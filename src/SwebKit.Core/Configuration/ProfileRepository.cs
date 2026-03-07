@@ -19,11 +19,15 @@ public class ProfileRepository
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        if (!File.Exists(AppDataPaths.ProfilesJson)) return;
+        var filePath = File.Exists(AppDataPaths.ProfilesJson)
+            ? AppDataPaths.ProfilesJson
+            : (File.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
+
+        if (filePath is null) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.ProfilesJson);
+            var json = await File.ReadAllTextAsync(filePath);
             _data = JsonSerializer.Deserialize<ProfileData>(json, Options) ?? new();
         }
         catch (Exception)

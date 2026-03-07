@@ -17,11 +17,15 @@ public class UiStateRepository
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        if (!File.Exists(AppDataPaths.UiStateJson)) return;
+        var filePath = File.Exists(AppDataPaths.UiStateJson)
+            ? AppDataPaths.UiStateJson
+            : (File.Exists(AppDataPaths.LegacyUiStateJson) ? AppDataPaths.LegacyUiStateJson : null);
+
+        if (filePath is null) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.UiStateJson);
+            var json = await File.ReadAllTextAsync(filePath);
             _state = JsonSerializer.Deserialize<UiState>(json, Options) ?? new();
         }
         catch

@@ -7,7 +7,47 @@
 <div style="display:flex; height:100%; overflow:hidden;">
     <!-- Left: entity tree -->
     <div style="width:240px; flex-shrink:0; border-right:1px solid var(--color-border); overflow-y:auto;">
-        @if (Client is not null)
+        <div
+            style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); color:var(--color-text-muted);">
+            @if (AppState.CurrentEnvironment?.ServiceBusConfig is not null)
+            {
+                <span>@AppState.CurrentEnvironment.ServiceBusConfig.FullyQualifiedNamespace</span>
+                @if (Client is not null)
+                {
+                    <span style="margin-left:8px; color:var(--color-success);">Connected</span>
+                }
+                else if (!string.IsNullOrWhiteSpace(ConnectionError))
+                {
+                    <span style="margin-left:8px; color:var(--color-error);">Connection failed</span>
+                }
+                else
+                {
+                    <span style="margin-left:8px;">Connecting...</span>
+                }
+            }
+            else
+            {
+                <span>No namespace configured</span>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(ConnectionScopeWarning))
+        {
+            <div
+                style="padding:8px 12px; font-size:11px; color:#D1A325; border-bottom:1px solid var(--color-border); background:rgba(209,163,37,0.1);">
+                @ConnectionScopeWarning
+            </div>
+        }
+
+        @if (IsConnecting)
+        {
+            <LoadingSpinner Message="Connecting..." />
+        }
+        else if (!string.IsNullOrWhiteSpace(ConnectionError))
+        {
+            <ErrorCallout Message="@ConnectionError" OnRetry="ConnectAsync" />
+        }
+        else if (Client is not null)
         {
             <EntityTree Client="Client" OnEntitySelected="OpenEntityTab" />
         }
@@ -39,7 +79,10 @@
                 @foreach (var tab in OpenTabs)
                 {
                     <div class="tab-item @(ActiveTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
-                        @if (tab.IsDlq) { <span style="color:var(--color-error);">&#9888;</span> }
+                        @if (tab.IsDlq)
+                        {
+                            <span style="color:var(--color-error);">&#9888;</span>
+                        }
                         <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@tab.Title</span>
                         <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
                     </div>
@@ -75,25 +118,69 @@
     private List<SbTab> OpenTabs = [];
     private SbTab? ActiveTab;
     private bool IsDetailsPaneOpen = true;
+    private bool IsConnecting;
+    private string? ConnectionError;
+    private string? ConnectionScopeWarning;
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+        Events.Subscribe<ProjectChangedEvent>(OnProjectChanged);
+        Events.Subscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
         await ConnectAsync();
     }
 
     private async Task ConnectAsync()
     {
+        IsConnecting = true;
+        ConnectionError = null;
+
         var config = AppState.CurrentEnvironment?.ServiceBusConfig;
-        if (config is null) return;
+        ConnectionScopeWarning = GetConnectionScopeWarning(config);
+        if (config is null)
+        {
+            if (Client is IAsyncDisposable disposableClient)
+            {
+                await disposableClient.DisposeAsync();
+            }
+
+            Client = null;
+            OpenTabs.Clear();
+            ActiveTab = null;
+            IsConnecting = false;
+            StateHasChanged();
+            return;
+        }
+
         try
         {
-            Client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(config, CredentialStore);
-            StateHasChanged();
+            if (Client is IAsyncDisposable oldClient)
+            {
+                await oldClient.DisposeAsync();
+            }
+
+            var newClient = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(config, CredentialStore);
+            var canConnect = await newClient.TestConnectionAsync();
+            if (!canConnect)
+            {
+                await newClient.DisposeAsync();
+                Client = null;
+                ConnectionError = "Unable to connect to Service Bus. Check namespace and credentials.";
+            }
+            else
+            {
+                Client = newClient;
+            }
         }
         catch (Exception ex)
         {
             Client = null;
+            ConnectionError = ex.Message;
+        }
+        finally
+        {
+            IsConnecting = false;
+            StateHasChanged();
         }
     }
 
@@ -119,7 +206,38 @@
 
     private void OnRefresh(RefreshRequestedEvent e) { if (e.Area == "service-bus") InvokeAsync(ConnectAsync); }
 
-    public void Dispose() => Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+    private void OnProjectChanged(ProjectChangedEvent _) => InvokeAsync(HandleContextChangedAsync);
+
+    private void OnEnvironmentChanged(EnvironmentChangedEvent _) => InvokeAsync(HandleContextChangedAsync);
+
+    private async Task HandleContextChangedAsync()
+    {
+        OpenTabs.Clear();
+        ActiveTab = null;
+        await ConnectAsync();
+    }
+
+    private string? GetConnectionScopeWarning(ServiceBusConfig? config)
+    {
+        if (config?.AuthMode != SbAuthMode.ConnectionString || string.IsNullOrWhiteSpace(config.CredentialRef))
+            return null;
+
+        var connectionString = CredentialStore.Get(config.CredentialRef);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return null;
+
+        var isEntityScoped = connectionString.IndexOf("EntityPath=", StringComparison.OrdinalIgnoreCase) >= 0;
+        return isEntityScoped
+            ? "Connection string is entity-scoped (EntityPath). Namespace queue/topic discovery can be limited."
+            : null;
+    }
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+        Events.Unsubscribe<ProjectChangedEvent>(OnProjectChanged);
+        Events.Unsubscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
+    }
 
     private class SbTab
     {

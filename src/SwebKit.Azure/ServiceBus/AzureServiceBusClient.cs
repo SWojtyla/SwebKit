@@ -11,6 +11,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 {
     private readonly ServiceBusClient _client;
     private readonly ServiceBusAdministrationClient _adminClient;
+    private readonly string? _scopedEntityPath;
 
     public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore)
     {
@@ -20,6 +21,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         {
             var connStr = credentialStore.Get(config.CredentialRef)
                 ?? throw new InvalidOperationException($"Credential '{config.CredentialRef}' not found.");
+            var props = ServiceBusConnectionStringProperties.Parse(connStr);
+            _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
             _client = new ServiceBusClient(connStr);
             _adminClient = new ServiceBusAdministrationClient(connStr);
         }
@@ -56,6 +59,12 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 }
             });
         }
+
+        if (result.Count == 0)
+        {
+            await TryAddScopedQueueAsync(result, ct);
+        }
+
         return result;
     }
 
@@ -66,7 +75,60 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         {
             result.Add(new SbEntityInfo { Name = t.Name, EntityPath = t.Name, IsTopic = true });
         }
+
+        if (result.Count == 0)
+        {
+            await TryAddScopedTopicAsync(result, ct);
+        }
+
         return result;
+    }
+
+    private async Task TryAddScopedQueueAsync(List<SbEntityInfo> result, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_scopedEntityPath)) return;
+
+        try
+        {
+            var q = await _adminClient.GetQueueRuntimePropertiesAsync(_scopedEntityPath, ct);
+            result.Add(new SbEntityInfo
+            {
+                Name = q.Value.Name,
+                EntityPath = q.Value.Name,
+                Stats = new SbEntityStats
+                {
+                    ActiveMessageCount = q.Value.ActiveMessageCount,
+                    DeadLetterMessageCount = q.Value.DeadLetterMessageCount,
+                    ScheduledMessageCount = q.Value.ScheduledMessageCount,
+                    TransferCount = q.Value.TransferMessageCount,
+                    UpdatedAt = q.Value.UpdatedAt
+                }
+            });
+        }
+        catch
+        {
+            // Intentionally ignore: scoped entity may be a topic or the principal may not have runtime rights.
+        }
+    }
+
+    private async Task TryAddScopedTopicAsync(List<SbEntityInfo> result, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_scopedEntityPath)) return;
+
+        try
+        {
+            var t = await _adminClient.GetTopicRuntimePropertiesAsync(_scopedEntityPath, ct);
+            result.Add(new SbEntityInfo
+            {
+                Name = t.Value.Name,
+                EntityPath = t.Value.Name,
+                IsTopic = true
+            });
+        }
+        catch
+        {
+            // Intentionally ignore: scoped entity may be a queue or topic runtime properties may not be accessible.
+        }
     }
 
     public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)

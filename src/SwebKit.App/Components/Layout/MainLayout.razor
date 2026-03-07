@@ -35,10 +35,14 @@
     private string CurrentArea = "projects";
     private DotNetObjectReference<MainLayout>? _jsRef;
 
+    protected override async Task OnInitializedAsync()
+    {
+        await AppState.InitializeAsync();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        await AppState.InitializeAsync();
         RegisterDefaultCommands();
         _jsRef = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
