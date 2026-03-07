@@ -87,7 +87,7 @@ public class AppStateService
     {
         _profiles.AddProject(project);
         await _profiles.SaveAsync();
-        if (CurrentProject is null) await SelectProjectAsync(project.Id);
+        await SelectProjectAsync(project.Id);
     }
 
     public async Task UpdateProjectAsync(Project project)

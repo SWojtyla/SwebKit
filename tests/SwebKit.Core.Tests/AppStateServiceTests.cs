@@ -39,6 +39,20 @@ public class AppStateServiceTests
     }
 
     [Fact]
+    public async Task AddProjectAsync_SelectsNewProject()
+    {
+        using var sandbox = new AppDataSandbox();
+        var existing = CreateProject("Orders", "Dev", isProd: false);
+        var sut = await CreateInitializedSutAsync(existing);
+        var added = CreateProject("Billing", "Test", isProd: false);
+
+        await sut.AddProjectAsync(added);
+
+        Assert.Equal(added.Id, sut.CurrentProject?.Id);
+        Assert.Equal(added.Environments[0].Id, sut.CurrentEnvironment?.Id);
+    }
+
+    [Fact]
     public async Task UpdateProjectAsync_ReplacesExistingProject()
     {
         using var sandbox = new AppDataSandbox();

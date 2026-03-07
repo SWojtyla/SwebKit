@@ -1,6 +1,7 @@
 @inject AppStateService AppState
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
+@implements IDisposable
 
 <div class="top-bar" style="background: @EnvColor; --env-color: @EnvColor;">
     <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation">&#9776;</button>
@@ -9,10 +10,11 @@
     <div style="display:flex; align-items:center; gap:6px; flex:1;">
         <span style="font-size:11px; color:rgba(255,255,255,0.6);">Project</span>
         <select style="background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:3px 8px; font-size:12px;"
+                value="@SelectedProjectId"
                 @onchange="OnProjectChanged">
             @foreach (var p in AppState.AllProjects)
             {
-                <option value="@p.Id" selected="@(p.Id == AppState.CurrentProject?.Id)">@p.Name</option>
+                <option value="@p.Id">@p.Name</option>
             }
         </select>
 
@@ -51,13 +53,20 @@
     [Parameter] public EventCallback OnNavToggle { get; set; }
 
     private string EnvColor => AppState.CurrentEnvironment?.EnvColor ?? "#1E1E2E";
+    private string SelectedProjectId => AppState.CurrentProject?.Id.ToString() ?? string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Events.Subscribe<ProjectChangedEvent>(OnProjectChangedEvent);
+        Events.Subscribe<EnvironmentChangedEvent>(OnEnvironmentChangedEvent);
+    }
 
     private string GetEnvBtnStyle(ProjectEnvironment env) =>
         env.IsProduction ? "border-color: #ff4444;" : "";
 
     private async Task OnProjectChanged(ChangeEventArgs e)
     {
-        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        if (Guid.TryParse(e.Value?.ToString(), out var id) && id != AppState.CurrentProject?.Id)
             await AppState.SelectProjectAsync(id);
         StateHasChanged();
     }
@@ -69,4 +78,13 @@
     }
 
     private void OpenCommandPalette() => Events.Publish(new CommandPaletteRequestedEvent());
+
+    private void OnProjectChangedEvent(ProjectChangedEvent _) => InvokeAsync(StateHasChanged);
+    private void OnEnvironmentChangedEvent(EnvironmentChangedEvent _) => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<ProjectChangedEvent>(OnProjectChangedEvent);
+        Events.Unsubscribe<EnvironmentChangedEvent>(OnEnvironmentChangedEvent);
+    }
 }

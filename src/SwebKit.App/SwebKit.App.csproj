@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
-        <TargetFrameworks>net10.0-android</TargetFrameworks>
-        <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+        <!-- <TargetFrameworks>net10.0-android</TargetFrameworks> -->
+        <!-- <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks> -->
         <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
 
         <!-- Note for MacCatalyst:
@@ -41,9 +41,9 @@
         <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
         <WindowsPackageType>None</WindowsPackageType>
 
-        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+        <!-- <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
-        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion> -->
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
     </PropertyGroup>
@@ -76,10 +76,10 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\SwebKit.Core\SwebKit.Core.csproj" />
-      <ProjectReference Include="..\SwebKit.Azure\SwebKit.Azure.csproj" />
-      <ProjectReference Include="..\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
-      <ProjectReference Include="..\SwebKit.OpenTelemetry\SwebKit.OpenTelemetry.csproj" />
+        <ProjectReference Include="..\SwebKit.Core\SwebKit.Core.csproj" />
+        <ProjectReference Include="..\SwebKit.Azure\SwebKit.Azure.csproj" />
+        <ProjectReference Include="..\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
+        <ProjectReference Include="..\SwebKit.OpenTelemetry\SwebKit.OpenTelemetry.csproj" />
     </ItemGroup>
 
 </Project>
