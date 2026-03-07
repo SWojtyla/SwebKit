@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+*.userprefs
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# App data (runtime)
+*.log
