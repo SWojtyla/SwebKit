@@ -1,0 +1,15 @@
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\bin\Debug\net10.0\SwebKit.OpenTelemetry.deps.json
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\bin\Debug\net10.0\SwebKit.OpenTelemetry.dll
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\bin\Debug\net10.0\SwebKit.OpenTelemetry.pdb
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\bin\Debug\net10.0\SwebKit.Core.dll
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\bin\Debug\net10.0\SwebKit.Core.pdb
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.csproj.AssemblyReference.cache
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.GeneratedMSBuildEditorConfig.editorconfig
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.AssemblyInfoInputs.cache
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.AssemblyInfo.cs
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.csproj.CoreCompileInputs.cache
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit..C152E584.Up2Date
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.dll
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\refint\SwebKit.OpenTelemetry.dll
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\SwebKit.OpenTelemetry.pdb
+D:\Projects\SwebKit\src\SwebKit.OpenTelemetry\obj\Debug\net10.0\ref\SwebKit.OpenTelemetry.dll

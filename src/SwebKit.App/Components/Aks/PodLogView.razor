@@ -1,0 +1,98 @@
+@inject IAppEventBus Events
+@implements IAsyncDisposable
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+    <div class="filter-bar">
+        <label style="font-size:11px; display:flex; align-items:center; gap:4px;">
+            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" />
+            Live tail
+        </label>
+        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter lines..."
+               style="flex:1; padding:3px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs">Clear</FluentButton>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; font-family:monospace; font-size:11px; padding:6px 10px; line-height:1.5;" @ref="_logContainer">
+        @foreach (var line in FilteredLines)
+        {
+            <div style="@GetLineStyle(line)">@line</div>
+        }
+        @if (IsLive && IsLoading)
+        {
+            <div style="color:var(--color-text-muted); padding:4px 0;">
+                <FluentProgressRing Width="12px" /> Tailing logs...
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string? Namespace { get; set; }
+    [Parameter] public string? PodName { get; set; }
+
+    private List<string> Lines = [];
+    private bool IsLive = true;
+    private bool IsLoading;
+    private string TextFilter = "";
+    private CancellationTokenSource? _cts;
+    private ElementReference _logContainer;
+
+    private IReadOnlyList<string> FilteredLines => string.IsNullOrEmpty(TextFilter)
+        ? Lines.TakeLast(500).ToList()
+        : Lines.Where(l => l.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).TakeLast(500).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Client is not null && PodName is not null && Namespace is not null && IsLive)
+            await StartTailingAsync();
+    }
+
+    private async Task OnLiveToggle()
+    {
+        if (IsLive) await StartTailingAsync();
+        else { _cts?.Cancel(); IsLoading = false; }
+    }
+
+    private async Task StartTailingAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        IsLoading = true;
+        Lines.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
+            var container = string.Empty;
+            _ = Task.Run(async () =>
+            {
+                await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, _cts.Token))
+                {
+                    Lines.Add(line);
+                    if (Lines.Count > 10000) Lines.RemoveAt(0);
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(50); // throttle
+                }
+                await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
+            });
+        }
+        catch (Exception) { IsLoading = false; StateHasChanged(); }
+    }
+
+    private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
+
+    private static string GetLineStyle(string line)
+    {
+        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
+            return "color: #FF6B6B;";
+        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN", StringComparison.OrdinalIgnoreCase))
+            return "color: #FFB86C;";
+        if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
+            return "color: var(--color-text-muted);";
+        return "";
+    }
+
+    public async ValueTask DisposeAsync() { _cts?.Cancel(); }
+}

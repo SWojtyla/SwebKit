@@ -1,0 +1,132 @@
+@page "/service-bus"
+@inject AppStateService AppState
+@inject ICredentialStore CredentialStore
+@inject IAppEventBus Events
+@implements IDisposable
+
+<div style="display:flex; height:100%; overflow:hidden;">
+    <!-- Left: entity tree -->
+    <div style="width:240px; flex-shrink:0; border-right:1px solid var(--color-border); overflow-y:auto;">
+        @if (Client is not null)
+        {
+            <EntityTree Client="Client" OnEntitySelected="OpenEntityTab" />
+        }
+        else if (AppState.CurrentEnvironment?.ServiceBusConfig is null)
+        {
+            <div style="padding:16px; font-size:12px; color:var(--color-text-muted);">
+                No Service Bus configured.<br />
+                <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
+            </div>
+        }
+        else
+        {
+            <LoadingSpinner Message="Connecting..." />
+        }
+    </div>
+
+    <!-- Right: tabbed content -->
+    <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        @if (!OpenTabs.Any())
+        {
+            <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
+                Select a queue or topic from the tree to open it.
+            </div>
+        }
+        else
+        {
+            <!-- Tab bar -->
+            <div class="tab-bar">
+                @foreach (var tab in OpenTabs)
+                {
+                    <div class="tab-item @(ActiveTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                        @if (tab.IsDlq) { <span style="color:var(--color-error);">&#9888;</span> }
+                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@tab.Title</span>
+                        <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
+                    </div>
+                }
+            </div>
+            <!-- Active tab content -->
+            @if (ActiveTab is not null)
+            {
+                @if (ActiveTab.IsDlq)
+                {
+                    <DlqView Client="Client" EntityPath="@ActiveTab.EntityPath" />
+                }
+                else
+                {
+                    <div style="display:flex; flex:1; overflow:hidden;">
+                        <div style="flex:1; overflow:hidden;">
+                            <MessageListView Client="Client" EntityPath="@ActiveTab.EntityPath"
+                                             SelectedMessage="ActiveTab.SelectedMessage"
+                                             OnMessageSelected="msg => { ActiveTab.SelectedMessage = msg; StateHasChanged(); }" />
+                        </div>
+                        <div class="details-pane" style="@(IsDetailsPaneOpen ? "" : "display:none")">
+                            <MessageDetailPane Message="ActiveTab.SelectedMessage" />
+                        </div>
+                    </div>
+                }
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private IServiceBusClient? Client;
+    private List<SbTab> OpenTabs = [];
+    private SbTab? ActiveTab;
+    private bool IsDetailsPaneOpen = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+        await ConnectAsync();
+    }
+
+    private async Task ConnectAsync()
+    {
+        var config = AppState.CurrentEnvironment?.ServiceBusConfig;
+        if (config is null) return;
+        try
+        {
+            Client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(config, CredentialStore);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Client = null;
+        }
+    }
+
+    private void OpenEntityTab(SbEntityInfo entity)
+    {
+        var id = entity.EntityPath;
+        var existing = OpenTabs.FirstOrDefault(t => t.Id == id && !t.IsDlq);
+        if (existing is not null) { ActiveTab = existing; StateHasChanged(); return; }
+
+        var tab = new SbTab { Id = id, Title = entity.Name, EntityPath = entity.EntityPath };
+        OpenTabs.Add(tab);
+        ActiveTab = tab;
+        StateHasChanged();
+    }
+
+    private void SetActive(SbTab tab) { ActiveTab = tab; StateHasChanged(); }
+    private void CloseTab(SbTab tab)
+    {
+        OpenTabs.Remove(tab);
+        if (ActiveTab == tab) ActiveTab = OpenTabs.LastOrDefault();
+        StateHasChanged();
+    }
+
+    private void OnRefresh(RefreshRequestedEvent e) { if (e.Area == "service-bus") InvokeAsync(ConnectAsync); }
+
+    public void Dispose() => Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+
+    private class SbTab
+    {
+        public required string Id { get; set; }
+        public required string Title { get; set; }
+        public required string EntityPath { get; set; }
+        public bool IsDlq { get; set; }
+        public SbMessage? SelectedMessage { get; set; }
+    }
+}

@@ -1,0 +1,72 @@
+@inject AppStateService AppState
+@inject IAppEventBus Events
+@inject CommandRegistry Commands
+
+<div class="top-bar" style="background: @EnvColor; --env-color: @EnvColor;">
+    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation">&#9776;</button>
+    <span class="app-logo" style="font-weight:700; font-size:15px; margin-right:8px;">SwebKit</span>
+
+    <div style="display:flex; align-items:center; gap:6px; flex:1;">
+        <span style="font-size:11px; color:rgba(255,255,255,0.6);">Project</span>
+        <select style="background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:3px 8px; font-size:12px;"
+                @onchange="OnProjectChanged">
+            @foreach (var p in AppState.AllProjects)
+            {
+                <option value="@p.Id" selected="@(p.Id == AppState.CurrentProject?.Id)">@p.Name</option>
+            }
+        </select>
+
+        <span style="font-size:11px; color:rgba(255,255,255,0.6); margin-left:8px;">Env</span>
+        <div style="display:flex; gap:2px;">
+            @foreach (var env in AppState.CurrentProject?.Environments ?? [])
+            {
+                <button class="env-btn @(env.Id == AppState.CurrentEnvironment?.Id ? "active" : "")"
+                        style="@GetEnvBtnStyle(env)"
+                        @onclick="() => OnEnvSelected(env.Id)">
+                    @env.Name
+                </button>
+            }
+        </div>
+
+        @if (AppState.IsProduction)
+        {
+            <span style="background:#C8002A; color:white; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700; margin-left:4px;">&#9888; PROD</span>
+        }
+    </div>
+
+    <button class="cmd-palette-btn" @onclick="OpenCommandPalette"
+            style="background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer;">
+        &gt;_ Command Palette &nbsp;<kbd>Ctrl+P</kbd>
+    </button>
+</div>
+
+<style>
+    .nav-toggle { background:transparent; border:none; color:white; font-size:18px; cursor:pointer; padding:4px 8px; }
+    .env-btn { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; padding:3px 10px; font-size:11px; cursor:pointer; border-radius:3px; }
+    .env-btn.active { background:rgba(255,255,255,0.25); font-weight:600; }
+    kbd { background:rgba(0,0,0,0.3); padding:1px 4px; border-radius:2px; font-size:10px; }
+</style>
+
+@code {
+    [Parameter] public EventCallback OnNavToggle { get; set; }
+
+    private string EnvColor => AppState.CurrentEnvironment?.EnvColor ?? "#1E1E2E";
+
+    private string GetEnvBtnStyle(ProjectEnvironment env) =>
+        env.IsProduction ? "border-color: #ff4444;" : "";
+
+    private async Task OnProjectChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+            await AppState.SelectProjectAsync(id);
+        StateHasChanged();
+    }
+
+    private async Task OnEnvSelected(Guid envId)
+    {
+        await AppState.SelectEnvironmentAsync(envId);
+        StateHasChanged();
+    }
+
+    private void OpenCommandPalette() => Events.Publish(new CommandPaletteRequestedEvent());
+}

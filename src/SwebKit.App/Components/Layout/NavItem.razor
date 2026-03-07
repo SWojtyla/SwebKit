@@ -1,0 +1,18 @@
+<div class="nav-item @(CurrentArea == Area ? "active" : "")" @onclick="Navigate" title="@(IsExpanded ? "" : Label)">
+    <span style="font-size: 16px; width: 20px; text-align: center;">@Icon</span>
+    @if (IsExpanded)
+    {
+        <span>@Label</span>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Area { get; set; } = "";
+    [Parameter] public bool IsExpanded { get; set; } = true;
+    [Parameter] public string CurrentArea { get; set; } = "";
+    [Parameter] public EventCallback<string> OnNavigate { get; set; }
+
+    private Task Navigate() => OnNavigate.InvokeAsync(Area);
+}

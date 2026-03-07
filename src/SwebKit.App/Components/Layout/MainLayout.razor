@@ -1,0 +1,111 @@
+@inherits LayoutComponentBase
+@inject AppStateService AppState
+@inject IAppEventBus Events
+@inject TabService Tabs
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<FluentDesignTheme StorageName="swebkit-theme" />
+
+<CascadingValue Value="AppState">
+    <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")">
+        <TopBar OnNavToggle="ToggleNav" />
+        <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
+        <main class="main-content">
+            @if (AppState.IsProduction)
+            {
+                <div class="prod-banner">&#9888; PRODUCTION ENVIRONMENT — Changes are real and irreversible</div>
+            }
+            @Body
+        </main>
+        <StatusBar />
+    </div>
+
+    @if (IsCommandPaletteOpen)
+    {
+        <CommandPalette OnClose="@(() => { IsCommandPaletteOpen = false; StateHasChanged(); })" />
+    }
+</CascadingValue>
+
+@code {
+    private bool IsNavExpanded = true;
+    private bool IsCommandPaletteOpen;
+    private string CurrentArea = "projects";
+    private DotNetObjectReference<MainLayout>? _jsRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await AppState.InitializeAsync();
+        _jsRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
+        StateHasChanged();
+    }
+
+    protected override void OnInitialized()
+    {
+        Events.Subscribe<NavigateToAreaEvent>(OnNavigateToArea);
+        Tabs.TabsChanged += StateHasChanged;
+    }
+
+    private void ToggleNav() { IsNavExpanded = !IsNavExpanded; StateHasChanged(); }
+
+    private void NavigateTo(string area)
+    {
+        CurrentArea = area;
+        Nav.NavigateTo($"/{area}");
+        StateHasChanged();
+    }
+
+    private void OnNavigateToArea(NavigateToAreaEvent e) => InvokeAsync(() => NavigateTo(e.Area));
+
+    [JSInvokable]
+    public async Task OnShortcut(string shortcut)
+    {
+        switch (shortcut)
+        {
+            case "CommandPalette": IsCommandPaletteOpen = !IsCommandPaletteOpen; break;
+            case "NavProjects": NavigateTo("projects"); break;
+            case "NavServiceBus": NavigateTo("service-bus"); break;
+            case "NavObservability": NavigateTo("observability"); break;
+            case "NavAks": NavigateTo("aks"); break;
+            case "NavSettings": NavigateTo("settings"); break;
+            case "TabNext": Tabs.SetActive(GetNextTabId(1) ?? ""); break;
+            case "TabPrev": Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
+            case "TabClose": if (Tabs.ActiveTab is not null) Tabs.CloseTab(Tabs.ActiveTab.Id); break;
+            case "Escape": IsCommandPaletteOpen = false; break;
+            case "EnvDev": await SwitchEnvByName("Dev"); break;
+            case "EnvTest": await SwitchEnvByName("Test"); break;
+            case "EnvAcc": await SwitchEnvByName("Acc"); break;
+            case "EnvProd": await SwitchEnvByName("Prod"); break;
+            case "Refresh": Events.Publish(new RefreshRequestedEvent(CurrentArea)); break;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string? GetNextTabId(int direction)
+    {
+        var tabs = Tabs.Tabs;
+        if (tabs.Count == 0) return null;
+        var current = Tabs.ActiveTab;
+        if (current is null) return tabs[0].Id;
+        var idx = tabs.ToList().IndexOf(current);
+        var next = (idx + direction + tabs.Count) % tabs.Count;
+        return tabs[next].Id;
+    }
+
+    private async Task SwitchEnvByName(string name)
+    {
+        var env = AppState.CurrentProject?.Environments
+            .FirstOrDefault(e => e.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+        if (env is not null) await AppState.SelectEnvironmentAsync(env.Id);
+    }
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<NavigateToAreaEvent>(OnNavigateToArea);
+        Tabs.TabsChanged -= StateHasChanged;
+        _jsRef?.Dispose();
+    }
+}

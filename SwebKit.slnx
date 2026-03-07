@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SwebKit.App/SwebKit.App.csproj" />
+    <Project Path="src/SwebKit.Azure/SwebKit.Azure.csproj" />
+    <Project Path="src/SwebKit.Core/SwebKit.Core.csproj" />
+    <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />
+    <Project Path="src/SwebKit.OpenTelemetry/SwebKit.OpenTelemetry.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj" />
+    <Project Path="tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj" />
+    <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />
+  </Folder>
+</Solution>

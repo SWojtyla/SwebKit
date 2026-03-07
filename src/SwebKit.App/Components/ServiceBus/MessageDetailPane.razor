@@ -1,0 +1,90 @@
+@inject IJSRuntime JS
+
+@if (Message is null)
+{
+    <div style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:13px;">
+        Select a message to view details
+    </div>
+}
+else
+{
+    <div style="height:100%; display:flex; flex-direction:column;">
+        <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); font-size:12px; display:flex; gap:6px; align-items:center;">
+            <span style="font-weight:600;">@(Message.MessageId.Length > 16 ? Message.MessageId[..16] + "…" : Message.MessageId)</span>
+            <button @onclick="CopyBody" style="margin-left:auto; padding:2px 8px; font-size:11px; cursor:pointer;">Copy Body</button>
+        </div>
+
+        <FluentTabs style="flex:1; overflow:hidden;">
+            <FluentTab Label="Body">
+                <div style="padding:10px; font-family:monospace; font-size:12px; white-space:pre-wrap; overflow:auto; height:100%; color:var(--color-text);">
+                    @FormatBody(Message.Body, Message.ContentType)
+                </div>
+            </FluentTab>
+            <FluentTab Label="Properties">
+                <div style="padding:10px; overflow:auto;">
+                    @foreach (var (key, value) in Message.ApplicationProperties)
+                    {
+                        <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid var(--color-border); font-size:12px;">
+                            <span style="color:var(--color-text-muted); min-width:140px; flex-shrink:0;">@key</span>
+                            <span>@value</span>
+                        </div>
+                    }
+                    @if (!Message.ApplicationProperties.Any())
+                    {
+                        <span style="color:var(--color-text-muted); font-size:12px;">No application properties</span>
+                    }
+                </div>
+            </FluentTab>
+            <FluentTab Label="System">
+                <div style="padding:10px; font-size:12px; overflow:auto;">
+                    <PropRow Label="MessageId" Value="@Message.MessageId" />
+                    <PropRow Label="CorrelationId" Value="@(Message.CorrelationId ?? "-")" />
+                    <PropRow Label="Subject" Value="@(Message.Subject ?? "-")" />
+                    <PropRow Label="ContentType" Value="@(Message.ContentType ?? "-")" />
+                    <PropRow Label="DeliveryCount" Value="@Message.DeliveryCount.ToString()" />
+                    <PropRow Label="EnqueuedAt" Value="@Message.EnqueuedAt.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")" />
+                    <PropRow Label="SequenceNumber" Value="@(Message.SequenceNumber?.ToString() ?? "-")" />
+                    <PropRow Label="SessionId" Value="@(Message.SessionId ?? "-")" />
+                </div>
+            </FluentTab>
+            @if (Message.DeadLetterReason is not null)
+            {
+                <FluentTab Label="DLQ Info">
+                    <div style="padding:10px;">
+                        <div style="background:rgba(229,57,53,0.15); border:1px solid var(--color-error); border-radius:4px; padding:10px; margin-bottom:10px;">
+                            <div style="font-size:12px; font-weight:600; color:#FF6B6B; margin-bottom:4px;">Reason: @Message.DeadLetterReason</div>
+                            @if (!string.IsNullOrEmpty(Message.DeadLetterErrorDescription))
+                            {
+                                <div style="font-size:12px; color:var(--color-text-muted);">@Message.DeadLetterErrorDescription</div>
+                            }
+                        </div>
+                    </div>
+                </FluentTab>
+            }
+        </FluentTabs>
+    </div>
+}
+
+@code {
+    [Parameter] public SbMessage? Message { get; set; }
+
+    private async Task CopyBody()
+    {
+        if (Message is not null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Message.Body);
+    }
+
+    private static string FormatBody(string body, string? contentType)
+    {
+        if (contentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true || body.TrimStart().StartsWith('{') || body.TrimStart().StartsWith('['))
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(body);
+                return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch { }
+        }
+        return body;
+    }
+}

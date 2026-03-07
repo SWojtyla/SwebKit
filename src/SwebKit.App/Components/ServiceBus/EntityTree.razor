@@ -1,0 +1,105 @@
+@inject AppStateService AppState
+@inject IAppEventBus Events
+
+<div class="entity-tree">
+    @if (IsLoading)
+    {
+        <LoadingSpinner Message="Loading entities..." />
+    }
+    else if (ErrorMessage is not null)
+    {
+        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        @if (Queues.Any())
+        {
+            <div style="padding: 6px 12px; font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Queues</div>
+            @foreach (var q in Queues)
+            {
+                <div class="entity-tree-item" @onclick="() => OpenEntity(q)">
+                    <span style="font-size:14px;">&#8660;</span>
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@q.Name</span>
+                    @if (q.Stats?.DeadLetterMessageCount > 0)
+                    {
+                        <span class="dlq-badge">@q.Stats.DeadLetterMessageCount DLQ</span>
+                    }
+                    else if (q.Stats?.ActiveMessageCount > 0)
+                    {
+                        <span style="font-size:10px; color:var(--color-text-muted);">@q.Stats.ActiveMessageCount</span>
+                    }
+                </div>
+            }
+        }
+
+        @if (Topics.Any())
+        {
+            <div style="padding: 6px 12px; font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Topics</div>
+            @foreach (var t in Topics)
+            {
+                <div class="entity-tree-item" @onclick="() => ToggleTopic(t.Name)">
+                    <span style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "&#9660;" : "&#9654;")</span>
+                    <span>@t.Name</span>
+                </div>
+                @if (ExpandedTopics.Contains(t.Name) && Subscriptions.TryGetValue(t.Name, out var subs))
+                {
+                    @foreach (var s in subs)
+                    {
+                        <div class="entity-tree-item" style="padding-left: 28px;" @onclick="() => OpenEntity(s)">
+                            <span style="font-size:13px;">&#x21B3;</span>
+                            <span style="flex:1;">@s.Name</span>
+                            @if (s.Stats?.DeadLetterMessageCount > 0)
+                            {
+                                <span class="dlq-badge">@s.Stats.DeadLetterMessageCount DLQ</span>
+                            }
+                        </div>
+                    }
+                }
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public EventCallback<SbEntityInfo> OnEntitySelected { get; set; }
+
+    private bool IsLoading;
+    private string? ErrorMessage;
+    private List<SbEntityInfo> Queues = [];
+    private List<SbEntityInfo> Topics = [];
+    private Dictionary<string, List<SbEntityInfo>> Subscriptions = [];
+    private HashSet<string> ExpandedTopics = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Client is not null) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null) return;
+        IsLoading = true; ErrorMessage = null; StateHasChanged();
+        try
+        {
+            Queues = (await Client.ListQueuesAsync()).ToList();
+            Topics = (await Client.ListTopicsAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally { IsLoading = false; StateHasChanged(); }
+    }
+
+    private async Task ToggleTopic(string name)
+    {
+        if (ExpandedTopics.Contains(name)) { ExpandedTopics.Remove(name); return; }
+        ExpandedTopics.Add(name);
+        if (!Subscriptions.ContainsKey(name) && Client is not null)
+            Subscriptions[name] = (await Client.ListSubscriptionsAsync(name)).ToList();
+        StateHasChanged();
+    }
+
+    private Task OpenEntity(SbEntityInfo entity) => OnEntitySelected.InvokeAsync(entity);
+}

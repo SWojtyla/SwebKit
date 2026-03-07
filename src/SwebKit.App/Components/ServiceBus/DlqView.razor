@@ -1,0 +1,107 @@
+@inject AppStateService AppState
+@inject ITaskQueue TaskQueue
+
+<div style="display:flex; flex-direction:column; height:100%;">
+    <div style="padding:6px 12px; background:rgba(229,57,53,0.1); border-bottom:1px solid var(--color-error); font-size:12px; color:#FF6B6B; font-weight:600;">
+        &#9888; Dead-Letter Queue — @EntityPath
+    </div>
+
+    <div style="display:flex; flex:1; overflow:hidden;">
+        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+            <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
+                             SelectedMessage="SelectedMessage" OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }" />
+
+            <div style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(SelectedMessage is null || IsWorking)"
+                              @onclick="ResubmitOne">
+                    Resubmit to @EntityPath
+                </FluentButton>
+                <FluentButton Disabled="@(SelectedMessage is null || IsWorking)" @onclick="CompleteOne">
+                    Complete (Delete)
+                </FluentButton>
+            </div>
+        </div>
+
+        <div class="details-pane">
+            <MessageDetailPane Message="SelectedMessage" />
+        </div>
+    </div>
+</div>
+
+<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
+               IsProduction="@AppState.IsProduction" ConfirmLabel="Proceed"
+               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public string? EntityPath { get; set; }
+
+    private SbMessage? SelectedMessage;
+    private bool IsWorking;
+    private bool ShowConfirm;
+    private string ConfirmTitle = "";
+    private string ConfirmMessage = "";
+    private Func<Task>? PendingAction;
+
+    private void ResubmitOne()
+    {
+        if (SelectedMessage is null || Client is null || EntityPath is null) return;
+        ConfirmTitle = "Resubmit Message";
+        ConfirmMessage = $"Resubmit message '{SelectedMessage.MessageId[..Math.Min(16, SelectedMessage.MessageId.Length)]}' to {EntityPath}?";
+        PendingAction = DoResubmit;
+        ShowConfirm = true;
+    }
+
+    private void CompleteOne()
+    {
+        if (SelectedMessage is null) return;
+        ConfirmTitle = "Complete Message";
+        ConfirmMessage = "Permanently delete this message from the DLQ?";
+        PendingAction = DoComplete;
+        ShowConfirm = true;
+    }
+
+    private async Task ExecuteAction()
+    {
+        ShowConfirm = false;
+        if (PendingAction is not null) await PendingAction();
+    }
+
+    private async Task DoResubmit()
+    {
+        if (Client is null || EntityPath is null || SelectedMessage?.SequenceNumber is null) return;
+        IsWorking = true;
+        var task = TaskQueue.Enqueue("Resubmitting message", SelectedMessage.MessageId);
+        try
+        {
+            await Client.ResubmitDeadLetterAsync(EntityPath, [SelectedMessage.SequenceNumber.Value.ToString()], null);
+            TaskQueue.Complete(task.Id);
+            SelectedMessage = null;
+        }
+        catch (Exception ex)
+        {
+            TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
+            TaskQueue.Complete(task.Id, false);
+        }
+        finally { IsWorking = false; StateHasChanged(); }
+    }
+
+    private async Task DoComplete()
+    {
+        if (Client is null || EntityPath is null || SelectedMessage?.SequenceNumber is null) return;
+        IsWorking = true;
+        var task = TaskQueue.Enqueue("Completing DLQ message", SelectedMessage.MessageId);
+        try
+        {
+            await Client.CompleteDeadLetterAsync(EntityPath, [SelectedMessage.SequenceNumber.Value.ToString()]);
+            TaskQueue.Complete(task.Id);
+            SelectedMessage = null;
+        }
+        catch (Exception ex)
+        {
+            TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
+            TaskQueue.Complete(task.Id, false);
+        }
+        finally { IsWorking = false; StateHasChanged(); }
+    }
+}

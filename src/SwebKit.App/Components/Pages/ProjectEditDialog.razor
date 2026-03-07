@@ -1,0 +1,89 @@
+@inject AppStateService AppState
+
+<div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
+    <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; width:520px; max-height:80vh; overflow-y:auto;">
+        <h3 style="margin:0 0 16px; font-size:15px;">@(IsNew ? "New Project" : "Edit Project")</h3>
+
+        <FluentTextField @bind-Value="Draft.Name" Label="Project Name" style="width:100%; margin-bottom:12px;" />
+        <FluentTextField @bind-Value="Draft.Description" Label="Description (optional)" style="width:100%; margin-bottom:12px;" />
+
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Accent Color</label>
+            <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;">
+                @foreach (var color in Colors)
+                {
+                    <button style="width:28px; height:28px; border-radius:50%; background:@color; border:3px solid @(Draft.IconColor == color ? "white" : "transparent"); cursor:pointer;"
+                            @onclick="() => Draft.IconColor = color" />
+                }
+            </div>
+        </div>
+
+        <h4 style="margin:0 0 10px; font-size:13px;">Environments</h4>
+        @foreach (var env in Draft.Environments)
+        {
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:8px; background:var(--color-surface); border-radius:4px;">
+                <span style="flex:1; font-size:13px;">@env.Name</span>
+                <label style="font-size:11px; display:flex; align-items:center; gap:4px;">
+                    <input type="checkbox" checked="@env.IsProduction" @onchange="e => env.Tier = (bool)e.Value! ? EnvironmentTier.Production : EnvironmentTier.NonProd" />
+                    Production
+                </label>
+                <button style="cursor:pointer; color:var(--color-error); background:transparent; border:none; font-size:14px;" @onclick="() => Draft.Environments.Remove(env)">&#x2715;</button>
+            </div>
+        }
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <input type="text" @bind="NewEnvName" placeholder="Environment name (e.g. Dev)" style="flex:1; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+            <button @onclick="AddEnv" style="padding:6px 12px; cursor:pointer;">+ Add</button>
+        </div>
+
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <FluentButton @onclick="Cancel">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="Save" Disabled="@string.IsNullOrWhiteSpace(Draft.Name)">Save</FluentButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Project? Project { get; set; }
+    [Parameter] public EventCallback<Project> OnSave { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Project Draft = new() { Name = "" };
+    private string NewEnvName = "";
+    private bool IsNew;
+
+    private static readonly string[] Colors = ["#0078D4", "#107C10", "#C8002A", "#E8720C", "#8B2FC9", "#00B7C3", "#7F7F7F", "#FFB900"];
+
+    protected override void OnParametersSet()
+    {
+        if (Project is not null)
+        {
+            IsNew = !AppState.AllProjects.Any(p => p.Id == Project.Id);
+            Draft = new Project
+            {
+                Id = Project.Id,
+                Name = Project.Name,
+                Description = Project.Description,
+                IconColor = Project.IconColor,
+                Environments = Project.Environments.Select(e => new ProjectEnvironment
+                {
+                    Id = e.Id, ProjectId = e.ProjectId, Name = e.Name, Tier = e.Tier
+                }).ToList()
+            };
+        }
+    }
+
+    private void AddEnv()
+    {
+        if (string.IsNullOrWhiteSpace(NewEnvName)) return;
+        Draft.Environments.Add(new ProjectEnvironment
+        {
+            ProjectId = Draft.Id,
+            Name = NewEnvName.Trim(),
+            Tier = NewEnvName.Contains("prod", StringComparison.OrdinalIgnoreCase) ? EnvironmentTier.Production : EnvironmentTier.NonProd
+        });
+        NewEnvName = "";
+    }
+
+    private Task Save() => OnSave.InvokeAsync(Draft);
+    private Task Cancel() => OnClose.InvokeAsync();
+}

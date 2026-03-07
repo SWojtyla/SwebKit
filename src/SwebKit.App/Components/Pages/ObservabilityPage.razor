@@ -1,0 +1,149 @@
+@page "/observability"
+@inject AppStateService AppState
+@inject ICredentialStore CredentialStore
+@implements IDisposable
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+    <!-- Filter bar -->
+    <div class="filter-bar">
+        <select @bind="TimeRange" style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+            <option value="15m">Last 15 min</option>
+            <option value="1h">Last 1 hour</option>
+            <option value="6h">Last 6 hours</option>
+            <option value="24h">Last 24 hours</option>
+        </select>
+        <input type="text" @bind="TextSearch" @bind:event="oninput" placeholder="Search messages..."
+               style="width:200px; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        <input type="text" @bind="CorrelationId" placeholder="Correlation ID"
+               style="width:160px; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        <select @bind="SavedQueryName" @bind:after="LoadSavedQuery"
+                style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+            <option value="">Saved queries...</option>
+            @foreach (var q in BuiltInQueries.All)
+            {
+                <option value="@q.Name">@q.Name</option>
+            }
+        </select>
+        <FluentButton Appearance="Appearance.Accent" @onclick="RunQuery" Disabled="@(IsLoading || Provider is null)">
+            Run  (Ctrl+Enter)
+        </FluentButton>
+        @if (IsLoading)
+        {
+            <FluentButton @onclick="CancelQuery">Cancel</FluentButton>
+        }
+    </div>
+
+    @if (ErrorMessage is not null) { <ErrorCallout Message="@ErrorMessage" OnRetry="RunQuery" /> }
+    @if (Provider is null && AppState.CurrentEnvironment?.ObservabilityConfig is null)
+    {
+        <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
+            No observability provider configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
+        </div>
+    }
+
+    <div style="display:flex; flex:1; overflow:hidden;">
+        <!-- Log table -->
+        <div class="data-table-container" style="flex:1;">
+            @if (IsLoading)
+            {
+                <LoadingSpinner Message="Querying..." />
+            }
+            else
+            {
+                <FluentDataGrid Items="@Entries.AsQueryable()" TGridItem="LogEntry"
+                                Virtualize="true" ItemSize="32"
+                                RowClass="@(e => SelectedEntry?.OperationId == e.OperationId ? "selected-row" : "")"
+                                OnRowClick="@(r => { SelectedEntry = r.Item; StateHasChanged(); })">
+                    <PropertyColumn Property="e => e.Timestamp" Title="Time" Format="HH:mm:ss.fff" Width="90px" />
+                    <TemplateColumn Title="Level" Width="70px">
+                        <span class="level-badge level-@(context.Level.ToString().ToLower())">@context.Level</span>
+                    </TemplateColumn>
+                    <PropertyColumn Property="e => e.Message" Title="Message" />
+                    <TemplateColumn Title="Operation" Width="160px">@(context.OperationName ?? "-")</TemplateColumn>
+                    <TemplateColumn Title="Correlation ID" Width="130px">@(context.CorrelationId ?? "-")</TemplateColumn>
+                </FluentDataGrid>
+                <div style="padding:4px 8px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border);">
+                    @Entries.Count log entries
+                </div>
+            }
+        </div>
+
+        <!-- Details pane -->
+        @if (SelectedEntry is not null)
+        {
+            <div class="details-pane" style="width:340px;">
+                <div style="padding:10px 12px; border-bottom:1px solid var(--color-border);">
+                    <div style="font-size:12px; font-weight:600;">@SelectedEntry.Message</div>
+                    <div style="font-size:11px; color:var(--color-text-muted); margin-top:4px;">@SelectedEntry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")</div>
+                </div>
+                <div style="padding:10px; font-size:12px; overflow-y:auto;">
+                    <PropRow Label="Level" Value="@SelectedEntry.Level.ToString()" />
+                    <PropRow Label="OperationId" Value="@(SelectedEntry.OperationId ?? "-")" />
+                    <PropRow Label="CorrelationId" Value="@(SelectedEntry.CorrelationId ?? "-")" />
+                    <PropRow Label="Operation" Value="@(SelectedEntry.OperationName ?? "-")" />
+                    @foreach (var (k, v) in SelectedEntry.Properties)
+                    {
+                        <PropRow Label="@k" Value="@v?.ToString()!" />
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private IObservabilityProvider? Provider;
+    private List<LogEntry> Entries = [];
+    private LogEntry? SelectedEntry;
+    private bool IsLoading;
+    private string? ErrorMessage;
+    private string TimeRange = "15m";
+    private string TextSearch = "";
+    private string CorrelationId = "";
+    private string SavedQueryName = "";
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnParametersSetAsync() => await ConnectAsync();
+
+    private async Task ConnectAsync()
+    {
+        var config = AppState.CurrentEnvironment?.ObservabilityConfig;
+        if (config is null) return;
+        try { Provider = new SwebKit.Azure.Observability.AppInsightsObservabilityProvider(config, CredentialStore); }
+        catch { Provider = null; }
+    }
+
+    private void LoadSavedQuery()
+    {
+        var q = BuiltInQueries.All.FirstOrDefault(x => x.Name == SavedQueryName);
+        if (q is not null) { TimeRange = q.DefaultTimeRange ?? "15m"; }
+    }
+
+    private async Task RunQuery()
+    {
+        if (Provider is null) return;
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        IsLoading = true; ErrorMessage = null; StateHasChanged();
+        try
+        {
+            var builtIn = BuiltInQueries.All.FirstOrDefault(q => q.Name == SavedQueryName);
+            var query = new LogQuery
+            {
+                TimeRange = TimeRange,
+                TextSearch = string.IsNullOrEmpty(TextSearch) ? null : TextSearch,
+                CorrelationId = string.IsNullOrEmpty(CorrelationId) ? null : CorrelationId,
+                RawKql = builtIn?.QueryText,
+                MaxRows = 200
+            };
+            Entries = (await Provider.QueryLogsAsync(query, _cts.Token)).ToList();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsLoading = false; StateHasChanged(); }
+    }
+
+    private void CancelQuery() => _cts?.Cancel();
+
+    public void Dispose() => _cts?.Cancel();
+}

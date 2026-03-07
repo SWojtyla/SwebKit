@@ -1,0 +1,89 @@
+@inject AppStateService AppState
+
+<div style="display:flex; flex-direction:column; height:100%;">
+    <div class="filter-bar">
+        <select @bind="PeekCount" style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+            <option value="50">50 messages</option>
+            <option value="100">100 messages</option>
+            <option value="200">200 messages</option>
+        </select>
+        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
+               style="flex:1; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        <FluentButton @onclick="LoadAsync" Appearance="Appearance.Accent" Disabled="@IsLoading">
+            @(IsLoading ? "Loading..." : "Peek")
+        </FluentButton>
+    </div>
+
+    @if (ErrorMessage is not null) { <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" /> }
+
+    @if (IsLoading)
+    {
+        <LoadingSpinner Message="Peeking messages..." />
+    }
+    else
+    {
+        <div class="data-table-container">
+            <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage"
+                            Virtualize="true" ItemSize="32" RowClass="@(m => SelectedMessage?.MessageId == m.MessageId ? "selected-row" : "")"
+                            OnRowClick="@(e => OnSelect(e.Item))">
+                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="90px" />
+                <TemplateColumn Title="Message ID" Width="120px">
+                    <span title="@context.MessageId">@(context.MessageId.Length > 12 ? context.MessageId[..12] + "…" : context.MessageId)</span>
+                </TemplateColumn>
+                <TemplateColumn Title="Correlation ID" Width="120px">@(context.CorrelationId ?? "-")</TemplateColumn>
+                <TemplateColumn Title="Subject">@(context.Subject ?? "-")</TemplateColumn>
+                <TemplateColumn Title="Delivery" Width="60px">@context.DeliveryCount</TemplateColumn>
+                @if (ShowDlqColumns)
+                {
+                    <TemplateColumn Title="DLQ Reason">@(context.DeadLetterReason ?? "-")</TemplateColumn>
+                }
+            </FluentDataGrid>
+        </div>
+        <div style="padding:4px 8px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border);">
+            @FilteredMessages.Count message(s) shown
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public string? EntityPath { get; set; }
+    [Parameter] public bool ShowDlqColumns { get; set; }
+    [Parameter] public bool IsDlqMode { get; set; }
+    [Parameter] public EventCallback<SbMessage> OnMessageSelected { get; set; }
+    [Parameter] public SbMessage? SelectedMessage { get; set; }
+
+    private bool IsLoading;
+    private string? ErrorMessage;
+    private List<SbMessage> Messages = [];
+    private string TextFilter = "";
+    private int PeekCount = 50;
+
+    private List<SbMessage> FilteredMessages => string.IsNullOrEmpty(TextFilter)
+        ? Messages
+        : Messages.Where(m => m.MessageId.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
+                            || m.CorrelationId?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
+                            || m.Subject?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
+                            || m.Body.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Client is not null && EntityPath is not null) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || EntityPath is null) return;
+        IsLoading = true; ErrorMessage = null; StateHasChanged();
+        try
+        {
+            Messages = IsDlqMode
+                ? (await Client.PeekDeadLetterAsync(EntityPath, PeekCount)).ToList()
+                : (await Client.PeekMessagesAsync(EntityPath, PeekCount)).ToList();
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsLoading = false; StateHasChanged(); }
+    }
+
+    private Task OnSelect(SbMessage msg) => OnMessageSelected.InvokeAsync(msg);
+}

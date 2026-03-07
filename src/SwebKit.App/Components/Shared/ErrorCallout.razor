@@ -1,0 +1,12 @@
+<div class="error-callout">
+    <strong>Error:</strong> @Message
+    @if (OnRetry.HasDelegate)
+    {
+        <button style="margin-left: 8px; padding: 2px 8px; font-size: 11px; cursor: pointer;" @onclick="OnRetry">Retry</button>
+    }
+</div>
+
+@code {
+    [Parameter] public string Message { get; set; } = "An error occurred.";
+    [Parameter] public EventCallback OnRetry { get; set; }
+}
