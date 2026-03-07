@@ -21,9 +21,12 @@ and AKS (Kubernetes) debugging helpers in a single developer-centric desktop app
 
 ## Documentation
 
+- [Documentation Entry Point](docs/README.md)
+- [Feature Catalog](docs/features/README.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Full Design Document](docs/DESIGN.md)
-- [Roadmap](docs/ROADMAP.md)
+- [Docs Rework Traceability Plan](docs/plans/docs-rework-traceability/index.md)
+- [Documentation Migration Notes](docs/MIGRATION-NOTES.md)
 
 ## Getting Started
 
