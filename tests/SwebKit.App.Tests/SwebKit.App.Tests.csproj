@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>SwebKit.App</RootNamespace>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="bunit.web" Version="1.29.5" />
+        <PackageReference Include="coverlet.collector" Version="6.0.4" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+        <PackageReference Include="xunit" Version="2.9.3" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\SwebKit.Core\SwebKit.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="..\..\src\SwebKit.App\Services\CommandRegistry.cs" Link="Services\CommandRegistry.cs" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\NavItem.razor" Link="Components\Layout\NavItem.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\LeftNav.razor" Link="Components\Layout\LeftNav.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\TopBar.razor" Link="Components\Layout\TopBar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\CommandPalette.razor" Link="Components\Shared\CommandPalette.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfirmDialog.razor" Link="Components\Shared\ConfirmDialog.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
+    </ItemGroup>
+</Project>

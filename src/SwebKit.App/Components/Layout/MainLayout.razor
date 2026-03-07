@@ -4,6 +4,7 @@
 @inject TabService Tabs
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject CommandRegistry Commands
 @implements IDisposable
 
 <FluentDesignTheme StorageName="swebkit-theme" />
@@ -38,6 +39,7 @@
     {
         if (!firstRender) return;
         await AppState.InitializeAsync();
+        RegisterDefaultCommands();
         _jsRef = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
         StateHasChanged();
@@ -46,6 +48,7 @@
     protected override void OnInitialized()
     {
         Events.Subscribe<NavigateToAreaEvent>(OnNavigateToArea);
+        Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged += StateHasChanged;
     }
 
@@ -59,6 +62,96 @@
     }
 
     private void OnNavigateToArea(NavigateToAreaEvent e) => InvokeAsync(() => NavigateTo(e.Area));
+
+    private void OnCommandPaletteRequested(CommandPaletteRequestedEvent _) =>
+        InvokeAsync(() =>
+        {
+            IsCommandPaletteOpen = true;
+            StateHasChanged();
+        });
+
+    private void RegisterDefaultCommands()
+    {
+        if (Commands.Commands.Count > 0) return;
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-projects",
+            Label = "Navigate to Projects",
+            Category = "Navigation",
+            Shortcut = "Alt+1",
+            Execute = () =>
+            {
+                NavigateTo("projects");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-service-bus",
+            Label = "Navigate to Service Bus",
+            Category = "Navigation",
+            Shortcut = "Alt+2",
+            Execute = () =>
+            {
+                NavigateTo("service-bus");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-observability",
+            Label = "Navigate to Observability",
+            Category = "Navigation",
+            Shortcut = "Alt+3",
+            Execute = () =>
+            {
+                NavigateTo("observability");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-aks",
+            Label = "Navigate to AKS",
+            Category = "Navigation",
+            Shortcut = "Alt+4",
+            Execute = () =>
+            {
+                NavigateTo("aks");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-settings",
+            Label = "Navigate to Settings",
+            Category = "Navigation",
+            Shortcut = "Alt+5",
+            Execute = () =>
+            {
+                NavigateTo("settings");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "refresh-current-area",
+            Label = "Refresh Current Area",
+            Category = "Actions",
+            Shortcut = "F5",
+            Execute = () =>
+            {
+                Events.Publish(new RefreshRequestedEvent(CurrentArea));
+                return Task.CompletedTask;
+            }
+        });
+    }
 
     [JSInvokable]
     public async Task OnShortcut(string shortcut)
@@ -105,6 +198,7 @@
     public void Dispose()
     {
         Events.Unsubscribe<NavigateToAreaEvent>(OnNavigateToArea);
+        Events.Unsubscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged -= StateHasChanged;
         _jsRef?.Dispose();
     }

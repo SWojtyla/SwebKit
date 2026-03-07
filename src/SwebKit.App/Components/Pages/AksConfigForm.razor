@@ -1,0 +1,39 @@
+@using SwebKit.Core.Domain
+
+<div style="display:grid; gap:10px; padding:12px 0;">
+    <FluentTextField Label="Kubeconfig Context" @bind-Value="KubeconfigContext" style="width:100%;"
+                     Placeholder="my-aks-context" />
+    <FluentTextField Label="Default Namespace" @bind-Value="DefaultNamespace" style="width:100%;"
+                     Placeholder="default" />
+    <FluentTextField Label="Explicit Cluster URL (optional)" @bind-Value="ExplicitClusterUrl" style="width:100%;"
+                     Placeholder="https://..." />
+
+    <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string KubeconfigContext = string.Empty;
+    private string DefaultNamespace = "default";
+    private string ExplicitClusterUrl = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        var config = Environment.AksConfig;
+        KubeconfigContext = config?.KubeconfigContext ?? string.Empty;
+        DefaultNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
+        ExplicitClusterUrl = config?.ExplicitClusterUrl ?? string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        var config = Environment.AksConfig ??= new AksConfig();
+        config.KubeconfigContext = string.IsNullOrWhiteSpace(KubeconfigContext) ? null : KubeconfigContext.Trim();
+        config.DefaultNamespace = string.IsNullOrWhiteSpace(DefaultNamespace) ? "default" : DefaultNamespace.Trim();
+        config.ExplicitClusterUrl = string.IsNullOrWhiteSpace(ExplicitClusterUrl) ? null : ExplicitClusterUrl.Trim();
+
+        await OnSaved.InvokeAsync();
+    }
+}

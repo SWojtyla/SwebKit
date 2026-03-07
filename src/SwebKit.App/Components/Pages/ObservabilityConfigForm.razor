@@ -1,0 +1,52 @@
+@using SwebKit.Core.Domain
+
+<div style="display:grid; gap:10px; padding:12px 0;">
+    <FluentTextField Label="Log Analytics Workspace ID" @bind-Value="WorkspaceId" style="width:100%;" />
+    <FluentTextField Label="Application Insights Application ID (optional)" @bind-Value="ApplicationId"
+                     style="width:100%;" />
+    <FluentTextField Label="OTLP Endpoint (optional)" @bind-Value="OtlpEndpoint" style="width:100%;"
+                     Placeholder="https://..." />
+
+    <div style="display:grid; gap:6px;">
+        <label style="font-size:12px; color:var(--color-text-muted);">Credential Mode</label>
+        <select @bind="CredentialMode"
+                style="padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; font-size:12px;">
+            <option value="DefaultAzureCredential">Default Azure Credential</option>
+            <option value="ManagedIdentity">Managed Identity</option>
+            <option value="ApiKey">API Key</option>
+        </select>
+    </div>
+
+    <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save Observability</FluentButton>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
+    [Parameter, EditorRequired] public ICredentialStore CredentialStore { get; set; } = default!;
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string WorkspaceId = string.Empty;
+    private string ApplicationId = string.Empty;
+    private string OtlpEndpoint = string.Empty;
+    private string CredentialMode = "DefaultAzureCredential";
+
+    protected override void OnParametersSet()
+    {
+        var config = Environment.ObservabilityConfig;
+        WorkspaceId = config?.WorkspaceId ?? string.Empty;
+        ApplicationId = config?.ApplicationId ?? string.Empty;
+        OtlpEndpoint = config?.OtlpEndpoint ?? string.Empty;
+        CredentialMode = config?.CredentialMode ?? "DefaultAzureCredential";
+    }
+
+    private async Task SaveAsync()
+    {
+        var config = Environment.ObservabilityConfig ??= new ObservabilityConfig();
+        config.WorkspaceId = string.IsNullOrWhiteSpace(WorkspaceId) ? null : WorkspaceId.Trim();
+        config.ApplicationId = string.IsNullOrWhiteSpace(ApplicationId) ? null : ApplicationId.Trim();
+        config.OtlpEndpoint = string.IsNullOrWhiteSpace(OtlpEndpoint) ? null : OtlpEndpoint.Trim();
+        config.CredentialMode = CredentialMode;
+
+        await OnSaved.InvokeAsync();
+    }
+}

@@ -1,0 +1,441 @@
+using Bunit;
+using Bunit.JSInterop;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.DependencyInjection;
+using SwebKit.App.Components.Layout;
+using SwebKit.App.Components.Pages;
+using SwebKit.App.Components.Shared;
+using SwebKit.App.Services;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
+
+namespace SwebKit.App.Tests;
+
+public class ComponentTests : TestContext
+{
+    public ComponentTests()
+    {
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
+        var libConfigType = Type.GetType(
+            "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
+        if (libConfigType is not null)
+        {
+            Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
+        }
+    }
+
+    [Fact]
+    public void NavItem_CollapsedMode_HidesLabel()
+    {
+        var cut = RenderComponent<NavItem>(ps => ps
+            .Add(p => p.Icon, "📁")
+            .Add(p => p.Label, "Projects")
+            .Add(p => p.IsExpanded, false));
+
+        Assert.Single(cut.FindAll("div.nav-item > span"));
+    }
+
+    [Fact]
+    public void NavItem_ActiveArea_HasActiveClass()
+    {
+        var cut = RenderComponent<NavItem>(ps => ps
+            .Add(p => p.Area, "projects")
+            .Add(p => p.CurrentArea, "projects"));
+
+        Assert.Contains("nav-item active", cut.Markup);
+    }
+
+    [Fact]
+    public void NavItem_Click_InvokesOnNavigate()
+    {
+        string? navigatedArea = null;
+        var cut = RenderComponent<NavItem>(ps => ps
+            .Add(p => p.Area, "aks")
+            .Add(p => p.OnNavigate, area => navigatedArea = area));
+
+        cut.Find("div.nav-item").Click();
+
+        Assert.Equal("aks", navigatedArea);
+    }
+
+    [Fact]
+    public void LeftNav_ShowsProjectName_WhenExpanded()
+    {
+        var appState = CreateAppStateWithProject("Orders", "Dev");
+        Services.AddSingleton(appState);
+
+        var cut = RenderComponent<LeftNav>(ps => ps.Add(p => p.IsExpanded, true));
+
+        Assert.Contains("Orders", cut.Markup);
+    }
+
+    [Fact]
+    public void LeftNav_HidesProjectName_WhenCollapsed()
+    {
+        var appState = CreateAppStateWithProject("Orders", "Dev");
+        Services.AddSingleton(appState);
+
+        var cut = RenderComponent<LeftNav>(ps => ps.Add(p => p.IsExpanded, false));
+
+        Assert.DoesNotContain("Orders", cut.Markup);
+    }
+
+    [Fact]
+    public void CommandPalette_EmptyRegistry_ShowsNoCommandsMessage()
+    {
+        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>();
+
+        Assert.Contains("No commands found", cut.Markup);
+    }
+
+    [Fact]
+    public void CommandPalette_WithCommands_ShowsResults()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(new AppCommand
+        {
+            Id = "nav-projects",
+            Label = "Navigate to Projects",
+            Category = "Navigation",
+            Execute = () => Task.CompletedTask
+        });
+        Services.AddSingleton(registry);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>();
+
+        Assert.Contains("Navigate to Projects", cut.Markup);
+    }
+
+    [Fact]
+    public void CommandPalette_FilterByQuery_NarrowsResults()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(new AppCommand
+        {
+            Id = "nav-projects",
+            Label = "Navigate to Projects",
+            Execute = () => Task.CompletedTask
+        });
+        registry.Register(new AppCommand
+        {
+            Id = "nav-aks",
+            Label = "Navigate to AKS",
+            Execute = () => Task.CompletedTask
+        });
+
+        Services.AddSingleton(registry);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>();
+        cut.Find("input").Input("AKS");
+
+        Assert.Contains("Navigate to AKS", cut.Markup);
+        Assert.DoesNotContain("Navigate to Projects", cut.Markup);
+    }
+
+    [Fact]
+    public void CommandPalette_Enter_ExecutesFocusedCommand()
+    {
+        var executed = 0;
+        var registry = new CommandRegistry();
+        registry.Register(new AppCommand
+        {
+            Id = "first",
+            Label = "First",
+            Execute = () => Task.CompletedTask
+        });
+        registry.Register(new AppCommand
+        {
+            Id = "second",
+            Label = "Second",
+            Execute = () =>
+            {
+                executed++;
+                return Task.CompletedTask;
+            }
+        });
+
+        Services.AddSingleton(registry);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>();
+        var input = cut.Find("input");
+        input.KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+        input.KeyDown(new KeyboardEventArgs { Key = "Enter" });
+
+        Assert.Equal(1, executed);
+    }
+
+    [Fact]
+    public void CommandPalette_ArrowKeys_MovesFocus()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(new AppCommand
+        {
+            Id = "first",
+            Label = "First",
+            Execute = () => Task.CompletedTask
+        });
+        registry.Register(new AppCommand
+        {
+            Id = "second",
+            Label = "Second",
+            Execute = () => Task.CompletedTask
+        });
+
+        Services.AddSingleton(registry);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>();
+        cut.Find("input").KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+
+        Assert.Contains("Second", cut.Find(".command-item.focused").TextContent);
+    }
+
+    [Fact]
+    public void CommandPalette_Escape_Closes()
+    {
+        var closeCalls = 0;
+        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>(ps => ps
+            .Add(p => p.OnClose, () => closeCalls++));
+
+        cut.Find("input").KeyDown(new KeyboardEventArgs { Key = "Escape" });
+
+        Assert.Equal(1, closeCalls);
+    }
+
+    [Fact]
+    public void CommandPalette_ClickOverlay_Closes()
+    {
+        var closeCalls = 0;
+        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+
+        var cut = RenderComponent<CommandPalette>(ps => ps
+            .Add(p => p.OnClose, () => closeCalls++));
+
+        cut.Find(".command-palette-overlay").Click();
+
+        Assert.Equal(1, closeCalls);
+    }
+
+    [Fact]
+    public void ConfirmDialog_RendersMessageAndTitle()
+    {
+        var cut = RenderComponent<ConfirmDialog>(ps => ps
+            .Add(p => p.Visible, true)
+            .Add(p => p.Title, "Delete Project")
+            .Add(p => p.Message, "Are you sure?"));
+
+        Assert.Contains("Delete Project", cut.Markup);
+        Assert.Contains("Are you sure?", cut.Markup);
+    }
+
+    [Fact]
+    public void ConfirmDialog_Confirm_InvokesOnConfirm()
+    {
+        var called = 0;
+        var cut = RenderComponent<ConfirmDialog>(ps => ps
+            .Add(p => p.Visible, true)
+            .Add(p => p.OnConfirm, () => called++));
+
+        cut.FindAll("button")[1].Click();
+
+        Assert.Equal(1, called);
+    }
+
+    [Fact]
+    public void ConfirmDialog_Cancel_InvokesOnCancel()
+    {
+        var called = 0;
+        var cut = RenderComponent<ConfirmDialog>(ps => ps
+            .Add(p => p.Visible, true)
+            .Add(p => p.OnCancel, () => called++));
+
+        cut.FindAll("button")[0].Click();
+
+        Assert.Equal(1, called);
+    }
+
+    [Fact]
+    public void ConfirmDialog_ProductionMode_ShowsRedStyling()
+    {
+        var cut = RenderComponent<ConfirmDialog>(ps => ps
+            .Add(p => p.Visible, true)
+            .Add(p => p.IsProduction, true));
+
+        Assert.Contains("PRODUCTION", cut.Markup);
+    }
+
+    [Fact]
+    public void TopBar_CommandPaletteButton_PublishesEvent()
+    {
+        var appState = CreateAppStateWithProject("Orders", "Dev");
+        var bus = new AppEventBus();
+        var published = 0;
+        bus.Subscribe<CommandPaletteRequestedEvent>(_ => published++);
+
+        Services.AddSingleton(appState);
+        Services.AddSingleton<IAppEventBus>(bus);
+        Services.AddSingleton(new CommandRegistry());
+
+        var cut = RenderComponent<TopBar>();
+        cut.Find("button.cmd-palette-btn").Click();
+
+        Assert.Equal(1, published);
+    }
+
+    [Fact]
+    public void TopBar_ProdBadge_ShownWhenProduction()
+    {
+        var appState = CreateAppStateWithProject("Orders", "Prod", isProduction: true);
+
+        Services.AddSingleton(appState);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton(new CommandRegistry());
+
+        var cut = RenderComponent<TopBar>();
+
+        Assert.Contains("PROD", cut.Markup);
+    }
+
+    [Fact]
+    public void TopBar_ProdBadge_HiddenWhenNonProd()
+    {
+        var appState = CreateAppStateWithProject("Orders", "Dev", isProduction: false);
+
+        Services.AddSingleton(appState);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton(new CommandRegistry());
+
+        var cut = RenderComponent<TopBar>();
+
+        Assert.DoesNotContain("PROD", cut.Markup);
+    }
+
+    [Fact]
+    public void TopBar_ProjectSelector_ShowsAllProjects()
+    {
+        var appState = CreateAppStateWithProjects(
+            CreateProject("Orders", "Dev"),
+            CreateProject("Billing", "Test"));
+
+        Services.AddSingleton(appState);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton(new CommandRegistry());
+
+        var cut = RenderComponent<TopBar>();
+
+        Assert.Equal(2, cut.FindAll("select option").Count);
+    }
+
+    [Fact]
+    public void TopBar_EnvButtons_ShowsCurrentProjectEnvs()
+    {
+        var project = new Project
+        {
+            Name = "Orders",
+            Environments =
+            [
+                new ProjectEnvironment { Name = "Dev", Tier = EnvironmentTier.NonProd },
+                new ProjectEnvironment { Name = "Prod", Tier = EnvironmentTier.Production }
+            ]
+        };
+        project.Environments[0].ProjectId = project.Id;
+        project.Environments[1].ProjectId = project.Id;
+
+        var appState = CreateAppStateWithProjects(project);
+
+        Services.AddSingleton(appState);
+        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton(new CommandRegistry());
+
+        var cut = RenderComponent<TopBar>();
+
+        Assert.Equal(2, cut.FindAll("button.env-btn").Count);
+    }
+
+    [Fact]
+    public void ServiceBusConfigForm_AuthModeChange_ShowsConnectionStringField()
+    {
+        var env = new ProjectEnvironment
+        {
+            ProjectId = Guid.NewGuid(),
+            Name = "Dev",
+            ServiceBusConfig = new ServiceBusConfig
+            {
+                NamespaceHostname = "orders",
+                AuthMode = SbAuthMode.DefaultAzureCredential
+            }
+        };
+
+        var cut = RenderComponent<ServiceBusConfigForm>(ps => ps
+            .Add(p => p.Environment, env)
+            .Add(p => p.CredentialStore, new InMemoryCredentialStore()));
+
+        cut.Find("select").Change("ConnectionString");
+        cut.SetParametersAndRender(ps => ps
+            .Add(p => p.Environment, env)
+            .Add(p => p.CredentialStore, new InMemoryCredentialStore()));
+
+        Assert.Contains("Connection String", cut.Markup);
+    }
+
+    private static AppStateService CreateAppStateWithProject(string projectName, string environmentName, bool isProduction = false)
+    {
+        return CreateAppStateWithProjects(CreateProject(projectName, environmentName, isProduction));
+    }
+
+    private static AppStateService CreateAppStateWithProjects(params Project[] projects)
+    {
+        var profiles = new ProfileRepository();
+        foreach (var project in projects)
+        {
+            profiles.AddProject(project);
+        }
+
+        var state = new AppStateService(profiles, new UiStateRepository(), new AppEventBus());
+        state.SelectProjectAsync(projects[0].Id).GetAwaiter().GetResult();
+        return state;
+    }
+
+    private static Project CreateProject(string projectName, string environmentName, bool isProduction = false)
+    {
+        var project = new Project
+        {
+            Name = projectName,
+            Environments =
+            [
+                new ProjectEnvironment
+                {
+                    Name = environmentName,
+                    Tier = isProduction ? EnvironmentTier.Production : EnvironmentTier.NonProd
+                }
+            ]
+        };
+
+        project.Environments[0].ProjectId = project.Id;
+        return project;
+    }
+
+    private sealed class InMemoryCredentialStore : ICredentialStore
+    {
+        private readonly Dictionary<string, string> _secrets = new();
+
+        public void Save(string key, string secret) => _secrets[key] = secret;
+        public string? Get(string key) => _secrets.TryGetValue(key, out var value) ? value : null;
+        public void Delete(string key) => _secrets.Remove(key);
+        public IReadOnlyList<string> ListKeys(string prefix = "") =>
+            _secrets.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+}

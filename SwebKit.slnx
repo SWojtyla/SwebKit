@@ -7,6 +7,7 @@
     <Project Path="src/SwebKit.OpenTelemetry/SwebKit.OpenTelemetry.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj" />
     <Project Path="tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj" />
     <Project Path="tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj" />
     <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />

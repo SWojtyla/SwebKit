@@ -7,79 +7,95 @@
     <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
         <div class="filter-bar">
             <span style="font-size:12px; color:var(--color-text-muted);">Namespace:</span>
-            <strong style="font-size:12px;">@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default")</strong>
-            <FluentButton @onclick="LoadAsync" Disabled="@IsLoading" style="margin-left:auto;">
-                @(IsLoading ? "Loading..." : "&#8635; Refresh (F5)")
-            </FluentButton>
-        </div>
-
-        @if (ErrorMessage is not null) { <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" /> }
-
-        @if (Client is null && AppState.CurrentEnvironment?.AksConfig is null)
-        {
-            <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
-                No AKS cluster configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
+            <strong style="font-size:12px;">@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ??
+                                "default")</strong>
+                <FluentButton @onclick="LoadAsync" Disabled="@IsLoading" style="margin-left:auto;">
+                    @(IsLoading ? "Loading..." : "↻ Refresh (F5)")
+                </FluentButton>
             </div>
-        }
-        else if (IsLoading)
-        {
-            <LoadingSpinner Message="Loading workloads..." />
-        }
-        else
-        {
-            <div style="display:flex; flex:1; overflow:hidden;">
-                <!-- Deployments table -->
-                <div class="data-table-container" style="flex:3;">
-                    <FluentDataGrid Items="@Deployments.AsQueryable()" TGridItem="DeploymentInfo"
-                                    Virtualize="true" ItemSize="36"
-                                    RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
-                                    OnRowClick="@(r => { SelectedDeployment = r.Item; StateHasChanged(); })">
-                        <PropertyColumn Property="d => d.Name" Title="Name" />
-                        <PropertyColumn Property="d => d.Namespace" Title="Namespace" Width="120px" />
-                        <TemplateColumn Title="Ready" Width="80px">
-                            <span style="color: @(context.ReadyReplicas == context.Replicas ? "var(--color-success)" : "var(--color-warning)")">@context.ReadyReplicas/@context.Replicas</span>
-                        </TemplateColumn>
-                        <PropertyColumn Property="d => d.Status" Title="Status" Width="90px" />
-                        <TemplateColumn Title="Actions" Width="120px">
-                            <span @onclick:stopPropagation="true"><FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogs(context)">Logs</FluentButton></span>
-                        </TemplateColumn>
-                    </FluentDataGrid>
-                </div>
 
-                <!-- Events panel -->
-                <div style="flex:2; border-left:1px solid var(--color-border); overflow-y:auto;">
-                    <div style="padding:6px 12px; font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--color-border);">Events</div>
-                    @foreach (var evt in Events)
-                    {
-                        <div style="padding:6px 12px; border-bottom:1px solid var(--color-border); font-size:11px;">
-                            <div style="display:flex; gap:8px; align-items:center;">
-                                @if (evt.Type == "Warning")
-                                {
-                                    <span style="color:var(--color-warning);">&#9888;</span>
-                                }
-                                <span style="font-weight:600; color:@(evt.Type == "Warning" ? "var(--color-warning)" : "var(--color-text)");">@evt.Reason</span>
-                                <span style="color:var(--color-text-muted); margin-left:auto;">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
-                            </div>
-                            <div style="color:var(--color-text-muted); margin-top:2px;">@evt.InvolvedObjectName — @evt.Message</div>
+            @if (ErrorMessage is not null)
+            {
+                <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+            }
+
+            @if (Client is null && AppState.CurrentEnvironment?.AksConfig is null)
+            {
+                <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
+                    No AKS cluster configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
+                </div>
+            }
+            else if (IsLoading)
+            {
+                <LoadingSpinner Message="Loading workloads..." />
+            }
+            else
+            {
+                <div style="display:flex; flex:1; overflow:hidden;">
+                    <!-- Deployments table -->
+                    <div class="data-table-container" style="flex:3;">
+                        <FluentDataGrid Items="@Deployments.AsQueryable()" TGridItem="DeploymentInfo" Virtualize="true"
+                                        ItemSize="36" RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
+                                        OnRowClick="@(r => { SelectedDeployment = r.Item; StateHasChanged(); })">
+                            <PropertyColumn Property="d => d.Name" Title="Name" />
+                            <PropertyColumn Property="d => d.Namespace" Title="Namespace" Width="120px" />
+                            <TemplateColumn Title="Ready" Width="80px">
+                                <span
+                                style="color: @(context.ReadyReplicas == context.Replicas ? "var(--color-success)" : "var(--color-warning)")">@context.ReadyReplicas/@context.Replicas</span>
+                            </TemplateColumn>
+                            <PropertyColumn Property="d => d.Status" Title="Status" Width="90px" />
+                            <TemplateColumn Title="Actions" Width="120px">
+                                <span @onclick:stopPropagation="true">
+                                    <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogs(context)">Logs
+                                    </FluentButton>
+                                </span>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </div>
+
+                    <!-- Events panel -->
+                    <div style="flex:2; border-left:1px solid var(--color-border); overflow-y:auto;">
+                        <div
+                            style="padding:6px 12px; font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--color-border);">
+                            Events</div>
+                            @foreach (var evt in Events)
+                            {
+                                <div style="padding:6px 12px; border-bottom:1px solid var(--color-border); font-size:11px;">
+                                    <div style="display:flex; gap:8px; align-items:center;">
+                                        @if (evt.Type == "Warning")
+                                        {
+                                            <span style="color:var(--color-warning);">&#9888;</span>
+                                        }
+                                        <span
+                                        style="font-weight:600; color:@(evt.Type == "Warning" ? "var(--color-warning)" : "var(--color-text)");">@evt.Reason</span>
+                                        <span
+                                        style="color:var(--color-text-muted); margin-left:auto;">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
+                                    </div>
+                                    <div style="color:var(--color-text-muted); margin-top:2px;">@evt.InvolvedObjectName — @evt.Message
+                                    </div>
+                                </div>
+                            }
                         </div>
-                    }
-                </div>
+                    </div>
+                }
             </div>
-        }
-    </div>
 
-    <!-- Log pane (if open) -->
-    @if (LogPodName is not null)
-    {
-        <div style="width:420px; border-left:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
-            <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; font-size:12px;">
-                <span style="font-weight:600;">Logs: @LogPodName</span>
-                <FluentButton Appearance="Appearance.Stealth" style="margin-left:auto;" @onclick="() => LogPodName = null">&#x2715;</FluentButton>
+            <!-- Log pane (if open) -->
+            @if (LogPodName is not null)
+            {
+                <div
+                    style="width:420px; border-left:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
+                    <div
+                        style="padding:8px 12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; font-size:12px;">
+                        <span style="font-weight:600;">Logs: @LogPodName</span>
+                        <FluentButton Appearance="Appearance.Stealth" style="margin-left:auto;" @onclick="() => LogPodName = null">
+                            &#x2715;</FluentButton>
+                        </div>
+                        <PodLogView Client="Client" Namespace="@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default")"
+                                    PodName="@LogPodName" />
+                    </div>
+                }
             </div>
-            <PodLogView Client="Client" Namespace="@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default")" PodName="@LogPodName" />
-        </div>
-    }
-</div>
 
 @code {
     private IAksClient? Client;
