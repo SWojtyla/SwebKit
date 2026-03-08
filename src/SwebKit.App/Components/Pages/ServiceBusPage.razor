@@ -4,101 +4,119 @@
 @inject IAppEventBus Events
 @implements IDisposable
 
-<div class="service-bus-page-shell" style="display:flex; height:100%; overflow:hidden;">
+<div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
+     style="display:flex; height:100%; overflow:hidden;">
     <!-- Left: namespace list + entity trees -->
-    <div        class="service-bus-left-pane"
-                style="width:260px; flex-shrink:0; border-right:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
+    <div class="service-bus-left-pane @(_isNamespacePaneCollapsed ? "collapsed" : string.Empty)"
+         style="border-right:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
 
         <!-- Namespace panel header -->
         <div
             style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
-            <span
-            style="color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Namespaces</span>
-            <div style="display:flex; gap:4px;">
-                <button
-                style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text-muted); border:1px solid var(--color-border); border-radius:3px;"
-                title="Add a demo namespace with fake data" @onclick="AddDemoNamespace">Demo</button>
-                <button
-                style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
-                @onclick="ToggleAddForm">+ Add</button>
-            </div>
+            @if (_isNamespacePaneCollapsed)
+            {
+                <button type="button"                        class="namespace-pane-toggle"                        title="Expand namespace panel"
+                        aria-label="Expand namespace panel"                        aria-expanded="false"                        @onclick="ToggleNamespacePane">
+                    ▶
+                </button>
+            }
+            else
+            {
+                <span
+                style="color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Namespaces</span>
+                <div style="display:flex; gap:4px; align-items:center;">
+                    <button
+                    style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text-muted); border:1px solid var(--color-border); border-radius:3px;"
+                    title="Add a demo namespace with fake data" @onclick="AddDemoNamespace">Demo</button>
+                    <button
+                    style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
+                    @onclick="ToggleAddForm">+ Add</button>
+                    <button type="button" class="namespace-pane-toggle" title="Collapse namespace panel"
+                            aria-label="Collapse namespace panel" aria-expanded="true" @onclick="ToggleNamespacePane">
+                        ◀
+                    </button>
+                </div>
+            }
         </div>
 
-        <!-- Add namespace form -->
-        @if (_showAddForm)
+        @if (!_isNamespacePaneCollapsed)
         {
-            <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
-                <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection string:
+            <!-- Add namespace form -->
+            @if (_showAddForm)
+            {
+                <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
+                    <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection string:
+                    </div>
+                    <textarea @bind="_addConnStr" rows="3"
+                              placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                              style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
+                    @if (!string.IsNullOrWhiteSpace(_addError))
+                    {
+                        <div style="font-size:11px; color:var(--color-error); margin-top:4px;">@_addError</div>
+                    }
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <button
+                        style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
+                        @onclick="AddNamespaceAsync">Add</button>
+                        <button
+                        style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
+                        @onclick="CancelAdd">Cancel</button>
+                    </div>
                 </div>
-                <textarea @bind="_addConnStr" rows="3"
-                          placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                          style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
-                @if (!string.IsNullOrWhiteSpace(_addError))
+            }
+
+            <!-- Namespace list -->
+            <div style="flex:1; overflow-y:auto;">
+                @if (!_namespaceStates.Any())
                 {
-                    <div style="font-size:11px; color:var(--color-error); margin-top:4px;">@_addError</div>
+                    <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
+                        No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
+                    </div>
                 }
-                <div style="display:flex; gap:6px; margin-top:6px;">
-                    <button
-                    style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
-                    @onclick="AddNamespaceAsync">Add</button>
-                    <button
-                    style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
-                    @onclick="CancelAdd">Cancel</button>
-                </div>
+
+                @foreach (var ns in _namespaceStates)
+                {
+                    <!-- Namespace header row -->
+                    <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
+                         @onclick="() => ToggleNamespace(ns.Namespace.Id)">
+                        <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
+                        <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                              title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
+                        @if (ns.IsConnecting)
+                        {
+                            <span style="font-size:10px; color:var(--color-text-muted);">...</span>
+                        }
+                        else if (ns.Client is not null)
+                        {
+                            <span style="font-size:10px; color:var(--color-success);">●</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:10px; color:var(--color-error);" title="@ns.ConnectionError">●</span>
+                        }
+                        <button
+                        style="margin-left:6px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
+                        title="Remove namespace" @onclick:stopPropagation="true"
+                        @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">✕</button>
+                    </div>
+
+                    @if (ns.IsExpanded)
+                    {
+                        @if (ns.ConnectionError is not null && ns.Client is null)
+                        {
+                            <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
+                        }
+                        else
+                        {
+                            <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="CurrentLinkedEntities"
+                                        OnEntitySelected="entity => OpenEntityTab(ns, entity)"
+                                        OnEntityModeSelected="selection => OpenEntityTab(ns, selection.Entity, selection.IsDlq)"
+                                        OnEntityLinkToggled="link => ToggleEntityLinkAsync(link)" />
+                        }
+                    }
+                }
             </div>
         }
-
-        <!-- Namespace list -->
-        <div style="flex:1; overflow-y:auto;">
-            @if (!_namespaceStates.Any())
-            {
-                <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
-                    No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
-                </div>
-            }
-
-            @foreach (var ns in _namespaceStates)
-            {
-                <!-- Namespace header row -->
-                <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
-                     @onclick="() => ToggleNamespace(ns.Namespace.Id)">
-                    <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
-                    <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                          title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
-                    @if (ns.IsConnecting)
-                    {
-                        <span style="font-size:10px; color:var(--color-text-muted);">...</span>
-                    }
-                    else if (ns.Client is not null)
-                    {
-                        <span style="font-size:10px; color:var(--color-success);">●</span>
-                    }
-                    else
-                    {
-                        <span style="font-size:10px; color:var(--color-error);" title="@ns.ConnectionError">●</span>
-                    }
-                    <button
-                    style="margin-left:6px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
-                    title="Remove namespace" @onclick:stopPropagation="true"
-                    @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">✕</button>
-                </div>
-
-                @if (ns.IsExpanded)
-                {
-                    @if (ns.ConnectionError is not null && ns.Client is null)
-                    {
-                        <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
-                    }
-                    else
-                    {
-                        <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="CurrentLinkedEntities"
-                                    OnEntitySelected="entity => OpenEntityTab(ns, entity)"
-                                    OnEntityModeSelected="selection => OpenEntityTab(ns, selection.Entity, selection.IsDlq)"
-                                    OnEntityLinkToggled="link => ToggleEntityLinkAsync(link)" />
-                    }
-                }
-            }
-        </div>
     </div>
 
     <!-- Right: tabbed content -->
@@ -157,6 +175,7 @@
     private List<SbTab> _openTabs = [];
     private SbTab? _activeTab;
     private bool _showAddForm;
+    private bool _isNamespacePaneCollapsed;
     private string _addConnStr = string.Empty;
     private string? _addError;
 
@@ -228,6 +247,15 @@
         _showAddForm = false;
         _addConnStr = string.Empty;
         _addError = null;
+    }
+
+    private void ToggleNamespacePane()
+    {
+        _isNamespacePaneCollapsed = !_isNamespacePaneCollapsed;
+        if (_isNamespacePaneCollapsed)
+        {
+            _showAddForm = false;
+        }
     }
 
     private async Task AddNamespaceAsync()

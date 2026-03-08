@@ -212,6 +212,7 @@ public sealed class MessageListViewTests : TestContext
             Assert.NotEmpty(cut.FindAll(".cell-truncate"));
             Assert.NotEmpty(cut.FindAll(".cell-wrap"));
             Assert.NotEmpty(cut.FindAll(".col-message-id"));
+            Assert.NotEmpty(cut.FindAll(".col-correlation-id"));
             Assert.NotEmpty(cut.FindAll(".col-subject"));
             Assert.NotEmpty(cut.FindAll(".col-delivery"));
             Assert.NotEmpty(cut.FindAll(".col-dlq-reason"));

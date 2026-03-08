@@ -40,6 +40,8 @@
 - [x] SB-UI-104: Entity tree exposes explicit Active/DLQ actions and renders both counts simultaneously.
 - [x] SB-UI-201: Responsive message-table hooks validated in component tests (scroll owner + per-column class strategy).
 - [ ] SB-UI-301: Horizontal scroll interaction remains usable when left settings panel is visible (manual interaction check pending).
+- [ ] SB-UI-302: Horizontal scroll interaction remains usable after collapsing the left panel (manual interaction check pending).
+- [x] SB-UI-303: Service Bus page exposes a left-pane collapse/expand control and applies collapsed layout class in component tests.
 - [x] SB-UI-401: Entity labels render without encoded artifacts like `&#...;`.
 
 ## Command Placeholders

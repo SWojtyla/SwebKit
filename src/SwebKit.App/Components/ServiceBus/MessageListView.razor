@@ -40,7 +40,7 @@
                 <TemplateColumn Title="Subject">
                     <span class="cell-wrap col-subject" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Delivery" Width="72px"><span class="col-delivery">@context.DeliveryCount</span></TemplateColumn>
+                <TemplateColumn Title="Delivery" Width="64px"><span class="col-delivery">@context.DeliveryCount</span></TemplateColumn>
                 @if (ShowDlqColumns)
                 {
                     <TemplateColumn Title="DLQ Reason">

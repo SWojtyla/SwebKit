@@ -26,6 +26,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\SwebKit.Core\SwebKit.Core.csproj" />
+        <ProjectReference Include="..\..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -39,6 +40,10 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageListView.razor" Link="Components\ServiceBus\MessageListView.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageDetailPane.razor" Link="Components\ServiceBus\MessageDetailPane.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\DlqView.razor" Link="Components\ServiceBus\DlqView.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\PropRow.razor" Link="Components\ServiceBus\PropRow.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
     </ItemGroup>
 </Project>

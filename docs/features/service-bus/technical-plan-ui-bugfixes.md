@@ -2,7 +2,7 @@
 
 ## Status
 
-- Plan state: In progress (SB-UI-BUG-01 complete; SB-UI-BUG-02 advanced; SB-UI-BUG-03 layout constraints applied; SB-UI-BUG-04 complete)
+- Plan state: In progress (SB-UI-BUG-01 complete; SB-UI-BUG-02 complete; SB-UI-BUG-03 complete; SB-UI-BUG-04 complete)
 - Scope: UI-focused fixes for 4 reported Service Bus defects
 - Product code changes: Not in this document (planning only)
 
@@ -89,12 +89,12 @@ Address four high-impact usability and correctness issues in the Service Bus ins
 
 ### SB-UI-BUG-02: Static columns truncate data and force unnecessary horizontal scroll
 
-- Implementation status: Advanced (second-step applied 2026-03-08)
+- Implementation status: Complete (final polish applied 2026-03-08)
 - Delivered this pass:
-  - Rebalanced message table column sizing to reduce rigid widths (flexible ID/subject/reason columns; fixed utility widths only where useful).
-  - Added explicit responsive column hooks (`col-message-id`, `col-subject`, `col-dlq-reason`, `col-delivery`) and `message-grid-scroll` ownership class.
-  - Updated table CSS to use `min-width: 100%` with `width: max-content` so horizontal scroll appears only when content truly exceeds available pane width.
-  - Preserved same rendering strategy for normal and DLQ modes.
+  - Tuned key column bounds to reduce unnecessary horizontal overflow while preserving readability (message id, correlation id, subject, DLQ reason).
+  - Kept utility columns compact (`Delivery`) and retained per-cell wrap/truncate behavior to avoid blanket clipping.
+  - Preserved `message-grid-scroll` as the list scroll owner with table sizing policy (`min-width: 100%` + `width: max-content`) so scrollbar appears only when content truly exceeds space.
+  - Added/updated component coverage for responsive class hooks including correlation-id column.
 
 - Reported behavior:
   - Table columns are fixed and truncate useful values.
@@ -128,11 +128,12 @@ Address four high-impact usability and correctness issues in the Service Bus ins
 
 ### SB-UI-BUG-03: Horizontal scrollbar cannot be used because left settings panel consumes space
 
-- Implementation status: Implemented (layout containment pass 2026-03-08)
+- Implementation status: Complete (collapse-control pass 2026-03-08)
 - Delivered this pass:
-  - Added explicit Service Bus page split-layout classes so right pane and message pane can shrink (`min-width: 0`) instead of forcing page-level overflow.
-  - Constrained details pane with clamp-based width and flex basis to keep message list as primary scroll owner.
-  - Ensured message list scroll container (`message-grid-scroll`) remains the horizontal scroll surface within the right content area.
+  - Added explicit namespace panel collapse/expand control in `ServiceBusPage` so users can quickly reclaim horizontal workspace.
+  - Added class-based collapsed layout state (`left-pane-collapsed`) so left pane shrinks to a compact rail without taking content width.
+  - Kept right pane and message list as explicit scroll owners (`service-bus-right-pane`, `service-bus-message-pane`, `message-grid-scroll`).
+  - Added component test coverage for collapse/expand interactions and collapsed state class behavior.
 
 - Reported behavior:
   - Even when horizontal scroll exists, users cannot effectively interact with it because the left panel dominates available width.

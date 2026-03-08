@@ -254,24 +254,27 @@ html, body {
 }
 
 .col-message-id {
-    min-width: 14rem;
-    max-width: 24rem;
-}
-
-.col-correlation-id {
-    min-width: 11rem;
+    min-width: 12rem;
     max-width: 18rem;
 }
 
+.col-correlation-id {
+    min-width: 9rem;
+    max-width: 14rem;
+}
+
 .col-subject {
-    min-width: 16rem;
+    min-width: 12rem;
+    max-width: 24rem;
 }
 
 .col-dlq-reason {
-    min-width: 16rem;
+    min-width: 12rem;
+    max-width: 24rem;
 }
 
 .col-delivery {
+    min-width: 4.5rem;
     white-space: nowrap;
 }
 
@@ -356,6 +359,32 @@ html, body {
     flex: 0 0 260px;
     min-width: 220px;
     max-width: 320px;
+}
+
+.service-bus-page-shell.left-pane-collapsed .service-bus-left-pane {
+    flex-basis: 44px;
+    min-width: 44px;
+    max-width: 44px;
+}
+
+.service-bus-left-pane.collapsed {
+    border-right-width: 1px;
+}
+
+.namespace-pane-toggle {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    cursor: pointer;
+}
+
+.namespace-pane-toggle:hover {
+    color: var(--color-text);
+    border-color: var(--color-accent);
 }
 
 .service-bus-right-pane {
