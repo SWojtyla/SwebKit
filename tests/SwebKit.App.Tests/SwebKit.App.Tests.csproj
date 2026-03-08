@@ -35,6 +35,10 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\TopBar.razor" Link="Components\Layout\TopBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\CommandPalette.razor" Link="Components\Shared\CommandPalette.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfirmDialog.razor" Link="Components\Shared\ConfirmDialog.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageListView.razor" Link="Components\ServiceBus\MessageListView.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
     </ItemGroup>
 </Project>

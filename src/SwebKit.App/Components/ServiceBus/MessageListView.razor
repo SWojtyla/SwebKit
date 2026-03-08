@@ -1,7 +1,10 @@
 @inject AppStateService AppState
 
-<div style="display:flex; flex-direction:column; height:100%;">
+<div class="message-list-host" style="display:flex; flex-direction:column; height:100%;">
     <div class="filter-bar">
+        <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
+            @(IsDlqMode ? "DLQ mode" : "Peek mode")
+        </span>
         <select @bind="PeekCount" style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
             <option value="50">50 messages</option>
             <option value="100">100 messages</option>
@@ -22,25 +25,32 @@
     }
     else
     {
-        <div class="data-table-container">
+        <div class="data-table-container message-grid-scroll" aria-label="Message list scroll container">
             <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage"
+                            Class="message-grid responsive-message-grid"
                             Virtualize="true" ItemSize="32" RowClass="@(m => SelectedMessage?.MessageId == m.MessageId ? "selected-row" : "")"
                             OnRowClick="@(e => OnSelect(e.Item))">
-                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="90px" />
-                <TemplateColumn Title="Message ID" Width="120px">
-                    <span title="@context.MessageId">@(context.MessageId.Length > 12 ? context.MessageId[..12] + "…" : context.MessageId)</span>
+                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="108px" />
+                <TemplateColumn Title="Message ID">
+                    <span class="cell-truncate col-message-id" title="@context.MessageId">@context.MessageId</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Correlation ID" Width="120px">@(context.CorrelationId ?? "-")</TemplateColumn>
-                <TemplateColumn Title="Subject">@(context.Subject ?? "-")</TemplateColumn>
-                <TemplateColumn Title="Delivery" Width="60px">@context.DeliveryCount</TemplateColumn>
+                <TemplateColumn Title="Correlation ID">
+                    <span class="cell-truncate col-correlation-id" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ?? "-")</span>
+                </TemplateColumn>
+                <TemplateColumn Title="Subject">
+                    <span class="cell-wrap col-subject" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
+                </TemplateColumn>
+                <TemplateColumn Title="Delivery" Width="72px"><span class="col-delivery">@context.DeliveryCount</span></TemplateColumn>
                 @if (ShowDlqColumns)
                 {
-                    <TemplateColumn Title="DLQ Reason">@(context.DeadLetterReason ?? "-")</TemplateColumn>
+                    <TemplateColumn Title="DLQ Reason">
+                        <span class="cell-wrap col-dlq-reason" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ?? "-")</span>
+                    </TemplateColumn>
                 }
             </FluentDataGrid>
         </div>
         <div style="padding:4px 8px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border);">
-            @FilteredMessages.Count message(s) shown
+            @CountSummary
         </div>
     }
 </div>
@@ -58,6 +68,11 @@
     private List<SbMessage> Messages = [];
     private string TextFilter = "";
     private int PeekCount = 50;
+    private long? TotalAvailableCount;
+    private IServiceBusClient? _loadedClient;
+    private string? _loadedEntityPath;
+    private bool _loadedIsDlqMode;
+    private int _loadVersion;
 
     private List<SbMessage> FilteredMessages => string.IsNullOrEmpty(TextFilter)
         ? Messages
@@ -66,24 +81,116 @@
                             || m.Subject?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
                             || m.Body.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
+    private string CountSummary
+    {
+        get
+        {
+            var filteredCount = FilteredMessages.Count;
+            var loadedCount = Messages.Count;
+            var hasFilter = !string.IsNullOrWhiteSpace(TextFilter);
+
+            if (TotalAvailableCount is long total)
+            {
+                if (hasFilter)
+                {
+                    return total > loadedCount
+                        ? $"Showing {filteredCount} filtered of {loadedCount} loaded ({total} total)"
+                        : $"Showing {filteredCount} filtered of {loadedCount} loaded";
+                }
+
+                return total > loadedCount
+                    ? $"Showing {loadedCount} of {total} message(s)"
+                    : $"Showing {loadedCount} message(s)";
+            }
+
+            return hasFilter
+                ? $"Showing {filteredCount} filtered of {loadedCount} loaded"
+                : $"Showing {loadedCount} message(s)";
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        if (Client is not null && EntityPath is not null) await LoadAsync();
+        if (Client is null || string.IsNullOrWhiteSpace(EntityPath))
+        {
+            Messages = [];
+            TotalAvailableCount = null;
+            ErrorMessage = null;
+            IsLoading = false;
+            return;
+        }
+
+        // Guard against parent re-renders triggering duplicate loads when relevant inputs did not change.
+        var shouldReload = !ReferenceEquals(_loadedClient, Client)
+            || !string.Equals(_loadedEntityPath, EntityPath, StringComparison.Ordinal)
+            || _loadedIsDlqMode != IsDlqMode;
+
+        if (!shouldReload)
+        {
+            return;
+        }
+
+        // Set guards before awaiting to prevent concurrent duplicate loads.
+        _loadedClient = Client;
+        _loadedEntityPath = EntityPath;
+        _loadedIsDlqMode = IsDlqMode;
+
+        await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         if (Client is null || EntityPath is null) return;
-        IsLoading = true; ErrorMessage = null; StateHasChanged();
+
+        var requestVersion = Interlocked.Increment(ref _loadVersion);
+        IsLoading = true;
+        ErrorMessage = null;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
-            Messages = IsDlqMode
+            long? totalAvailableCount = null;
+
+            var loadedMessages = (IsDlqMode
                 ? (await Client.PeekDeadLetterAsync(EntityPath, PeekCount)).ToList()
-                : (await Client.PeekMessagesAsync(EntityPath, PeekCount)).ToList();
+                : (await Client.PeekMessagesAsync(EntityPath, PeekCount)).ToList());
+
+            try
+            {
+                var stats = await Client.GetEntityStatsAsync(EntityPath);
+                totalAvailableCount = IsDlqMode ? stats.DeadLetterMessageCount : stats.ActiveMessageCount;
+            }
+            catch
+            {
+                // Keep rendering loaded data if stats cannot be retrieved.
+                totalAvailableCount = null;
+            }
+
+            if (requestVersion == _loadVersion)
+            {
+                Messages = loadedMessages;
+                TotalAvailableCount = totalAvailableCount;
+            }
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
-        finally { IsLoading = false; StateHasChanged(); }
+        catch (Exception ex)
+        {
+            if (requestVersion == _loadVersion)
+            {
+                ErrorMessage = ex.Message;
+                Messages = [];
+                TotalAvailableCount = null;
+            }
+        }
+        finally
+        {
+            if (requestVersion == _loadVersion)
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
     }
 
-    private Task OnSelect(SbMessage msg) => OnMessageSelected.InvokeAsync(msg);
+    private Task OnSelect(SbMessage? msg) =>
+        msg is null ? Task.CompletedTask : OnMessageSelected.InvokeAsync(msg);
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-- Current: Partially implemented (namespace model, repository, client guard)
+- Current: Partially implemented (namespace model, repository, client guard, and SB-UI-BUG-01 validation)
 
 ## Scope
 
@@ -12,6 +12,7 @@
 - Validate operational Service Bus workflows for safe message inspection and mutation.
 - Validate DLQ remediation, message composition, templates, and repeatable scenario execution.
 - Validate production safety gates for mutative actions and confirmation behavior.
+- Validate focused UI bug fixes for DLQ rendering accuracy, table responsiveness, horizontal scroll usability, and entity label decoding.
 
 ## Test Levels
 
@@ -33,6 +34,13 @@
 - [ ] SB-004: Scenario execution runs ordered steps and supports cancellation.
 - [ ] SB-005: Favorites and live counters refresh without breaking filter state.
 - [ ] SB-006: Production environment mutative actions always require explicit confirmation.
+- [x] SB-UI-101: DLQ list shows explicit `showing X of Y` semantics when render window is smaller than total count.
+- [x] SB-UI-102: DLQ mode is visually distinct from normal message list mode.
+- [ ] SB-UI-103: Manual smoke test with large DLQ (>1000) validates clarity and navigation.
+- [x] SB-UI-104: Entity tree exposes explicit Active/DLQ actions and renders both counts simultaneously.
+- [x] SB-UI-201: Responsive message-table hooks validated in component tests (scroll owner + per-column class strategy).
+- [ ] SB-UI-301: Horizontal scroll interaction remains usable when left settings panel is visible (manual interaction check pending).
+- [x] SB-UI-401: Entity labels render without encoded artifacts like `&#...;`.
 
 ## Command Placeholders
 
@@ -44,5 +52,6 @@
 ## Traceability Backlinks
 
 - `docs/features/service-bus/index.md`
+- `docs/features/service-bus/technical-plan-ui-bugfixes.md`
 - `docs/features/service-bus/technical-plan.md`
 - `docs/plans/docs-rework-traceability/index.md`

@@ -7,6 +7,7 @@
 - Tab system (open / close / DLQ): **Done**
 - Pin / unpin entity (📍 / 📌): **Done**
 - Demo namespace (FakeServiceBusClient): **Done**
+- Focused UI bug fix pack (4 user-reported defects): **Planned**
 - DLQ multi-select and action bar: Pending
 - Message composer: Pending
 - Template picker: Pending
@@ -32,6 +33,12 @@ ServiceBusPage (Pages/)
 ## Blazor Patterns & Pitfalls
 
 See [`docs/pitfalls/blazor-maui.md`](../../pitfalls/blazor-maui.md) for the full reference. Entries most relevant here: **BL-1** (`_Imports.razor`), **BL-2** (`InvokeAsync`), **BL-3** (guard before `await`), **BL-4** (`@if` destroy/recreate), **BL-5** (`OnParametersSetAsync` frequency).
+
+## Focused Bug Plan
+
+For the user-reported Service Bus UI defects (DLQ count/render mismatch, table truncation/scroll, left-panel scroll interference, and encoded topic labels), use:
+
+- `docs/features/service-bus/technical-plan-ui-bugfixes.md`
 
 ## Implementation Sequence
 
@@ -84,5 +91,6 @@ See [`docs/pitfalls/blazor-maui.md`](../../pitfalls/blazor-maui.md) for the full
 ## Traceability Backlinks
 
 - `docs/features/service-bus/index.md`
+- `docs/features/service-bus/technical-plan-ui-bugfixes.md`
 - `docs/features/service-bus/technical-plan-backend.md`
 - `docs/features/service-bus/test-plan.md`

@@ -47,6 +47,7 @@ multiple namespaces, with project-scoped entity filtering and guarded mutation i
 
 - `docs/features/service-bus/technical-plan-backend.md`
 - `docs/features/service-bus/technical-plan-ui.md`
+- `docs/features/service-bus/technical-plan-ui-bugfixes.md`
 - `docs/features/service-bus/test-plan.md`
 
 ## Migration Notes
