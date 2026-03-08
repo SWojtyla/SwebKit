@@ -13,6 +13,16 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     private readonly ServiceBusAdministrationClient _adminClient;
     private readonly string? _scopedEntityPath;
 
+    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    public AzureServiceBusClient(string connectionString)
+    {
+        var props = ServiceBusConnectionStringProperties.Parse(connectionString);
+        _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
+        _client = new ServiceBusClient(connectionString);
+        _adminClient = new ServiceBusAdministrationClient(connectionString);
+    }
+
+    /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>
     public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore)
     {
         var fqns = config.FullyQualifiedNamespace;

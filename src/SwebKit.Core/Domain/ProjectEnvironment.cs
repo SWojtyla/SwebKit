@@ -6,7 +6,8 @@ public class ProjectEnvironment
     public Guid ProjectId { get; set; }
     public required string Name { get; set; }
     public EnvironmentTier Tier { get; set; } = EnvironmentTier.NonProd;
-    public ServiceBusConfig? ServiceBusConfig { get; set; }
+    /// <summary>Queues/topics from global namespaces that are pinned to this environment.</summary>
+    public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public ObservabilityConfig? ObservabilityConfig { get; set; }
     public AksConfig? AksConfig { get; set; }
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];

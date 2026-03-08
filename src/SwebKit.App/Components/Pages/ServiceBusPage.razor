@@ -5,106 +5,139 @@
 @implements IDisposable
 
 <div style="display:flex; height:100%; overflow:hidden;">
-    <!-- Left: entity tree -->
-    <div style="width:240px; flex-shrink:0; border-right:1px solid var(--color-border); overflow-y:auto;">
-        <div
-            style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); color:var(--color-text-muted);">
-            @if (AppState.CurrentEnvironment?.ServiceBusConfig is not null)
-            {
-                <span>@AppState.CurrentEnvironment.ServiceBusConfig.FullyQualifiedNamespace</span>
-                @if (Client is not null)
-                {
-                    <span style="margin-left:8px; color:var(--color-success);">Connected</span>
-                }
-                else if (!string.IsNullOrWhiteSpace(ConnectionError))
-                {
-                    <span style="margin-left:8px; color:var(--color-error);">Connection failed</span>
-                }
-                else
-                {
-                    <span style="margin-left:8px;">Connecting...</span>
-                }
-            }
-            else
-            {
-                <span>No namespace configured</span>
-            }
+    <!-- Left: namespace list + entity trees -->
+    <div style="width:260px; flex-shrink:0; border-right:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
+
+        <!-- Namespace panel header -->
+        <div style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
+            <span style="color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Namespaces</span>
+            <div style="display:flex; gap:4px;">
+                <button style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text-muted); border:1px solid var(--color-border); border-radius:3px;"
+                        title="Add a demo namespace with fake data"
+                        @onclick="AddDemoNamespace">Demo</button>
+                <button style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
+                        @onclick="ToggleAddForm">+ Add</button>
+            </div>
         </div>
 
-        @if (!string.IsNullOrWhiteSpace(ConnectionScopeWarning))
+        <!-- Add namespace form -->
+        @if (_showAddForm)
         {
-            <div
-                style="padding:8px 12px; font-size:11px; color:#D1A325; border-bottom:1px solid var(--color-border); background:rgba(209,163,37,0.1);">
-                @ConnectionScopeWarning
+            <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
+                <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection string:</div>
+                <textarea @bind="_addConnStr" rows="3"
+                          placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                          style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
+                @if (!string.IsNullOrWhiteSpace(_addError))
+                {
+                    <div style="font-size:11px; color:var(--color-error); margin-top:4px;">@_addError</div>
+                }
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                    <button style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
+                            @onclick="AddNamespaceAsync">Add</button>
+                    <button style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
+                            @onclick="CancelAdd">Cancel</button>
+                </div>
             </div>
         }
 
-        @if (IsConnecting)
-        {
-            <LoadingSpinner Message="Connecting..." />
-        }
-        else if (!string.IsNullOrWhiteSpace(ConnectionError))
-        {
-            <ErrorCallout Message="@ConnectionError" OnRetry="ConnectAsync" />
-        }
-        else if (Client is not null)
-        {
-            <EntityTree Client="Client" OnEntitySelected="OpenEntityTab" />
-        }
-        else if (AppState.CurrentEnvironment?.ServiceBusConfig is null)
-        {
-            <div style="padding:16px; font-size:12px; color:var(--color-text-muted);">
-                No Service Bus configured.<br />
-                <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
-            </div>
-        }
-        else
-        {
-            <LoadingSpinner Message="Connecting..." />
-        }
+        <!-- Namespace list -->
+        <div style="flex:1; overflow-y:auto;">
+            @if (!_namespaceStates.Any())
+            {
+                <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
+                    No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
+                </div>
+            }
+
+            @foreach (var ns in _namespaceStates)
+            {
+                <!-- Namespace header row -->
+                <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
+                     @onclick="() => ToggleNamespace(ns.Namespace.Id)">
+                    <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
+                    <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                          title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
+                    @if (ns.IsConnecting)
+                    {
+                        <span style="font-size:10px; color:var(--color-text-muted);">...</span>
+                    }
+                    else if (ns.Client is not null)
+                    {
+                        <span style="font-size:10px; color:var(--color-success);">●</span>
+                    }
+                    else
+                    {
+                        <span style="font-size:10px; color:var(--color-error);" title="@ns.ConnectionError">●</span>
+                    }
+                    <button style="margin-left:6px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
+                            title="Remove namespace"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">✕</button>
+                </div>
+
+                @if (ns.IsExpanded)
+                {
+                    @if (ns.ConnectionError is not null && ns.Client is null)
+                    {
+                        <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
+                    }
+                    else
+                    {
+                        <EntityTree Client="ns.Client"
+                                    NamespaceId="ns.Namespace.Id"
+                                    LinkedEntities="CurrentLinkedEntities"
+                                    OnEntitySelected="entity => OpenEntityTab(ns, entity)"
+                                    OnEntityLinkToggled="link => ToggleEntityLinkAsync(link)" />
+                    }
+                }
+            }
+        </div>
     </div>
 
     <!-- Right: tabbed content -->
     <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-        @if (!OpenTabs.Any())
+        @if (!_openTabs.Any())
         {
             <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
-                Select a queue or topic from the tree to open it.
+                Select a queue or topic from a namespace to open it.
             </div>
         }
         else
         {
             <!-- Tab bar -->
             <div class="tab-bar">
-                @foreach (var tab in OpenTabs)
+                @foreach (var tab in _openTabs)
                 {
-                    <div class="tab-item @(ActiveTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                    <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
                         @if (tab.IsDlq)
                         {
                             <span style="color:var(--color-error);">&#9888;</span>
                         }
-                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@tab.Title</span>
+                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
+                            <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias / </span>@tab.Title
+                        </span>
                         <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
                     </div>
                 }
             </div>
             <!-- Active tab content -->
-            @if (ActiveTab is not null)
+            @if (_activeTab is not null)
             {
-                @if (ActiveTab.IsDlq)
+                @if (_activeTab.IsDlq)
                 {
-                    <DlqView Client="Client" EntityPath="@ActiveTab.EntityPath" />
+                    <DlqView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
                 }
                 else
                 {
                     <div style="display:flex; flex:1; overflow:hidden;">
                         <div style="flex:1; overflow:hidden;">
-                            <MessageListView Client="Client" EntityPath="@ActiveTab.EntityPath"
-                                             SelectedMessage="ActiveTab.SelectedMessage"
-                                             OnMessageSelected="msg => { ActiveTab.SelectedMessage = msg; StateHasChanged(); }" />
+                            <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                             SelectedMessage="_activeTab.SelectedMessage"
+                                             OnMessageSelected="msg => { _activeTab.SelectedMessage = msg; StateHasChanged(); }" />
                         </div>
-                        <div class="details-pane" style="@(IsDetailsPaneOpen ? "" : "display:none")">
-                            <MessageDetailPane Message="ActiveTab.SelectedMessage" />
+                        <div class="details-pane">
+                            <MessageDetailPane Message="_activeTab.SelectedMessage" />
                         </div>
                     </div>
                 }
@@ -114,137 +147,316 @@
 </div>
 
 @code {
-    private IServiceBusClient? Client;
-    private List<SbTab> OpenTabs = [];
-    private SbTab? ActiveTab;
-    private bool IsDetailsPaneOpen = true;
-    private bool IsConnecting;
-    private string? ConnectionError;
-    private string? ConnectionScopeWarning;
+    private List<NsState> _namespaceStates = [];
+    private List<SbTab> _openTabs = [];
+    private SbTab? _activeTab;
+    private bool _showAddForm;
+    private string _addConnStr = string.Empty;
+    private string? _addError;
+
+    private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
+        AppState.CurrentEnvironment?.ServiceBusEntityLinks ?? [];
 
     protected override async Task OnInitializedAsync()
     {
-        Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
-        Events.Subscribe<ProjectChangedEvent>(OnProjectChanged);
-        Events.Subscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
-        await ConnectAsync();
+        Events.Subscribe<ProjectChangedEvent>(OnContextChanged);
+        Events.Subscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        await LoadNamespacesAsync();
     }
 
-    private async Task ConnectAsync()
+    private async Task LoadNamespacesAsync()
     {
-        IsConnecting = true;
-        ConnectionError = null;
-
-        var config = AppState.CurrentEnvironment?.ServiceBusConfig;
-        ConnectionScopeWarning = GetConnectionScopeWarning(config);
-        if (config is null)
+        // Build namespace states from global list and connect each
+        var incoming = AppState.ServiceBusNamespaces;
+        var tasks = incoming.Select(async ns =>
         {
-            if (Client is IAsyncDisposable disposableClient)
-            {
-                await disposableClient.DisposeAsync();
-            }
+            var state = new NsState { Namespace = ns, IsExpanded = true, IsConnecting = true };
+            state.Client = await TryConnectAsync(ns, state);
+            return state;
+        });
+        _namespaceStates = (await Task.WhenAll(tasks)).ToList();
+        StateHasChanged();
+    }
 
-            Client = null;
-            OpenTabs.Clear();
-            ActiveTab = null;
-            IsConnecting = false;
-            StateHasChanged();
-            return;
-        }
-
+    private async Task<IServiceBusClient?> TryConnectAsync(ServiceBusNamespace ns, NsState state)
+    {
         try
         {
-            if (Client is IAsyncDisposable oldClient)
+            var connStr = CredentialStore.Get(ns.CredentialKey);
+            if (string.IsNullOrWhiteSpace(connStr))
             {
-                await oldClient.DisposeAsync();
+                state.ConnectionError = "Connection string not found in credential store.";
+                state.IsConnecting = false;
+                return null;
             }
 
-            var newClient = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(config, CredentialStore);
-            var canConnect = await newClient.TestConnectionAsync();
-            if (!canConnect)
+            var client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(connStr);
+            var ok = await client.TestConnectionAsync();
+            state.IsConnecting = false;
+            if (!ok)
             {
-                await newClient.DisposeAsync();
-                Client = null;
-                ConnectionError = "Unable to connect to Service Bus. Check namespace and credentials.";
+                state.ConnectionError = "Connection test failed. Check the connection string.";
+                await client.DisposeAsync();
+                return null;
             }
-            else
-            {
-                Client = newClient;
-            }
+
+            return client;
         }
         catch (Exception ex)
         {
-            Client = null;
-            ConnectionError = ex.Message;
-        }
-        finally
-        {
-            IsConnecting = false;
-            StateHasChanged();
+            state.IsConnecting = false;
+            state.ConnectionError = ex.Message;
+            return null;
         }
     }
 
-    private void OpenEntityTab(SbEntityInfo entity)
+    private void ToggleAddForm()
     {
-        var id = entity.EntityPath;
-        var existing = OpenTabs.FirstOrDefault(t => t.Id == id && !t.IsDlq);
-        if (existing is not null) { ActiveTab = existing; StateHasChanged(); return; }
+        _showAddForm = !_showAddForm;
+        _addConnStr = string.Empty;
+        _addError = null;
+    }
 
-        var tab = new SbTab { Id = id, Title = entity.Name, EntityPath = entity.EntityPath };
-        OpenTabs.Add(tab);
-        ActiveTab = tab;
+    private void CancelAdd()
+    {
+        _showAddForm = false;
+        _addConnStr = string.Empty;
+        _addError = null;
+    }
+
+    private async Task AddNamespaceAsync()
+    {
+        _addError = null;
+        var raw = _addConnStr.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _addError = "Connection string is required.";
+            return;
+        }
+
+        string fqns;
+        try
+        {
+            var props = global::Azure.Messaging.ServiceBus.ServiceBusConnectionStringProperties.Parse(raw);
+            fqns = props.FullyQualifiedNamespace;
+            if (string.IsNullOrWhiteSpace(fqns))
+                throw new FormatException("Could not determine namespace from connection string.");
+        }
+        catch (Exception ex)
+        {
+            _addError = $"Invalid connection string: {ex.Message}";
+            return;
+        }
+
+        // Avoid duplicates
+        if (AppState.ServiceBusNamespaces.Any(n => n.FullyQualifiedNamespace.Equals(fqns, StringComparison.OrdinalIgnoreCase)))
+        {
+            _addError = "This namespace is already added.";
+            return;
+        }
+
+        var credKey = $"sb:ns:{Guid.NewGuid()}";
+        CredentialStore.Save(credKey, raw);
+
+        var ns = new ServiceBusNamespace
+        {
+            Alias = fqns.Split('.')[0],
+            FullyQualifiedNamespace = fqns,
+            CredentialKey = credKey
+        };
+
+        await AppState.AddServiceBusNamespaceAsync(ns);
+
+        var state = new NsState { Namespace = ns, IsExpanded = true, IsConnecting = true };
+        _namespaceStates.Add(state);
+        _showAddForm = false;
+        _addConnStr = string.Empty;
+        StateHasChanged();
+
+        state.Client = await TryConnectAsync(ns, state);
         StateHasChanged();
     }
 
-    private void SetActive(SbTab tab) { ActiveTab = tab; StateHasChanged(); }
+    private async Task RemoveNamespaceAsync(Guid namespaceId)
+    {
+        var state = _namespaceStates.FirstOrDefault(s => s.Namespace.Id == namespaceId);
+        if (state is null) return;
+
+        // Close tabs belonging to this namespace
+        var tabsToClose = _openTabs.Where(t => t.NamespaceId == namespaceId).ToList();
+        foreach (var tab in tabsToClose) _openTabs.Remove(tab);
+        if (_activeTab is not null && tabsToClose.Contains(_activeTab))
+            _activeTab = _openTabs.LastOrDefault();
+
+        // Dispose client
+        if (state.Client is IAsyncDisposable d) await d.DisposeAsync();
+
+        // Remove credential
+        CredentialStore.Delete(state.Namespace.CredentialKey);
+
+        _namespaceStates.Remove(state);
+        await AppState.RemoveServiceBusNamespaceAsync(namespaceId);
+        StateHasChanged();
+    }
+
+    private void ToggleNamespace(Guid id)
+    {
+        var ns = _namespaceStates.FirstOrDefault(s => s.Namespace.Id == id);
+        if (ns is not null) ns.IsExpanded = !ns.IsExpanded;
+        StateHasChanged();
+    }
+
+    private void OpenEntityTab(NsState ns, SbEntityInfo entity)
+    {
+        if (ns.Client is null) return;
+        var id = $"{ns.Namespace.Id}:{entity.EntityPath}";
+        var existing = _openTabs.FirstOrDefault(t => t.Id == id && !t.IsDlq);
+        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
+
+        var tab = new SbTab
+        {
+            Id = id,
+            NamespaceId = ns.Namespace.Id,
+            NamespaceAlias = ns.Namespace.Alias,
+            Title = entity.Name,
+            EntityPath = entity.EntityPath,
+            Client = ns.Client
+        };
+        _openTabs.Add(tab);
+        _activeTab = tab;
+        StateHasChanged();
+    }
+
+    private async Task ToggleEntityLinkAsync(SbEntityLink link)
+    {
+        var env = AppState.CurrentEnvironment;
+        if (env is null || AppState.CurrentProject is null) return;
+
+        var existing = env.ServiceBusEntityLinks
+            .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
+
+        if (existing is not null)
+            env.ServiceBusEntityLinks.Remove(existing);
+        else
+            env.ServiceBusEntityLinks.Add(link);
+
+        await AppState.UpdateProjectAsync(AppState.CurrentProject);
+        StateHasChanged();
+    }
+
+    private void SetActive(SbTab tab) { _activeTab = tab; StateHasChanged(); }
+
     private void CloseTab(SbTab tab)
     {
-        OpenTabs.Remove(tab);
-        if (ActiveTab == tab) ActiveTab = OpenTabs.LastOrDefault();
+        _openTabs.Remove(tab);
+        if (_activeTab == tab) _activeTab = _openTabs.LastOrDefault();
         StateHasChanged();
     }
 
-    private void OnRefresh(RefreshRequestedEvent e) { if (e.Area == "service-bus") InvokeAsync(ConnectAsync); }
-
-    private void OnProjectChanged(ProjectChangedEvent _) => InvokeAsync(HandleContextChangedAsync);
-
-    private void OnEnvironmentChanged(EnvironmentChangedEvent _) => InvokeAsync(HandleContextChangedAsync);
-
-    private async Task HandleContextChangedAsync()
-    {
-        OpenTabs.Clear();
-        ActiveTab = null;
-        await ConnectAsync();
-    }
-
-    private string? GetConnectionScopeWarning(ServiceBusConfig? config)
-    {
-        if (config?.AuthMode != SbAuthMode.ConnectionString || string.IsNullOrWhiteSpace(config.CredentialRef))
-            return null;
-
-        var connectionString = CredentialStore.Get(config.CredentialRef);
-        if (string.IsNullOrWhiteSpace(connectionString))
-            return null;
-
-        var isEntityScoped = connectionString.IndexOf("EntityPath=", StringComparison.OrdinalIgnoreCase) >= 0;
-        return isEntityScoped
-            ? "Connection string is entity-scoped (EntityPath). Namespace queue/topic discovery can be limited."
-            : null;
-    }
+    private void OnContextChanged(ProjectChangedEvent _) => InvokeAsync(StateHasChanged);
+    private void OnContextChanged2(EnvironmentChangedEvent _) => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
-        Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
-        Events.Unsubscribe<ProjectChangedEvent>(OnProjectChanged);
-        Events.Unsubscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
+        Events.Unsubscribe<ProjectChangedEvent>(OnContextChanged);
+        Events.Unsubscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        foreach (var ns in _namespaceStates)
+            if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
+    }
+
+    private static readonly Guid DemoNamespaceId = new("00000000-0000-0000-0000-000000000001");
+
+    private void AddDemoNamespace()
+    {
+        if (_namespaceStates.Any(s => s.Namespace.Id == DemoNamespaceId)) return;
+
+        var ns = new ServiceBusNamespace
+        {
+            Id = DemoNamespaceId,
+            Alias = "demo-namespace",
+            FullyQualifiedNamespace = "demo.servicebus.windows.net",
+            CredentialKey = string.Empty
+        };
+
+        _namespaceStates.Add(new NsState
+        {
+            Namespace = ns,
+            IsExpanded = true,
+            IsConnecting = false,
+            Client = new FakeServiceBusClient()
+        });
+        StateHasChanged();
+    }
+
+    private class NsState
+    {
+        public required ServiceBusNamespace Namespace { get; set; }
+        public IServiceBusClient? Client { get; set; }
+        public bool IsExpanded { get; set; }
+        public bool IsConnecting { get; set; }
+        public string? ConnectionError { get; set; }
     }
 
     private class SbTab
     {
         public required string Id { get; set; }
+        public required Guid NamespaceId { get; set; }
+        public required string NamespaceAlias { get; set; }
         public required string Title { get; set; }
         public required string EntityPath { get; set; }
+        public required IServiceBusClient Client { get; set; }
         public bool IsDlq { get; set; }
         public SbMessage? SelectedMessage { get; set; }
+    }
+
+    private sealed class FakeServiceBusClient : IServiceBusClient
+    {
+        public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) =>
+            Task.FromResult(new SbNamespaceInfo { Name = "demo-namespace", Endpoint = "demo.servicebus.windows.net" });
+
+        public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SbEntityInfo>>(
+            [
+                new SbEntityInfo { Name = "orders", EntityPath = "orders", Stats = new() { ActiveMessageCount = 42, DeadLetterMessageCount = 3 } },
+                new SbEntityInfo { Name = "payments", EntityPath = "payments", Stats = new() { ActiveMessageCount = 7 } },
+                new SbEntityInfo { Name = "notifications", EntityPath = "notifications" },
+            ]);
+
+        public Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SbEntityInfo>>(
+            [
+                new SbEntityInfo { Name = "user-events", EntityPath = "user-events", IsTopic = true },
+                new SbEntityInfo { Name = "audit-log", EntityPath = "audit-log", IsTopic = true },
+            ]);
+
+        public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SbEntityInfo>>(
+            [
+                new SbEntityInfo { Name = "consumer-a", EntityPath = $"{topicName}/subscriptions/consumer-a", IsSubscription = true, TopicName = topicName, Stats = new() { ActiveMessageCount = 5 } },
+                new SbEntityInfo { Name = "consumer-b", EntityPath = $"{topicName}/subscriptions/consumer-b", IsSubscription = true, TopicName = topicName },
+            ]);
+
+        public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
+            Task.FromResult(new SbEntityStats { ActiveMessageCount = 10, DeadLetterMessageCount = 1 });
+
+        public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SbMessage>>(
+            [
+                new SbMessage { MessageId = "msg-001", Body = """{"orderId":"12345","amount":99.99}""", ContentType = "application/json", Subject = "OrderCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-5), DeliveryCount = 1 },
+                new SbMessage { MessageId = "msg-002", Body = """{"orderId":"12346","amount":149.99}""", ContentType = "application/json", Subject = "OrderCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-2), DeliveryCount = 1 },
+            ]);
+
+        public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SbMessage>>(
+            [
+                new SbMessage { MessageId = "dead-001", Body = """{"error":"validation failed"}""", Subject = "OrderFailed", DeadLetterReason = "MaxDeliveryCountExceeded", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-1), DeliveryCount = 10 },
+                new SbMessage { MessageId = "dead-002", Body = """{"error":"timeout"}""", Subject = "PaymentTimeout", DeadLetterReason = "MaxDeliveryCountExceeded", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-3), DeliveryCount = 10 },
+            ]);
+
+        public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) => Task.CompletedTask;
+        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
     }
 }

@@ -1,112 +1,48 @@
 @using SwebKit.Core.Domain
+@inject AppStateService AppState
 
+@* Displays and manages the Service Bus entity links pinned to this environment. *@
 <div style="display:grid; gap:10px; padding:12px 0;">
-    <FluentTextField Label="Namespace / Hostname" @bind-Value="NamespaceHostname" style="width:100%;"
-                     Placeholder="my-namespace or my-namespace.servicebus.windows.net" />
 
-    <div style="display:grid; gap:6px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Authentication</label>
-        <select @bind="AuthMode"
-                style="padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; font-size:12px;">
-            <option value="DefaultAzureCredential">Default Azure Credential</option>
-            <option value="ConnectionString">Connection String (stored in Windows Credential Manager)</option>
-        </select>
+    <div style="font-size:12px; color:var(--color-text-muted);">
+        Pin queues or subscriptions from your global namespaces to this environment.
+        You can pin entities from the Service Bus page (📍 icon next to each entity).
     </div>
 
-    @if (AuthMode == "ConnectionString")
+    @if (!Environment.ServiceBusEntityLinks.Any())
     {
-        <FluentTextField Label="Connection String" @bind-Value="ConnectionString" TextFieldType="TextFieldType.Password"
-                         style="width:100%;" Placeholder="Endpoint=sb://..." />
+        <div style="font-size:12px; color:var(--color-text-muted); padding:8px; background:var(--color-surface); border-radius:4px;">
+            No entities pinned yet.
+        </div>
     }
-
-    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    else
     {
-        <div style="font-size:12px; color:var(--color-error);">@ErrorMessage</div>
+        <div style="display:grid; gap:4px;">
+            @foreach (var link in Environment.ServiceBusEntityLinks.ToList())
+            {
+                var ns = AppState.ServiceBusNamespaces.FirstOrDefault(n => n.Id == link.NamespaceId);
+                <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; background:var(--color-surface); border-radius:4px; font-size:12px;">
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
+                        <span style="color:var(--color-text-muted);">@(ns?.Alias ?? link.NamespaceId.ToString("N")[..8])</span>
+                        <span style="margin:0 4px;">/</span>
+                        @link.EntityPath
+                    </span>
+                    <button style="background:transparent; border:none; color:var(--color-error); cursor:pointer; font-size:13px;"
+                            title="Remove link"
+                            @onclick="() => RemoveLinkAsync(link)">✕</button>
+                </div>
+            }
+        </div>
     }
-
-    @if (!string.IsNullOrWhiteSpace(SuccessMessage))
-    {
-        <div style="font-size:12px; color:var(--color-success);">@SuccessMessage</div>
-    }
-
-    <div>
-        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save Service Bus Settings</FluentButton>
-    </div>
 </div>
 
 @code {
     [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
-    [Parameter, EditorRequired] public ICredentialStore CredentialStore { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
-    private string NamespaceHostname = string.Empty;
-    private string AuthMode = nameof(SbAuthMode.DefaultAzureCredential);
-    private string ConnectionString = string.Empty;
-    private Guid _loadedEnvironmentId;
-    private string? ErrorMessage;
-    private string? SuccessMessage;
-
-    protected override void OnParametersSet()
+    private async Task RemoveLinkAsync(SbEntityLink link)
     {
-        if (_loadedEnvironmentId == Environment.Id) return;
-
-        var config = Environment.ServiceBusConfig;
-        NamespaceHostname = config?.NamespaceHostname ?? string.Empty;
-        AuthMode = config?.AuthMode == SbAuthMode.ConnectionString
-            ? nameof(SbAuthMode.ConnectionString)
-            : nameof(SbAuthMode.DefaultAzureCredential);
-
-        if (config?.CredentialRef is not null)
-        {
-            ConnectionString = CredentialStore.Get(config.CredentialRef) ?? string.Empty;
-        }
-
-        _loadedEnvironmentId = Environment.Id;
-    }
-
-    private async Task SaveAsync()
-    {
-        ErrorMessage = null;
-        SuccessMessage = null;
-
-        if (string.IsNullOrWhiteSpace(NamespaceHostname))
-        {
-            ErrorMessage = "Namespace / hostname is required.";
-            return;
-        }
-
-        var useConnectionString = AuthMode == nameof(SbAuthMode.ConnectionString);
-        if (useConnectionString && string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            ErrorMessage = "Connection string is required when Connection String auth is selected.";
-            return;
-        }
-
-        var config = Environment.ServiceBusConfig ??= new ServiceBusConfig { NamespaceHostname = string.Empty };
-        config.NamespaceHostname = NamespaceHostname.Trim();
-        config.AuthMode = useConnectionString
-            ? SbAuthMode.ConnectionString
-            : SbAuthMode.DefaultAzureCredential;
-
-        if (config.AuthMode == SbAuthMode.ConnectionString)
-        {
-            var key = config.CredentialRef ?? $"project:{Environment.ProjectId}:env:{Environment.Id}:servicebus";
-            config.CredentialRef = key;
-            if (!string.IsNullOrWhiteSpace(ConnectionString))
-            {
-                CredentialStore.Save(key, ConnectionString.Trim());
-            }
-        }
-        else
-        {
-            if (config.CredentialRef is not null)
-            {
-                CredentialStore.Delete(config.CredentialRef);
-                config.CredentialRef = null;
-            }
-        }
-
+        Environment.ServiceBusEntityLinks.Remove(link);
         await OnSaved.InvokeAsync();
-        SuccessMessage = "Service Bus settings saved.";
     }
 }

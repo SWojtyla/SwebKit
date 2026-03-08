@@ -31,6 +31,21 @@ public class AzureClientGuardTests
         Assert.Equal("WorkspaceId is not configured.", ex.Message);
     }
 
+    [Fact]
+    public void AzureServiceBusClient_ConnectionStringCtor_InvalidString_Throws()
+    {
+        Assert.ThrowsAny<Exception>(() => new AzureServiceBusClient("not-a-valid-connection-string"));
+    }
+
+    [Fact]
+    public void AzureServiceBusClient_ConnectionStringCtor_ValidString_DoesNotThrow()
+    {
+        // A syntactically valid connection string (no real credentials — just parsing smoke test)
+        const string conn = "Endpoint=sb://sb-test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+        var client = new AzureServiceBusClient(conn);
+        Assert.NotNull(client);
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         public void Save(string key, string secret) { }

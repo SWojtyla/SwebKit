@@ -1,5 +1,4 @@
 @inject AppStateService AppState
-@inject IAppEventBus Events
 
 <div class="entity-tree">
     @if (IsLoading)
@@ -15,63 +14,82 @@
         @if (!Queues.Any() && !Topics.Any())
         {
             <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">
-                Connected, but no queues or topics were found in this namespace.
+                No queues or topics found. If you expect entities here, verify the namespace and that your connection string has Manage rights.
             </div>
         }
 
         @if (Queues.Any())
         {
-            <div style="padding: 6px 12px; font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+            <div style="padding:6px 12px; font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">
                 Queues</div>
-                @foreach (var q in Queues)
-                {
-                    <div class="entity-tree-item" @onclick="() => OpenEntity(q)">
-                        <span style="font-size:14px;">&#8660;</span>
-                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@q.Name</span>
-                        @if (q.Stats?.DeadLetterMessageCount > 0)
-                        {
-                            <span class="dlq-badge">@q.Stats.DeadLetterMessageCount DLQ</span>
-                        }
-                        else if (q.Stats?.ActiveMessageCount > 0)
-                        {
-                            <span style="font-size:10px; color:var(--color-text-muted);">@q.Stats.ActiveMessageCount</span>
-                        }
-                    </div>
-                }
-            }
-
-            @if (Topics.Any())
+            @foreach (var q in Queues)
             {
-                <div style="padding: 6px 12px; font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
-                    Topics</div>
-                    @foreach (var t in Topics)
+                var isLinked = IsEntityLinked(q.EntityPath);
+                <div class="entity-tree-item" @onclick="() => OpenEntity(q)">
+                    <span style="font-size:14px;">&#8660;</span>
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@q.Name</span>
+                    @if (q.Stats?.DeadLetterMessageCount > 0)
                     {
-                        <div class="entity-tree-item" @onclick="() => ToggleTopic(t.Name)">
-                            <span style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "&#9660;" : "&#9654;")</span>
-                            <span>@t.Name</span>
-                        </div>
-                        @if (ExpandedTopics.Contains(t.Name) && Subscriptions.TryGetValue(t.Name, out var subs))
-                        {
-                            @foreach (var s in subs)
+                        <span class="dlq-badge">@q.Stats.DeadLetterMessageCount DLQ</span>
+                    }
+                    else if (q.Stats?.ActiveMessageCount > 0)
+                    {
+                        <span style="font-size:10px; color:var(--color-text-muted);">@q.Stats.ActiveMessageCount</span>
+                    }
+                    @if (AppState.CurrentEnvironment is not null)
+                    {
+                        <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
+                              style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
+                              @onclick:stopPropagation="true"
+                              @onclick="() => ToggleLink(q.EntityPath)">@(isLinked ? "📌" : "📍")</span>
+                    }
+                </div>
+            }
+        }
+
+        @if (Topics.Any())
+        {
+            <div style="padding:6px 12px; font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">
+                Topics</div>
+            @foreach (var t in Topics)
+            {
+                <div class="entity-tree-item" @onclick="() => ToggleTopic(t.Name)">
+                    <span style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "&#9660;" : "&#9654;")</span>
+                    <span>@t.Name</span>
+                </div>
+                @if (ExpandedTopics.Contains(t.Name) && Subscriptions.TryGetValue(t.Name, out var subs))
+                {
+                    @foreach (var s in subs)
+                    {
+                        var isLinked = IsEntityLinked(s.EntityPath);
+                        <div class="entity-tree-item" style="padding-left:28px;" @onclick="() => OpenEntity(s)">
+                            <span style="font-size:13px;">&#x21B3;</span>
+                            <span style="flex:1;">@s.Name</span>
+                            @if (s.Stats?.DeadLetterMessageCount > 0)
                             {
-                                <div class="entity-tree-item" style="padding-left: 28px;" @onclick="() => OpenEntity(s)">
-                                    <span style="font-size:13px;">&#x21B3;</span>
-                                    <span style="flex:1;">@s.Name</span>
-                                    @if (s.Stats?.DeadLetterMessageCount > 0)
-                                    {
-                                        <span class="dlq-badge">@s.Stats.DeadLetterMessageCount DLQ</span>
-                                    }
-                                </div>
+                                <span class="dlq-badge">@s.Stats.DeadLetterMessageCount DLQ</span>
                             }
-                        }
+                            @if (AppState.CurrentEnvironment is not null)
+                            {
+                                <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
+                                      style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => ToggleLink(s.EntityPath)">@(isLinked ? "📌" : "📍")</span>
+                            }
+                        </div>
                     }
                 }
             }
-        </div>
+        }
+    }
+</div>
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public Guid NamespaceId { get; set; }
+    [Parameter] public IReadOnlyList<SbEntityLink> LinkedEntities { get; set; } = [];
     [Parameter] public EventCallback<SbEntityInfo> OnEntitySelected { get; set; }
+    [Parameter] public EventCallback<SbEntityLink> OnEntityLinkToggled { get; set; }
 
     private bool IsLoading;
     private string? ErrorMessage;
@@ -95,15 +113,16 @@
 
         if (!ReferenceEquals(_loadedClient, Client))
         {
+            _loadedClient = Client; // Set before await to prevent concurrent loads on parent re-render
             await LoadAsync();
-            _loadedClient = Client;
         }
     }
 
     private async Task LoadAsync()
     {
         if (Client is null) return;
-        IsLoading = true; ErrorMessage = null; StateHasChanged();
+        IsLoading = true; ErrorMessage = null;
+        await InvokeAsync(StateHasChanged);
         try
         {
             Subscriptions.Clear();
@@ -113,9 +132,16 @@
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Failed to load queues/topics: {ex.Message}";
+            var hint = ex.Message.Contains("401") || ex.Message.Contains("403") || ex.Message.Contains("Unauthorized") || ex.Message.Contains("Forbidden")
+                ? " (Ensure your connection string has 'Manage' rights.)"
+                : string.Empty;
+            ErrorMessage = $"Failed to load queues/topics: {ex.Message}{hint}";
         }
-        finally { IsLoading = false; StateHasChanged(); }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task ToggleTopic(string name)
@@ -128,4 +154,10 @@
     }
 
     private Task OpenEntity(SbEntityInfo entity) => OnEntitySelected.InvokeAsync(entity);
+
+    private bool IsEntityLinked(string entityPath) =>
+        LinkedEntities.Any(l => l.NamespaceId == NamespaceId && l.EntityPath == entityPath);
+
+    private Task ToggleLink(string entityPath) =>
+        OnEntityLinkToggled.InvokeAsync(new SbEntityLink { NamespaceId = NamespaceId, EntityPath = entityPath });
 }

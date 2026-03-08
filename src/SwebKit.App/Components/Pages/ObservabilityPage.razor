@@ -83,7 +83,7 @@
                     <PropRow Label="Operation" Value="@(SelectedEntry.OperationName ?? "-")" />
                     @foreach (var (k, v) in SelectedEntry.Properties)
                     {
-                        <PropRow Label="@k" Value="@v?.ToString()!" />
+                        <PropRow Label="@k" Value="@(v?.ToString() ?? string.Empty)" />
                     }
                 </div>
             </div>

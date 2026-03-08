@@ -15,6 +15,7 @@ public class ProfileRepository
     private ProfileData _data = new();
 
     public IReadOnlyList<Project> Projects => _data.Projects;
+    public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
 
     public async Task LoadAsync()
     {
@@ -60,10 +61,18 @@ public class ProfileRepository
     }
 
     public Project? FindProject(Guid id) => _data.Projects.FirstOrDefault(p => p.Id == id);
+
+    public void AddServiceBusNamespace(ServiceBusNamespace ns) => _data.ServiceBusNamespaces.Add(ns);
+
+    public void RemoveServiceBusNamespace(Guid id) => _data.ServiceBusNamespaces.RemoveAll(n => n.Id == id);
+
+    public ServiceBusNamespace? FindServiceBusNamespace(Guid id) =>
+        _data.ServiceBusNamespaces.FirstOrDefault(n => n.Id == id);
 }
 
 public class ProfileData
 {
     public List<Project> Projects { get; set; } = [];
+    public List<ServiceBusNamespace> ServiceBusNamespaces { get; set; } = [];
     public int SchemaVersion { get; set; } = 1;
 }

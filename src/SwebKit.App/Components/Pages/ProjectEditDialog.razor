@@ -43,7 +43,7 @@
                     <summary style="cursor:pointer; font-size:12px; color:var(--color-text-muted);">Configure integrations
                         for @env.Name (applied when you click Save Project)</summary>
                         <div style="margin-top:8px; border-top:1px solid var(--color-border); padding-top:8px;">
-                            <ServiceBusConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="NoOpSave" />
+                            <ServiceBusConfigForm Environment="env" OnSaved="NoOpSave" />
                             <ObservabilityConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="NoOpSave" />
                             <AksConfigForm Environment="env" OnSaved="NoOpSave" />
                         </div>
@@ -93,14 +93,9 @@
                     ProjectId = e.ProjectId,
                     Name = e.Name,
                     Tier = e.Tier,
-                    ServiceBusConfig = e.ServiceBusConfig is null ? null : new ServiceBusConfig
-                    {
-                        NamespaceHostname = e.ServiceBusConfig.NamespaceHostname,
-                        AuthMode = e.ServiceBusConfig.AuthMode,
-                        CredentialRef = e.ServiceBusConfig.CredentialRef,
-                        FavoriteQueues = [.. e.ServiceBusConfig.FavoriteQueues],
-                        FavoriteTopics = [.. e.ServiceBusConfig.FavoriteTopics]
-                    },
+                    ServiceBusEntityLinks = e.ServiceBusEntityLinks
+                        .Select(l => new SbEntityLink { NamespaceId = l.NamespaceId, EntityPath = l.EntityPath, Alias = l.Alias })
+                        .ToList(),
                     ObservabilityConfig = e.ObservabilityConfig is null ? null : new ObservabilityConfig
                     {
                         Provider = e.ObservabilityConfig.Provider,

@@ -22,6 +22,7 @@ public class AppStateService
     public ProjectEnvironment? CurrentEnvironment { get; private set; }
 
     public IReadOnlyList<Project> AllProjects => _profiles.Projects;
+    public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _profiles.ServiceBusNamespaces;
 
     public bool IsProduction => CurrentEnvironment?.IsProduction ?? false;
 
@@ -105,6 +106,18 @@ public class AppStateService
             CurrentProject = _profiles.Projects.FirstOrDefault();
             CurrentEnvironment = CurrentProject?.Environments.FirstOrDefault();
         }
+        await _profiles.SaveAsync();
+    }
+
+    public async Task AddServiceBusNamespaceAsync(ServiceBusNamespace ns)
+    {
+        _profiles.AddServiceBusNamespace(ns);
+        await _profiles.SaveAsync();
+    }
+
+    public async Task RemoveServiceBusNamespaceAsync(Guid id)
+    {
+        _profiles.RemoveServiceBusNamespace(id);
         await _profiles.SaveAsync();
     }
 }

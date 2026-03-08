@@ -366,29 +366,20 @@ public class ComponentTests : TestContext
     }
 
     [Fact]
-    public void ServiceBusConfigForm_AuthModeChange_ShowsConnectionStringField()
+    public void ServiceBusConfigForm_NoLinks_ShowsEmptyMessage()
     {
         var env = new ProjectEnvironment
         {
             ProjectId = Guid.NewGuid(),
-            Name = "Dev",
-            ServiceBusConfig = new ServiceBusConfig
-            {
-                NamespaceHostname = "orders",
-                AuthMode = SbAuthMode.DefaultAzureCredential
-            }
+            Name = "Dev"
         };
 
+        Services.AddSingleton(CreateAppStateWithProject("Acme", "Dev"));
+
         var cut = RenderComponent<ServiceBusConfigForm>(ps => ps
-            .Add(p => p.Environment, env)
-            .Add(p => p.CredentialStore, new InMemoryCredentialStore()));
+            .Add(p => p.Environment, env));
 
-        cut.Find("select").Change("ConnectionString");
-        cut.SetParametersAndRender(ps => ps
-            .Add(p => p.Environment, env)
-            .Add(p => p.CredentialStore, new InMemoryCredentialStore()));
-
-        Assert.Contains("Connection String", cut.Markup);
+        Assert.Contains("No entities pinned yet", cut.Markup);
     }
 
     private static AppStateService CreateAppStateWithProject(string projectName, string environmentName, bool isProduction = false)

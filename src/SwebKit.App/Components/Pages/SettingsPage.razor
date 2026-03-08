@@ -28,8 +28,8 @@
         {
             var env = AppState.CurrentEnvironment;
             <FluentAccordion>
-                <FluentAccordionItem Heading="Service Bus">
-                    <ServiceBusConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
+                <FluentAccordionItem Heading="Service Bus — Pinned Entities">
+                    <ServiceBusConfigForm Environment="env" OnSaved="SaveAsync" />
                 </FluentAccordionItem>
                 <FluentAccordionItem Heading="Observability (App Insights / OTLP)">
                     <ObservabilityConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
