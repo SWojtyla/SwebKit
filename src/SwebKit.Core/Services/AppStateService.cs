@@ -26,6 +26,7 @@ public class AppStateService
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _profiles.MessageTemplates;
 
     public bool IsProduction => CurrentEnvironment?.IsProduction ?? false;
+    public bool UseDemoData { get; set; }
 
     public async Task InitializeAsync()
     {

@@ -34,7 +34,7 @@
     </div>
 
     @if (ErrorMessage is not null) { <ErrorCallout Message="@ErrorMessage" OnRetry="RunQuery" /> }
-    @if (Provider is null && AppState.CurrentEnvironment?.ObservabilityConfig is null)
+    @if (Provider is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.ObservabilityConfig is null)
     {
         <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
             No observability provider configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
@@ -107,6 +107,11 @@
 
     private async Task ConnectAsync()
     {
+        if (AppState.UseDemoData)
+        {
+            Provider = new SwebKit.Core.Services.DemoObservabilityProvider();
+            return;
+        }
         var config = AppState.CurrentEnvironment?.ObservabilityConfig;
         if (config is null) return;
         try { Provider = new SwebKit.Azure.Observability.AppInsightsObservabilityProvider(config, CredentialStore); }

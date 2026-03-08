@@ -19,7 +19,7 @@
                 <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
             }
 
-            @if (Client is null && AppState.CurrentEnvironment?.AksConfig is null)
+            @if (Client is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.AksConfig is null)
             {
                 <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
                     No AKS cluster configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
@@ -110,6 +110,12 @@
 
     private async Task ConnectAndLoadAsync()
     {
+        if (AppState.UseDemoData)
+        {
+            Client = new SwebKit.Core.Services.DemoAksClient();
+            await LoadAsync();
+            return;
+        }
         var config = AppState.CurrentEnvironment?.AksConfig;
         if (config is null) return;
         try
