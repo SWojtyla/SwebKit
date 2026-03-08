@@ -1,8 +1,8 @@
-# Decisions - aks
+# Decisions - AKS
 
 ---
 
-title: "Decisions - aks"
+title: "Decisions - AKS"
 owner: ""
 status: "In Progress"
 

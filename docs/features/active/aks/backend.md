@@ -1,8 +1,8 @@
-# Backend Plan - aks
+# Backend Plan - AKS
 
 ---
 
-title: "Backend Plan - aks"
+title: "Backend Plan - AKS"
 owner: ""
 status: "Planned"
 
@@ -52,6 +52,11 @@ Backward compatibility notes:
 - [ ] Add/update error handling for invalid kubeconfig, auth failures, and RBAC-denied resources
 - [ ] Add/update logging and telemetry around cluster calls and failures
 - [ ] Add/update unit and integration tests in `tests/SwebKit.Kubernetes.Tests/`
+
+## Concern-specific risks
+
+- Risk: Helm metadata formats vary between clusters and Helm versions — Mitigation: implement tolerant parsing with explicit fallback and warning states.
+- Risk: namespace-scoped calls may fail under limited RBAC — Mitigation: return structured authorization errors and keep unaffected tabs usable.
 
 ## Migration and runtime changes
 

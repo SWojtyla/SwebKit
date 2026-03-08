@@ -1,8 +1,8 @@
-# Frontend Plan - aks
+# Frontend Plan - AKS
 
 ---
 
-title: "Frontend Plan - aks"
+title: "Frontend Plan - AKS"
 owner: ""
 status: "Planned"
 
@@ -48,6 +48,11 @@ Backward compatibility notes:
 - [ ] Add unit/component tests for core AKS browsing flows
 - [ ] Add e2e tests for context/namespace switching and YAML view
 - [ ] Accessibility review for keyboard navigation and tab order
+
+## Concern-specific risks
+
+- Risk: large namespace/resource lists can degrade render performance — Mitigation: pagination/virtualization and incremental loading.
+- Risk: YAML viewer with large manifests can hurt responsiveness — Mitigation: lazy fetch and lightweight viewer defaults.
 
 ## Validation
 

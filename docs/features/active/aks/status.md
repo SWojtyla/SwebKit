@@ -1,8 +1,8 @@
-# Status - aks
+# Status - AKS
 
 ---
 
-title: "Status - aks"
+title: "Status - AKS"
 owner: ""
 state: "Planned"
 branch: ""

@@ -50,8 +50,16 @@ Eliminates constant context-switching between the app and `kubectl` / Lens / Azu
 
 ## Related documents
 
-- Architecture: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`
+- Architecture: `docs/architecture/architecture.md`, `docs/architecture/design.md`
 - Pitfalls: `docs/pitfalls/blazor-maui.md`
+
+## Suggested modules
+
+- `backend.md` — kubeconfig, namespace/resource contracts, YAML retrieval
+- `frontend.md` — AKS page flows and resource/YAML browsing UX
+- `decisions.md` — architecture and scope tradeoffs
+- `test-plan.md` — validation strategy and scenarios
+- `status.md` — execution progress and blockers
 
 ## Quick links
 

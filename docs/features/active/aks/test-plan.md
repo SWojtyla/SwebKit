@@ -1,8 +1,8 @@
-# Test Plan - aks
+# Test Plan - AKS
 
 ---
 
-title: "Test Plan - aks"
+title: "Test Plan - AKS"
 owner: ""
 status: "Planned"
 created: "2026-03-08"
