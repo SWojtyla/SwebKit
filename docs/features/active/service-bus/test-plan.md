@@ -56,6 +56,7 @@ dotnet test SwebKit.slnx
 ## Traceability Backlinks
 
 - `docs/features/active/service-bus/index.md`
-- `docs/features/active/service-bus/technical-plan-ui-bugfixes.md`
-- `docs/features/active/service-bus/technical-plan.md`
+- `docs/features/active/service-bus/index.md`
+- `docs/features/active/service-bus/backend.md`
+- `docs/features/active/service-bus/frontend.md`
 - `docs/plans/docs-rework-traceability/index.md`

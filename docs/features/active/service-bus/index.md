@@ -81,10 +81,10 @@ A practical Service Bus operations workspace that supports fast and safe debuggi
 
 ## Deliverables
 
-- `docs/features/active/service-bus/technical-plan-backend.md`
-- `docs/features/active/service-bus/technical-plan-ui.md`
-- `docs/features/active/service-bus/technical-plan-ui-bugfixes.md`
-- `docs/features/active/service-bus/technical-plan-ui-polish.md`
+- `docs/features/active/service-bus/backend.md`
+- `docs/features/active/service-bus/frontend.md`
+- `docs/features/active/service-bus/decisions.md`
+- `docs/features/active/service-bus/status.md`
 - `docs/features/active/service-bus/test-plan.md`
 
 ## Migration notes

@@ -21,7 +21,50 @@ Deliver reliable backend primitives for global namespaces, entity listing, DLQ r
 
 Preserve the global namespace model (`ProfileData.ServiceBusNamespaces`) and per-environment entity pins (`ProjectEnvironment.ServiceBusEntityLinks`). The primary `AzureServiceBusClient(string connectionString)` ctor is the canonical path for runtime usage; legacy ctor retained for compatibility.
 
-Key types and architecture are documented in `technical-plan-backend.md`.
+## Architecture
+
+```
+ProfileData
+	ServiceBusNamespaces: List<ServiceBusNamespace>   // global, stored in profiles.json
+
+ProjectEnvironment
+	ServiceBusEntityLinks: List<SbEntityLink>          // per-env pins
+
+AzureServiceBusClient(string connectionString)       // primary ctor
+AzureServiceBusClient(ServiceBusConfig, ICredentialStore)  // legacy ctor
+```
+
+## Key types
+
+- `ServiceBusNamespace` — Global namespace entry (alias, FQNS, credential key)
+- `SbEntityLink` — Pins a queue/subscription to a project environment
+- `SbEntityInfo` — Queue/topic/subscription descriptor with stats
+- `SbMessage` — Mapped message for peek / send
+- `IServiceBusClient` — Client contract
+- `AzureServiceBusClient` — Azure SDK implementation
+
+## Implementation Sequence
+
+1. Add `ServiceBusNamespace` and `SbEntityLink` domain models.
+2. Extend `ProfileRepository` with namespace CRUD.
+3. Add primary `(string connectionString)` ctor to `AzureServiceBusClient`.
+4. Implement `ListQueuesAsync` / `ListTopicsAsync` / `ListSubscriptionsAsync`.
+5. Implement DLQ batch select — receive-and-complete / receive-and-resubmit with progress.
+6. Implement `SendMessageAsync` / `SendBatchAsync` and add integration tests.
+7. Add message template domain model and `ProfileRepository` CRUD.
+8. Add scenario model, runner service, and cancellation support.
+9. Validate production safety guards for all mutative operations.
+
+## Acceptance Checks
+
+- Global namespaces added by connection string; FQNS auto-extracted.
+- Multiple namespaces stored and reloaded across restarts.
+- Queues, topics, and subscriptions listed with live counts.
+- Entity pins persisted per project environment.
+- Batch DLQ resubmit processes correct messages and reports progress via TaskQueue.
+- Send API delivers messages with custom properties.
+- Templates persist and reload without data loss.
+- Scenario runner executes tasks sequentially and supports cancellation (planned).
 
 ## API / Contracts
 
