@@ -27,6 +27,7 @@ public sealed class MessageListViewTests : TestContext
         Services.AddFluentUIComponents();
 
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus()));
+        Services.AddSingleton(new UiStateRepository());
     }
 
     [Fact]
@@ -208,14 +209,9 @@ public sealed class MessageListViewTests : TestContext
             Assert.NotNull(cut.Find(".message-list-host"));
             Assert.NotNull(cut.Find(".message-grid-scroll"));
             Assert.NotNull(cut.Find(".message-grid"));
-            Assert.NotNull(cut.Find(".responsive-message-grid"));
             Assert.NotEmpty(cut.FindAll(".cell-truncate"));
-            Assert.NotEmpty(cut.FindAll(".cell-wrap"));
-            Assert.NotEmpty(cut.FindAll(".col-message-id"));
-            Assert.NotEmpty(cut.FindAll(".col-correlation-id"));
-            Assert.NotEmpty(cut.FindAll(".col-subject"));
-            Assert.NotEmpty(cut.FindAll(".col-delivery"));
-            Assert.NotEmpty(cut.FindAll(".col-dlq-reason"));
+            Assert.Contains("very-long-message-id-1234567890", cut.Markup);
+            Assert.Contains("corr-1234567890", cut.Markup);
         });
     }
 
@@ -284,6 +280,10 @@ public sealed class MessageListViewTests : TestContext
 
         public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) =>
+            Task.FromResult(100_000L);
+        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
+            Task.CompletedTask;
 
         public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) =>
             Task.CompletedTask;

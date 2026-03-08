@@ -1,0 +1,152 @@
+@inject ScheduledMessageRepository ScheduledRepo
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+    <!-- Header -->
+    <div style="padding:10px 14px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <span style="font-size:12px; font-weight:600;">Scheduled Messages</span>
+        @if (NamespaceId.HasValue)
+        {
+            <span style="font-size:11px; color:var(--color-text-muted);">— @(EntityPath ?? "all entities")</span>
+        }
+        <span style="margin-left:auto; font-size:11px; color:var(--color-text-muted);">@_entries.Count scheduled</span>
+        <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="Refresh">Refresh</FluentButton>
+    </div>
+
+    @if (_entries.Count == 0)
+    {
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px;">
+            <div style="text-align:center; color:var(--color-text-muted);">
+                <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">🕐</div>
+                <div style="font-size:14px; font-weight:500;">No scheduled messages</div>
+                <div style="font-size:12px; margin-top:4px;">Use the Schedule action in the message detail pane to schedule a message for future delivery.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div style="flex:1; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="border-bottom:1px solid var(--color-border); background:var(--color-surface);">
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Enqueue At</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Entity</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Message ID</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Subject</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Seq #</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;">Status</th>
+                        <th style="padding:6px 10px; text-align:left; font-weight:600; color:var(--color-text-muted); font-size:11px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _entries)
+                    {
+                        var isPast = entry.ScheduledEnqueueTime < DateTimeOffset.Now;
+                        var isCancelling = _cancellingIds.Contains(entry.Id);
+                        <tr style="border-bottom:1px solid var(--color-border); @(isPast ? "opacity:0.6;" : "")">
+                            <td style="padding:6px 10px; font-family:monospace; white-space:nowrap;">
+                                @entry.ScheduledEnqueueTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </td>
+                            <td style="padding:6px 10px; font-family:monospace; overflow:hidden; text-overflow:ellipsis; max-width:160px; white-space:nowrap;" title="@entry.EntityPath">
+                                @entry.EntityPath
+                            </td>
+                            <td style="padding:6px 10px; font-family:monospace; overflow:hidden; text-overflow:ellipsis; max-width:140px; white-space:nowrap;" title="@entry.MessageId">
+                                @(entry.MessageId is { Length: > 0 } mid ? (mid.Length > 16 ? mid[..16] + "…" : mid) : "—")
+                            </td>
+                            <td style="padding:6px 10px; overflow:hidden; text-overflow:ellipsis; max-width:140px; white-space:nowrap;" title="@entry.Subject">
+                                @(entry.Subject ?? "—")
+                            </td>
+                            <td style="padding:6px 10px; font-family:monospace;">@entry.SequenceNumber</td>
+                            <td style="padding:6px 10px;">
+                                @if (isPast)
+                                {
+                                    <span style="font-size:11px; color:var(--color-text-muted);">Enqueued</span>
+                                }
+                                else
+                                {
+                                    <span style="font-size:11px; color:var(--color-success);">Pending</span>
+                                }
+                            </td>
+                            <td style="padding:6px 10px; white-space:nowrap;">
+                                @if (!isPast)
+                                {
+                                    <button @onclick="() => CancelAsync(entry)"
+                                            disabled="@isCancelling"
+                                            style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:@(isCancelling ? "var(--color-text-muted)" : "var(--color-error)");">
+                                        @(isCancelling ? "Cancelling…" : "Cancel")
+                                    </button>
+                                }
+                                <button @onclick="() => RemoveLocalEntry(entry)"
+                                        title="Remove from local list"
+                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted); margin-left:4px;">
+                                    Remove
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_cancelError is not null)
+{
+    <div style="position:fixed; bottom:20px; right:20px; z-index:500; background:var(--color-surface-2); border:1px solid var(--color-error); border-radius:6px; padding:10px 14px; font-size:12px; color:var(--color-error); max-width:360px;">
+        @_cancelError
+        <button @onclick="() => _cancelError = null" style="margin-left:8px; background:transparent; border:none; cursor:pointer; color:var(--color-text-muted);">✕</button>
+    </div>
+}
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public Guid? NamespaceId { get; set; }
+    [Parameter] public string? EntityPath { get; set; }
+
+    private List<ScheduledMessageEntry> _entries = [];
+    private HashSet<Guid> _cancellingIds = [];
+    private string? _cancelError;
+
+    protected override void OnParametersSet() => Refresh();
+
+    private void Refresh()
+    {
+        _entries = NamespaceId.HasValue && EntityPath is not null
+            ? ScheduledRepo.GetByEntity(NamespaceId.Value, EntityPath).ToList()
+            : NamespaceId.HasValue
+                ? ScheduledRepo.GetByNamespace(NamespaceId.Value).ToList()
+                : ScheduledRepo.All.ToList();
+
+        _entries = _entries.OrderBy(e => e.ScheduledEnqueueTime).ToList();
+    }
+
+    private async Task CancelAsync(ScheduledMessageEntry entry)
+    {
+        if (Client is null) return;
+        _cancellingIds.Add(entry.Id);
+        _cancelError = null;
+        StateHasChanged();
+
+        try
+        {
+            await Client.CancelScheduledMessageAsync(entry.EntityPath, entry.SequenceNumber);
+            await ScheduledRepo.RemoveAsync(entry.Id);
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            _cancelError = $"Cancel failed: {ex.Message}";
+        }
+        finally
+        {
+            _cancellingIds.Remove(entry.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveLocalEntry(ScheduledMessageEntry entry)
+    {
+        await ScheduledRepo.RemoveAsync(entry.Id);
+        Refresh();
+        StateHasChanged();
+    }
+}

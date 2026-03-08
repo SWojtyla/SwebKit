@@ -4,14 +4,106 @@
 <div style="padding:12px 16px; background:var(--color-surface); display:flex; flex-direction:column; gap:8px;">
     <!-- Header -->
     <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:12px; font-weight:600; color:var(--color-text);">Compose → @EntityPath</span>
+        <span style="font-size:12px; font-weight:600; color:var(--color-text);">
+            @(Mode == ComposerMode.Replay ? "Replay →" : Mode == ComposerMode.Schedule ? "Schedule →" : "Compose →")
+            @(_effectiveEntityPath ?? EntityPath ?? "—")
+        </span>
         <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
-            <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load Template</FluentButton>
-            <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as Template</FluentButton>
+            @if (Mode == ComposerMode.Compose)
+            {
+                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load Template</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as Template</FluentButton>
+            }
             <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
                     style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:14px; padding:2px 6px;">✕</button>
         </div>
     </div>
+
+    <!-- Target namespace / entity override (Replay mode) -->
+    @if (Mode == ComposerMode.Replay && AvailableNamespaces is { Count: > 0 })
+    {
+        <div style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
+            <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">Replay Target</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:10px; color:var(--color-text-muted);">Namespace</label>
+                    <select @bind="_targetNamespaceId"
+                            style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;">
+                        <option value="">— same namespace —</option>
+                        @foreach (var ns in AvailableNamespaces)
+                        {
+                            <option value="@ns.Id">@ns.Alias</option>
+                        }
+                    </select>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                    <label style="font-size:10px; color:var(--color-text-muted);">Entity</label>
+                    <input type="text" @bind="_effectiveEntityPath" placeholder="@(EntityPath ?? "entity path…")"
+                           style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                </div>
+            </div>
+            <!-- Remap rules -->
+            <details style="margin-top:8px;">
+                <summary style="font-size:11px; color:var(--color-text-muted); cursor:pointer;">Remap rules (optional)</summary>
+                <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="display:flex; flex-direction:column; gap:3px;">
+                            <label style="font-size:10px; color:var(--color-text-muted);">Override Subject</label>
+                            <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
+                                   style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:3px;">
+                            <label style="font-size:10px; color:var(--color-text-muted);">Override CorrelationId</label>
+                            <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
+                                   style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:var(--color-text-muted); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                            Property Renames
+                            <button @onclick="AddPropertyRename"
+                                    style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+ Add</button>
+                        </div>
+                        @for (var i = 0; i < _propertyRenames.Count; i++)
+                        {
+                            var idx = i;
+                            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                                <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
+                                       @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                <span style="align-self:center; color:var(--color-text-muted); font-size:11px;">→</span>
+                                <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
+                                       @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                <button @onclick="() => RemovePropertyRename(idx)" title="Remove"
+                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </details>
+        </div>
+    }
+
+    <!-- Schedule controls -->
+    @if (Mode == ComposerMode.Schedule)
+    {
+        <div style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
+            <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">Schedule</div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                <label style="font-size:11px; color:var(--color-text-muted);">Enqueue at (local time)</label>
+                <input type="datetime-local" @bind="_scheduleAt"
+                       style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                @if (_scheduleAt != default)
+                {
+                    var minutesFromNow = (_scheduleAt - DateTime.Now).TotalMinutes;
+                    <div style="font-size:11px; color:var(--color-text-muted);">
+                        Sends at @_scheduleAt.ToString("yyyy-MM-dd HH:mm") (local) — @minutesFromNow.ToString("F0") min from now
+                    </div>
+                }
+            </div>
+        </div>
+    }
 
     <!-- Message fields row -->
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -78,9 +170,9 @@
             <span style="font-size:11px; color:@(_sendError ? "var(--color-error)" : "var(--color-success)");">@_sendResult</span>
         }
         <FluentButton Appearance="Appearance.Accent" style="margin-left:auto;"
-                      Disabled="@(_isSending || Client is null || string.IsNullOrWhiteSpace(EntityPath))"
+                      Disabled="@(!CanSend)"
                       @onclick="SendMessage">
-            @(_isSending ? "Sending…" : "Send")
+            @SendLabel
         </FluentButton>
     </div>
 </div>
@@ -108,19 +200,31 @@
 }
 
 <ConfirmDialog Visible="_showSendConfirm"
-               Title="Send Message"
-               Message="@($"Send message to {EntityPath} in production?")"
+               Title="@ConfirmTitle"
+               Message="@ConfirmMessage"
                IsProduction="true"
-               ConfirmLabel="Send"
+               ConfirmLabel="@SendLabel"
                OnConfirm="DoSend"
                OnCancel="() => _showSendConfirm = false" />
 
 @code {
+    public enum ComposerMode { Compose, Edit, Replay, Schedule }
+
+    public record NamespaceOption(Guid Id, string Alias, IServiceBusClient Client);
+
     [Parameter] public IServiceBusClient? Client { get; set; }
     [Parameter] public string? EntityPath { get; set; }
     [Parameter] public bool IsProduction { get; set; }
-    [Parameter] public EventCallback OnSent { get; set; }
+    [Parameter] public ComposerMode Mode { get; set; } = ComposerMode.Compose;
+    /// <summary>When set, fields are prefilled from this message (Edit/Replay/Schedule modes).</summary>
+    [Parameter] public SbMessage? PrefillMessage { get; set; }
+    /// <summary>Namespaces available for replay target selection.</summary>
+    [Parameter] public IReadOnlyList<NamespaceOption>? AvailableNamespaces { get; set; }
+    /// <summary>Called after a successful send/schedule. Argument is non-null only for Schedule mode.</summary>
+    [Parameter] public EventCallback<ScheduledMessageEntry?> OnSent { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public Guid? OwnerNamespaceId { get; set; }
+    [Parameter] public ScheduledMessageRepository? ScheduledRepo { get; set; }
 
     private string _messageId = Guid.NewGuid().ToString();
     private string _correlationId = "";
@@ -136,10 +240,67 @@
     private string _saveTemplateName = "";
     private bool _showSendConfirm;
 
+    // Replay target state
+    private string _targetNamespaceId = "";
+    private string? _effectiveEntityPath;
+    private string? _remapOverrideSubject;
+    private string? _remapOverrideCorrelationId;
+    private List<(string OldKey, string NewKey)> _propertyRenames = [];
+
+    // Schedule state
+    private DateTime _scheduleAt = DateTime.Now.AddHours(1);
+
+    private SbMessage? _lastPrefill;
+
+    protected override void OnParametersSet()
+    {
+        if (PrefillMessage is not null && !ReferenceEquals(PrefillMessage, _lastPrefill))
+        {
+            _lastPrefill = PrefillMessage;
+            _messageId = Guid.NewGuid().ToString();
+            _correlationId = PrefillMessage.CorrelationId ?? "";
+            _subject = PrefillMessage.Subject ?? "";
+            _contentType = PrefillMessage.ContentType ?? "application/json";
+            _body = PrefillMessage.Body;
+            _properties = PrefillMessage.ApplicationProperties
+                .Select(kvp => (kvp.Key, kvp.Value?.ToString() ?? "")).ToList();
+        }
+
+        if (_effectiveEntityPath is null)
+            _effectiveEntityPath = EntityPath;
+    }
+
+    private bool CanSend => !_isSending &&
+        (Client is not null || (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId))) &&
+        !string.IsNullOrWhiteSpace(_effectiveEntityPath ?? EntityPath) &&
+        (Mode != ComposerMode.Schedule || _scheduleAt > DateTime.Now);
+
+    private string SendLabel => _isSending
+        ? (Mode == ComposerMode.Schedule ? "Scheduling…" : "Sending…")
+        : Mode switch
+        {
+            ComposerMode.Schedule => "Schedule",
+            ComposerMode.Replay => "Replay",
+            ComposerMode.Edit => "Resubmit",
+            _ => "Send"
+        };
+
+    private string ConfirmTitle => Mode == ComposerMode.Schedule ? "Schedule Message" : "Send Message";
+    private string ConfirmMessage => Mode == ComposerMode.Replay
+        ? $"Replay message to {_effectiveEntityPath} in production?"
+        : Mode == ComposerMode.Schedule
+            ? $"Schedule message on {_effectiveEntityPath ?? EntityPath} at {_scheduleAt:yyyy-MM-dd HH:mm} in production?"
+            : $"Send message to {_effectiveEntityPath ?? EntityPath} in production?";
+
     private void AddProperty() => _properties.Add(("", ""));
     private void RemoveProperty(int idx) { _properties.RemoveAt(idx); StateHasChanged(); }
     private void SetPropertyKey(int idx, string key) { _properties[idx] = (key, _properties[idx].Value); StateHasChanged(); }
     private void SetPropertyValue(int idx, string val) { _properties[idx] = (_properties[idx].Key, val); StateHasChanged(); }
+
+    private void AddPropertyRename() => _propertyRenames.Add(("", ""));
+    private void RemovePropertyRename(int idx) { _propertyRenames.RemoveAt(idx); StateHasChanged(); }
+    private void SetRenameOldKey(int idx, string v) { _propertyRenames[idx] = (v, _propertyRenames[idx].NewKey); StateHasChanged(); }
+    private void SetRenameNewKey(int idx, string v) { _propertyRenames[idx] = (_propertyRenames[idx].OldKey, v); StateHasChanged(); }
 
     private void OpenTemplatePicker() => _showTemplatePicker = true;
 
@@ -183,7 +344,7 @@
 
     private void SendMessage()
     {
-        if (Client is null || string.IsNullOrWhiteSpace(EntityPath)) return;
+        if (!CanSend) return;
         _sendResult = null;
         _sendError = false;
 
@@ -196,7 +357,7 @@
     private async Task DoSend()
     {
         _showSendConfirm = false;
-        if (Client is null || string.IsNullOrWhiteSpace(EntityPath)) return;
+        if (!CanSend) return;
 
         _isSending = true;
         StateHasChanged();
@@ -217,21 +378,86 @@
                 ApplicationProperties = props
             };
 
-            await Client.SendMessageAsync(EntityPath, msg);
-            _sendResult = "Message sent.";
+            var targetClient = ResolveTargetClient();
+            var targetEntity = _effectiveEntityPath ?? EntityPath
+                ?? throw new InvalidOperationException("No target entity.");
+
+            if (Mode == ComposerMode.Replay)
+                ApplyRemapRules(msg);
+
+            ScheduledMessageEntry? scheduledEntry = null;
+
+            if (Mode == ComposerMode.Schedule)
+            {
+                var enqueueTime = new DateTimeOffset(_scheduleAt, TimeZoneInfo.Local.GetUtcOffset(_scheduleAt));
+                var seqNo = await targetClient.ScheduleMessageAsync(targetEntity, msg, enqueueTime);
+
+                if (ScheduledRepo is not null && OwnerNamespaceId.HasValue)
+                {
+                    scheduledEntry = new ScheduledMessageEntry
+                    {
+                        NamespaceId = OwnerNamespaceId.Value,
+                        EntityPath = targetEntity,
+                        SequenceNumber = seqNo,
+                        ScheduledEnqueueTime = enqueueTime,
+                        MessageId = msg.MessageId,
+                        Subject = msg.Subject,
+                        CorrelationId = msg.CorrelationId
+                    };
+                    await ScheduledRepo.AddAsync(scheduledEntry);
+                }
+
+                _sendResult = $"Scheduled (seq #{seqNo}).";
+            }
+            else
+            {
+                await targetClient.SendMessageAsync(targetEntity, msg);
+                _sendResult = Mode == ComposerMode.Replay ? "Replayed." : "Message sent.";
+            }
+
             _sendError = false;
             _messageId = Guid.NewGuid().ToString();
-            await OnSent.InvokeAsync();
+            await OnSent.InvokeAsync(scheduledEntry);
         }
         catch (Exception ex)
         {
-            _sendResult = $"Send failed: {ex.Message}";
+            _sendResult = $"Failed: {ex.Message}";
             _sendError = true;
         }
         finally
         {
             _isSending = false;
             StateHasChanged();
+        }
+    }
+
+    private IServiceBusClient ResolveTargetClient()
+    {
+        if (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId) &&
+            Guid.TryParse(_targetNamespaceId, out var nsId) && AvailableNamespaces is not null)
+        {
+            var ns = AvailableNamespaces.FirstOrDefault(n => n.Id == nsId);
+            if (ns?.Client is not null) return ns.Client;
+        }
+
+        return Client ?? throw new InvalidOperationException("No client available.");
+    }
+
+    private void ApplyRemapRules(SbMessage msg)
+    {
+        if (!string.IsNullOrWhiteSpace(_remapOverrideSubject))
+            msg.Subject = _remapOverrideSubject;
+        if (!string.IsNullOrWhiteSpace(_remapOverrideCorrelationId))
+            msg.CorrelationId = _remapOverrideCorrelationId;
+
+        foreach (var (oldKey, newKey) in _propertyRenames)
+        {
+            if (string.IsNullOrWhiteSpace(oldKey) || string.IsNullOrWhiteSpace(newKey)) continue;
+            if (msg.ApplicationProperties.TryGetValue(oldKey, out var val))
+            {
+                msg.ApplicationProperties.Remove(oldKey);
+                msg.ApplicationProperties[newKey] = val;
+            }
         }
     }
 }

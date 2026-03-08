@@ -40,6 +40,30 @@ public class UiStateRepository
         var json = JsonSerializer.Serialize(_state, Options);
         await File.WriteAllTextAsync(AppDataPaths.UiStateJson, json);
     }
+
+    public IReadOnlyList<SavedFilter> GetFilters(string scopeKey) =>
+        _state.SavedFilters.TryGetValue(scopeKey, out var list) ? list : [];
+
+    public async Task SaveFilterAsync(string scopeKey, SavedFilter filter)
+    {
+        if (!_state.SavedFilters.TryGetValue(scopeKey, out var list))
+        {
+            list = [];
+            _state.SavedFilters[scopeKey] = list;
+        }
+
+        var existing = list.FirstOrDefault(f => string.Equals(f.Name, filter.Name, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) list.Remove(existing);
+        list.Add(filter);
+        await SaveAsync();
+    }
+
+    public async Task DeleteFilterAsync(string scopeKey, string filterName)
+    {
+        if (!_state.SavedFilters.TryGetValue(scopeKey, out var list)) return;
+        list.RemoveAll(f => string.Equals(f.Name, filterName, StringComparison.OrdinalIgnoreCase));
+        await SaveAsync();
+    }
 }
 
 public class UiState
@@ -50,6 +74,14 @@ public class UiState
     public bool IsDetailsPaneOpen { get; set; } = true;
     public List<OpenTab> OpenTabs { get; set; } = [];
     public Dictionary<string, object> ViewStates { get; set; } = [];
+    /// <summary>Saved message list filters keyed by "{namespaceId}:{entityPath}".</summary>
+    public Dictionary<string, List<SavedFilter>> SavedFilters { get; set; } = [];
+}
+
+public class SavedFilter
+{
+    public required string Name { get; set; }
+    public required string Value { get; set; }
 }
 
 public class OpenTab

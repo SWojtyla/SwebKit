@@ -1,5 +1,7 @@
 @implements IDisposable
 @inject AppStateService AppState
+@inject UiStateRepository UiState
+@inject IJSRuntime JS
 
 <div class="message-list-host" style="display:flex; flex-direction:column; height:100%;">
     @if (_showComposer && ShowCompose)
@@ -7,7 +9,7 @@
         <div style="border-bottom:1px solid var(--color-border); background:var(--color-surface); flex-shrink:0;">
             <MessageComposer Client="Client" EntityPath="EntityPath"
                              IsProduction="@AppState.IsProduction"
-                             OnSent="OnComposerSent"
+                             OnSent="@((_) => OnComposerSent())"
                              OnClose="@(() => _showComposer = false)" />
         </div>
     }
@@ -39,8 +41,37 @@
                 @(_selectedIds.Count == Messages.Count ? "Deselect all" : "Select all")
             </FluentButton>
         }
-        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
-               style="flex:1; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        <!-- Filter input with save / saved-filters menu -->
+        <div style="flex:1; display:flex; gap:0; min-width:0;">
+            <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
+                   style="flex:1; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px 0 0 3px; font-size:12px; min-width:0;" />
+            @if (!string.IsNullOrWhiteSpace(TextFilter))
+            {
+                <button @onclick="SaveCurrentFilter" title="Save current filter"
+                        style="padding:4px 6px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-left:none; color:var(--color-text-muted);">💾</button>
+            }
+            <div style="position:relative;">
+                <button @onclick="() => _showFilterMenu = !_showFilterMenu" title="Saved filters"
+                        style="padding:4px 6px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-left:none; border-radius:0 3px 3px 0; color:var(--color-text-muted);"
+                        disabled="@(SavedFilters.Count == 0)">▾</button>
+                @if (_showFilterMenu && SavedFilters.Count > 0)
+                {
+                    <div style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                        @foreach (var f in SavedFilters)
+                        {
+                            <div style="display:flex; align-items:center; padding:5px 8px; gap:6px; cursor:pointer; font-size:12px;"
+                                 @onclick="() => ApplySavedFilter(f)">
+                                <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@f.Value">@f.Name</span>
+                                <button @onclick:stopPropagation="true"
+                                        @onclick="() => DeleteSavedFilter(f.Name)"
+                                        title="Remove filter"
+                                        style="background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:11px; padding:1px 3px;">✕</button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
         @if (ShowCompose && !IsDlqMode && Client is not null)
         {
             <FluentButton @onclick="@(() => _showComposer = !_showComposer)"
@@ -49,6 +80,23 @@
                 ✉ Send
             </FluentButton>
         }
+        <!-- Export dropdown -->
+        <div style="position:relative;">
+            <FluentButton @onclick="() => _showExportMenu = !_showExportMenu"
+                          Appearance="Appearance.Stealth"
+                          Disabled="@(FilteredMessages.Count == 0)"
+                          title="Export visible messages">
+                ⬇ Export
+            </FluentButton>
+            @if (_showExportMenu)
+            {
+                <div style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:150px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Json)">JSON array</div>
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Ndjson)">NDJSON (one per line)</div>
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Csv)">CSV</div>
+                </div>
+            }
+        </div>
         <FluentButton @onclick="LoadAsync" Appearance="Appearance.Accent" Disabled="@IsLoading">
             @(IsLoading ? "Loading..." : "Peek")
         </FluentButton>
@@ -125,9 +173,30 @@
     }
 </div>
 
+@if (_showSaveFilterDialog)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:320px; width:90%;">
+            <h3 style="margin:0 0 12px; font-size:14px;">Save Filter</h3>
+            <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Filter: "@TextFilter"</div>
+            <input type="text" @bind="_saveFilterName" placeholder="Filter name…"
+                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                <button @onclick="() => _showSaveFilterDialog = false"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                <button @onclick="ConfirmSaveFilter" disabled="@string.IsNullOrWhiteSpace(_saveFilterName)"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private enum ExportFormat { Json, Ndjson, Csv }
+
     [Parameter] public IServiceBusClient? Client { get; set; }
     [Parameter] public string? EntityPath { get; set; }
+    [Parameter] public Guid? NamespaceId { get; set; }
     [Parameter] public bool ShowDlqColumns { get; set; }
     [Parameter] public bool IsDlqMode { get; set; }
     [Parameter] public EventCallback<SbMessage> OnMessageSelected { get; set; }
@@ -152,6 +221,18 @@
     private int _autoRefreshSeconds;
     private bool _showComposer;
     private bool _preventKeyDefault;
+    private bool _showExportMenu;
+    private bool _showFilterMenu;
+    private bool _showSaveFilterDialog;
+    private string _saveFilterName = "";
+
+    private string FilterScopeKey =>
+        NamespaceId.HasValue && EntityPath is not null
+            ? $"{NamespaceId.Value}:{EntityPath}"
+            : EntityPath ?? "";
+
+    private IReadOnlyList<SavedFilter> SavedFilters =>
+        string.IsNullOrWhiteSpace(FilterScopeKey) ? [] : UiState.GetFilters(FilterScopeKey);
 
     private List<SbMessage> FilteredMessages => string.IsNullOrEmpty(TextFilter)
         ? Messages
@@ -291,7 +372,6 @@
 
             if (requestVersion == _loadVersion)
             {
-                // Remove stale batch-selected IDs that are no longer in the result set.
                 var currentIds = loadedMessages.Select(m => m.MessageId).ToHashSet();
                 _selectedIds.IntersectWith(currentIds);
                 Messages = loadedMessages;
@@ -319,6 +399,8 @@
 
     private Task OnRowClickedAsync(SbMessage? msg)
     {
+        _showExportMenu = false;
+        _showFilterMenu = false;
         if (msg is null) return Task.CompletedTask;
         return OnMessageSelected.InvokeAsync(msg);
     }
@@ -348,6 +430,109 @@
 
         if (newIdx >= 0 && newIdx < items.Count)
             await OnMessageSelected.InvokeAsync(items[newIdx]);
+    }
+
+    // ── Saved filters ────────────────────────────────────────────────────────
+
+    private void ApplySavedFilter(SavedFilter f)
+    {
+        TextFilter = f.Value;
+        _showFilterMenu = false;
+        StateHasChanged();
+    }
+
+    private void SaveCurrentFilter()
+    {
+        _saveFilterName = "";
+        _showSaveFilterDialog = true;
+        _showFilterMenu = false;
+    }
+
+    private async Task ConfirmSaveFilter()
+    {
+        var name = _saveFilterName.Trim();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(FilterScopeKey)) return;
+        await UiState.SaveFilterAsync(FilterScopeKey, new SavedFilter { Name = name, Value = TextFilter });
+        _showSaveFilterDialog = false;
+        StateHasChanged();
+    }
+
+    private async Task DeleteSavedFilter(string filterName)
+    {
+        if (string.IsNullOrWhiteSpace(FilterScopeKey)) return;
+        await UiState.DeleteFilterAsync(FilterScopeKey, filterName);
+        StateHasChanged();
+    }
+
+    // ── Export ───────────────────────────────────────────────────────────────
+
+    private async Task ExportAsync(ExportFormat format)
+    {
+        _showExportMenu = false;
+        var messages = FilteredMessages;
+        if (messages.Count == 0) return;
+
+        string content;
+        string fileName;
+        string mimeType;
+
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var entitySlug = (EntityPath ?? "messages").Replace('/', '-');
+
+        switch (format)
+        {
+            case ExportFormat.Json:
+                content = System.Text.Json.JsonSerializer.Serialize(messages,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                fileName = $"{entitySlug}-{ts}.json";
+                mimeType = "application/json";
+                break;
+
+            case ExportFormat.Ndjson:
+                var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = false };
+                content = string.Join('\n', messages.Select(m => System.Text.Json.JsonSerializer.Serialize(m, opts)));
+                fileName = $"{entitySlug}-{ts}.ndjson";
+                mimeType = "application/x-ndjson";
+                break;
+
+            case ExportFormat.Csv:
+                content = BuildCsv(messages);
+                fileName = $"{entitySlug}-{ts}.csv";
+                mimeType = "text/csv";
+                break;
+
+            default:
+                return;
+        }
+
+        await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, mimeType, content);
+    }
+
+    private static string BuildCsv(IReadOnlyList<SbMessage> messages)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("MessageId,CorrelationId,Subject,ContentType,EnqueuedAt,DeliveryCount,SequenceNumber,DeadLetterReason,Body");
+        foreach (var m in messages)
+        {
+            sb.Append(CsvEscape(m.MessageId)).Append(',');
+            sb.Append(CsvEscape(m.CorrelationId)).Append(',');
+            sb.Append(CsvEscape(m.Subject)).Append(',');
+            sb.Append(CsvEscape(m.ContentType)).Append(',');
+            sb.Append(m.EnqueuedAt.ToString("O")).Append(',');
+            sb.Append(m.DeliveryCount).Append(',');
+            sb.Append(m.SequenceNumber?.ToString() ?? "").Append(',');
+            sb.Append(CsvEscape(m.DeadLetterReason)).Append(',');
+            sb.AppendLine(CsvEscape(m.Body));
+        }
+        return sb.ToString();
+    }
+
+    private static string CsvEscape(string? value)
+    {
+        if (value is null) return "";
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        return value;
     }
 
     public void Dispose() => _refreshTimer?.Dispose();

@@ -18,6 +18,8 @@ public sealed class ServiceBusPageTests : TestContext
         Services.AddSingleton<IAppEventBus>(events);
         Services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
+        Services.AddSingleton(new ScheduledMessageRepository());
+        Services.AddSingleton(new UiStateRepository());
     }
 
     [Fact]

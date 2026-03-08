@@ -34,6 +34,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITaskQueue, TaskQueueService>();
         builder.Services.AddSingleton<ProfileRepository>();
         builder.Services.AddSingleton<UiStateRepository>();
+        builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
 
         // App UI services

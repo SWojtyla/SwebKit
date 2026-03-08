@@ -225,6 +225,19 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         await sender.SendMessagesAsync(batch, ct);
     }
 
+    public async Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default)
+    {
+        await using var sender = _client.CreateSender(entityPath);
+        var sdkMsg = MapToSdk(message);
+        return await sender.ScheduleMessageAsync(sdkMsg, scheduledEnqueueTime, ct);
+    }
+
+    public async Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default)
+    {
+        await using var sender = _client.CreateSender(entityPath);
+        await sender.CancelScheduledMessageAsync(sequenceNumber, ct);
+    }
+
     public async Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default)
     {
         var dlqPath = $"{entityPath}/$DeadLetterQueue";

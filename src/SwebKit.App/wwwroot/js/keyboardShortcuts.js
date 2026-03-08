@@ -29,5 +29,31 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         if (alt && key === '3') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'EnvAcc'); return; }
         if (alt && key === '4') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'EnvProd'); return; }
         if (alt && shift && key === 'P') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'FocusProjectSelector'); return; }
+
+        // Service Bus quick actions (only when not in text input)
+        if (!inInput) {
+            if (ctrl && key === 'e') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbEditResubmit'); return; }
+            if (ctrl && key === 'r' && !shift) { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbReplay'); return; }
+            if (ctrl && shift && key === 'S') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbSchedule'); return; }
+            if (ctrl && shift && key === 'P') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbPeek'); return; }
+        }
     });
+};
+
+/**
+ * Triggers a file download from a string of text content.
+ * @param {string} filename - Suggested file name.
+ * @param {string} mimeType - MIME type (e.g. "application/json").
+ * @param {string} content  - Text content to download.
+ */
+window.SwebKit.downloadText = function (filename, mimeType, content) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 };

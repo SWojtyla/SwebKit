@@ -3,6 +3,7 @@
 @inject ICredentialStore CredentialStore
 @inject IAppEventBus Events
 @inject IJSRuntime JS
+@inject ScheduledMessageRepository ScheduledRepo
 @implements IDisposable
 
 <div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
@@ -96,7 +97,11 @@
                             <span style="font-size:10px; color:var(--color-error);" title="@ns.ConnectionError">●</span>
                         }
                         <button
-                        style="margin-left:6px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
+                        style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:11px; padding:0 3px;"
+                        title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
+                        @onclick="() => OpenScheduledTab(ns)">🕐</button>
+                        <button
+                        style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
                         title="Remove namespace" @onclick:stopPropagation="true"
                         @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">✕</button>
                     </div>
@@ -149,7 +154,14 @@
             <!-- Active tab content -->
             @if (_activeTab is not null)
             {
-                @if (_activeTab.IsDlq)
+                @if (_activeTab.IsScheduled)
+                {
+                    <ScheduledMessages @key="_activeTab.Id"
+                                       Client="_activeTab.Client"
+                                       NamespaceId="_activeTab.NamespaceId"
+                                       EntityPath="@_activeTab.EntityPath" />
+                }
+                else if (_activeTab.IsDlq)
                 {
                     <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
                 }
@@ -158,13 +170,17 @@
                     <div @key="_activeTab.Id" class="service-bus-active-workspace" style="display:flex; flex:1; overflow:hidden;">
                         <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                             NamespaceId="_activeTab.NamespaceId"
                                              ShowCompose="true"
                                              SelectedMessage="_activeTab.SelectedMessage"
                                              OnMessageSelected="msg => { _activeTab.SelectedMessage = msg; StateHasChanged(); }" />
                         </div>
                         <div @ref="_splitterRef" class="pane-splitter"></div>
                         <div @ref="_detailPaneRef" class="details-pane">
-                            <MessageDetailPane Message="_activeTab.SelectedMessage" />
+                            <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
                         </div>
                     </div>
                 }
@@ -172,6 +188,25 @@
         }
     </div>
 </div>
+
+<!-- Modal composer (Edit / Replay / Schedule) -->
+@if (_composerMessage is not null && _activeTab is not null)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; display:flex; align-items:flex-start; justify-content:center; padding-top:60px;">
+        <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; width:min(760px,95vw); max-height:80vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+            <MessageComposer Client="_activeTab.Client"
+                             EntityPath="@_activeTab.EntityPath"
+                             IsProduction="@AppState.IsProduction"
+                             Mode="_composerMode"
+                             PrefillMessage="_composerMessage"
+                             AvailableNamespaces="@AvailableNamespaceOptions"
+                             OwnerNamespaceId="_activeTab.NamespaceId"
+                             ScheduledRepo="ScheduledRepo"
+                             OnSent="OnComposerSent"
+                             OnClose="CloseComposer" />
+        </div>
+    </div>
+}
 
 @code {
     private List<NsState> _namespaceStates = [];
@@ -185,6 +220,35 @@
     private ElementReference _detailPaneRef;
     private IJSObjectReference? _splitterHandle;
 
+    // Composer modal state
+    private SbMessage? _composerMessage;
+    private MessageComposer.ComposerMode _composerMode;
+
+    private IReadOnlyList<MessageComposer.NamespaceOption> AvailableNamespaceOptions =>
+        _namespaceStates
+            .Where(s => s.Client is not null)
+            .Select(s => new MessageComposer.NamespaceOption(s.Namespace.Id, s.Namespace.Alias, s.Client!))
+            .ToList();
+
+    private void OpenComposer(SbMessage msg, MessageComposer.ComposerMode mode)
+    {
+        _composerMessage = msg;
+        _composerMode = mode;
+        StateHasChanged();
+    }
+
+    private void CloseComposer()
+    {
+        _composerMessage = null;
+        StateHasChanged();
+    }
+
+    private Task OnComposerSent(ScheduledMessageEntry? _)
+    {
+        CloseComposer();
+        return Task.CompletedTask;
+    }
+
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
         AppState.CurrentEnvironment?.ServiceBusEntityLinks ?? [];
 
@@ -192,12 +256,13 @@
     {
         Events.Subscribe<ProjectChangedEvent>(OnContextChanged);
         Events.Subscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_activeTab is not null && !_activeTab.IsDlq && _splitterHandle is null)
+        if (_activeTab is not null && !_activeTab.IsDlq && !_activeTab.IsScheduled && _splitterHandle is null)
         {
             try
             {
@@ -383,6 +448,28 @@
         StateHasChanged();
     }
 
+    private void OpenScheduledTab(NsState ns)
+    {
+        if (ns.Client is null) return;
+        var id = $"{ns.Namespace.Id}:scheduled";
+        var existing = _openTabs.FirstOrDefault(t => t.Id == id);
+        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
+
+        var tab = new SbTab
+        {
+            Id = id,
+            NamespaceId = ns.Namespace.Id,
+            NamespaceAlias = ns.Namespace.Alias,
+            Title = "Scheduled",
+            EntityPath = string.Empty,
+            Client = ns.Client,
+            IsScheduled = true
+        };
+        _openTabs.Add(tab);
+        _activeTab = tab;
+        StateHasChanged();
+    }
+
     private async Task ToggleEntityLinkAsync(SbEntityLink link)
     {
         var env = AppState.CurrentEnvironment;
@@ -475,6 +562,7 @@
         public required string EntityPath { get; set; }
         public required IServiceBusClient Client { get; set; }
         public bool IsDlq { get; set; }
+        public bool IsScheduled { get; set; }
         public SbMessage? SelectedMessage { get; set; }
     }
 
@@ -604,6 +692,10 @@ TopicName = topicName, Stats = new() { ActiveMessageCount = 0, DeadLetterMessage
 Task.CompletedTask;
         public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) =>
 Task.CompletedTask;
+        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) =>
+            Task.FromResult((long)new Random().Next(100000, 999999));
+        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
+            Task.CompletedTask;
         public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath,
 CancellationToken ct = default) => Task.CompletedTask;
         public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct =

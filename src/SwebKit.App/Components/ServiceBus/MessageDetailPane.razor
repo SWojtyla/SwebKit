@@ -12,7 +12,31 @@ else
     <div style="height:100%; display:flex; flex-direction:column;">
         <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); font-size:12px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
             <span style="font-weight:600;">@(Message.MessageId.Length > 16 ? Message.MessageId[..16] + "…" : Message.MessageId)</span>
-            <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
+            <div style="margin-left:auto; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+                @if (OnEdit.HasDelegate)
+                {
+                    <button @onclick="() => OnEdit.InvokeAsync(Message)"
+                            style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);"
+                            title="Edit message body/properties and re-send (Ctrl+E)">
+                        Edit &amp; Resubmit
+                    </button>
+                }
+                @if (OnReplay.HasDelegate)
+                {
+                    <button @onclick="() => OnReplay.InvokeAsync(Message)"
+                            style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);"
+                            title="Replay this message to another namespace/entity">
+                        Replay
+                    </button>
+                }
+                @if (OnSchedule.HasDelegate)
+                {
+                    <button @onclick="() => OnSchedule.InvokeAsync(Message)"
+                            style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);"
+                            title="Schedule this message for future delivery (Ctrl+Shift+S)">
+                        Schedule
+                    </button>
+                }
                 <button @onclick="CopyBody" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);" title="Copy message body to clipboard">
                     @(_copyFeedback == "body" ? "Copied!" : "Copy Body")
                 </button>
@@ -98,6 +122,9 @@ else
 
 @code {
     [Parameter] public SbMessage? Message { get; set; }
+    [Parameter] public EventCallback<SbMessage> OnEdit { get; set; }
+    [Parameter] public EventCallback<SbMessage> OnReplay { get; set; }
+    [Parameter] public EventCallback<SbMessage> OnSchedule { get; set; }
 
     private string? _copyFeedback;
     private CancellationTokenSource? _feedbackCts;

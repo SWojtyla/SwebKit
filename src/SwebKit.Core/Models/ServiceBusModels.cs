@@ -1,5 +1,34 @@
 namespace SwebKit.Core.Models;
 
+public class RemapRules
+{
+    public string? OverrideSubject { get; set; }
+    public string? OverrideCorrelationId { get; set; }
+    /// <summary>Maps old application-property key → new key name.</summary>
+    public Dictionary<string, string> PropertyRenames { get; set; } = new();
+    /// <summary>Application-property keys to remove from the replayed message.</summary>
+    public HashSet<string> PropertyRemoves { get; set; } = new();
+
+    public bool IsEmpty =>
+        OverrideSubject is null &&
+        OverrideCorrelationId is null &&
+        PropertyRenames.Count == 0 &&
+        PropertyRemoves.Count == 0;
+}
+
+public class ScheduledMessageEntry
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public required Guid NamespaceId { get; set; }
+    public required string EntityPath { get; set; }
+    public required long SequenceNumber { get; set; }
+    public required DateTimeOffset ScheduledEnqueueTime { get; set; }
+    public string? MessageId { get; set; }
+    public string? Subject { get; set; }
+    public string? CorrelationId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public class SbMessage
 {
     public required string MessageId { get; set; }
