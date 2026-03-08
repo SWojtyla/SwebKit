@@ -29,7 +29,8 @@ An AKS troubleshooting workspace that supports day-to-day cluster diagnostics wi
 
 ## Deliverables
 
-- `docs/features/aks/technical-plan.md`
+- `docs/features/aks/technical-plan-backend.md`
+- `docs/features/aks/technical-plan-ui.md`
 - `docs/features/aks/test-plan.md`
 
 ## Migration Notes

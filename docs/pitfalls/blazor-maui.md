@@ -1,0 +1,156 @@
+# Pitfalls — Blazor / MAUI Hybrid
+
+---
+
+## BL-1 — Missing `@using` in `_Imports.razor` silently breaks components
+
+**Symptom:** A component renders blank. No error, no lifecycle fires, no render output.
+
+**Cause:** Blazor does not auto-import component namespaces from subdirectories. A component in `Components/ServiceBus/EntityTree.razor` that is NOT listed in `_Imports.razor` is treated as an unknown HTML element — `<entitytree>` — with no Blazor behaviour. The build emits a **RZ10012** warning; treat it as a functional error.
+
+**Fix:** Add the namespace immediately when creating a new `Components/` subdirectory.
+
+```razor
+@using SwebKit.App.Components.ServiceBus
+@using SwebKit.App.Components.Aks
+```
+
+**Rule:** after adding a new subdirectory, check `_Imports.razor` before writing any component that uses it.
+
+---
+
+## BL-2 — `StateHasChanged()` must be dispatched via `InvokeAsync` inside async methods
+
+**Symptom:** UI does not update after an `await` completes inside a component method (e.g., loading spinner never disappears, list stays empty).
+
+**Cause:** In MAUI Blazor Hybrid, the Blazor sync context runs on the MAUI dispatcher. After an `await` of an SDK call that uses `ConfigureAwait(false)` internally, you may no longer be on that dispatcher. Calling `StateHasChanged()` directly can silently no-op.
+
+**Fix:**
+
+```csharp
+// Wrong
+StateHasChanged();
+
+// Correct
+await InvokeAsync(StateHasChanged);
+```
+
+---
+
+## BL-3 — Set guard state before `await` in `OnParametersSetAsync`
+
+**Symptom:** Data loads twice concurrently; race condition on component fields.
+
+**Cause:** `OnParametersSetAsync` is called on every parent re-render, not just on parameter value changes. If a guard variable (e.g., `_loadedClient`) is set **after** an `await`, a parent re-render arriving during the await sees the guard as unset and triggers a second concurrent load.
+
+**Fix:**
+
+```csharp
+// Wrong
+if (!ReferenceEquals(_loadedClient, Client))
+{
+    await LoadAsync();
+    _loadedClient = Client; // too late — parent may re-render before this
+}
+
+// Correct
+if (!ReferenceEquals(_loadedClient, Client))
+{
+    _loadedClient = Client; // guard first
+    await LoadAsync();
+}
+```
+
+---
+
+## BL-4 — `@if` blocks fully destroy and recreate components
+
+**Symptom:** Collapsing and re-expanding a section resets all component state (loaded data, scroll position, local fields).
+
+**Cause:** `@if (condition) { <MyComponent /> }` disposes the component when the condition turns false and creates a brand-new instance when it turns true. Blazor does not preserve state across this destroy/create cycle.
+
+**Fix:** Lift any state that must survive the toggle to the parent page, a service, or a cascading value. Use `display:none` via inline style if you genuinely need the DOM to persist (rare).
+
+---
+
+## BL-5 — `OnParametersSetAsync` fires on every parent render
+
+**Symptom:** Expensive operation (network call, large computation) runs repeatedly as the user interacts with sibling components.
+
+**Cause:** Blazor calls `SetParametersAsync` (and therefore `OnParametersSetAsync`) on all child components whenever the parent re-renders, even if the parameter values are unchanged.
+
+**Fix:** Guard with a reference or value equality check.
+
+```csharp
+if (!ReferenceEquals(_loadedClient, Client))
+{
+    _loadedClient = Client;
+    await LoadAsync();
+}
+```
+
+---
+
+## BL-6 — JS interop must wait for the DOM (`OnAfterRenderAsync`)
+
+**Symptom:** JS call throws `Cannot read properties of null` or the interop target element is not found.
+
+**Cause:** `OnInitializedAsync` and `OnParametersSetAsync` run before the component's HTML exists in the WebView DOM. Any `IJSRuntime.InvokeAsync` call that targets a DOM element (Monaco editor, xterm.js terminal, chart) will fail if called before the first render.
+
+**Fix:** Use `OnAfterRenderAsync(bool firstRender)` and guard with the `firstRender` flag.
+
+```csharp
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (firstRender)
+        await JS.InvokeVoidAsync("myLib.init", _elementRef);
+}
+```
+
+---
+
+## BL-7 — `IAsyncEnumerable` streams must be cancelled on component dispose
+
+**Symptom:** Background streaming task (log tail, pod watch) continues running after navigating away; possible `ObjectDisposedException` or stale updates on a dead component.
+
+**Cause:** `await foreach` loops run until the enumerable is exhausted or a `CancellationToken` is cancelled. Navigating away destroys the component but does not cancel the token automatically.
+
+**Fix:** Create a `CancellationTokenSource` tied to the component lifetime and cancel it on dispose.
+
+```csharp
+private readonly CancellationTokenSource _cts = new();
+
+public void Dispose() => _cts.Cancel();
+
+// Usage
+await foreach (var line in client.StreamLogsAsync(pod, _cts.Token))
+    ...
+```
+
+---
+
+## BL-8 — Throttle `StateHasChanged` in high-frequency update loops
+
+**Symptom:** UI freezes or becomes unresponsive while streaming log lines or consuming a fast event source.
+
+**Cause:** Calling `await InvokeAsync(StateHasChanged)` per received line saturates the Blazor render queue faster than the WebView can paint.
+
+**Fix:** Buffer updates and flush on a timer or after N items.
+
+```csharp
+private readonly List<string> _buffer = [];
+private readonly PeriodicTimer _flushTimer = new(TimeSpan.FromMilliseconds(150));
+
+// In a background loop:
+_buffer.Add(line);
+if (_buffer.Count >= 50)
+    await FlushAsync();
+
+// Or timer-driven:
+while (await _flushTimer.WaitForNextTickAsync(_cts.Token))
+    await FlushAsync();
+```
+
+---
+
+_See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

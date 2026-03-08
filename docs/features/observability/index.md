@@ -28,7 +28,8 @@ A provider-agnostic observability workspace that supports both quick triage and 
 
 ## Deliverables
 
-- `docs/features/observability/technical-plan.md`
+- `docs/features/observability/technical-plan-backend.md`
+- `docs/features/observability/technical-plan-ui.md`
 - `docs/features/observability/test-plan.md`
 
 ## Migration Notes

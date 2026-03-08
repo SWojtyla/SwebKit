@@ -33,7 +33,8 @@ A polished, reliable, and high-productivity tool suitable for sustained daily us
 
 ## Deliverables
 
-- `docs/features/polish-advanced/technical-plan.md`
+- `docs/features/polish-advanced/technical-plan-backend.md`
+- `docs/features/polish-advanced/technical-plan-ui.md`
 - `docs/features/polish-advanced/test-plan.md`
 
 ## Migration Notes

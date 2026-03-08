@@ -27,7 +27,8 @@ A runnable app where project and environment context drives all major pages, wit
 
 ## Deliverables
 
-- `docs/features/foundation-mvp/technical-plan.md`
+- `docs/features/foundation-mvp/technical-plan-backend.md`
+- `docs/features/foundation-mvp/technical-plan-ui.md`
 - `docs/features/foundation-mvp/test-plan.md`
 
 ## Migration Notes
