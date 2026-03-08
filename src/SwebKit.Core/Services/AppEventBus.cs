@@ -51,3 +51,4 @@ public record CommandPaletteRequestedEvent;
 public record NavigateToAreaEvent(string Area);
 public record OpenEntityTabEvent(string Area, string EntityPath, string Title);
 public record RefreshRequestedEvent(string Area);
+public record ServiceBusShortcutEvent(string Action);

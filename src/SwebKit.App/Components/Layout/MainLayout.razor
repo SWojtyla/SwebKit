@@ -177,6 +177,10 @@
             case "EnvAcc": await SwitchEnvByName("Acc"); break;
             case "EnvProd": await SwitchEnvByName("Prod"); break;
             case "Refresh": Events.Publish(new RefreshRequestedEvent(CurrentArea)); break;
+            case "SbEditResubmit": Events.Publish(new ServiceBusShortcutEvent("Edit")); break;
+            case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
+            case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
+            case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
         }
         await InvokeAsync(StateHasChanged);
     }

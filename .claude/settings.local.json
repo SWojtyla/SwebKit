@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --nologo -v:q)",
+      "Bash(dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --nologo -v:q)"
+    ]
+  }
+}

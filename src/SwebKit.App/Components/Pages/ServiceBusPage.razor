@@ -256,6 +256,7 @@
     {
         Events.Subscribe<ProjectChangedEvent>(OnContextChanged);
         Events.Subscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
     }
@@ -508,10 +509,33 @@
     private void OnContextChanged(ProjectChangedEvent _) => InvokeAsync(StateHasChanged);
     private void OnContextChanged2(EnvironmentChangedEvent _) => InvokeAsync(StateHasChanged);
 
+    private void OnServiceBusShortcut(ServiceBusShortcutEvent e) => InvokeAsync(() =>
+    {
+        if (_activeTab is null || _activeTab.IsDlq || _activeTab.IsScheduled) return;
+        var msg = _activeTab.SelectedMessage;
+
+        switch (e.Action)
+        {
+            case "Edit" when msg is not null:
+                OpenComposer(msg, MessageComposer.ComposerMode.Edit);
+                break;
+            case "Replay" when msg is not null:
+                OpenComposer(msg, MessageComposer.ComposerMode.Replay);
+                break;
+            case "Schedule" when msg is not null:
+                OpenComposer(msg, MessageComposer.ComposerMode.Schedule);
+                break;
+            case "Peek":
+                Events.Publish(new RefreshRequestedEvent("service-bus"));
+                break;
+        }
+    });
+
     public void Dispose()
     {
         Events.Unsubscribe<ProjectChangedEvent>(OnContextChanged);
         Events.Unsubscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         if (_splitterHandle is not null)
         {
             try { _ = _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
