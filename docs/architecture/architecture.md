@@ -1,10 +1,13 @@
+<!-- Copied from docs/ARCHITECTURE.md -->
+
 # SwebKit — Architecture Overview
 
-> Full detail: [DESIGN.md](./DESIGN.md)
+> Full detail: [DESIGN.md](../DESIGN.md)
 
 ## What Is SwebKit
 
 A .NET MAUI Blazor Hybrid desktop tool for .NET developers who work daily with:
+
 - **Azure Service Bus** — inspect queues, fix DLQs, replay messages
 - **Application Insights / OpenTelemetry** — query logs, explore traces, view metrics
 - **AKS (Kubernetes)** — workload overview, live log tail, port-forward, pod shell
@@ -16,19 +19,19 @@ Everything is organized around a **Project + Environment** selector. Switching t
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Platform | .NET MAUI Blazor Hybrid (Windows primary) |
-| UI Components | Microsoft Fluent UI Blazor (`Microsoft.FluentUI.AspNetCore.Components`) |
-| Charts | Blazor-ApexCharts (metrics dashboard only) |
-| Code Editor | BlazorMonaco (Monaco Editor via JSInterop — KQL, JSON body) |
-| Terminal | xterm.js via JSInterop (`TerminalView.razor`) |
-| Azure SB | `Azure.Messaging.ServiceBus` |
-| Azure Observability | `Azure.Monitor.Query` + `Azure.Identity` |
-| Kubernetes | `KubernetesClient` |
-| OTLP | `OpenTelemetry.Exporter.OpenTelemetryProtocol` |
-| Serialization | `System.Text.Json` (source generators) |
-| Secrets | Windows Credential Manager (ICredentialStore abstraction) |
+| Layer               | Choice                                                                  |
+| ------------------- | ----------------------------------------------------------------------- |
+| Platform            | .NET MAUI Blazor Hybrid (Windows primary)                               |
+| UI Components       | Microsoft Fluent UI Blazor (`Microsoft.FluentUI.AspNetCore.Components`) |
+| Charts              | Blazor-ApexCharts (metrics dashboard only)                              |
+| Code Editor         | BlazorMonaco (Monaco Editor via JSInterop — KQL, JSON body)             |
+| Terminal            | xterm.js via JSInterop (`TerminalView.razor`)                           |
+| Azure SB            | `Azure.Messaging.ServiceBus`                                            |
+| Azure Observability | `Azure.Monitor.Query` + `Azure.Identity`                                |
+| Kubernetes          | `KubernetesClient`                                                      |
+| OTLP                | `OpenTelemetry.Exporter.OpenTelemetryProtocol`                          |
+| Serialization       | `System.Text.Json` (source generators)                                  |
+| Secrets             | Windows Credential Manager (ICredentialStore abstraction)               |
 
 ---
 
@@ -41,7 +44,6 @@ SwebKit.sln
 │   ├── SwebKit.Core/         # Domain models, interfaces, config logic
 │   ├── SwebKit.Azure/        # Azure SB + App Insights implementations
 │   ├── SwebKit.Kubernetes/   # Kubernetes/AKS implementation
-│   └── SwebKit.OpenTelemetry/ # OTLP observability provider
 └── tests/
     ├── SwebKit.Core.Tests/
     ├── SwebKit.Azure.Tests/
@@ -53,42 +55,51 @@ SwebKit.sln
 ## Key Design Decisions
 
 ### Blazor Hybrid (not XAML)
+
 All UI lives in Razor components inside a `BlazorWebView`. `MainPage.xaml` is a thin MAUI shell
 containing only the `<BlazorWebView>`. This gives access to the full web component ecosystem
 (Fluent UI, Monaco Editor, xterm.js) and CSS-based layouts.
 
 ### Project + Environment Model
+
 - `Project` → `List<ProjectEnvironment>`
 - Each `ProjectEnvironment` carries independent `ServiceBusConfig`, `ObservabilityConfig`, `AksConfig`
 - `AppStateService` (DI Singleton) holds current project+env; broadcasts `EnvironmentChanged` event
 - `CascadingValue<AppContext>` propagates context to all Blazor components
 
 ### Secrets
+
 - Config files (`profiles.json`, `ui-state.json`) contain **no secrets**
 - All credentials stored in Windows Credential Manager via `ICredentialStore`
 - Credential refs are logical string keys; secrets decoded at runtime only
 
 ### Core Abstractions (in `SwebKit.Core`)
+
 - `IServiceBusClient` — Peek, Send, Resubmit DLQ, Complete, List entities
 - `IObservabilityProvider` — QueryLogs, GetTrace, GetMetrics (AppInsights and OTLP use same interface)
 - `IAksClient` — GetDeployments, GetPods, StreamLogs, PortForward, OpenShell
 - `ICredentialStore` — Save, Get, Delete
 
 ### UI Consistency
+
 All three areas (Service Bus, Observability, AKS) share identical:
+
 - `FilterBar.razor` — filter toolbar component
 - `DataTable.razor` — wraps `FluentDataGrid<TItem>` with consistent column/selection behavior
 - `DetailsPane.razor` — collapsible right-hand details panel
 - Same keyboard shortcuts, same error display, same loading states
 
 ### Keyboard Shortcuts
+
 Global shortcuts registered via `keyboardShortcuts.js` (JSInterop). Key bindings:
 `Ctrl+P` (command palette), `Ctrl+1-4` (navigate sections), `Alt+1-4` (switch env),
 `Ctrl+Tab`/`Ctrl+Shift+Tab` (tab navigation), `Ctrl+W` (close tab), `F5` (refresh),
 `Ctrl+Enter` (execute query/send), `Ctrl+F` (focus filter), `Ctrl+\` (toggle details pane).
 
 ### Production Safety
+
 When `Tier = Production` environment is selected:
+
 - Top bar turns red (`#C8002A`)
 - `⚠ PROD` badge always visible
 - Per-pane production banner
@@ -107,16 +118,4 @@ User selects "order-queue" in EntityTree.razor
       → Returns List<SbMessage>
   → FluentDataGrid renders rows
   → User clicks row → MessageDetailPane.razor shows body (JSON formatted) + properties
-```
-
-## Data Flow Example: Query Logs
-
-```
-User enters filter + clicks Run (Ctrl+Enter)
-  → LogTableView.razor calls IObservabilityProvider.QueryLogsAsync(query, ct)
-      → AppInsightsObservabilityProvider builds KQL from LogQuery fields
-      → Calls LogsQueryClient.QueryWorkspaceAsync(workspaceId, kql, range)
-      → Maps response rows to List<LogEntry>
-  → FluentDataGrid renders log entries
-  → User right-clicks → "Find trace for this operation" → NavigationManager.NavigateTo("/observability/trace?id=...")
 ```
