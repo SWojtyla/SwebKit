@@ -1,43 +1,65 @@
-# Test Plan - AKS
+# Test Plan - aks
 
-## Status
+---
 
-- Current: Planned
+title: "Test Plan - aks"
+owner: ""
+status: "Planned"
+created: "2026-03-08"
+updated: "2026-03-08"
+
+---
+
+## Goal
+
+Validate that users can load kubeconfig, select namespaces, browse pods/deployments/helm releases/ingresses, and inspect raw YAML safely and reliably.
 
 ## Scope
 
-- Validate AKS diagnostic workflows for workloads, pods, events, logs, and terminal operations.
-- Validate port-forward and live tail lifecycle handling under expected failure and reconnect paths.
-- Validate observability cross-links from AKS context into related diagnostic views.
-- Preserve traceability with active feature technical plan deliverables.
+- In scope: kubeconfig load, context switch, namespace selection, resource list views, YAML view retrieval/display, error states
+- Out of scope: resource mutation (apply/delete), live tail/port-forward/terminal flows
 
-## Test Levels
+## Main scenarios (priority)
 
-- Unit tests (`tests/SwebKit.Kubernetes.Tests/`, `tests/SwebKit.Core.Tests/`): client behavior, model mapping, and guardrails.
-- Component tests (`tests/SwebKit.App.Tests/`): AKS page rendering, watch controls, and action safety behavior.
-- Integration tests (cluster-mocked): listing, logs, and port-forward orchestration contracts.
-- Smoke tests (manual): end-to-end namespace and workload diagnostics in non-production clusters.
+1. Scenario: Load default and custom kubeconfig files — Expected result: contexts are parsed and selectable.
+2. Scenario: Select namespace and open Pods/Deployments/Helm Releases/Ingresses — Expected result: each view shows namespace-scoped data.
+3. Scenario: Open YAML for each resource type — Expected result: full YAML is displayed read-only with correct metadata.
 
-## Key Scenarios
+## Automated coverage
 
-- [ ] AKS-001: Namespace and workload list load with accurate status indicators.
-- [ ] AKS-002: Pod log tail starts, reconnects after transient failures, and stops cleanly.
-- [ ] AKS-003: Multi-pod tail and pod watch update views without duplicate events.
-- [ ] AKS-004: Port-forward lifecycle create, show status, and terminate behavior is reliable.
-- [ ] AKS-005: Embedded terminal launches with selected cluster context and namespace.
-- [ ] AKS-006: AKS to observability deep-link preserves correlation context where available.
+- Unit tests: kubeconfig parsing, namespace/resource mappers, YAML fetch wrappers — target coverage: core AKS client paths
+- Integration tests: Kubernetes client interactions for list/get by namespace — CI gates on AKS client test project
+- End-to-end tests: UI journey (`kubeconfig -> namespace -> resource -> yaml`) as smoke suite
 
-## Command Placeholders
+## Test data and setup
 
-```
-dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj -p:Configuration=Debug
-dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj -p:Configuration=Debug
-dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj -p:Configuration=Debug
-dotnet test SwebKit.slnx
-```
+- Required fixtures: sample kubeconfig files (single-context and multi-context), mocked namespace/resource responses
+- Environment vars: optional kubeconfig fixture path for test runs
+- Mocking strategy: mock Kubernetes API responses in unit/integration layers where cluster access is unavailable
 
-## Traceability Backlinks
+## Manual checks
 
-- `docs/features/active/aks/index.md`
-- `docs/features/active/aks/technical-plan.md`
-- `docs/plans/docs-rework-traceability/index.md`
+- Check: Kubeconfig error handling — steps: load invalid/expired kubeconfig and verify actionable error messaging.
+- Check: Namespace scoping — steps: switch namespace and verify all resource tabs refresh consistently.
+- Check: YAML viewer usability — steps: open YAML for each resource type and verify read-only behavior and scroll performance.
+
+## Regression risks & mitigations
+
+- Risk: namespace selection not propagated to all resource tabs — Mitigation: add shared state tests and component assertions.
+- Risk: large YAML payload rendering issues — Mitigation: lazy load YAML and test with large fixture files.
+
+## Acceptance criteria
+
+- All high-priority scenarios pass in CI
+- No critical regressions in AKS page navigation and resource rendering
+- Tests and AKS feature docs updated
+
+## Validation status
+
+- Automated: Not started
+- Manual: Not started
+
+## Sign-off
+
+- Owner:
+- Date:

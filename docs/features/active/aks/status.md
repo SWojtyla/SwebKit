@@ -1,42 +1,53 @@
-# Status - AKS
+# Status - aks
 
 ---
 
 title: "Status - aks"
 owner: ""
-state: "Pending"
+state: "Planned"
 branch: ""
-started: ""
-last_updated: ""
+started: "2026-03-08"
+last_updated: "2026-03-08"
 
 ---
 
 ## Quick summary
 
-Current state: Pending — implement buffered log streaming and port-forward lifecycle.
+Planning docs have been rewritten to the new template standard; implementation is not started.
+
+**Current focus:** Implement kubeconfig loading and namespace/resource listing backend contracts.
 
 ## Progress checklist
 
-- [ ] Planning complete
-- [ ] Design reviewed
+- [x] Planning complete
+- [x] Design reviewed
 - [ ] Backend implementation
 - [ ] Frontend implementation
 - [ ] Tests (unit/integration/e2e)
-- [ ] Docs aligned
+- [x] Docs aligned
 - [ ] Ready for review
 
 ## Completed
 
-- Feature scope and technical plans drafted.
+- `index.md` aligned to feature overview template.
+- Rewrote `backend.md`, `frontend.md`, `decisions.md`, and `test-plan.md` to template structure.
+- Updated scope to prioritize kubeconfig + namespace and read-only resource/YAML browsing.
 
 ## Remaining
 
-- Implement backend streaming, UI components, and tests.
+- Implement backend `IAksClient` methods for kubeconfig/context/namespace/resources/YAML.
+- Implement AKS UI flows for namespace-scoped views and YAML viewer.
+- Add automated and manual validation from `test-plan.md`.
 
 ## Blockers
 
-- None recorded.
+- None.
 
 ## Validation
 
-- Follow `docs/features/active/aks/test-plan.md` for validation steps.
+- Test Plan: `test-plan.md`
+- Validation status: Not started
+
+## Notes
+
+- Keep AKS operations read-only in this feature phase.

@@ -1,61 +1,64 @@
-<!-- Copied from technical-plan-ui.md -->
+# Frontend Plan - aks
 
-# Frontend
+---
 
-## Status
+title: "Frontend Plan - aks"
+owner: ""
+status: "Planned"
 
-- Current: Pending
+---
 
-## Component Hierarchy
+## Goal
 
-```
-AksPage (Pages/)
-├── WorkloadOverview (Aks/)
-├── PodLogView (Aks/)        — buffered streaming, multi-pod
-├── PortForwardPanel (Aks/)  — active tunnels list
-├── TerminalView (Aks/)      — xterm.js via JS interop
-└── EventsTimeline (Aks/)
-```
+Provide a clean AKS UI flow where users can select a kubeconfig, choose context and namespace, browse pods/deployments/helm releases/ingresses, and open read-only YAML for each item.
 
-## Blazor Patterns & Pitfalls
+## Impacted areas
 
-See [`docs/pitfalls/blazor-maui.md`](../../../pitfalls/blazor-maui.md) for the full reference. Entries most relevant here: **BL-2** (`InvokeAsync`), **BL-6** (JS interop after DOM), **BL-7** (`IAsyncEnumerable` cancellation), **BL-8** (throttle `StateHasChanged`).
+- Files / components: `src/SwebKit.App/Components/Aks/*`, `src/SwebKit.App/Components/Pages/AksPage.razor`
+- Pages / routes: AKS page
+- Shared components: table/list components, details pane, empty/error state callouts
 
-## Implementation Sequence
+## UX and accessibility notes
 
-1. Add buffered streaming log pipeline and throttled render to `PodLogView`.
-2. Add pod restart detection UX and reconnect indicator.
-3. Add multi-pod combined tail view with per-pod color prefixes.
-4. Build `PortForwardPanel` showing active tunnels with start/stop controls.
-5. Build `TerminalView` JS interop bridge and xterm.js host.
-6. Add pod watch binding to `WorkloadOverview` for live updates.
-7. Add `EventsTimeline` with filter controls.
-8. Implement AKS → Observability cross-link navigation.
+- Primary flow: `kubeconfig` -> `context` -> `namespace` -> resource tab -> YAML drawer/modal.
+- Namespace selection should be explicit and sticky during page session.
+- Each resource tab must support loading, empty, unauthorized, and error states.
+- YAML viewer should use readable typography and keyboard-friendly scroll/focus behavior.
 
-## Detailed Tasks
+## API / contract changes
 
-- [ ] Add buffered streaming log pipeline and throttled rendering.
-  - Files: `src/SwebKit.App/Components/Aks/PodLogView.razor`
-- [ ] Add pod restart detection and reconnect UX.
-  - Files: `src/SwebKit.App/Components/Aks/PodLogView.razor`
-- [ ] Add multi-pod combined tail view with per-pod prefixes.
-  - Files: `src/SwebKit.App/Components/Aks/PodLogView.razor`
-- [ ] Add port-forward lifecycle panel.
-  - Files: `src/SwebKit.App/Components/Aks/PortForwardPanel.razor`
-- [ ] Add terminal JS interop layer and Blazor host component.
-  - Files: `src/SwebKit.App/wwwroot/js/terminalInterop.js`, `src/SwebKit.App/Components/Aks/TerminalView.razor`
-- [ ] Add Kubernetes watch binding to `WorkloadOverview`.
-  - Files: `src/SwebKit.App/Components/Aks/WorkloadOverview.razor`
-- [ ] Add events timeline view and filters.
-  - Files: `src/SwebKit.App/Components/Aks/EventsTimeline.razor`
-- [ ] Add AKS to observability navigation contract.
-  - Files: `src/SwebKit.App/Components/Pages/AksPage.razor`
+- UI view models for:
+  - kubeconfig/context metadata
+  - namespace list and active namespace
+  - pods, deployments, helm releases, ingresses rows
+  - YAML payload result object (kind/name/namespace/yaml text)
 
-## Acceptance Checks
+Backward compatibility notes:
 
-- [ ] Live tail remains stable through pod restarts.
-- [ ] Multi-pod tailing is usable and bounded by render limits.
-- [ ] Port-forwards can be started, viewed, and stopped reliably.
-- [ ] Embedded terminal supports interactive shell commands.
-- [ ] Watch mode updates pod table without full refresh.
-- [ ] Events timeline reflects recent namespace events.
+- Existing AKS log/terminal UI can remain hidden or unchanged while resource browser flows are prioritized.
+
+## Tasks
+
+- [ ] Update AKS page view model for kubeconfig + context + namespace state
+- [ ] Implement kubeconfig picker and context selector UI
+- [ ] Implement namespace selector and namespace-scoped refresh behavior
+- [ ] Implement tabs or sections for Pods, Deployments, Helm Releases, and Ingresses
+- [ ] Implement consistent loading/error/empty states for each resource section
+- [ ] Wire resource row action to open YAML viewer (drawer/modal)
+- [ ] Add unit/component tests for core AKS browsing flows
+- [ ] Add e2e tests for context/namespace switching and YAML view
+- [ ] Accessibility review for keyboard navigation and tab order
+
+## Validation
+
+- Component tests: Planned
+- Manual UX checks:
+  - Select custom kubeconfig and verify contexts load
+  - Select namespace and verify all tabs scope correctly
+  - Open YAML view from pods/deployments/helm releases/ingresses
+  - Validate behavior for empty namespace and RBAC denied responses
+
+## Notes
+
+- Follow `docs/pitfalls/blazor-maui.md` guidance for `InvokeAsync(StateHasChanged)` and JS interop timing.
+- Keep YAML view read-only in this phase.
