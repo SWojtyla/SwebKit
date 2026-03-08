@@ -2,26 +2,69 @@
 
 This repository uses a docs-first workflow for both human and AI contributors.
 
-The goal is to keep implementation, plans, decisions, testing, and lessons aligned without creating unnecessary documentation noise.
+The purpose of this workflow is to keep implementation, validation, decisions, and lessons aligned while staying lightweight and adaptable to different project types.
 
 ## Principles
 
-- Stable guidance belongs in shared docs.
+- Stable rules belong in shared docs.
 - Active work belongs in the active feature folder.
 - Historical work belongs in archive.
 - Repeated mistakes belong in pitfalls.
-- Important technical choices belong in decision notes.
-- Completion means code, tests, and docs are aligned.
+- Important choices belong in decision notes.
+- Only create files that the feature actually needs.
+- Prefer a few clear files over many shallow ones.
 
 ## Repository structure
 
 Use this structure as the default model:
 
 - `docs/architecture/` for stable architecture and design context
-- `docs/ways-of-working/` for process rules and quality expectations
+- `docs/ways-of-working/` for process and quality rules
 - `docs/pitfalls/` for recurring AI or implementation mistakes
 - `docs/features/active/<feature-name>/` for active feature work
 - `docs/features/archive/<year>/<feature-name>/` for completed feature history
+
+## Feature model
+
+For substantial features, always create the core files:
+
+- `index.md`
+- `status.md`
+- `test-plan.md`
+
+Then add only the implementation modules the feature needs, for example:
+
+- `backend.md`
+- `frontend.md`
+- `infra.md`
+- `api-contract.md`
+- `domain.md`
+- `persistence.md`
+- `messaging.md`
+- `security.md`
+- `migration.md`
+- `playwright.md`
+- `decisions.md`
+
+Do not create empty placeholder files for concerns that do not exist in the feature.
+
+## When to split a module
+
+If one implementation file becomes too broad, split it by concern.
+
+Good reasons to split:
+
+- multiple subsystems are affected
+- different specialists could work in parallel
+- one file is becoming long and hard to scan
+- validation differs by concern
+- the file mixes unrelated responsibilities
+
+Examples:
+
+- split `backend.md` into `api-contract.md`, `domain.md`, and `persistence.md`
+- split `frontend.md` into `ui.md`, `state.md`, and `playwright.md`
+- split operational work into `infra.md`, `deployment.md`, and `observability.md`
 
 ## Working modes
 
@@ -36,37 +79,19 @@ A small change is:
 
 For small changes:
 
-- use the existing docs if relevant
-- do not create a new feature folder unless needed
+- use existing docs if relevant
+- do not create a feature folder unless needed
 - still respect architecture, pitfalls, and definition of done
-
-Examples:
-
-- fix a small bug
-- rename a field
-- adjust a simple UI label
-- add a focused test
 
 ### Feature work
 
 A feature requires a dedicated folder when it:
 
 - spans multiple files or layers
-- requires design choices
+- requires technical planning
 - has non-trivial validation needs
-- benefits from explicit progress tracking
 - may be implemented incrementally
-
-For feature work, create:
-
-- `index.md`
-- `status.md`
-- `backend.md` if backend work exists
-- `frontend.md` if frontend work exists
-- `test-plan.md`
-- `decisions.md` if meaningful technical decisions arise
-
-Add other files only when clearly justified.
+- benefits from explicit progress tracking
 
 ## Standard execution flow
 
@@ -80,14 +105,14 @@ When working on a feature, follow this sequence:
    - relevant files in `docs/pitfalls/`
 3. Create or update the feature folder under `docs/features/active/<feature-name>/`.
 4. Clarify scope in `index.md`.
-5. Track current progress in `status.md`.
-6. Document implementation work in `backend.md`, `frontend.md`, or equivalent files.
-7. Record meaningful choices in `decisions.md`.
-8. Update `test-plan.md` as behavior or validation expectations evolve.
+5. Track progress in `status.md`.
+6. Add only the implementation modules needed for the feature.
+7. Record meaningful tradeoffs in `decisions.md` when appropriate.
+8. Update `test-plan.md` as validation expectations evolve.
 9. Implement in code.
 10. Validate.
 11. Update docs to reflect reality.
-12. Move the feature to archive when it is truly complete.
+12. Archive the feature when it is truly complete.
 
 ## File responsibilities
 
@@ -96,7 +121,7 @@ When working on a feature, follow this sequence:
 Use for:
 
 - feature goal
-- user or business value
+- value
 - scope
 - non-goals
 - dependencies
@@ -110,42 +135,43 @@ Do not use it as a scratchpad.
 Use for:
 
 - current state
+- current focus
 - completed work
 - remaining work
 - blockers
 - validation state
-- current focus
 
-This file should be fast to read.
+This file should be short and fast to read.
 
-### `backend.md` / `frontend.md`
+### Implementation modules
 
-Use for:
+Use implementation modules for:
 
 - technical design
-- file-level implementation plan
-- API or UI contracts
-- task checklists
-- important validation notes
+- affected files or areas
+- contracts
+- decomposition of work
+- concern-specific checklists
+- validation notes tied to that concern
 
-These files should be execution-oriented.
+Each module should have one clear responsibility.
 
 ### `test-plan.md`
 
 Use for:
 
-- test strategy
-- scenarios
-- acceptance checks
+- validation strategy
+- main scenarios
 - regression risks
-- manual and automated validation notes
+- manual and automated checks
+- acceptance criteria
 
 ### `decisions.md`
 
 Use for:
 
 - important tradeoffs
-- accepted implementation direction
+- chosen direction
 - rejected alternatives worth remembering
 - temporary compromises that need revisit
 
@@ -177,16 +203,13 @@ When a repeated mistake appears:
 - describe how to avoid it
 - keep it short and actionable
 
-Good pitfalls are reusable.
-Bad pitfalls are long postmortems with no operational guidance.
-
 ## Decision rules
 
 A decision should be recorded when:
 
 - multiple reasonable options exist
 - the chosen path affects future work
-- the architecture is being refined
+- architecture is being refined
 - a workaround is introduced
 - a limitation is accepted intentionally
 
@@ -196,32 +219,8 @@ Minor obvious choices do not need a decision entry.
 
 When a feature is complete:
 
-- remove active-only execution noise if it is no longer useful
+- remove active-only execution noise if no longer useful
 - keep reusable decisions and lessons
 - create an archive summary
 - move the feature under `docs/features/archive/<year>/<feature-name>/`
-- stop treating it as live context
-
-Archived work is reference material, not active instruction.
-
-## AI-specific expectations
-
-AI contributors should:
-
-- prefer updating existing docs over creating new scattered notes
-- avoid silent divergence between docs and code
-- mention uncertainty instead of inventing confidence
-- preserve traceability for meaningful work
-- keep the active area clean and current
-- avoid reading unrelated archived material by default
-
-## Human review expectations
-
-Human reviewers should be able to answer these quickly:
-
-- What is being built?
-- What changed?
-- What remains?
-- What decisions were made?
-- How was it validated?
-- Is this ready to archive?
+- stop treating it as

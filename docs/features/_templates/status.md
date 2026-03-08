@@ -1,21 +1,29 @@
 # Status - <feature-name>
 
-State: Proposed
-Owner: AI + Human
-Branch:
-Started:
-Last Updated:
+---
 
-## Current focus
+title: "Status - <feature-name>"
+owner: ""
+state: "Proposed"
+branch: ""
+started: ""
+last_updated: ""
 
-Describe the current next meaningful step.
+---
 
-## Progress
+## Quick summary
+
+One-line current status and the most important next step.
+
+**Current focus:** Describe the next meaningful deliverable.
+
+## Progress checklist
 
 - [ ] Planning complete
-- [ ] Backend complete
-- [ ] Frontend complete
-- [ ] Tests complete
+- [ ] Design reviewed
+- [ ] Backend implementation
+- [ ] Frontend implementation
+- [ ] Tests (unit/integration/e2e)
 - [ ] Docs aligned
 - [ ] Ready for review
 
@@ -31,8 +39,13 @@ Describe the current next meaningful step.
 
 ## Blockers
 
-- None
+- None / Describe blocker and owner
 
 ## Validation
 
-- Not started
+- Test Plan: link to `test-plan.md`
+- Validation status: Not started / In progress / Passed
+
+## Notes
+
+- Any quick notes about timings, handoffs, or deployment windows

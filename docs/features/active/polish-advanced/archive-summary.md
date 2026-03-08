@@ -1,8 +1,8 @@
-# Archive Summary - <feature-name>
+# Archive Summary - Polish and Advanced
 
 ---
 
-title: "Archive Summary - <feature-name>"
+title: "Archive Summary - Polish and Advanced"
 owner: ""
 completed_date: ""
 pr: ""
@@ -12,18 +12,15 @@ commit: ""
 
 ## Goal
 
-Restate the goal the feature set out to achieve.
+When this feature is complete, record outcomes, lessons, and related PRs/commits here.
 
 ## Delivered
 
-- Delivered item A
-- Delivered item B
-- Delivered item C
+-
 
 ## Key decisions
 
-- Decision A — brief rationale
-- Decision B — brief rationale
+-
 
 ## Validation performed
 

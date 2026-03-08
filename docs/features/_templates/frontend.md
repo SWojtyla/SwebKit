@@ -1,34 +1,48 @@
 # Frontend Plan - <feature-name>
 
+---
+
+title: "Frontend Plan - <feature-name>"
+owner: ""
+status: "Not started"
+
+---
+
 ## Goal
 
-Describe the UI or client-side outcome.
+Describe the UI/client outcome and user-facing changes.
 
 ## Impacted areas
 
-- `src/...`
-- `src/...`
+- Files / components: `src/...`
+- Pages / routes
+- Shared components
 
-## UX notes
+## UX and accessibility notes
 
-Describe expected user behavior, states, and interaction constraints.
+- Expected user flows and states
+- Accessibility considerations (a11y checks required)
+
+## API / contract changes
+
+- DTOs, props, events, and contracts that will change
+- Backward compatibility notes
 
 ## Tasks
 
-- [ ] Update UI contract or view model
-- [ ] Implement component or page changes
+- [ ] Update UI contract / viewmodel
+- [ ] Implement components / pages
 - [ ] Handle loading, error, and empty states
-- [ ] Connect to backend or state layer
-- [ ] Add or update tests
-- [ ] Validate accessibility or usability concerns if relevant
-
-## Notes
-
-- Important detail
-- Important detail
+- [ ] Wire to backend / state layer
+- [ ] Add unit / component tests
+- [ ] Add e2e tests for core flows
+- [ ] Accessibility review
 
 ## Validation
 
-- UI checks:
-- Component tests:
-- Manual checks:
+- Component tests: Not started / In progress / Passed
+- Manual UX checks: list of acceptance steps
+
+## Notes
+
+- Important implementation details, style guide references, or design tokens

@@ -1,34 +1,51 @@
 # Backend Plan - <feature-name>
 
+---
+
+title: "Backend Plan - <feature-name>"
+owner: ""
+status: "Not started"
+
+---
+
 ## Goal
 
-Describe the backend outcome.
+Describe the backend outcome, SLA targets, and scaling expectations.
 
 ## Impacted areas
 
-- `src/...`
-- `src/...`
+- Projects / services: `src/...`
+- Databases, queues, caches
 
 ## Design
 
-Describe the backend design, contracts, data flow, and important constraints.
+High-level design, contracts, data flow diagrams (link to architecture if available).
+
+## API / Contracts
+
+- API endpoints, messages, DTOs, and schema changes
+- Backwards compatibility notes
 
 ## Tasks
 
-- [ ] Define or update contracts
+- [ ] Define/update contracts
 - [ ] Implement domain logic
-- [ ] Implement infrastructure or persistence changes
-- [ ] Add or update error handling
-- [ ] Add or update logging or telemetry if relevant
-- [ ] Add or update tests
+- [ ] Implement infrastructure/persistence changes
+- [ ] Add/update error handling
+- [ ] Add/update logging & telemetry
+- [ ] Add/update unit & integration tests
 
-## Notes
+## Migration and runtime changes
 
-- Important detail
-- Important detail
+- DB migration steps
+- Operational runbook and config changes
 
 ## Validation
 
-- Unit tests:
-- Integration tests:
-- Manual checks:
+- Unit tests: Not started / In progress / Passed
+- Integration tests: Not started / In progress / Passed
+- Manual checks: list of acceptance steps
+
+## Notes
+
+- Important implementation notes, performance considerations

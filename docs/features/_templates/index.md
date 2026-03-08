@@ -1,38 +1,43 @@
 # Feature Overview - <feature-name>
 
+---
+
+title: "Feature Overview - <feature-name>"
+owner: ""
+status: "Proposed"
+created: ""
+updated: ""
+
+---
+
 ## Goal
 
-Describe the outcome this feature should achieve.
+Clear statement of the outcome the feature should achieve.
 
 ## Value
 
-Explain why this feature matters to the user, system, or business.
+Why this matters for users, the system, or the business. Include expected benefits.
 
 ## Scope
 
-- In scope:
-- In scope:
-- In scope:
-
-## Out of scope
-
-- Out of scope:
-- Out of scope:
+- In scope: concise list of deliverables
+- Out of scope: concise list
 
 ## Dependencies
 
-- Related feature:
-- External dependency:
-- Decision dependency:
+- Related features or teams
+- External services, SDKs, or infra
 
-## Risks
+## Risks & mitigations
 
-- Risk:
-- Risk:
+- Risk: [description] — Mitigation: [action]
 
 ## Related documents
 
-- Architecture:
-- Design:
-- Pitfalls:
-- Related PRs/issues:
+- Architecture/design links, pitfalls, related PRs or issues
+
+## Quick links
+
+- Status: `status.md`
+- Technical plan: `standard-feature.md`
+- Tests: `test-plan.md`

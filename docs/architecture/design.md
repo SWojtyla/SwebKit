@@ -1,4 +1,3 @@
-<!-- Copied from docs/DESIGN.md -->
 
 # SwebKit — Design & Implementation Plan
 

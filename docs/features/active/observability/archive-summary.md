@@ -1,8 +1,8 @@
-# Archive Summary - <feature-name>
+# Archive Summary - Observability
 
 ---
 
-title: "Archive Summary - <feature-name>"
+title: "Archive Summary - Observability"
 owner: ""
 completed_date: ""
 pr: ""
@@ -16,14 +16,11 @@ Restate the goal the feature set out to achieve.
 
 ## Delivered
 
-- Delivered item A
-- Delivered item B
-- Delivered item C
+- (copy delivered items here)
 
 ## Key decisions
 
-- Decision A — brief rationale
-- Decision B — brief rationale
+- (Decision A — brief rationale)
 
 ## Validation performed
 

@@ -1,8 +1,8 @@
-# Decisions - <feature-name>
+# Decisions - Polish and Advanced
 
 ---
 
-title: "Decisions - <feature-name>"
+title: "Decisions - Polish and Advanced"
 owner: ""
 status: ""
 
@@ -34,4 +34,4 @@ Clear statement of the chosen approach.
 
 ---
 
-_(Add further decisions as numbered entries.)_
+No formal decisions recorded yet for Polish & Advanced. Use this file to capture trade-offs and UX choices.

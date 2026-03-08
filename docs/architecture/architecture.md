@@ -2,7 +2,7 @@
 
 # SwebKit — Architecture Overview
 
-> Full detail: [DESIGN.md](../DESIGN.md)
+> Full detail: [DESIGN.md](design.md)
 
 ## What Is SwebKit
 
