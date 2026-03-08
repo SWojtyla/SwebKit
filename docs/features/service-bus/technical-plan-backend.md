@@ -6,9 +6,9 @@
 - Connection-string-only add flow: **Done**
 - Entity listing (queues / topics / subscriptions): **Done**
 - Project entity linking (SbEntityLink): **Done**
-- DLQ batch operations: Pending
-- Message send API: Pending
-- Template persistence: Pending
+- DLQ batch operations (receive + complete/resubmit): **Done** (AzureServiceBusClient + DlqView batch bar)
+- Message send API (`SendMessageAsync`): **Done** (AzureServiceBusClient + MessageComposer)
+- Template domain model + persistence: **Done** (SbMessageTemplate, ProfileRepository, AppStateService)
 - Scenario runner: Pending
 
 ## Architecture
@@ -55,16 +55,20 @@ AzureServiceBusClient(ServiceBusConfig, ICredentialStore)  // legacy ctor
 
 ## Detailed Tasks
 
-- [ ] Implement DLQ multi-receive with sequence-number targeting.
+- [x] Implement DLQ multi-receive with sequence-number targeting.
   - Files: `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`
-- [ ] Add batch progress reporting via task queue or progress callback.
+  - Done: `ResubmitDeadLetterAsync` and `CompleteDeadLetterAsync` accept a list of sequence number strings; DlqView batch bar drives batch calls.
+- [x] Add batch progress reporting via task queue.
   - Files: `src/SwebKit.Core/Abstractions/ITaskQueue.cs`, `src/SwebKit.Core/Services/TaskQueueService.cs`
-- [ ] Add message template domain model and persistence.
-  - Files: `src/SwebKit.Core/Domain/SbMessageTemplate.cs`, `src/SwebKit.Core/Configuration/ProfileRepository.cs`
+  - Done: `TaskQueue.Enqueue/Complete/Update` used for both single-message and batch DLQ operations.
+- [x] Add message template domain model and persistence.
+  - Files: `src/SwebKit.Core/Domain/SbMessageTemplate.cs` (new), `src/SwebKit.Core/Configuration/ProfileRepository.cs`
+  - Done: `SbMessageTemplate`, `ProfileData.MessageTemplates`, `ProfileRepository.SaveMessageTemplate/DeleteMessageTemplate`, `AppStateService.SaveMessageTemplateAsync/DeleteMessageTemplateAsync`.
 - [ ] Add scenario model and orchestrator.
   - Files: `src/SwebKit.Core/Domain/SbScenario.cs`, `src/SwebKit.Core/Services/SbScenarioRunner.cs`
 - [ ] Enforce production env check before any mutative `IServiceBusClient` call.
   - Files: `src/SwebKit.Core/Abstractions/IServiceBusClient.cs`
+  - Note: Currently enforced at UI layer via `ConfirmDialog` in `DlqView` and `MessageComposer`.
 
 ## Acceptance Checks
 
@@ -72,9 +76,9 @@ AzureServiceBusClient(ServiceBusConfig, ICredentialStore)  // legacy ctor
 - [x] Multiple namespaces stored and reloaded across restarts.
 - [x] Queues, topics, and subscriptions listed with live counts.
 - [x] Entity pins persisted per project environment.
-- [ ] Batch DLQ resubmit processes correct messages and reports progress.
-- [ ] Send API delivers messages with custom properties.
-- [ ] Templates persist and reload without data loss.
+- [x] Batch DLQ resubmit processes correct messages and reports progress via TaskQueue.
+- [x] Send API delivers messages with custom properties (MessageComposer → SendMessageAsync).
+- [x] Templates persist and reload without data loss (saved to profiles.json, reloaded on app start).
 - [ ] Scenario runner executes tasks sequentially and supports cancellation.
 
 ## Traceability Backlinks

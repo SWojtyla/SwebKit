@@ -23,6 +23,7 @@ public class AppStateService
 
     public IReadOnlyList<Project> AllProjects => _profiles.Projects;
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _profiles.ServiceBusNamespaces;
+    public IReadOnlyList<SbMessageTemplate> MessageTemplates => _profiles.MessageTemplates;
 
     public bool IsProduction => CurrentEnvironment?.IsProduction ?? false;
 
@@ -118,6 +119,18 @@ public class AppStateService
     public async Task RemoveServiceBusNamespaceAsync(Guid id)
     {
         _profiles.RemoveServiceBusNamespace(id);
+        await _profiles.SaveAsync();
+    }
+
+    public async Task SaveMessageTemplateAsync(SbMessageTemplate template)
+    {
+        _profiles.SaveMessageTemplate(template);
+        await _profiles.SaveAsync();
+    }
+
+    public async Task DeleteMessageTemplateAsync(Guid id)
+    {
+        _profiles.DeleteMessageTemplate(id);
         await _profiles.SaveAsync();
     }
 }

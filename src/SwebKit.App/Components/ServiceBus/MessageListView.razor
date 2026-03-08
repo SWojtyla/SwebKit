@@ -1,17 +1,54 @@
+@implements IDisposable
 @inject AppStateService AppState
 
 <div class="message-list-host" style="display:flex; flex-direction:column; height:100%;">
+    @if (_showComposer && ShowCompose)
+    {
+        <div style="border-bottom:1px solid var(--color-border); background:var(--color-surface); flex-shrink:0;">
+            <MessageComposer Client="Client" EntityPath="EntityPath"
+                             IsProduction="@AppState.IsProduction"
+                             OnSent="OnComposerSent"
+                             OnClose="@(() => _showComposer = false)" />
+        </div>
+    }
+
     <div class="filter-bar">
         <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
             @(IsDlqMode ? "DLQ mode" : "Peek mode")
         </span>
         <select @bind="PeekCount" style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+            <option value="5">5 messages</option>
+            <option value="10">10 messages</option>
             <option value="50">50 messages</option>
             <option value="100">100 messages</option>
             <option value="200">200 messages</option>
         </select>
+        <select @bind="_autoRefreshSeconds" @bind:after="ApplyAutoRefresh"
+                title="Auto-refresh interval"
+                style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+            <option value="0">No auto-refresh</option>
+            <option value="10">Refresh 10 s</option>
+            <option value="30">Refresh 30 s</option>
+            <option value="60">Refresh 60 s</option>
+        </select>
+        @if (MultiSelect && Messages.Count > 0)
+        {
+            <FluentButton @onclick="ToggleSelectAll" Appearance="Appearance.Stealth"
+                          style="font-size:11px; padding:2px 6px;"
+                          title="Select / deselect all visible messages">
+                @(_selectedIds.Count == Messages.Count ? "Deselect all" : "Select all")
+            </FluentButton>
+        }
         <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
                style="flex:1; padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
+        @if (ShowCompose && !IsDlqMode && Client is not null)
+        {
+            <FluentButton @onclick="@(() => _showComposer = !_showComposer)"
+                          Appearance="@(_showComposer ? Appearance.Accent : Appearance.Stealth)"
+                          title="Open message composer">
+                ✉ Send
+            </FluentButton>
+        }
         <FluentButton @onclick="LoadAsync" Appearance="Appearance.Accent" Disabled="@IsLoading">
             @(IsLoading ? "Loading..." : "Peek")
         </FluentButton>
@@ -23,28 +60,61 @@
     {
         <LoadingSpinner Message="Peeking messages..." />
     }
+    else if (FilteredMessages.Count == 0)
+    {
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px;">
+            <div style="text-align:center; color:var(--color-text-muted);">
+                @if (Messages.Count == 0)
+                {
+                    <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">📭</div>
+                    <div style="font-size:14px; font-weight:500;">No messages</div>
+                    <div style="font-size:12px; margin-top:4px;">Click <strong>Peek</strong> to load messages from the queue.</div>
+                }
+                else
+                {
+                    <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">🔍</div>
+                    <div style="font-size:14px; font-weight:500;">No matches</div>
+                    <div style="font-size:12px; margin-top:4px;">No messages match "<strong>@TextFilter</strong>". Try a different filter.</div>
+                }
+            </div>
+        </div>
+    }
     else
     {
-        <div class="data-table-container message-grid-scroll" aria-label="Message list scroll container">
+        <div class="data-table-container message-grid-scroll" tabindex="0"
+             @onkeydown="HandleKeyDown" @onkeydown:preventDefault="@_preventKeyDefault"
+             aria-label="Message list scroll container">
             <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage"
-                            Class="message-grid responsive-message-grid"
-                            Virtualize="true" ItemSize="32" RowClass="@(m => SelectedMessage?.MessageId == m.MessageId ? "selected-row" : "")"
-                            OnRowClick="@(e => OnSelect(e.Item))">
-                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="108px" />
-                <TemplateColumn Title="Message ID">
-                    <span class="cell-truncate col-message-id" title="@context.MessageId">@context.MessageId</span>
+                            Class="message-grid"
+                            ResizableColumns="true"
+                            Virtualize="true" ItemSize="32"
+                            RowClass="@(m => GetRowClass(m))"
+                            OnRowClick="@(e => OnRowClickedAsync(e.Item))">
+                @if (MultiSelect)
+                {
+                    <TemplateColumn Title="✓" Width="40px">
+                        <input type="checkbox"
+                               checked="@_selectedIds.Contains(context.MessageId)"
+                               @onclick:stopPropagation="true"
+                               @onchange="e => ToggleSelection(context, (bool)e.Value!)"
+                               style="cursor:pointer;" />
+                    </TemplateColumn>
+                }
+                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="120px" Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+                <TemplateColumn Title="Message ID" Width="220px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.MessageId))">
+                    <span class="cell-truncate" title="@context.MessageId">@context.MessageId</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Correlation ID">
-                    <span class="cell-truncate col-correlation-id" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ?? "-")</span>
+                <TemplateColumn Title="Correlation ID" Width="180px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
+                    <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ?? "-")</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Subject">
-                    <span class="cell-wrap col-subject" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
+                <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
+                    <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Delivery" Width="64px"><span class="col-delivery">@context.DeliveryCount</span></TemplateColumn>
+                <TemplateColumn Title="Delivery" Width="72px" SortBy="@(GridSort<SbMessage>.ByDescending(m => m.DeliveryCount))">@context.DeliveryCount</TemplateColumn>
                 @if (ShowDlqColumns)
                 {
-                    <TemplateColumn Title="DLQ Reason">
-                        <span class="cell-wrap col-dlq-reason" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ?? "-")</span>
+                    <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
+                        <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ?? "-")</span>
                     </TemplateColumn>
                 }
             </FluentDataGrid>
@@ -62,6 +132,9 @@
     [Parameter] public bool IsDlqMode { get; set; }
     [Parameter] public EventCallback<SbMessage> OnMessageSelected { get; set; }
     [Parameter] public SbMessage? SelectedMessage { get; set; }
+    [Parameter] public bool MultiSelect { get; set; }
+    [Parameter] public EventCallback<List<SbMessage>> OnMultiSelectionChanged { get; set; }
+    [Parameter] public bool ShowCompose { get; set; }
 
     private bool IsLoading;
     private string? ErrorMessage;
@@ -74,12 +147,67 @@
     private bool _loadedIsDlqMode;
     private int _loadVersion;
 
+    private HashSet<string> _selectedIds = [];
+    private System.Timers.Timer? _refreshTimer;
+    private int _autoRefreshSeconds;
+    private bool _showComposer;
+    private bool _preventKeyDefault;
+
     private List<SbMessage> FilteredMessages => string.IsNullOrEmpty(TextFilter)
         ? Messages
         : Messages.Where(m => m.MessageId.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
                             || m.CorrelationId?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
                             || m.Subject?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
                             || m.Body.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private string GetRowClass(SbMessage m)
+    {
+        if (MultiSelect && _selectedIds.Count > 0 && _selectedIds.Contains(m.MessageId))
+            return "selected-row";
+        if (!MultiSelect && SelectedMessage?.MessageId == m.MessageId)
+            return "selected-row";
+        return "";
+    }
+
+    private void ToggleSelection(SbMessage msg, bool selected)
+    {
+        if (selected) _selectedIds.Add(msg.MessageId);
+        else _selectedIds.Remove(msg.MessageId);
+        var batch = Messages.Where(m => _selectedIds.Contains(m.MessageId)).ToList();
+        _ = OnMultiSelectionChanged.InvokeAsync(batch);
+        StateHasChanged();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (_selectedIds.Count == Messages.Count && Messages.Count > 0)
+            _selectedIds.Clear();
+        else
+            _selectedIds = Messages.Select(m => m.MessageId).ToHashSet();
+
+        var batch = Messages.Where(m => _selectedIds.Contains(m.MessageId)).ToList();
+        _ = OnMultiSelectionChanged.InvokeAsync(batch);
+        StateHasChanged();
+    }
+
+    private void ApplyAutoRefresh()
+    {
+        _refreshTimer?.Stop();
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+        if (_autoRefreshSeconds > 0)
+        {
+            _refreshTimer = new System.Timers.Timer(_autoRefreshSeconds * 1000) { AutoReset = true };
+            _refreshTimer.Elapsed += (_, _) => InvokeAsync(LoadAsync);
+            _refreshTimer.Start();
+        }
+    }
+
+    private async Task OnComposerSent()
+    {
+        _showComposer = false;
+        await LoadAsync();
+    }
 
     private string CountSummary
     {
@@ -88,24 +216,24 @@
             var filteredCount = FilteredMessages.Count;
             var loadedCount = Messages.Count;
             var hasFilter = !string.IsNullOrWhiteSpace(TextFilter);
+            var selectedInfo = MultiSelect && _selectedIds.Count > 0 ? $" · {_selectedIds.Count} selected" : "";
+            var refreshInfo = _autoRefreshSeconds > 0 ? $" · auto-refresh {_autoRefreshSeconds}s" : "";
 
             if (TotalAvailableCount is long total)
             {
                 if (hasFilter)
-                {
                     return total > loadedCount
-                        ? $"Showing {filteredCount} filtered of {loadedCount} loaded ({total} total)"
-                        : $"Showing {filteredCount} filtered of {loadedCount} loaded";
-                }
+                        ? $"Showing {filteredCount} filtered of {loadedCount} loaded ({total} total){selectedInfo}{refreshInfo}"
+                        : $"Showing {filteredCount} filtered of {loadedCount} loaded{selectedInfo}{refreshInfo}";
 
                 return total > loadedCount
-                    ? $"Showing {loadedCount} of {total} message(s)"
-                    : $"Showing {loadedCount} message(s)";
+                    ? $"Showing {loadedCount} of {total} message(s){selectedInfo}{refreshInfo}"
+                    : $"Showing {loadedCount} message(s){selectedInfo}{refreshInfo}";
             }
 
             return hasFilter
-                ? $"Showing {filteredCount} filtered of {loadedCount} loaded"
-                : $"Showing {loadedCount} message(s)";
+                ? $"Showing {filteredCount} filtered of {loadedCount} loaded{selectedInfo}{refreshInfo}"
+                : $"Showing {loadedCount} message(s){selectedInfo}{refreshInfo}";
         }
     }
 
@@ -120,20 +248,16 @@
             return;
         }
 
-        // Guard against parent re-renders triggering duplicate loads when relevant inputs did not change.
         var shouldReload = !ReferenceEquals(_loadedClient, Client)
             || !string.Equals(_loadedEntityPath, EntityPath, StringComparison.Ordinal)
             || _loadedIsDlqMode != IsDlqMode;
 
-        if (!shouldReload)
-        {
-            return;
-        }
+        if (!shouldReload) return;
 
-        // Set guards before awaiting to prevent concurrent duplicate loads.
         _loadedClient = Client;
         _loadedEntityPath = EntityPath;
         _loadedIsDlqMode = IsDlqMode;
+        _selectedIds.Clear();
 
         await LoadAsync();
     }
@@ -162,12 +286,14 @@
             }
             catch
             {
-                // Keep rendering loaded data if stats cannot be retrieved.
                 totalAvailableCount = null;
             }
 
             if (requestVersion == _loadVersion)
             {
+                // Remove stale batch-selected IDs that are no longer in the result set.
+                var currentIds = loadedMessages.Select(m => m.MessageId).ToHashSet();
+                _selectedIds.IntersectWith(currentIds);
                 Messages = loadedMessages;
                 TotalAvailableCount = totalAvailableCount;
             }
@@ -191,6 +317,38 @@
         }
     }
 
-    private Task OnSelect(SbMessage? msg) =>
-        msg is null ? Task.CompletedTask : OnMessageSelected.InvokeAsync(msg);
+    private Task OnRowClickedAsync(SbMessage? msg)
+    {
+        if (msg is null) return Task.CompletedTask;
+        return OnMessageSelected.InvokeAsync(msg);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        var items = FilteredMessages;
+        if (items.Count == 0) return;
+
+        _preventKeyDefault = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+
+        if (e.Key == "Escape")
+        {
+            await OnMessageSelected.InvokeAsync(null);
+            return;
+        }
+
+        if (e.Key is not ("ArrowUp" or "ArrowDown")) return;
+
+        var currentIdx = SelectedMessage is null
+            ? -1
+            : items.FindIndex(m => m.MessageId == SelectedMessage.MessageId);
+
+        var newIdx = e.Key == "ArrowDown"
+            ? Math.Min(currentIdx + 1, items.Count - 1)
+            : Math.Max(currentIdx - 1, 0);
+
+        if (newIdx >= 0 && newIdx < items.Count)
+            await OnMessageSelected.InvokeAsync(items[newIdx]);
+    }
+
+    public void Dispose() => _refreshTimer?.Dispose();
 }

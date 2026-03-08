@@ -1,5 +1,33 @@
 # Service Bus
 
+## Implementation Status (updated 2026-03-08)
+
+| Area | Status |
+|------|--------|
+| Namespace panel (add / collapse / remove) | ✅ Done |
+| Entity tree (queues / topics / subscriptions + live counts) | ✅ Done |
+| Tab system (open / close / DLQ vs Active mode) | ✅ Done |
+| Pin / unpin entities to project environments | ✅ Done |
+| Demo namespace (FakeServiceBusClient) | ✅ Done |
+| Bug fix pack SB-UI-BUG-01..04 | ✅ Done |
+| DLQ multi-select + batch resubmit / delete | ✅ Done |
+| Message composer (body + properties + send) | ✅ Done |
+| Message templates (save / load / delete) | ✅ Done |
+| Auto-refresh interval selector | ✅ Done |
+| Copy Body + Copy Full Message export | ✅ Done |
+| Production ConfirmDialog for all mutative ops | ✅ Done |
+| UI polish: grid layout fix (headers/resize) | ✅ Done |
+| UI polish: button label clarity (Copy Full Message) | ✅ Done |
+| UI polish: save message as template from detail pane | ✅ Done |
+| UI polish: enhanced template management (rename/edit/duplicate) | ✅ Done |
+| UI polish: resizable splitter (list ↔ detail) | ✅ Done |
+| UI polish: sortable columns | ✅ Done |
+| UI polish: empty state for message list | ✅ Done |
+| UI polish: keyboard navigation (arrow/escape) | ✅ Done |
+| UI polish: copy feedback toast | ✅ Done |
+| Scenario editor + runner | ⏳ Pending |
+| Filter-state persistence by entity path | ⏳ Pending |
+
 ## Purpose
 
 Provide a global Service Bus workspace for .NET developers: add namespaces by connection string,
@@ -48,6 +76,7 @@ multiple namespaces, with project-scoped entity filtering and guarded mutation i
 - `docs/features/service-bus/technical-plan-backend.md`
 - `docs/features/service-bus/technical-plan-ui.md`
 - `docs/features/service-bus/technical-plan-ui-bugfixes.md`
+- `docs/features/service-bus/technical-plan-ui-polish.md`
 - `docs/features/service-bus/test-plan.md`
 
 ## Migration Notes

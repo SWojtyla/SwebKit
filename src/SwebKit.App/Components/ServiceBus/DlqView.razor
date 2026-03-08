@@ -1,5 +1,6 @@
 @inject AppStateService AppState
 @inject ITaskQueue TaskQueue
+@inject IJSRuntime JS
 
 <div style="display:flex; flex-direction:column; height:100%;">
     <div style="padding:6px 12px; background:rgba(229,57,53,0.1); border-bottom:1px solid var(--color-error); font-size:12px; color:#FF6B6B; font-weight:600;">
@@ -9,20 +10,42 @@
     <div style="display:flex; flex:1; overflow:hidden;">
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
-                             SelectedMessage="SelectedMessage" OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }" />
+                             MultiSelect="true"
+                             SelectedMessage="SelectedMessage"
+                             OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
+                             OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
-            <div style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
-                <FluentButton Appearance="Appearance.Accent" Disabled="@(SelectedMessage is null || IsWorking)"
-                              @onclick="ResubmitOne">
-                    Resubmit to @EntityPath
-                </FluentButton>
-                <FluentButton Disabled="@(SelectedMessage is null || IsWorking)" @onclick="CompleteOne">
-                    Complete (Delete)
-                </FluentButton>
-            </div>
+            @if (_batchSelected.Count > 0)
+            {
+                <div style="padding:6px 12px; background:rgba(0,112,204,0.1); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                    <span style="font-size:12px; color:var(--color-text-muted);">@_batchSelected.Count selected</span>
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsWorking" @onclick="ResubmitBatch">
+                        Resubmit @_batchSelected.Count
+                    </FluentButton>
+                    <FluentButton Disabled="@IsWorking" @onclick="CompleteBatch">
+                        Delete @_batchSelected.Count
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="ClearBatchSelection">
+                        Clear
+                    </FluentButton>
+                </div>
+            }
+            else
+            {
+                <div style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@(SelectedMessage is null || IsWorking)"
+                                  @onclick="ResubmitOne">
+                        Resubmit to @EntityPath
+                    </FluentButton>
+                    <FluentButton Disabled="@(SelectedMessage is null || IsWorking)" @onclick="CompleteOne">
+                        Complete (Delete)
+                    </FluentButton>
+                </div>
+            }
         </div>
 
-        <div class="details-pane">
+        <div @ref="_dlqSplitterRef" class="pane-splitter"></div>
+        <div @ref="_dlqDetailRef" class="details-pane">
             <MessageDetailPane Message="SelectedMessage" />
         </div>
     </div>
@@ -42,6 +65,38 @@
     private string ConfirmTitle = "";
     private string ConfirmMessage = "";
     private Func<Task>? PendingAction;
+    private List<SbMessage> _batchSelected = [];
+    private ElementReference _dlqSplitterRef;
+    private ElementReference _dlqDetailRef;
+    private IJSObjectReference? _dlqSplitterHandle;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _dlqSplitterHandle is null)
+        {
+            try
+            {
+                _dlqSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                    "SwebKitSplitter.init", _dlqSplitterRef, _dlqDetailRef,
+                    new { minWidth = 200, maxWidth = 700 });
+            }
+            catch { }
+        }
+    }
+
+    private void OnBatchSelectionChanged(List<SbMessage> messages)
+    {
+        _batchSelected = messages;
+        StateHasChanged();
+    }
+
+    private void ClearBatchSelection()
+    {
+        _batchSelected = [];
+        StateHasChanged();
+    }
+
+    // --- Single-message actions ---
 
     private void ResubmitOne()
     {
@@ -58,6 +113,26 @@
         ConfirmTitle = "Complete Message";
         ConfirmMessage = "Permanently delete this message from the DLQ?";
         PendingAction = DoComplete;
+        ShowConfirm = true;
+    }
+
+    // --- Batch actions ---
+
+    private void ResubmitBatch()
+    {
+        if (_batchSelected.Count == 0 || Client is null || EntityPath is null) return;
+        ConfirmTitle = $"Resubmit {_batchSelected.Count} Messages";
+        ConfirmMessage = $"Resubmit {_batchSelected.Count} message(s) from the DLQ to {EntityPath}?";
+        PendingAction = DoBatchResubmit;
+        ShowConfirm = true;
+    }
+
+    private void CompleteBatch()
+    {
+        if (_batchSelected.Count == 0) return;
+        ConfirmTitle = $"Delete {_batchSelected.Count} Messages";
+        ConfirmMessage = $"Permanently delete {_batchSelected.Count} message(s) from the DLQ?";
+        PendingAction = DoBatchComplete;
         ShowConfirm = true;
     }
 
@@ -95,6 +170,58 @@
         {
             await Client.CompleteDeadLetterAsync(EntityPath, [SelectedMessage.SequenceNumber.Value.ToString()]);
             TaskQueue.Complete(task.Id);
+            SelectedMessage = null;
+        }
+        catch (Exception ex)
+        {
+            TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
+            TaskQueue.Complete(task.Id, false);
+        }
+        finally { IsWorking = false; StateHasChanged(); }
+    }
+
+    private async Task DoBatchResubmit()
+    {
+        if (Client is null || EntityPath is null) return;
+        var seqNumbers = _batchSelected
+            .Where(m => m.SequenceNumber is not null)
+            .Select(m => m.SequenceNumber!.Value.ToString())
+            .ToList();
+        if (seqNumbers.Count == 0) return;
+
+        IsWorking = true;
+        var task = TaskQueue.Enqueue($"Resubmitting {seqNumbers.Count} messages", EntityPath);
+        try
+        {
+            await Client.ResubmitDeadLetterAsync(EntityPath, seqNumbers, null);
+            TaskQueue.Complete(task.Id);
+            _batchSelected.Clear();
+            SelectedMessage = null;
+        }
+        catch (Exception ex)
+        {
+            TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
+            TaskQueue.Complete(task.Id, false);
+        }
+        finally { IsWorking = false; StateHasChanged(); }
+    }
+
+    private async Task DoBatchComplete()
+    {
+        if (Client is null || EntityPath is null) return;
+        var seqNumbers = _batchSelected
+            .Where(m => m.SequenceNumber is not null)
+            .Select(m => m.SequenceNumber!.Value.ToString())
+            .ToList();
+        if (seqNumbers.Count == 0) return;
+
+        IsWorking = true;
+        var task = TaskQueue.Enqueue($"Completing {seqNumbers.Count} DLQ messages", EntityPath);
+        try
+        {
+            await Client.CompleteDeadLetterAsync(EntityPath, seqNumbers);
+            TaskQueue.Complete(task.Id);
+            _batchSelected.Clear();
             SelectedMessage = null;
         }
         catch (Exception ex)

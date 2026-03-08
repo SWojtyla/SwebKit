@@ -1,0 +1,237 @@
+@inject AppStateService AppState
+@inject ITaskQueue TaskQueue
+
+<div style="padding:12px 16px; background:var(--color-surface); display:flex; flex-direction:column; gap:8px;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:12px; font-weight:600; color:var(--color-text);">Compose → @EntityPath</span>
+        <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
+            <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load Template</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as Template</FluentButton>
+            <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
+                    style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:14px; padding:2px 6px;">✕</button>
+        </div>
+    </div>
+
+    <!-- Message fields row -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Message ID</label>
+            <div style="display:flex; gap:4px;">
+                <input type="text" @bind="_messageId"
+                       style="flex:1; padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                <button @onclick="@(() => _messageId = Guid.NewGuid().ToString())" title="Generate new ID"
+                        style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">⟳</button>
+            </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Correlation ID</label>
+            <input type="text" @bind="_correlationId"
+                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Subject</label>
+            <input type="text" @bind="_subject"
+                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Content-Type</label>
+            <input type="text" @bind="_contentType"
+                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+        </div>
+    </div>
+
+    <!-- Application properties -->
+    <div>
+        <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+            Application Properties
+            <button @onclick="AddProperty"
+                    style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+ Add</button>
+        </div>
+        @for (var i = 0; i < _properties.Count; i++)
+        {
+            var idx = i;
+            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                <input type="text" value="@_properties[idx].Key" placeholder="Key"
+                       @onchange="e => SetPropertyKey(idx, e.Value?.ToString() ?? string.Empty)"
+                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                <input type="text" value="@_properties[idx].Value" placeholder="Value"
+                       @onchange="e => SetPropertyValue(idx, e.Value?.ToString() ?? string.Empty)"
+                       style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                <button @onclick="() => RemoveProperty(idx)" title="Remove property"
+                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
+            </div>
+        }
+    </div>
+
+    <!-- Body -->
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Body</label>
+        <textarea @bind="_body" rows="5"
+                  style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:80px;" />
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex; align-items:center; gap:8px;">
+        @if (_sendResult is not null)
+        {
+            <span style="font-size:11px; color:@(_sendError ? "var(--color-error)" : "var(--color-success)");">@_sendResult</span>
+        }
+        <FluentButton Appearance="Appearance.Accent" style="margin-left:auto;"
+                      Disabled="@(_isSending || Client is null || string.IsNullOrWhiteSpace(EntityPath))"
+                      @onclick="SendMessage">
+            @(_isSending ? "Sending…" : "Send")
+        </FluentButton>
+    </div>
+</div>
+
+@if (_showTemplatePicker)
+{
+    <TemplatePicker OnTemplateSelected="ApplyTemplate" OnClose="() => _showTemplatePicker = false" />
+}
+
+@if (_showSaveTemplate)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
+            <h3 style="margin:0 0 12px; font-size:14px;">Save as Template</h3>
+            <input type="text" @bind="_saveTemplateName" placeholder="Template name…"
+                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                <button @onclick="() => _showSaveTemplate = false"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                <button @onclick="SaveTemplate" disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmDialog Visible="_showSendConfirm"
+               Title="Send Message"
+               Message="@($"Send message to {EntityPath} in production?")"
+               IsProduction="true"
+               ConfirmLabel="Send"
+               OnConfirm="DoSend"
+               OnCancel="() => _showSendConfirm = false" />
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public string? EntityPath { get; set; }
+    [Parameter] public bool IsProduction { get; set; }
+    [Parameter] public EventCallback OnSent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string _messageId = Guid.NewGuid().ToString();
+    private string _correlationId = "";
+    private string _subject = "";
+    private string _contentType = "application/json";
+    private string _body = "";
+    private List<(string Key, string Value)> _properties = [];
+    private bool _isSending;
+    private string? _sendResult;
+    private bool _sendError;
+    private bool _showTemplatePicker;
+    private bool _showSaveTemplate;
+    private string _saveTemplateName = "";
+    private bool _showSendConfirm;
+
+    private void AddProperty() => _properties.Add(("", ""));
+    private void RemoveProperty(int idx) { _properties.RemoveAt(idx); StateHasChanged(); }
+    private void SetPropertyKey(int idx, string key) { _properties[idx] = (key, _properties[idx].Value); StateHasChanged(); }
+    private void SetPropertyValue(int idx, string val) { _properties[idx] = (_properties[idx].Key, val); StateHasChanged(); }
+
+    private void OpenTemplatePicker() => _showTemplatePicker = true;
+
+    private void OpenSaveTemplate()
+    {
+        _saveTemplateName = "";
+        _showSaveTemplate = true;
+    }
+
+    private void ApplyTemplate(SbMessageTemplate template)
+    {
+        _body = template.Body;
+        _contentType = template.ContentType ?? "application/json";
+        _subject = template.Subject ?? "";
+        _correlationId = template.CorrelationId ?? "";
+        _properties = template.Properties.Select(kvp => (kvp.Key, kvp.Value)).ToList();
+        _showTemplatePicker = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveTemplate()
+    {
+        var name = _saveTemplateName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var template = new SbMessageTemplate
+        {
+            Name = name,
+            Body = _body,
+            ContentType = string.IsNullOrWhiteSpace(_contentType) ? null : _contentType,
+            Subject = string.IsNullOrWhiteSpace(_subject) ? null : _subject,
+            CorrelationId = string.IsNullOrWhiteSpace(_correlationId) ? null : _correlationId,
+            Properties = _properties
+                .Where(p => !string.IsNullOrWhiteSpace(p.Key))
+                .ToDictionary(p => p.Key, p => p.Value)
+        };
+
+        await AppState.SaveMessageTemplateAsync(template);
+        _showSaveTemplate = false;
+    }
+
+    private void SendMessage()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(EntityPath)) return;
+        _sendResult = null;
+        _sendError = false;
+
+        if (IsProduction)
+            _showSendConfirm = true;
+        else
+            _ = DoSend();
+    }
+
+    private async Task DoSend()
+    {
+        _showSendConfirm = false;
+        if (Client is null || string.IsNullOrWhiteSpace(EntityPath)) return;
+
+        _isSending = true;
+        StateHasChanged();
+
+        try
+        {
+            var props = _properties
+                .Where(p => !string.IsNullOrWhiteSpace(p.Key))
+                .ToDictionary<(string Key, string Value), string, object>(p => p.Key, p => p.Value);
+
+            var msg = new SbMessage
+            {
+                MessageId = string.IsNullOrWhiteSpace(_messageId) ? Guid.NewGuid().ToString() : _messageId,
+                CorrelationId = string.IsNullOrWhiteSpace(_correlationId) ? null : _correlationId,
+                Subject = string.IsNullOrWhiteSpace(_subject) ? null : _subject,
+                ContentType = string.IsNullOrWhiteSpace(_contentType) ? null : _contentType,
+                Body = _body,
+                ApplicationProperties = props
+            };
+
+            await Client.SendMessageAsync(EntityPath, msg);
+            _sendResult = "Message sent.";
+            _sendError = false;
+            _messageId = Guid.NewGuid().ToString();
+            await OnSent.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _sendResult = $"Send failed: {ex.Message}";
+            _sendError = true;
+        }
+        finally
+        {
+            _isSending = false;
+            StateHasChanged();
+        }
+    }
+}

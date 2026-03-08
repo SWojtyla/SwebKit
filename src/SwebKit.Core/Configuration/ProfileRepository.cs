@@ -16,6 +16,7 @@ public class ProfileRepository
 
     public IReadOnlyList<Project> Projects => _data.Projects;
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
+    public IReadOnlyList<SbMessageTemplate> MessageTemplates => _data.MessageTemplates;
 
     public async Task LoadAsync()
     {
@@ -68,11 +69,25 @@ public class ProfileRepository
 
     public ServiceBusNamespace? FindServiceBusNamespace(Guid id) =>
         _data.ServiceBusNamespaces.FirstOrDefault(n => n.Id == id);
+
+    public SbMessageTemplate? FindMessageTemplate(Guid id) =>
+        _data.MessageTemplates.FirstOrDefault(t => t.Id == id);
+
+    public void SaveMessageTemplate(SbMessageTemplate template)
+    {
+        var idx = _data.MessageTemplates.FindIndex(t => t.Id == template.Id);
+        if (idx >= 0) _data.MessageTemplates[idx] = template;
+        else _data.MessageTemplates.Add(template);
+    }
+
+    public void DeleteMessageTemplate(Guid id) =>
+        _data.MessageTemplates.RemoveAll(t => t.Id == id);
 }
 
 public class ProfileData
 {
     public List<Project> Projects { get; set; } = [];
     public List<ServiceBusNamespace> ServiceBusNamespaces { get; set; } = [];
+    public List<SbMessageTemplate> MessageTemplates { get; set; } = [];
     public int SchemaVersion { get; set; } = 1;
 }

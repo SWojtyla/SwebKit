@@ -234,8 +234,8 @@ html, body {
 }
 
 .message-grid {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    table-layout: fixed;
 }
 
 .message-list-host {
@@ -245,50 +245,18 @@ html, body {
 .message-grid-scroll {
     overflow-x: auto;
     overflow-y: auto;
-    scrollbar-gutter: stable both-edges;
     min-width: 0;
 }
 
-.responsive-message-grid {
-    table-layout: auto;
-}
-
-.col-message-id {
-    min-width: 12rem;
-    max-width: 18rem;
-}
-
-.col-correlation-id {
-    min-width: 9rem;
-    max-width: 14rem;
-}
-
-.col-subject {
-    min-width: 12rem;
-    max-width: 24rem;
-}
-
-.col-dlq-reason {
-    min-width: 12rem;
-    max-width: 24rem;
-}
-
-.col-delivery {
-    min-width: 4.5rem;
-    white-space: nowrap;
-}
-
 .cell-truncate {
-    display: inline-block;
-    max-width: 100%;
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .cell-wrap {
-    display: inline-block;
-    max-width: 100%;
+    display: block;
     white-space: normal;
     overflow-wrap: anywhere;
 }
@@ -340,15 +308,27 @@ html, body {
 .level-debug, .level-trace { background: #1a1a2e; color: var(--color-text-muted); }
 .level-critical { background: var(--color-error); color: white; }
 
+/* Splitter */
+.pane-splitter {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--color-border);
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.pane-splitter:hover,
+.pane-splitter.active {
+    background: var(--color-accent);
+}
+
 /* Misc */
 .details-pane {
     border-left: 1px solid var(--color-border);
     background: var(--color-surface);
     overflow: auto;
-    min-width: 280px;
-    max-width: 400px;
-    width: clamp(280px, 30vw, 400px);
-    flex: 0 0 clamp(280px, 30vw, 400px);
+    width: 340px;
+    flex: 0 0 340px;
+    min-width: 200px;
 }
 
 .service-bus-page-shell {

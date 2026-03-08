@@ -2,6 +2,7 @@
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
 @inject IAppEventBus Events
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
@@ -157,10 +158,12 @@
                     <div @key="_activeTab.Id" class="service-bus-active-workspace" style="display:flex; flex:1; overflow:hidden;">
                         <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                             ShowCompose="true"
                                              SelectedMessage="_activeTab.SelectedMessage"
                                              OnMessageSelected="msg => { _activeTab.SelectedMessage = msg; StateHasChanged(); }" />
                         </div>
-                        <div class="details-pane">
+                        <div @ref="_splitterRef" class="pane-splitter"></div>
+                        <div @ref="_detailPaneRef" class="details-pane">
                             <MessageDetailPane Message="_activeTab.SelectedMessage" />
                         </div>
                     </div>
@@ -178,6 +181,9 @@
     private bool _isNamespacePaneCollapsed;
     private string _addConnStr = string.Empty;
     private string? _addError;
+    private ElementReference _splitterRef;
+    private ElementReference _detailPaneRef;
+    private IJSObjectReference? _splitterHandle;
 
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
         AppState.CurrentEnvironment?.ServiceBusEntityLinks ?? [];
@@ -187,6 +193,20 @@
         Events.Subscribe<ProjectChangedEvent>(OnContextChanged);
         Events.Subscribe<EnvironmentChangedEvent>(OnContextChanged2);
         await LoadNamespacesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_activeTab is not null && !_activeTab.IsDlq && _splitterHandle is null)
+        {
+            try
+            {
+                _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                    "SwebKitSplitter.init", _splitterRef, _detailPaneRef,
+                    new { minWidth = 200, maxWidth = 700 });
+            }
+            catch { /* Element may not be rendered yet */ }
+        }
     }
 
     private async Task LoadNamespacesAsync()
@@ -380,7 +400,16 @@
         StateHasChanged();
     }
 
-    private void SetActive(SbTab tab) { _activeTab = tab; StateHasChanged(); }
+    private async Task SetActive(SbTab tab)
+    {
+        if (_splitterHandle is not null)
+        {
+            try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
+            _splitterHandle = null;
+        }
+        _activeTab = tab;
+        StateHasChanged();
+    }
 
     private void CloseTab(SbTab tab)
     {
@@ -396,6 +425,10 @@
     {
         Events.Unsubscribe<ProjectChangedEvent>(OnContextChanged);
         Events.Unsubscribe<EnvironmentChangedEvent>(OnContextChanged2);
+        if (_splitterHandle is not null)
+        {
+            try { _ = _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
+        }
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
     }

@@ -1,4 +1,5 @@
 @inject IJSRuntime JS
+@inject AppStateService AppState
 
 @if (Message is null)
 {
@@ -9,9 +10,19 @@
 else
 {
     <div style="height:100%; display:flex; flex-direction:column;">
-        <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); font-size:12px; display:flex; gap:6px; align-items:center;">
+        <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); font-size:12px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
             <span style="font-weight:600;">@(Message.MessageId.Length > 16 ? Message.MessageId[..16] + "…" : Message.MessageId)</span>
-            <button @onclick="CopyBody" style="margin-left:auto; padding:2px 8px; font-size:11px; cursor:pointer;">Copy Body</button>
+            <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
+                <button @onclick="CopyBody" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);" title="Copy message body to clipboard">
+                    @(_copyFeedback == "body" ? "Copied!" : "Copy Body")
+                </button>
+                <button @onclick="CopyFullMessage" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);" title="Copy full message (all properties + body) as JSON">
+                    @(_copyFeedback == "full" ? "Copied!" : "Copy Full Message")
+                </button>
+                <button @onclick="OpenSaveAsTemplate" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);" title="Save this message as a reusable template">
+                    Save as Template
+                </button>
+            </div>
         </div>
 
         <FluentTabs style="flex:1; overflow:hidden;">
@@ -21,12 +32,12 @@ else
                 </div>
             </FluentTab>
             <FluentTab Label="Properties">
-                <div style="padding:10px; overflow:auto;">
+                <div style="padding:10px; overflow:auto; height:100%; box-sizing:border-box;">
                     @foreach (var (key, value) in Message.ApplicationProperties)
                     {
                         <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid var(--color-border); font-size:12px;">
-                            <span style="color:var(--color-text-muted); min-width:140px; flex-shrink:0;">@key</span>
-                            <span>@value</span>
+                            <span style="color:var(--color-text-muted); min-width:140px; flex-shrink:0; word-break:break-all;">@key</span>
+                            <span style="word-break:break-all;">@value</span>
                         </div>
                     }
                     @if (!Message.ApplicationProperties.Any())
@@ -36,7 +47,7 @@ else
                 </div>
             </FluentTab>
             <FluentTab Label="System">
-                <div style="padding:10px; font-size:12px; overflow:auto;">
+                <div style="padding:10px; font-size:12px; overflow:auto; height:100%; box-sizing:border-box;">
                     <PropRow Label="MessageId" Value="@Message.MessageId" />
                     <PropRow Label="CorrelationId" Value="@(Message.CorrelationId ?? "-")" />
                     <PropRow Label="Subject" Value="@(Message.Subject ?? "-")" />
@@ -65,13 +76,104 @@ else
     </div>
 }
 
+@if (_showSaveTemplate)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
+            <h3 style="margin:0 0 12px; font-size:14px;">Save Message as Template</h3>
+            <input type="text" @bind="_templateName" placeholder="Template name…"
+                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+            <div style="font-size:11px; color:var(--color-text-muted); margin-top:8px;">
+                Body, subject, content-type, correlation ID, and application properties will be saved.
+            </div>
+            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                <button @onclick="() => _showSaveTemplate = false"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                <button @onclick="SaveAsTemplate" disabled="@string.IsNullOrWhiteSpace(_templateName)"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public SbMessage? Message { get; set; }
+
+    private string? _copyFeedback;
+    private CancellationTokenSource? _feedbackCts;
+    private bool _showSaveTemplate;
+    private string _templateName = "";
 
     private async Task CopyBody()
     {
         if (Message is not null)
+        {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", Message.Body);
+            await ShowFeedback("body");
+        }
+    }
+
+    private async Task CopyFullMessage()
+    {
+        if (Message is null) return;
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            messageId = Message.MessageId,
+            correlationId = Message.CorrelationId,
+            subject = Message.Subject,
+            contentType = Message.ContentType,
+            deliveryCount = Message.DeliveryCount,
+            enqueuedAt = Message.EnqueuedAt,
+            sequenceNumber = Message.SequenceNumber,
+            sessionId = Message.SessionId,
+            deadLetterReason = Message.DeadLetterReason,
+            deadLetterErrorDescription = Message.DeadLetterErrorDescription,
+            applicationProperties = Message.ApplicationProperties,
+            body = Message.Body
+        }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        await ShowFeedback("full");
+    }
+
+    private async Task ShowFeedback(string key)
+    {
+        _feedbackCts?.Cancel();
+        _feedbackCts = new CancellationTokenSource();
+        _copyFeedback = key;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(2000, _feedbackCts.Token);
+            _copyFeedback = null;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void OpenSaveAsTemplate()
+    {
+        if (Message is null) return;
+        _templateName = Message.Subject ?? "Untitled template";
+        _showSaveTemplate = true;
+    }
+
+    private async Task SaveAsTemplate()
+    {
+        if (Message is null || string.IsNullOrWhiteSpace(_templateName)) return;
+
+        var template = new SbMessageTemplate
+        {
+            Name = _templateName.Trim(),
+            Body = Message.Body,
+            ContentType = string.IsNullOrWhiteSpace(Message.ContentType) ? null : Message.ContentType,
+            Subject = string.IsNullOrWhiteSpace(Message.Subject) ? null : Message.Subject,
+            CorrelationId = string.IsNullOrWhiteSpace(Message.CorrelationId) ? null : Message.CorrelationId,
+            Properties = Message.ApplicationProperties
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString() ?? "")
+        };
+
+        await AppState.SaveMessageTemplateAsync(template);
+        _showSaveTemplate = false;
     }
 
     private static string FormatBody(string body, string? contentType)
