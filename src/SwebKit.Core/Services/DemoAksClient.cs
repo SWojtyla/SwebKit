@@ -177,6 +177,91 @@ public class DemoAksClient : IAksClient
         return events.OrderByDescending(e => e.LastTimestamp).ToList();
     }
 
+    public async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        return new List<IngressInfo>
+        {
+            new()
+            {
+                Name = "main-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.52"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "api.ecommerce.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/orders", PathType = "Prefix", ServiceName = "order-api", ServicePort = 80 },
+                            new IngressPath { Path = "/products", PathType = "Prefix", ServiceName = "product-catalog", ServicePort = 80 },
+                            new IngressPath { Path = "/cart", PathType = "Prefix", ServiceName = "cart-api", ServicePort = 80 },
+                            new IngressPath { Path = "/auth", PathType = "Prefix", ServiceName = "auth-service", ServicePort = 80 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "admin-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.52"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "admin.ecommerce.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "admin-dashboard", ServicePort = 8080 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "monitoring-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.53"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "grafana.internal.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "grafana", ServicePort = 3000 },
+                        ]
+                    },
+                    new IngressRule
+                    {
+                        Host = "prometheus.internal.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "prometheus-server", ServicePort = 9090 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm", ["tier"] = "monitoring" }
+            }
+        };
+    }
+
+    public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<string> namespaces = new List<string>
+        {
+            "default",
+            "ecommerce",
+            "kube-system",
+            "monitoring",
+            "ingress-nginx",
+            "cert-manager",
+            "istio-system"
+        };
+        return Task.FromResult(namespaces);
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)

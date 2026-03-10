@@ -54,3 +54,27 @@ public class KubernetesEvent
     public DateTimeOffset? LastTimestamp { get; set; }
     public int Count { get; set; }
 }
+
+public class IngressInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? IngressClass { get; set; }
+    public List<IngressRule> Rules { get; set; } = [];
+    public List<string> Addresses { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+public class IngressRule
+{
+    public string? Host { get; set; }
+    public List<IngressPath> Paths { get; set; } = [];
+}
+
+public class IngressPath
+{
+    public string Path { get; set; } = "/";
+    public string? PathType { get; set; }
+    public string? ServiceName { get; set; }
+    public int? ServicePort { get; set; }
+}

@@ -130,6 +130,36 @@ public class KubernetesAksClient : IAksClient
             }).ToList();
     }
 
+    public async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
+    {
+        var result = await _client.NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct);
+        return result.Items.Select(ing => new IngressInfo
+        {
+            Name = ing.Metadata.Name,
+            Namespace = ing.Metadata.NamespaceProperty ?? ns,
+            IngressClass = ing.Spec?.IngressClassName,
+            Rules = ing.Spec?.Rules?.Select(r => new IngressRule
+            {
+                Host = r.Host,
+                Paths = r.Http?.Paths?.Select(p => new IngressPath
+                {
+                    Path = p.Path ?? "/",
+                    PathType = p.PathType,
+                    ServiceName = p.Backend?.Service?.Name,
+                    ServicePort = p.Backend?.Service?.Port?.Number
+                }).ToList() ?? []
+            }).ToList() ?? [],
+            Addresses = ing.Status?.LoadBalancer?.Ingress?.Select(i => i.Ip ?? i.Hostname ?? "").Where(a => a != "").ToList() ?? [],
+            Labels = ing.Metadata.Labels is not null ? new Dictionary<string, string>(ing.Metadata.Labels) : []
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
+    {
+        var result = await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct);
+        return result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container,
         LogStreamOptions opts, [EnumeratorCancellation] CancellationToken ct = default)

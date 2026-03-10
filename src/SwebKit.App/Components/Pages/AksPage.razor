@@ -2,142 +2,276 @@
 @inject AppStateService AppState
 @implements IDisposable
 
-<div style="display:flex; height:100%; overflow:hidden;">
-    <!-- Workload overview + events -->
-    <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-        <div class="filter-bar">
-            <span style="font-size:12px; color:var(--color-text-muted);">Namespace:</span>
-            <strong style="font-size:12px;">@CurrentNamespace</strong>
-                <span style="font-size:12px; color:var(--color-text-muted); margin-left:10px;">Context:</span>
-                <strong style="font-size:12px;">@(string.IsNullOrWhiteSpace(CurrentContext) ? "(current)" : CurrentContext)</strong>
-                <FluentButton @onclick="LoadAsync" Disabled="@IsLoading" style="margin-left:auto;">
-                    @(IsLoading ? "Loading..." : "↻ Refresh (F5)")
-                </FluentButton>
-            </div>
-
-            <div style="display:grid; grid-template-columns: 1.2fr 0.9fr 0.7fr auto auto; gap:8px; padding:8px 0; align-items:end;">
-                <FluentTextField Label="Kubeconfig Path" @bind-Value="CurrentKubeconfigPath" Placeholder="C:\Users\you\.kube\config" />
-                <FluentTextField Label="Context" @bind-Value="CurrentContext" Placeholder="my-aks-context" />
-                <FluentTextField Label="Namespace" @bind-Value="CurrentNamespace" Placeholder="default" />
-                <label style="display:flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; padding-bottom:8px;">
-                    <input type="checkbox" @bind="UseAzureCredentialFallback" />
-                    Azure fallback
-                </label>
-                <div style="display:flex; gap:8px; padding-bottom:4px;">
-                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsLoading" @onclick="ApplyAndReconnectAsync">Apply</FluentButton>
-                    <FluentButton Disabled="@IsLoading" @onclick="SaveAndReconnectAsync">Save</FluentButton>
-                </div>
-            </div>
-
-            @if (ErrorMessage is not null)
+<div class="aks-page">
+    @* ── Toolbar ── *@
+    <div class="aks-toolbar">
+        <span class="connection-dot @(Client is not null ? "dot-ok" : "dot-unknown")"></span>
+        <span class="aks-context-label">
+            @if (Client is not null)
             {
-                <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
-            }
-
-            @if (Client is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.AksConfig is null)
-            {
-                <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
-                    No AKS cluster configured. <a href="/settings" style="color:var(--color-accent);">Open Settings</a>
-                </div>
-            }
-            else if (IsLoading)
-            {
-                <LoadingSpinner Message="Loading workloads..." />
+                <span>@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</span>
             }
             else
             {
-                <div style="display:flex; flex:1; overflow:hidden;">
-                    <!-- Deployments table -->
-                    <div class="data-table-container" style="flex:3;">
-                        <FluentDataGrid Items="@Deployments.AsQueryable()" TGridItem="DeploymentInfo" Virtualize="true"
-                                        ItemSize="36" RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
-                                        OnRowClick="@(r => { SelectedDeployment = r.Item; StateHasChanged(); })">
-                            <PropertyColumn Property="d => d.Name" Title="Name" />
-                            <PropertyColumn Property="d => d.Namespace" Title="Namespace" Width="120px" />
-                            <TemplateColumn Title="Ready" Width="80px">
-                                <span
-                                style="color: @(context.ReadyReplicas == context.Replicas ? "var(--color-success)" : "var(--color-warning)")">@context.ReadyReplicas/@context.Replicas</span>
-                            </TemplateColumn>
-                            <PropertyColumn Property="d => d.Status" Title="Status" Width="90px" />
-                            <TemplateColumn Title="Actions" Width="120px">
-                                <span @onclick:stopPropagation="true">
-                                    <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogs(context)">Logs
-                                    </FluentButton>
-                                </span>
-                            </TemplateColumn>
-                        </FluentDataGrid>
-                    </div>
+                <span>Not connected</span>
+            }
+        </span>
 
-                    <!-- Events panel -->
-                    <div style="flex:2; border-left:1px solid var(--color-border); overflow-y:auto;">
-                        <div
-                            style="padding:6px 12px; font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--color-border);">
-                            Events</div>
+        <span class="aks-toolbar-divider"></span>
+
+        @* ── Namespace dropdown ── *@
+        <label class="aks-ns-label">Namespace</label>
+        <select class="aks-ns-select" value="@CurrentNamespace" @onchange="OnNamespaceChanged">
+            @foreach (var ns in Namespaces)
+            {
+                <option value="@ns" selected="@(ns == CurrentNamespace)">@ns</option>
+            }
+        </select>
+
+        @* ── Resource type selector ── *@
+        <span class="aks-toolbar-divider"></span>
+        @foreach (var rt in ResourceTypes)
+        {
+            <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
+                    @onclick="() => SwitchResourceType(rt)">
+                @rt
+            </button>
+        }
+
+        <span class="aks-toolbar-spacer"></span>
+
+        <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="LoadAsync"
+                      Title="Refresh (F5)">
+            @(IsLoading ? "Loading…" : "↻ Refresh")
+        </FluentButton>
+    </div>
+
+    @* ── Error ── *@
+    @if (ErrorMessage is not null)
+    {
+        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+    }
+
+    @* ── Empty / Loading / Content ── *@
+    @if (Client is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.AksConfig is null)
+    {
+        <div class="aks-empty-state">
+            <div class="aks-empty-icon">☸</div>
+            <div class="aks-empty-title">No cluster configured</div>
+            <div class="aks-empty-subtitle">
+                Go to <a href="/settings">Settings</a> to configure your AKS connection.
+            </div>
+        </div>
+    }
+    else if (IsLoading && !HasAnyData)
+    {
+        <LoadingSpinner Message="Connecting to cluster…" />
+    }
+    else
+    {
+        <div class="aks-content @(LogPodName is not null ? "log-open" : "") @(ShowEvents ? "" : "events-collapsed")">
+            @* ── Main resource panel ── *@
+            <div class="aks-resource-panel">
+                <div class="aks-section-header">
+                    <span class="aks-section-title">@ActiveResourceType</span>
+                    <span class="aks-section-count">@ActiveResourceCount</span>
+                </div>
+                <div class="aks-table-wrap">
+                    @switch (ActiveResourceType)
+                    {
+                        case "Deployments":
+                            <FluentDataGrid Items="@Deployments.AsQueryable()" TGridItem="DeploymentInfo"
+                                            Virtualize="true" ItemSize="36"
+                                            RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
+                                            OnRowClick="@(r => { if (r.Item is not null) { SelectedDeployment = r.Item; StateHasChanged(); } })">
+                                <TemplateColumn Title="Name">
+                                    <span class="aks-resource-name">@context.Name</span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Ready" Width="90px">
+                                    <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
+                                        @context.ReadyReplicas / @context.Replicas
+                                    </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Status" Width="100px">
+                                    <span class="aks-status @(context.Status is "Running" or "Available" ? "running" : "other")">
+                                        @context.Status
+                                    </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="" Width="80px">
+                                    <span @onclick:stopPropagation="true">
+                                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForDeployment(context)"
+                                                      Title="Stream pod logs">Logs</FluentButton>
+                                    </span>
+                                </TemplateColumn>
+                            </FluentDataGrid>
+                            break;
+
+                        case "Pods":
+                            <FluentDataGrid Items="@Pods.AsQueryable()" TGridItem="PodInfo"
+                                            Virtualize="true" ItemSize="36">
+                                <TemplateColumn Title="Name">
+                                    <span class="aks-resource-name">@context.Name</span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Phase" Width="110px">
+                                    <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
+                                        @context.Phase
+                                    </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Ready" Width="70px">
+                                    <span class="aks-ready-badge @(context.Ready ? "healthy" : "degraded")">
+                                        @(context.Ready ? "Yes" : "No")
+                                    </span>
+                                </TemplateColumn>
+                                <PropertyColumn Property="p => p.NodeName" Title="Node" Width="180px" />
+                                <TemplateColumn Title="Age" Width="80px">
+                                    @if (context.StartTime.HasValue)
+                                    {
+                                        @FormatAge(context.StartTime.Value)
+                                    }
+                                </TemplateColumn>
+                                <TemplateColumn Title="" Width="80px">
+                                    <span @onclick:stopPropagation="true">
+                                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForPod(context)"
+                                                      Title="Stream pod logs">Logs</FluentButton>
+                                    </span>
+                                </TemplateColumn>
+                            </FluentDataGrid>
+                            break;
+
+                        case "Ingresses":
+                            <FluentDataGrid Items="@Ingresses.AsQueryable()" TGridItem="IngressInfo"
+                                            Virtualize="true" ItemSize="36">
+                                <TemplateColumn Title="Name">
+                                    <span class="aks-resource-name">@context.Name</span>
+                                </TemplateColumn>
+                                <PropertyColumn Property="i => i.IngressClass" Title="Class" Width="100px" />
+                                <TemplateColumn Title="Hosts">
+                                    <span class="aks-ingress-hosts">
+                                        @string.Join(", ", context.Rules.Where(r => r.Host is not null).Select(r => r.Host!))
+                                    </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Address" Width="140px">
+                                    @string.Join(", ", context.Addresses)
+                                </TemplateColumn>
+                                <TemplateColumn Title="Paths" Width="70px">
+                                    <span class="aks-section-count">@context.Rules.Sum(r => r.Paths.Count)</span>
+                                </TemplateColumn>
+                            </FluentDataGrid>
+                            break;
+                    }
+                </div>
+            </div>
+
+            @* ── Events panel (collapsible) ── *@
+            @if (ShowEvents)
+            {
+                <div class="aks-events-panel">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title">Events</span>
+                        <span class="aks-section-count">@Events.Count</span>
+                        <button class="aks-collapse-btn" @onclick="() => ShowEvents = false" title="Collapse events">
+                            ✕
+                        </button>
+                    </div>
+                    <div class="aks-events-list">
+                        @if (Events.Count == 0)
+                        {
+                            <div class="aks-events-empty">No recent events</div>
+                        }
+                        else
+                        {
                             @foreach (var evt in Events)
                             {
-                                <div style="padding:6px 12px; border-bottom:1px solid var(--color-border); font-size:11px;">
-                                    <div style="display:flex; gap:8px; align-items:center;">
+                                <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
+                                    <div class="aks-event-header">
                                         @if (evt.Type == "Warning")
                                         {
-                                            <span style="color:var(--color-warning);">&#9888;</span>
+                                            <span class="aks-event-icon warning">&#9888;</span>
                                         }
-                                        <span
-                                        style="font-weight:600; color:@(evt.Type == "Warning" ? "var(--color-warning)" : "var(--color-text)");">@evt.Reason</span>
-                                        <span
-                                        style="color:var(--color-text-muted); margin-left:auto;">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
+                                        else
+                                        {
+                                            <span class="aks-event-icon normal">&#9679;</span>
+                                        }
+                                        <span class="aks-event-reason">@evt.Reason</span>
+                                        @if (evt.Count > 1)
+                                        {
+                                            <span class="aks-event-count">×@evt.Count</span>
+                                        }
+                                        <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
                                     </div>
-                                    <div style="color:var(--color-text-muted); margin-top:2px;">@evt.InvolvedObjectName — @evt.Message
+                                    <div class="aks-event-detail">
+                                        <span class="aks-event-object">@evt.InvolvedObjectName</span>
+                                        @evt.Message
                                     </div>
                                 </div>
                             }
-                        </div>
+                        }
                     </div>
-                }
-            </div>
+                </div>
+            }
+            else
+            {
+                <button class="aks-events-collapsed-tab" @onclick="() => ShowEvents = true" title="Show events">
+                    Events (@Events.Count(e => e.Type == "Warning") &#9888;)
+                </button>
+            }
 
-            <!-- Log pane (if open) -->
+            @* ── Log slide-out ── *@
             @if (LogPodName is not null)
             {
-                <div
-                    style="width:420px; border-left:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
-                    <div
-                        style="padding:8px 12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; font-size:12px;">
-                        <span style="font-weight:600;">Logs: @LogPodName</span>
-                        <FluentButton Appearance="Appearance.Stealth" style="margin-left:auto;" @onclick="() => LogPodName = null">
-                            &#x2715;</FluentButton>
-                        </div>
-                        <PodLogView Client="Client" Namespace="@CurrentNamespace"
-                                    PodName="@LogPodName" />
+                <div class="aks-log-panel">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title" title="@LogPodName">Logs: @TruncatePodName(LogPodName)</span>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="CloseLogs"
+                                      Title="Close log panel">✕</FluentButton>
                     </div>
-                }
-            </div>
+                    <PodLogView Client="Client" Namespace="@CurrentNamespace" PodName="@LogPodName" />
+                </div>
+            }
+        </div>
+    }
+</div>
 
 @code {
+    private static readonly string[] ResourceTypes = ["Deployments", "Pods", "Ingresses"];
+
     private IAksClient? Client;
     private List<DeploymentInfo> Deployments = [];
+    private List<PodInfo> Pods = [];
+    private List<IngressInfo> Ingresses = [];
     private List<KubernetesEvent> Events = [];
+    private List<string> Namespaces = ["default"];
     private DeploymentInfo? SelectedDeployment;
     private bool IsLoading;
     private string? ErrorMessage;
     private string? LogPodName;
-    private string CurrentKubeconfigPath = string.Empty;
-    private string CurrentContext = string.Empty;
+
     private string CurrentNamespace = "default";
-    private bool UseAzureCredentialFallback = true;
+    private string ActiveContext = string.Empty;
+    private string ActiveResourceType = "Deployments";
+    private bool ShowEvents = true;
+
+    private bool HasAnyData => Deployments.Count > 0 || Pods.Count > 0 || Ingresses.Count > 0;
+
+    private int ActiveResourceCount => ActiveResourceType switch
+    {
+        "Deployments" => Deployments.Count,
+        "Pods" => Pods.Count,
+        "Ingresses" => Ingresses.Count,
+        _ => 0
+    };
 
     protected override async Task OnParametersSetAsync()
     {
-        SyncInputsFromEnvironment();
+        SyncFromEnvironment();
         await ConnectAndLoadAsync();
     }
 
-    private void SyncInputsFromEnvironment()
+    private void SyncFromEnvironment()
     {
         var config = AppState.CurrentEnvironment?.AksConfig;
-        CurrentKubeconfigPath = config?.KubeconfigPath ?? string.Empty;
-        CurrentContext = config?.KubeconfigContext ?? string.Empty;
         CurrentNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
-        UseAzureCredentialFallback = config?.UseAzureCredentialFallback ?? true;
+        ActiveContext = config?.KubeconfigContext ?? string.Empty;
     }
 
     private async Task ConnectAndLoadAsync()
@@ -145,46 +279,40 @@
         if (AppState.UseDemoData)
         {
             Client = new SwebKit.Core.Services.DemoAksClient();
+            await LoadNamespacesAsync();
             await LoadAsync();
             return;
         }
 
-        var hasKubeconfigData = !string.IsNullOrWhiteSpace(CurrentKubeconfigPath)
-            || !string.IsNullOrWhiteSpace(CurrentContext);
         var config = AppState.CurrentEnvironment?.AksConfig;
-        if (config is null && !hasKubeconfigData) return;
+        if (config is null) return;
 
         try
         {
             Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
-                string.IsNullOrWhiteSpace(CurrentContext) ? null : CurrentContext.Trim(),
-                string.IsNullOrWhiteSpace(CurrentKubeconfigPath) ? null : CurrentKubeconfigPath.Trim(),
-                UseAzureCredentialFallback);
+                string.IsNullOrWhiteSpace(config.KubeconfigContext) ? null : config.KubeconfigContext,
+                string.IsNullOrWhiteSpace(config.KubeconfigPath) ? null : config.KubeconfigPath,
+                config.UseAzureCredentialFallback);
+            await LoadNamespacesAsync();
             await LoadAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
     }
 
-    private async Task ApplyAndReconnectAsync()
+    private async Task LoadNamespacesAsync()
     {
-        ErrorMessage = null;
-        await ConnectAndLoadAsync();
-    }
-
-    private async Task SaveAndReconnectAsync()
-    {
-        var env = AppState.CurrentEnvironment;
-        if (env is null || AppState.CurrentProject is null)
-            return;
-
-        var config = env.AksConfig ??= new SwebKit.Core.Domain.AksConfig();
-        config.KubeconfigPath = string.IsNullOrWhiteSpace(CurrentKubeconfigPath) ? null : CurrentKubeconfigPath.Trim();
-        config.KubeconfigContext = string.IsNullOrWhiteSpace(CurrentContext) ? null : CurrentContext.Trim();
-        config.DefaultNamespace = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
-        config.UseAzureCredentialFallback = UseAzureCredentialFallback;
-
-        await AppState.UpdateProjectAsync(AppState.CurrentProject);
-        await ConnectAndLoadAsync();
+        if (Client is null) return;
+        try
+        {
+            var ns = await Client.GetNamespacesAsync();
+            if (ns.Count > 0)
+            {
+                Namespaces = ns.ToList();
+                if (!Namespaces.Contains(CurrentNamespace))
+                    CurrentNamespace = Namespaces.Contains("default") ? "default" : Namespaces[0];
+            }
+        }
+        catch { /* keep default list */ }
     }
 
     private async Task LoadAsync()
@@ -193,20 +321,59 @@
         IsLoading = true; ErrorMessage = null; StateHasChanged();
         try
         {
-            var ns = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
-            Deployments = (await Client.GetDeploymentsAsync(ns)).ToList();
-            Events = (await Client.GetEventsAsync(ns)).Take(50).ToList();
+            var ns = CurrentNamespace;
+            // Load all resource types in parallel
+            var deploymentsTask = Client.GetDeploymentsAsync(ns);
+            var podsTask = Client.GetPodsAsync(ns);
+            var ingressesTask = Client.GetIngressesAsync(ns);
+            var eventsTask = Client.GetEventsAsync(ns);
+
+            await Task.WhenAll(deploymentsTask, podsTask, ingressesTask, eventsTask);
+
+            Deployments = deploymentsTask.Result.ToList();
+            Pods = podsTask.Result.ToList();
+            Ingresses = ingressesTask.Result.ToList();
+            Events = eventsTask.Result.Take(50).ToList();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
         finally { IsLoading = false; StateHasChanged(); }
     }
 
-    private async Task OpenLogs(DeploymentInfo deployment)
+    private async Task OnNamespaceChanged(ChangeEventArgs e)
     {
-        var ns = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
-        var pods = await Client!.GetPodsAsync(ns);
-        var pod = pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
+        CurrentNamespace = e.Value?.ToString() ?? "default";
+        await LoadAsync();
+    }
+
+    private void SwitchResourceType(string type)
+    {
+        ActiveResourceType = type;
+        StateHasChanged();
+    }
+
+    private async Task OpenLogsForDeployment(DeploymentInfo deployment)
+    {
+        var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
         if (pod is not null) { LogPodName = pod.Name; StateHasChanged(); }
+    }
+
+    private void OpenLogsForPod(PodInfo pod)
+    {
+        LogPodName = pod.Name;
+        StateHasChanged();
+    }
+
+    private void CloseLogs() { LogPodName = null; StateHasChanged(); }
+
+    private static string TruncatePodName(string name)
+        => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
+
+    private static string FormatAge(DateTimeOffset start)
+    {
+        var span = DateTimeOffset.UtcNow - start;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+        return $"{(int)span.TotalMinutes}m";
     }
 
     public void Dispose() { }

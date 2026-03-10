@@ -1,0 +1,121 @@
+/* ── Log viewer shell ── */
+.log-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Toolbar ── */
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.log-live-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.log-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.log-live-dot.active {
+    background: var(--color-success);
+    box-shadow: 0 0 4px var(--color-success);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.log-filter-input {
+    flex: 1;
+    min-width: 80px;
+    padding: 3px 8px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: 11px;
+    outline: none;
+}
+
+.log-filter-input:focus {
+    border-color: var(--color-accent);
+}
+
+.log-line-count {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Log output ── */
+.log-output {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 6px 10px;
+    background: var(--color-bg);
+}
+
+.log-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.log-line {
+    padding: 0 4px;
+    border-radius: 2px;
+    word-break: break-all;
+}
+
+.log-line:hover {
+    background: var(--color-surface-2);
+}
+
+.log-line.error {
+    color: #FF6B6B;
+    background: rgba(229, 57, 53, 0.06);
+}
+
+.log-line.warn {
+    color: #FFB86C;
+}
+
+.log-line.debug {
+    color: var(--color-text-muted);
+}
+
+.log-tailing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-muted);
+    padding: 6px 4px;
+    font-size: 11px;
+}

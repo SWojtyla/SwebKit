@@ -4,7 +4,7 @@
 
 title: "Feature Overview - AKS Enhancements"
 owner: ""
-status: "Planned"
+status: "In Progress"
 created: "2026-03-10"
 updated: "2026-03-10"
 
@@ -30,6 +30,10 @@ Developers can inspect AKS workloads end-to-end from one page using discoverable
   - Mutations (apply/delete/edit)
   - Live terminal/shell improvements beyond existing behavior
   - AKS management-plane operations (scale/upgrade/nodepool management)
+
+## Current state
+
+Namespace listing, ingress listing, resource type tabs (Deployments/Pods/Ingresses), namespace dropdown, collapsible events, and full UI/UX redesign are delivered. Remaining work: context discovery, YAML viewer, helm releases, and tests. See `status.md` for details.
 
 ## Dependencies
 

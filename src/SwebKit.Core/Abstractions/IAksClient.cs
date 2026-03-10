@@ -11,5 +11,7 @@ public interface IAksClient
     Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default);
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
     Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default);
+    Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

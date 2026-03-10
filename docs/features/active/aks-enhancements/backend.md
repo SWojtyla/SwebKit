@@ -4,7 +4,7 @@
 
 title: "Backend Plan - AKS Enhancements"
 owner: ""
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -16,7 +16,8 @@ Expand AKS backend capabilities from connectivity-only to full namespace-scoped 
 
 - `src/SwebKit.Kubernetes/`
 - `src/SwebKit.Core/Abstractions/`
-- `src/SwebKit.Core/Domain/`
+- `src/SwebKit.Core/Models/`
+- `src/SwebKit.Core/Services/`
 - `tests/SwebKit.Kubernetes.Tests/`
 
 ## Design
@@ -28,18 +29,30 @@ Expand AKS backend capabilities from connectivity-only to full namespace-scoped 
 
 ## API / Contracts
 
-Planned additions or updates:
+### Delivered
 
-- `GetContextsAsync(string? kubeconfigPath)`
-- `GetNamespacesAsync(...)`
-- Resource list calls for pods, deployments, helm releases, ingresses
-- `GetResourceYamlAsync(...)`
+- `GetNamespacesAsync(CancellationToken)` — Lists all namespaces from the cluster, returns `IReadOnlyList<string>` sorted alphabetically. Implemented in `KubernetesAksClient` via `CoreV1.ListNamespaceAsync` and in `DemoAksClient` with 7 demo namespaces.
+- `GetIngressesAsync(string ns, CancellationToken)` — Lists ingresses in a namespace, returns `IReadOnlyList<IngressInfo>`. Implemented in `KubernetesAksClient` via `NetworkingV1.ListNamespacedIngressAsync` and in `DemoAksClient` with 3 demo ingresses.
+
+### New models (in `AksModels.cs`)
+
+- `IngressInfo` — Name, Namespace, IngressClass, Rules, Addresses, Labels
+- `IngressRule` — Host, Paths
+- `IngressPath` — Path, PathType, ServiceName, ServicePort
+
+### Planned
+
+- `GetContextsAsync(string? kubeconfigPath)` — Discover kubeconfig contexts
+- `GetResourceYamlAsync(...)` — Read-only YAML retrieval per resource kind
+- Helm release listing
 
 ## Tasks
 
+- [x] Add namespace listing and mapping models
+- [x] Add ingress list wrappers and models
+- [x] Add demo data for namespaces and ingresses
 - [ ] Add context discovery methods using kubeconfig load helpers
-- [ ] Add namespace listing and mapping models
-- [ ] Add pods/deployments/helm/ingress list wrappers
+- [ ] Add helm release listing
 - [ ] Add read-only YAML retrieval for supported kinds
 - [ ] Add structured errors for auth, RBAC, and invalid context/namespace
 - [ ] Add tests for context parsing and resource calls
