@@ -1,20 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --nologo -v:q)",
-      "Bash(dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --nologo -v:q)",
-      "Bash(ls -la /d/Projects/SwebKit/src/SwebKit.*/)",
-      "Bash(dotnet build --no-restore)",
-      "Bash(dotnet build SwebKit.sln)",
-      "Bash(dotnet build src/SwebKit.Core/SwebKit.Core.csproj src/SwebKit.Azure/SwebKit.Azure.csproj src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj src/SwebKit.OpenTelemetry/SwebKit.OpenTelemetry.csproj)",
-      "Bash(dotnet build src/SwebKit.Core/SwebKit.Core.csproj)",
-      "Bash(dotnet build src/SwebKit.Azure/SwebKit.Azure.csproj)",
-      "Bash(dotnet build src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj)",
-      "Bash(dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj -p:Configuration=Debug --no-restore)",
-      "Bash(dotnet test tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj -p:Configuration=Debug)",
-      "Bash(dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj -p:Configuration=Debug)",
-      "Bash(dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj -p:Configuration=Debug)",
-      "Bash(dotnet build tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj --no-restore)"
+      "Bash(dotnet list:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet build:*)",
+      "Bash(Select-String -Pattern \"error|Build succeeded\")",
+      "Bash(dotnet remove:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(findstr:*)",
+      "Bash(dotnet test:*)",
+      "Bash(find:*)"
     ]
   }
 }
