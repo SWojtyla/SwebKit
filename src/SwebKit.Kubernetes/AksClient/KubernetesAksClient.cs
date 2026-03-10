@@ -1,31 +1,81 @@
+using Azure.Core;
+using Azure.Identity;
 using k8s;
 using k8s.Models;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Text;
 
 namespace SwebKit.Kubernetes.AksClient;
 
 public class KubernetesAksClient : IAksClient
 {
+    private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
     private readonly k8s.Kubernetes _client;
 
-    public KubernetesAksClient(string? kubeconfigContext = null)
+    public KubernetesAksClient(
+        string? kubeconfigContext = null,
+        string? kubeconfigPath = null,
+        bool enableAzureCredentialFallback = true)
     {
-        KubernetesClientConfiguration config;
-        if (kubeconfigContext is not null)
-        {
-            var kubeconfigPath = KubernetesClientConfiguration.KubeConfigDefaultLocation;
-            config = KubernetesClientConfiguration.BuildConfigFromConfigFile(
-                kubeconfigPath, kubeconfigContext);
-        }
-        else
-        {
-            config = KubernetesClientConfiguration.BuildDefaultConfig();
-        }
+        var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
+
+        if (enableAzureCredentialFallback)
+            TryApplyAzureCredentialFallback(config, kubeconfigPath);
+
         _client = new k8s.Kubernetes(config);
+    }
+
+    internal static KubernetesClientConfiguration BuildClientConfiguration(string? kubeconfigContext, string? kubeconfigPath)
+    {
+        var hasExplicitKubeconfig = !string.IsNullOrWhiteSpace(kubeconfigPath);
+        var hasExplicitContext = !string.IsNullOrWhiteSpace(kubeconfigContext);
+
+        if (!hasExplicitKubeconfig && !hasExplicitContext)
+            return KubernetesClientConfiguration.BuildDefaultConfig();
+
+        return KubernetesClientConfiguration.BuildConfigFromConfigFile(
+            hasExplicitKubeconfig ? kubeconfigPath : null,
+            hasExplicitContext ? kubeconfigContext : null);
+    }
+
+    internal static void TryApplyAzureCredentialFallback(KubernetesClientConfiguration config, string? kubeconfigPath)
+    {
+        if (!AksAzureAuthHelpers.ShouldUseAzureCredentialFallback(config.Host, config.AccessToken))
+            return;
+
+        var effectiveKubeconfigPath = string.IsNullOrWhiteSpace(kubeconfigPath)
+            ? KubernetesClientConfiguration.KubeConfigDefaultLocation
+            : kubeconfigPath;
+
+        string? serverId = null;
+        if (!string.IsNullOrWhiteSpace(effectiveKubeconfigPath) && File.Exists(effectiveKubeconfigPath))
+        {
+            var kubeconfigContent = File.ReadAllText(effectiveKubeconfigPath);
+            serverId = AksAzureAuthHelpers.TryExtractServerIdFromKubeconfig(kubeconfigContent);
+        }
+
+        foreach (var scope in AksAzureAuthHelpers.BuildAksTokenScopes(serverId ?? DefaultAksServerAppId))
+        {
+            try
+            {
+                var credential = new DefaultAzureCredential();
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), default);
+                if (!string.IsNullOrWhiteSpace(accessToken.Token))
+                {
+                    config.AccessToken = accessToken.Token;
+                    return;
+                }
+            }
+            catch
+            {
+                // Keep kubeconfig-based auth as the primary mechanism and silently continue fallback attempts.
+            }
+        }
     }
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
@@ -159,6 +209,102 @@ public class KubernetesAksClient : IAksClient
     {
         try { await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct); return true; }
         catch { return false; }
+    }
+}
+
+internal static class AksAzureAuthHelpers
+{
+    private static readonly Regex ServerIdRegex = new(
+        "--server-id(?:=|\\s+)(?<value>[^\\s\"']+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool ShouldUseAzureCredentialFallback(string? host, string? accessToken)
+    {
+        if (!string.IsNullOrWhiteSpace(accessToken))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+
+        return host.Contains("azmk8s.io", StringComparison.OrdinalIgnoreCase)
+            || host.Contains("azure.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? TryExtractServerIdFromKubeconfig(string kubeconfigContent)
+    {
+        if (string.IsNullOrWhiteSpace(kubeconfigContent))
+            return null;
+
+        var match = ServerIdRegex.Match(kubeconfigContent);
+        if (match.Success)
+        {
+            var serverId = match.Groups["value"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(serverId) && serverId != "-")
+                return serverId;
+        }
+
+        var lines = kubeconfigContent.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            if (!line.Contains("--server-id", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var separatorIndex = line.IndexOf("--server-id=", StringComparison.OrdinalIgnoreCase);
+            if (separatorIndex >= 0)
+            {
+                var inlineValue = line[(separatorIndex + "--server-id=".Length)..].Trim().Trim('"', '\'');
+                if (!string.IsNullOrWhiteSpace(inlineValue))
+                    return inlineValue;
+            }
+
+            for (var next = i + 1; next < lines.Length; next++)
+            {
+                var valueLine = lines[next].Trim();
+                if (string.IsNullOrWhiteSpace(valueLine))
+                    continue;
+
+                if (valueLine.StartsWith("-"))
+                    valueLine = valueLine[1..].Trim();
+
+                if (!valueLine.StartsWith("--", StringComparison.OrdinalIgnoreCase))
+                    return valueLine.Trim('"', '\'');
+
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    public static IReadOnlyList<string> BuildAksTokenScopes(string serverId)
+    {
+        var normalized = serverId.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return [];
+
+        var scopes = new List<string>();
+        if (normalized.StartsWith("api://", StringComparison.OrdinalIgnoreCase))
+        {
+            scopes.Add(EnsureDefaultSuffix(normalized));
+            return scopes;
+        }
+
+        scopes.Add(EnsureDefaultSuffix($"api://{normalized}"));
+
+        if (Uri.IsWellFormedUriString(normalized, UriKind.Absolute))
+            scopes.Add(EnsureDefaultSuffix(normalized));
+
+        return scopes;
+    }
+
+    private static string EnsureDefaultSuffix(string value)
+    {
+        var trimmed = value.TrimEnd('/');
+        if (trimmed.EndsWith("/.default", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        return string.Create(CultureInfo.InvariantCulture, $"{trimmed}/.default");
     }
 }
 

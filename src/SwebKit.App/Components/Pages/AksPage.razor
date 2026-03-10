@@ -7,11 +7,26 @@
     <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
         <div class="filter-bar">
             <span style="font-size:12px; color:var(--color-text-muted);">Namespace:</span>
-            <strong style="font-size:12px;">@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ??
-                                "default")</strong>
+            <strong style="font-size:12px;">@CurrentNamespace</strong>
+                <span style="font-size:12px; color:var(--color-text-muted); margin-left:10px;">Context:</span>
+                <strong style="font-size:12px;">@(string.IsNullOrWhiteSpace(CurrentContext) ? "(current)" : CurrentContext)</strong>
                 <FluentButton @onclick="LoadAsync" Disabled="@IsLoading" style="margin-left:auto;">
                     @(IsLoading ? "Loading..." : "↻ Refresh (F5)")
                 </FluentButton>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1.2fr 0.9fr 0.7fr auto auto; gap:8px; padding:8px 0; align-items:end;">
+                <FluentTextField Label="Kubeconfig Path" @bind-Value="CurrentKubeconfigPath" Placeholder="C:\Users\you\.kube\config" />
+                <FluentTextField Label="Context" @bind-Value="CurrentContext" Placeholder="my-aks-context" />
+                <FluentTextField Label="Namespace" @bind-Value="CurrentNamespace" Placeholder="default" />
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; padding-bottom:8px;">
+                    <input type="checkbox" @bind="UseAzureCredentialFallback" />
+                    Azure fallback
+                </label>
+                <div style="display:flex; gap:8px; padding-bottom:4px;">
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsLoading" @onclick="ApplyAndReconnectAsync">Apply</FluentButton>
+                    <FluentButton Disabled="@IsLoading" @onclick="SaveAndReconnectAsync">Save</FluentButton>
+                </div>
             </div>
 
             @if (ErrorMessage is not null)
@@ -91,7 +106,7 @@
                         <FluentButton Appearance="Appearance.Stealth" style="margin-left:auto;" @onclick="() => LogPodName = null">
                             &#x2715;</FluentButton>
                         </div>
-                        <PodLogView Client="Client" Namespace="@(AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default")"
+                        <PodLogView Client="Client" Namespace="@CurrentNamespace"
                                     PodName="@LogPodName" />
                     </div>
                 }
@@ -105,8 +120,25 @@
     private bool IsLoading;
     private string? ErrorMessage;
     private string? LogPodName;
+    private string CurrentKubeconfigPath = string.Empty;
+    private string CurrentContext = string.Empty;
+    private string CurrentNamespace = "default";
+    private bool UseAzureCredentialFallback = true;
 
-    protected override async Task OnParametersSetAsync() => await ConnectAndLoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        SyncInputsFromEnvironment();
+        await ConnectAndLoadAsync();
+    }
+
+    private void SyncInputsFromEnvironment()
+    {
+        var config = AppState.CurrentEnvironment?.AksConfig;
+        CurrentKubeconfigPath = config?.KubeconfigPath ?? string.Empty;
+        CurrentContext = config?.KubeconfigContext ?? string.Empty;
+        CurrentNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
+        UseAzureCredentialFallback = config?.UseAzureCredentialFallback ?? true;
+    }
 
     private async Task ConnectAndLoadAsync()
     {
@@ -116,14 +148,43 @@
             await LoadAsync();
             return;
         }
+
+        var hasKubeconfigData = !string.IsNullOrWhiteSpace(CurrentKubeconfigPath)
+            || !string.IsNullOrWhiteSpace(CurrentContext);
         var config = AppState.CurrentEnvironment?.AksConfig;
-        if (config is null) return;
+        if (config is null && !hasKubeconfigData) return;
+
         try
         {
-            Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(config.KubeconfigContext);
+            Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
+                string.IsNullOrWhiteSpace(CurrentContext) ? null : CurrentContext.Trim(),
+                string.IsNullOrWhiteSpace(CurrentKubeconfigPath) ? null : CurrentKubeconfigPath.Trim(),
+                UseAzureCredentialFallback);
             await LoadAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
+    }
+
+    private async Task ApplyAndReconnectAsync()
+    {
+        ErrorMessage = null;
+        await ConnectAndLoadAsync();
+    }
+
+    private async Task SaveAndReconnectAsync()
+    {
+        var env = AppState.CurrentEnvironment;
+        if (env is null || AppState.CurrentProject is null)
+            return;
+
+        var config = env.AksConfig ??= new SwebKit.Core.Domain.AksConfig();
+        config.KubeconfigPath = string.IsNullOrWhiteSpace(CurrentKubeconfigPath) ? null : CurrentKubeconfigPath.Trim();
+        config.KubeconfigContext = string.IsNullOrWhiteSpace(CurrentContext) ? null : CurrentContext.Trim();
+        config.DefaultNamespace = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
+        config.UseAzureCredentialFallback = UseAzureCredentialFallback;
+
+        await AppState.UpdateProjectAsync(AppState.CurrentProject);
+        await ConnectAndLoadAsync();
     }
 
     private async Task LoadAsync()
@@ -132,7 +193,7 @@
         IsLoading = true; ErrorMessage = null; StateHasChanged();
         try
         {
-            var ns = AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default";
+            var ns = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
             Deployments = (await Client.GetDeploymentsAsync(ns)).ToList();
             Events = (await Client.GetEventsAsync(ns)).Take(50).ToList();
         }
@@ -142,7 +203,7 @@
 
     private async Task OpenLogs(DeploymentInfo deployment)
     {
-        var ns = AppState.CurrentEnvironment?.AksConfig?.DefaultNamespace ?? "default";
+        var ns = string.IsNullOrWhiteSpace(CurrentNamespace) ? "default" : CurrentNamespace.Trim();
         var pods = await Client!.GetPodsAsync(ns);
         var pod = pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
         if (pod is not null) { LogPodName = pod.Name; StateHasChanged(); }

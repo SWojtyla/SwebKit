@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.14.2" />
     <PackageReference Include="KubernetesClient" Version="19.0.2" />
   </ItemGroup>
 
