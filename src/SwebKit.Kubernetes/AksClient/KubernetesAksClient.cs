@@ -16,12 +16,17 @@ public class KubernetesAksClient : IAksClient
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
     private readonly k8s.Kubernetes _client;
+    private readonly string? _kubeconfigPath;
+    private readonly string? _kubeconfigContext;
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
         string? kubeconfigPath = null,
         bool enableAzureCredentialFallback = true)
     {
+        _kubeconfigPath = kubeconfigPath;
+        _kubeconfigContext = kubeconfigContext;
+
         var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
 
         if (enableAzureCredentialFallback)
@@ -158,6 +163,83 @@ public class KubernetesAksClient : IAksClient
     {
         var result = await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct);
         return result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+    }
+
+    public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
+    {
+        var kubeconfigPath = string.IsNullOrWhiteSpace(_kubeconfigPath)
+            ? KubernetesClientConfiguration.KubeConfigDefaultLocation
+            : _kubeconfigPath;
+
+        var contexts = new List<KubeContextInfo>();
+        if (string.IsNullOrWhiteSpace(kubeconfigPath) || !File.Exists(kubeconfigPath))
+            return Task.FromResult<IReadOnlyList<KubeContextInfo>>(contexts);
+
+        var config = KubernetesClientConfiguration.LoadKubeConfig(kubeconfigPath);
+        var currentContext = config.CurrentContext;
+
+        foreach (var ctx in config.Contexts ?? [])
+        {
+            contexts.Add(new KubeContextInfo
+            {
+                Name = ctx.Name,
+                Cluster = ctx.ContextDetails?.Cluster,
+                User = ctx.ContextDetails?.User,
+                Namespace = ctx.ContextDetails?.Namespace,
+                IsCurrent = string.Equals(ctx.Name, currentContext, StringComparison.Ordinal)
+            });
+        }
+
+        return Task.FromResult<IReadOnlyList<KubeContextInfo>>(contexts.OrderBy(c => c.Name).ToList());
+    }
+
+    public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
+    {
+        // Helm stores releases as Secrets with type=helm.sh/release.v1 and label owner=helm
+        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+            ns, labelSelector: "owner=helm", cancellationToken: ct);
+
+        var releases = new Dictionary<string, HelmReleaseInfo>();
+        foreach (var secret in secrets.Items)
+        {
+            var labels = secret.Metadata.Labels;
+            var name = (labels is not null && labels.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
+            var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+            var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+            var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
+
+            // Keep only the latest revision per release name
+            if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
+                continue;
+
+            releases[name] = new HelmReleaseInfo
+            {
+                Name = name,
+                Namespace = ns,
+                Chart = chart,
+                Revision = version,
+                Status = status,
+                Updated = secret.Metadata.CreationTimestamp.HasValue
+                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                    : null
+            };
+        }
+
+        return releases.Values.OrderBy(r => r.Name).ToList();
+    }
+
+    public async Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
+    {
+        object resource = kind.ToLowerInvariant() switch
+        {
+            "deployment" => await _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct),
+            "pod" => await _client.CoreV1.ReadNamespacedPodAsync(name, ns, cancellationToken: ct),
+            "ingress" => await _client.NetworkingV1.ReadNamespacedIngressAsync(name, ns, cancellationToken: ct),
+            "service" => await _client.CoreV1.ReadNamespacedServiceAsync(name, ns, cancellationToken: ct),
+            _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
+        };
+
+        return KubernetesYaml.Serialize(resource);
     }
 
     public async IAsyncEnumerable<string> StreamPodLogsAsync(

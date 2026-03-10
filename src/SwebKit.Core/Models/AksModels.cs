@@ -78,3 +78,24 @@ public class IngressPath
     public string? ServiceName { get; set; }
     public int? ServicePort { get; set; }
 }
+
+public class HelmReleaseInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? Chart { get; set; }
+    public string? AppVersion { get; set; }
+    public string? ChartVersion { get; set; }
+    public string Status { get; set; } = "unknown";
+    public int Revision { get; set; }
+    public DateTimeOffset? Updated { get; set; }
+}
+
+public class KubeContextInfo
+{
+    public required string Name { get; set; }
+    public string? Cluster { get; set; }
+    public string? User { get; set; }
+    public string? Namespace { get; set; }
+    public bool IsCurrent { get; set; }
+}

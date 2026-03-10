@@ -262,6 +262,92 @@ public class DemoAksClient : IAksClient
         return Task.FromResult(namespaces);
     }
 
+    public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<KubeContextInfo> contexts =
+        [
+            new KubeContextInfo { Name = "aks-ecommerce-dev", Cluster = "aks-ecommerce-dev-westeu", User = "clusterUser_rg-ecommerce-dev", Namespace = "ecommerce", IsCurrent = true },
+            new KubeContextInfo { Name = "aks-ecommerce-staging", Cluster = "aks-ecommerce-stg-westeu", User = "clusterUser_rg-ecommerce-stg", Namespace = "ecommerce" },
+            new KubeContextInfo { Name = "aks-ecommerce-prod", Cluster = "aks-ecommerce-prod-westeu", User = "clusterUser_rg-ecommerce-prod", Namespace = "ecommerce" },
+            new KubeContextInfo { Name = "aks-platform-dev", Cluster = "aks-platform-dev-northeu", User = "clusterUser_rg-platform-dev" },
+            new KubeContextInfo { Name = "minikube", Cluster = "minikube", User = "minikube", Namespace = "default" }
+        ];
+        return Task.FromResult(contexts);
+    }
+
+    public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        var now = DateTimeOffset.UtcNow;
+        return new List<HelmReleaseInfo>
+        {
+            new() { Name = "order-api", Namespace = ns, Chart = "order-api-1.8.3", AppVersion = "1.8.3", ChartVersion = "1.8.3", Status = "deployed", Revision = 12, Updated = now.AddHours(-6) },
+            new() { Name = "product-catalog", Namespace = ns, Chart = "product-catalog-2.1.0", AppVersion = "2.1.0", ChartVersion = "2.1.0", Status = "deployed", Revision = 8, Updated = now.AddDays(-1) },
+            new() { Name = "user-service", Namespace = ns, Chart = "user-service-1.4.7", AppVersion = "1.4.7", ChartVersion = "1.4.7", Status = "deployed", Revision = 15, Updated = now.AddHours(-2) },
+            new() { Name = "payment-gateway", Namespace = ns, Chart = "payment-gateway-3.0.1", AppVersion = "3.0.1", ChartVersion = "3.0.1", Status = "deployed", Revision = 5, Updated = now.AddDays(-3) },
+            new() { Name = "ingress-nginx", Namespace = ns, Chart = "ingress-nginx-4.9.1", AppVersion = "1.9.6", ChartVersion = "4.9.1", Status = "deployed", Revision = 3, Updated = now.AddDays(-14) },
+            new() { Name = "cert-manager", Namespace = ns, Chart = "cert-manager-1.14.4", AppVersion = "1.14.4", ChartVersion = "1.14.4", Status = "deployed", Revision = 2, Updated = now.AddDays(-30) },
+            new() { Name = "search-indexer", Namespace = ns, Chart = "search-indexer-0.9.2", AppVersion = "0.9.2", ChartVersion = "0.9.2", Status = "failed", Revision = 4, Updated = now.AddMinutes(-45) },
+            new() { Name = "istio-base", Namespace = ns, Chart = "base-1.20.3", AppVersion = "1.20.3", ChartVersion = "1.20.3", Status = "deployed", Revision = 1, Updated = now.AddDays(-60) },
+        };
+    }
+
+    public Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
+    {
+        var yaml = $"""
+            apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}
+            kind: {kind}
+            metadata:
+              name: {name}
+              namespace: {ns}
+              labels:
+                app: {name}
+                version: "1.8.3"
+                team: commerce
+              annotations:
+                deployment.kubernetes.io/revision: "12"
+            spec:
+              replicas: 3
+              selector:
+                matchLabels:
+                  app: {name}
+              template:
+                metadata:
+                  labels:
+                    app: {name}
+                spec:
+                  containers:
+                  - name: {name}
+                    image: acr.azurecr.io/{name}:1.8.3
+                    ports:
+                    - containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                    readinessProbe:
+                      httpGet:
+                        path: /ready
+                        port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                  - name: istio-proxy
+                    image: docker.io/istio/proxyv2:1.20.3
+                    ports:
+                    - containerPort: 15090
+            """;
+        return Task.FromResult(yaml);
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)

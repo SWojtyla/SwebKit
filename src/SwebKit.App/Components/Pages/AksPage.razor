@@ -6,16 +6,21 @@
     @* ── Toolbar ── *@
     <div class="aks-toolbar">
         <span class="connection-dot @(Client is not null ? "dot-ok" : "dot-unknown")"></span>
-        <span class="aks-context-label">
-            @if (Client is not null)
+
+        @* ── Context dropdown ── *@
+        <label class="aks-ns-label">Context</label>
+        <select class="aks-ns-select" value="@ActiveContext" @onchange="OnContextChanged">
+            @if (Contexts.Count == 0)
             {
-                <span>@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</span>
+                <option value="">@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</option>
             }
-            else
+            @foreach (var ctx in Contexts)
             {
-                <span>Not connected</span>
+                <option value="@ctx.Name" selected="@(ctx.Name == ActiveContext)">
+                    @ctx.Name @(ctx.IsCurrent ? "(current)" : "")
+                </option>
             }
-        </span>
+        </select>
 
         <span class="aks-toolbar-divider"></span>
 
@@ -28,8 +33,9 @@
             }
         </select>
 
-        @* ── Resource type selector ── *@
         <span class="aks-toolbar-divider"></span>
+
+        @* ── Resource type selector ── *@
         @foreach (var rt in ResourceTypes)
         {
             <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
@@ -69,7 +75,7 @@
     }
     else
     {
-        <div class="aks-content @(LogPodName is not null ? "log-open" : "") @(ShowEvents ? "" : "events-collapsed")">
+        <div class="aks-content @(YamlTarget is not null || LogPodName is not null ? "side-open" : "") @(ShowEvents ? "" : "events-collapsed")">
             @* ── Main resource panel ── *@
             <div class="aks-resource-panel">
                 <div class="aks-section-header">
@@ -97,10 +103,12 @@
                                         @context.Status
                                     </span>
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Width="80px">
-                                    <span @onclick:stopPropagation="true">
+                                <TemplateColumn Title="" Width="120px">
+                                    <span @onclick:stopPropagation="true" class="aks-row-actions">
                                         <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForDeployment(context)"
                                                       Title="Stream pod logs">Logs</FluentButton>
+                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Deployment", context.Name))"
+                                                      Title="View YAML">YAML</FluentButton>
                                     </span>
                                 </TemplateColumn>
                             </FluentDataGrid>
@@ -129,10 +137,12 @@
                                         @FormatAge(context.StartTime.Value)
                                     }
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Width="80px">
-                                    <span @onclick:stopPropagation="true">
+                                <TemplateColumn Title="" Width="120px">
+                                    <span @onclick:stopPropagation="true" class="aks-row-actions">
                                         <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForPod(context)"
                                                       Title="Stream pod logs">Logs</FluentButton>
+                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Pod", context.Name))"
+                                                      Title="View YAML">YAML</FluentButton>
                                     </span>
                                 </TemplateColumn>
                             </FluentDataGrid>
@@ -153,8 +163,37 @@
                                 <TemplateColumn Title="Address" Width="140px">
                                     @string.Join(", ", context.Addresses)
                                 </TemplateColumn>
-                                <TemplateColumn Title="Paths" Width="70px">
-                                    <span class="aks-section-count">@context.Rules.Sum(r => r.Paths.Count)</span>
+                                <TemplateColumn Title="" Width="80px">
+                                    <span @onclick:stopPropagation="true">
+                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Ingress", context.Name))"
+                                                      Title="View YAML">YAML</FluentButton>
+                                    </span>
+                                </TemplateColumn>
+                            </FluentDataGrid>
+                            break;
+
+                        case "Helm":
+                            <FluentDataGrid Items="@HelmReleases.AsQueryable()" TGridItem="HelmReleaseInfo"
+                                            Virtualize="true" ItemSize="36">
+                                <TemplateColumn Title="Release">
+                                    <span class="aks-resource-name">@context.Name</span>
+                                </TemplateColumn>
+                                <PropertyColumn Property="h => h.Chart" Title="Chart" />
+                                <PropertyColumn Property="h => h.AppVersion" Title="App Version" Width="100px" />
+                                <TemplateColumn Title="Rev" Width="60px">
+                                    <span class="aks-section-count">@context.Revision</span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Status" Width="100px">
+                                    <span class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
+                                        @context.Status
+                                    </span>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Updated" Width="100px">
+                                    @if (context.Updated.HasValue)
+                                    {
+                                        @FormatAge(context.Updated.Value)
+                                        <span class="aks-age-suffix"> ago</span>
+                                    }
                                 </TemplateColumn>
                             </FluentDataGrid>
                             break;
@@ -216,8 +255,35 @@
                 </button>
             }
 
+            @* ── YAML viewer slide-out ── *@
+            @if (YamlTarget is not null)
+            {
+                <div class="aks-yaml-panel">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title" title="@YamlTarget.Value.Kind/@YamlTarget.Value.Name">
+                            @YamlTarget.Value.Kind: @YamlTarget.Value.Name
+                        </span>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="CloseYaml" Title="Close YAML">✕</FluentButton>
+                    </div>
+                    <div class="aks-yaml-content">
+                        @if (YamlLoading)
+                        {
+                            <LoadingSpinner Message="Loading YAML…" />
+                        }
+                        else if (YamlError is not null)
+                        {
+                            <div class="aks-yaml-error">@YamlError</div>
+                        }
+                        else
+                        {
+                            <pre class="aks-yaml-pre">@YamlText</pre>
+                        }
+                    </div>
+                </div>
+            }
+
             @* ── Log slide-out ── *@
-            @if (LogPodName is not null)
+            @if (LogPodName is not null && YamlTarget is null)
             {
                 <div class="aks-log-panel">
                     <div class="aks-section-header">
@@ -233,31 +299,40 @@
 </div>
 
 @code {
-    private static readonly string[] ResourceTypes = ["Deployments", "Pods", "Ingresses"];
+    private static readonly string[] ResourceTypes = ["Deployments", "Pods", "Ingresses", "Helm"];
 
     private IAksClient? Client;
     private List<DeploymentInfo> Deployments = [];
     private List<PodInfo> Pods = [];
     private List<IngressInfo> Ingresses = [];
+    private List<HelmReleaseInfo> HelmReleases = [];
     private List<KubernetesEvent> Events = [];
     private List<string> Namespaces = ["default"];
+    private List<KubeContextInfo> Contexts = [];
     private DeploymentInfo? SelectedDeployment;
     private bool IsLoading;
     private string? ErrorMessage;
     private string? LogPodName;
+
+    // YAML viewer state
+    private (string Kind, string Name)? YamlTarget;
+    private string? YamlText;
+    private string? YamlError;
+    private bool YamlLoading;
 
     private string CurrentNamespace = "default";
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
     private bool ShowEvents = true;
 
-    private bool HasAnyData => Deployments.Count > 0 || Pods.Count > 0 || Ingresses.Count > 0;
+    private bool HasAnyData => Deployments.Count > 0 || Pods.Count > 0 || Ingresses.Count > 0 || HelmReleases.Count > 0;
 
     private int ActiveResourceCount => ActiveResourceType switch
     {
         "Deployments" => Deployments.Count,
         "Pods" => Pods.Count,
         "Ingresses" => Ingresses.Count,
+        "Helm" => HelmReleases.Count,
         _ => 0
     };
 
@@ -279,6 +354,7 @@
         if (AppState.UseDemoData)
         {
             Client = new SwebKit.Core.Services.DemoAksClient();
+            await LoadContextsAsync();
             await LoadNamespacesAsync();
             await LoadAsync();
             return;
@@ -293,10 +369,27 @@
                 string.IsNullOrWhiteSpace(config.KubeconfigContext) ? null : config.KubeconfigContext,
                 string.IsNullOrWhiteSpace(config.KubeconfigPath) ? null : config.KubeconfigPath,
                 config.UseAzureCredentialFallback);
+            await LoadContextsAsync();
             await LoadNamespacesAsync();
             await LoadAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
+    }
+
+    private async Task LoadContextsAsync()
+    {
+        if (Client is null) return;
+        try
+        {
+            Contexts = (await Client.GetContextsAsync()).ToList();
+            // If no active context set, pick the current one
+            if (string.IsNullOrWhiteSpace(ActiveContext))
+            {
+                var current = Contexts.FirstOrDefault(c => c.IsCurrent);
+                if (current is not null) ActiveContext = current.Name;
+            }
+        }
+        catch { /* keep empty */ }
     }
 
     private async Task LoadNamespacesAsync()
@@ -322,21 +415,46 @@
         try
         {
             var ns = CurrentNamespace;
-            // Load all resource types in parallel
             var deploymentsTask = Client.GetDeploymentsAsync(ns);
             var podsTask = Client.GetPodsAsync(ns);
             var ingressesTask = Client.GetIngressesAsync(ns);
+            var helmTask = Client.GetHelmReleasesAsync(ns);
             var eventsTask = Client.GetEventsAsync(ns);
 
-            await Task.WhenAll(deploymentsTask, podsTask, ingressesTask, eventsTask);
+            await Task.WhenAll(deploymentsTask, podsTask, ingressesTask, helmTask, eventsTask);
 
             Deployments = deploymentsTask.Result.ToList();
             Pods = podsTask.Result.ToList();
             Ingresses = ingressesTask.Result.ToList();
+            HelmReleases = helmTask.Result.ToList();
             Events = eventsTask.Result.Take(50).ToList();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
         finally { IsLoading = false; StateHasChanged(); }
+    }
+
+    private async Task OnContextChanged(ChangeEventArgs e)
+    {
+        var newContext = e.Value?.ToString() ?? "";
+        if (newContext == ActiveContext) return;
+        ActiveContext = newContext;
+
+        // Reconnect with the new context
+        if (!AppState.UseDemoData)
+        {
+            var config = AppState.CurrentEnvironment?.AksConfig;
+            try
+            {
+                Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
+                    string.IsNullOrWhiteSpace(newContext) ? null : newContext,
+                    string.IsNullOrWhiteSpace(config?.KubeconfigPath) ? null : config?.KubeconfigPath,
+                    config?.UseAzureCredentialFallback ?? true);
+            }
+            catch (Exception ex) { ErrorMessage = ex.Message; return; }
+        }
+
+        await LoadNamespacesAsync();
+        await LoadAsync();
     }
 
     private async Task OnNamespaceChanged(ChangeEventArgs e)
@@ -353,17 +471,45 @@
 
     private async Task OpenLogsForDeployment(DeploymentInfo deployment)
     {
+        CloseYaml();
         var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
         if (pod is not null) { LogPodName = pod.Name; StateHasChanged(); }
     }
 
     private void OpenLogsForPod(PodInfo pod)
     {
+        CloseYaml();
         LogPodName = pod.Name;
         StateHasChanged();
     }
 
     private void CloseLogs() { LogPodName = null; StateHasChanged(); }
+
+    private async Task OpenYaml(string kind, string name)
+    {
+        LogPodName = null; // close logs if open
+        YamlTarget = (kind, name);
+        YamlText = null;
+        YamlError = null;
+        YamlLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            YamlText = await Client!.GetResourceYamlAsync(CurrentNamespace, kind, name);
+        }
+        catch (Exception ex)
+        {
+            YamlError = ex.Message;
+        }
+        finally
+        {
+            YamlLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseYaml() { YamlTarget = null; YamlText = null; YamlError = null; StateHasChanged(); }
 
     private static string TruncatePodName(string name)
         => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;

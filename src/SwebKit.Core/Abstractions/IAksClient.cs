@@ -12,6 +12,9 @@ public interface IAksClient
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
     Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default);
     Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default);
+    Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }
