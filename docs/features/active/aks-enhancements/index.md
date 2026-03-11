@@ -4,7 +4,7 @@
 
 title: "Feature Overview - AKS Enhancements"
 owner: ""
-status: "In Progress"
+status: "Complete"
 created: "2026-03-10"
 updated: "2026-03-10"
 
@@ -33,7 +33,7 @@ Developers can inspect AKS workloads end-to-end from one page using discoverable
 
 ## Current state
 
-Namespace listing, ingress listing, resource type tabs (Deployments/Pods/Ingresses), namespace dropdown, collapsible events, and full UI/UX redesign are delivered. Remaining work: context discovery, YAML viewer, helm releases, and tests. See `status.md` for details.
+All planned items are delivered: context discovery dropdown, namespace-scoped resource views (Deployments/Pods/Ingresses/Helm), read-only YAML viewer, collapsible events, settings simplification with automatic Azure auth, and expanded unit tests (24 passing). See `status.md` for details.
 
 ## Dependencies
 

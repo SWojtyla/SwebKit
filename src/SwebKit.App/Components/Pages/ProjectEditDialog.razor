@@ -109,9 +109,8 @@
                     },
                     AksConfig = e.AksConfig is null ? null : new AksConfig
                     {
+                        KubeconfigPath = e.AksConfig.KubeconfigPath,
                         KubeconfigContext = e.AksConfig.KubeconfigContext,
-                        ExplicitClusterUrl = e.AksConfig.ExplicitClusterUrl,
-                        CredentialRef = e.AksConfig.CredentialRef,
                         DefaultNamespace = e.AksConfig.DefaultNamespace,
                         WatchedDeployments = [.. e.AksConfig.WatchedDeployments]
                     }

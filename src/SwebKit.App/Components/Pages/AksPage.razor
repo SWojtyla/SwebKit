@@ -367,8 +367,7 @@
         {
             Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
                 string.IsNullOrWhiteSpace(config.KubeconfigContext) ? null : config.KubeconfigContext,
-                string.IsNullOrWhiteSpace(config.KubeconfigPath) ? null : config.KubeconfigPath,
-                config.UseAzureCredentialFallback);
+                string.IsNullOrWhiteSpace(config.KubeconfigPath) ? null : config.KubeconfigPath);
             await LoadContextsAsync();
             await LoadNamespacesAsync();
             await LoadAsync();
@@ -447,8 +446,7 @@
             {
                 Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
                     string.IsNullOrWhiteSpace(newContext) ? null : newContext,
-                    string.IsNullOrWhiteSpace(config?.KubeconfigPath) ? null : config?.KubeconfigPath,
-                    config?.UseAzureCredentialFallback ?? true);
+                    string.IsNullOrWhiteSpace(config?.KubeconfigPath) ? null : config?.KubeconfigPath);
             }
             catch (Exception ex) { ErrorMessage = ex.Message; return; }
         }

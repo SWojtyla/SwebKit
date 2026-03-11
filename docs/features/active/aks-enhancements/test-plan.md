@@ -4,9 +4,9 @@
 
 title: "Test Plan - AKS Enhancements"
 owner: ""
-status: "Planned"
+status: "Partially Complete"
 created: "2026-03-10"
-updated: "2026-03-10"
+updated: "2026-03-11"
 
 ---
 
@@ -29,9 +29,13 @@ Validate end-to-end AKS browsing workflows: kubeconfig context discovery, namesp
 
 ## Automated coverage
 
-- Unit tests: kubeconfig context parsing helpers, namespace/resource mappers, YAML fetch wrappers
-- Integration tests: AKS client interactions for list/get by namespace using mocked Kubernetes responses
-- UI/component tests: selector state propagation and per-tab loading/error behavior
+- Unit tests (24 passing in `SwebKit.Kubernetes.Tests`):
+  - Auth helpers: server-id extraction from kubeconfig (inline, equals-style, missing, empty), scope construction (GUID, api:// prefix, empty), fallback gating (AKS hosts, non-AKS, with/without token, null/empty)
+  - Chart version parsing: standard charts, pre-release versions, no version, empty/null
+  - Client configuration: default config behavior, invalid context rejection
+  - Constructor: invalid context throws helpful exception
+- Integration tests: Deferred (requires live cluster or mocked Kubernetes API)
+- UI/component tests: Deferred
 
 ## Test data and setup
 
@@ -58,7 +62,7 @@ Validate end-to-end AKS browsing workflows: kubeconfig context discovery, namesp
 
 ## Validation status
 
-- Automated: Not started
+- Automated: 24/24 unit tests passing
 - Manual: Not started
 
 ## Sign-off

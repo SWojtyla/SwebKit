@@ -21,16 +21,13 @@ public class KubernetesAksClient : IAksClient
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
-        string? kubeconfigPath = null,
-        bool enableAzureCredentialFallback = true)
+        string? kubeconfigPath = null)
     {
         _kubeconfigPath = kubeconfigPath;
         _kubeconfigContext = kubeconfigContext;
 
         var config = BuildClientConfiguration(kubeconfigContext, kubeconfigPath);
-
-        if (enableAzureCredentialFallback)
-            TryApplyAzureCredentialFallback(config, kubeconfigPath);
+        TryApplyAzureCredentialFallback(config, kubeconfigPath);
 
         _client = new k8s.Kubernetes(config);
     }
@@ -212,11 +209,14 @@ public class KubernetesAksClient : IAksClient
             if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
                 continue;
 
+            var chartVersion = TryParseChartVersion(chart);
+
             releases[name] = new HelmReleaseInfo
             {
                 Name = name,
                 Namespace = ns,
                 Chart = chart,
+                ChartVersion = chartVersion,
                 Revision = version,
                 Status = status,
                 Updated = secret.Metadata.CreationTimestamp.HasValue
@@ -226,6 +226,24 @@ public class KubernetesAksClient : IAksClient
         }
 
         return releases.Values.OrderBy(r => r.Name).ToList();
+    }
+
+    /// <summary>
+    /// Extracts the version portion from a Helm chart label value (e.g. "ingress-nginx-4.9.1" → "4.9.1").
+    /// </summary>
+    internal static string? TryParseChartVersion(string? chart)
+    {
+        if (string.IsNullOrWhiteSpace(chart))
+            return null;
+
+        // Helm chart labels use format "chart-name-X.Y.Z". Find the last hyphen before a digit sequence.
+        for (var i = chart.Length - 1; i >= 0; i--)
+        {
+            if (chart[i] == '-' && i + 1 < chart.Length && char.IsDigit(chart[i + 1]))
+                return chart[(i + 1)..];
+        }
+
+        return null;
     }
 
     public async Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
