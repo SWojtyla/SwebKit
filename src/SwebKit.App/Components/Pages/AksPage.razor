@@ -94,17 +94,23 @@
                                             RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
                                             OnRowClick="@(r => { if (r.Item is not null) { SelectedDeployment = r.Item; StateHasChanged(); } })">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name" @oncontextmenu="e => ShowDeploymentMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowDeploymentMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-resource-name">@context.Name</span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Ready" Width="90px">
-                                    <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
-                                        @context.ReadyReplicas / @context.Replicas
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowDeploymentMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
+                                            @context.ReadyReplicas / @context.Replicas
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Status" Width="100px">
-                                    <span class="aks-status @(context.Status is "Running" or "Available" ? "running" : "other")">
-                                        @context.Status
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowDeploymentMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-status @(context.Status is "Running" or "Available" ? "running" : "other")">
+                                            @context.Status
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
                             </FluentDataGrid>
                             break;
@@ -113,24 +119,36 @@
                             <FluentDataGrid Items="@Pods.AsQueryable()" TGridItem="PodInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-resource-name">@context.Name</span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Phase" Width="110px">
-                                    <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
-                                        @context.Phase
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
+                                            @context.Phase
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Ready" Width="70px">
-                                    <span class="aks-ready-badge @(context.Ready ? "healthy" : "degraded")">
-                                        @(context.Ready ? "Yes" : "No")
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-ready-badge @(context.Ready ? "healthy" : "degraded")">
+                                            @(context.Ready ? "Yes" : "No")
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
-                                <PropertyColumn Property="p => p.NodeName" Title="Node" Width="180px" />
+                                <TemplateColumn Title="Node" Width="180px">
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @context.NodeName
+                                    </div>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Age" Width="80px">
-                                    @if (context.StartTime.HasValue)
-                                    {
-                                        @FormatAge(context.StartTime.Value)
-                                    }
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @if (context.StartTime.HasValue)
+                                        {
+                                            @FormatAge(context.StartTime.Value)
+                                        }
+                                    </div>
                                 </TemplateColumn>
                             </FluentDataGrid>
                             break;
@@ -139,16 +157,26 @@
                             <FluentDataGrid Items="@Ingresses.AsQueryable()" TGridItem="IngressInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-resource-name">@context.Name</span>
+                                    </div>
                                 </TemplateColumn>
-                                <PropertyColumn Property="i => i.IngressClass" Title="Class" Width="100px" />
+                                <TemplateColumn Title="Class" Width="100px">
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @context.IngressClass
+                                    </div>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Hosts">
-                                    <span class="aks-ingress-hosts">
-                                        @string.Join(", ", context.Rules.Where(r => r.Host is not null).Select(r => r.Host!))
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-ingress-hosts">
+                                            @string.Join(", ", context.Rules.Where(r => r.Host is not null).Select(r => r.Host!))
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Address" Width="140px">
-                                    @string.Join(", ", context.Addresses)
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @string.Join(", ", context.Addresses)
+                                    </div>
                                 </TemplateColumn>
                             </FluentDataGrid>
                             break;
@@ -157,24 +185,40 @@
                             <FluentDataGrid Items="@HelmReleases.AsQueryable()" TGridItem="HelmReleaseInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Release">
-                                    <span class="aks-resource-name" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-resource-name">@context.Name</span>
+                                    </div>
                                 </TemplateColumn>
-                                <PropertyColumn Property="h => h.Chart" Title="Chart" />
-                                <PropertyColumn Property="h => h.AppVersion" Title="App Version" Width="100px" />
+                                <TemplateColumn Title="Chart">
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @context.Chart
+                                    </div>
+                                </TemplateColumn>
+                                <TemplateColumn Title="App Version" Width="100px">
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @context.AppVersion
+                                    </div>
+                                </TemplateColumn>
                                 <TemplateColumn Title="Rev" Width="60px">
-                                    <span class="aks-section-count">@context.Revision</span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-section-count">@context.Revision</span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Status" Width="100px">
-                                    <span class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
-                                        @context.Status
-                                    </span>
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        <span class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
+                                            @context.Status
+                                        </span>
+                                    </div>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Updated" Width="100px">
-                                    @if (context.Updated.HasValue)
-                                    {
-                                        @FormatAge(context.Updated.Value)
-                                        <span class="aks-age-suffix"> ago</span>
-                                    }
+                                    <div class="aks-row-ctx" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>
+                                        @if (context.Updated.HasValue)
+                                        {
+                                            @FormatAge(context.Updated.Value)
+                                            <span class="aks-age-suffix"> ago</span>
+                                        }
+                                    </div>
                                 </TemplateColumn>
                             </FluentDataGrid>
                             break;
