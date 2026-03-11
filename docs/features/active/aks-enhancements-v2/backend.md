@@ -53,8 +53,8 @@ Extend `IAksClient` with mutative operations, Helm release inspection, pod metri
 
 ## Tasks
 
-- [ ] Add `DeletePodAsync` to `IAksClient` and implement in both clients
-- [ ] Add `RestartDeploymentAsync` to `IAksClient` and implement (patch pod template annotation)
+- [x] Add `DeletePodAsync` to `IAksClient` and implement in both clients
+- [x] Add `RestartDeploymentAsync` to `IAksClient` and implement (patch pod template annotation)
 - [ ] Add `ScaleDeploymentAsync` to `IAksClient` and implement
 - [ ] Add `GetHelmReleaseHistoryAsync` to `IAksClient` and implement (query all secrets per release)
 - [ ] Add `GetHelmReleaseValuesAsync` to `IAksClient` and implement (decode release secret data)

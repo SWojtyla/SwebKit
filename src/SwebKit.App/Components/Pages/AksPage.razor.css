@@ -408,12 +408,6 @@
     font-size: 12px;
 }
 
-/* ── Row actions ── */
-.aks-row-actions {
-    display: inline-flex;
-    gap: 2px;
-}
-
 /* ── Helm age suffix ── */
 .aks-age-suffix {
     color: var(--color-text-muted);

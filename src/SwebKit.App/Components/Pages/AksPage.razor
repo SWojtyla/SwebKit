@@ -2,7 +2,7 @@
 @inject AppStateService AppState
 @implements IDisposable
 
-<div class="aks-page">
+<div class="aks-page" @oncontextmenu:preventDefault>
     @* ── Toolbar ── *@
     <div class="aks-toolbar">
         <span class="connection-dot @(Client is not null ? "dot-ok" : "dot-unknown")"></span>
@@ -58,6 +58,9 @@
         <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
     }
 
+    @* ── Confirm bar ── *@
+    <AksConfirmBar @ref="Confirm" />
+
     @* ── Empty / Loading / Content ── *@
     @if (Client is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.AksConfig is null)
     {
@@ -82,7 +85,7 @@
                     <span class="aks-section-title">@ActiveResourceType</span>
                     <span class="aks-section-count">@ActiveResourceCount</span>
                 </div>
-                <div class="aks-table-wrap">
+                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault>
                     @switch (ActiveResourceType)
                     {
                         case "Deployments":
@@ -91,7 +94,7 @@
                                             RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
                                             OnRowClick="@(r => { if (r.Item is not null) { SelectedDeployment = r.Item; StateHasChanged(); } })">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name">@context.Name</span>
+                                    <span class="aks-resource-name" @oncontextmenu="e => ShowDeploymentMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Ready" Width="90px">
                                     <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
@@ -103,14 +106,6 @@
                                         @context.Status
                                     </span>
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Width="120px">
-                                    <span @onclick:stopPropagation="true" class="aks-row-actions">
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForDeployment(context)"
-                                                      Title="Stream pod logs">Logs</FluentButton>
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Deployment", context.Name))"
-                                                      Title="View YAML">YAML</FluentButton>
-                                    </span>
-                                </TemplateColumn>
                             </FluentDataGrid>
                             break;
 
@@ -118,7 +113,7 @@
                             <FluentDataGrid Items="@Pods.AsQueryable()" TGridItem="PodInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name">@context.Name</span>
+                                    <span class="aks-resource-name" @oncontextmenu="e => ShowPodMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Phase" Width="110px">
                                     <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
@@ -137,14 +132,6 @@
                                         @FormatAge(context.StartTime.Value)
                                     }
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Width="120px">
-                                    <span @onclick:stopPropagation="true" class="aks-row-actions">
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenLogsForPod(context)"
-                                                      Title="Stream pod logs">Logs</FluentButton>
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Pod", context.Name))"
-                                                      Title="View YAML">YAML</FluentButton>
-                                    </span>
-                                </TemplateColumn>
                             </FluentDataGrid>
                             break;
 
@@ -152,7 +139,7 @@
                             <FluentDataGrid Items="@Ingresses.AsQueryable()" TGridItem="IngressInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Name">
-                                    <span class="aks-resource-name">@context.Name</span>
+                                    <span class="aks-resource-name" @oncontextmenu="e => ShowIngressMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
                                 </TemplateColumn>
                                 <PropertyColumn Property="i => i.IngressClass" Title="Class" Width="100px" />
                                 <TemplateColumn Title="Hosts">
@@ -163,12 +150,6 @@
                                 <TemplateColumn Title="Address" Width="140px">
                                     @string.Join(", ", context.Addresses)
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Width="80px">
-                                    <span @onclick:stopPropagation="true">
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenYaml("Ingress", context.Name))"
-                                                      Title="View YAML">YAML</FluentButton>
-                                    </span>
-                                </TemplateColumn>
                             </FluentDataGrid>
                             break;
 
@@ -176,7 +157,7 @@
                             <FluentDataGrid Items="@HelmReleases.AsQueryable()" TGridItem="HelmReleaseInfo"
                                             Virtualize="true" ItemSize="36">
                                 <TemplateColumn Title="Release">
-                                    <span class="aks-resource-name">@context.Name</span>
+                                    <span class="aks-resource-name" @oncontextmenu="e => ShowHelmMenu(e, context)" @oncontextmenu:preventDefault>@context.Name</span>
                                 </TemplateColumn>
                                 <PropertyColumn Property="h => h.Chart" Title="Chart" />
                                 <PropertyColumn Property="h => h.AppVersion" Title="App Version" Width="100px" />
@@ -298,6 +279,30 @@
     }
 </div>
 
+@* ── Context menus ── *@
+<ContextMenu @ref="DeploymentMenu">
+    <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View YAML</button>
+    <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View Logs</button>
+    <div class="ctx-separator"></div>
+    <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart Deployment</button>
+</ContextMenu>
+
+<ContextMenu @ref="PodMenu">
+    <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View YAML</button>
+    <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View Logs</button>
+    <div class="ctx-separator"></div>
+    <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill Pod</button>
+</ContextMenu>
+
+<ContextMenu @ref="IngressMenu">
+    <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View YAML</button>
+    <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128279;</span> Copy Host URL</button>
+</ContextMenu>
+
+<ContextMenu @ref="HelmMenu">
+    <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release YAML</button>
+</ContextMenu>
+
 @code {
     private static readonly string[] ResourceTypes = ["Deployments", "Pods", "Ingresses", "Helm"];
 
@@ -325,6 +330,18 @@
     private string ActiveResourceType = "Deployments";
     private bool ShowEvents = true;
 
+    // Context menu refs and targets
+    private ContextMenu DeploymentMenu = default!;
+    private ContextMenu PodMenu = default!;
+    private ContextMenu IngressMenu = default!;
+    private ContextMenu HelmMenu = default!;
+    private AksConfirmBar Confirm = default!;
+
+    private DeploymentInfo? CtxDeployment;
+    private PodInfo? CtxPod;
+    private IngressInfo? CtxIngress;
+    private HelmReleaseInfo? CtxHelm;
+
     private bool HasAnyData => Deployments.Count > 0 || Pods.Count > 0 || Ingresses.Count > 0 || HelmReleases.Count > 0;
 
     private int ActiveResourceCount => ActiveResourceType switch
@@ -335,6 +352,8 @@
         "Helm" => HelmReleases.Count,
         _ => 0
     };
+
+    private bool IsProduction => AppState.CurrentEnvironment?.IsProduction ?? false;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -381,7 +400,6 @@
         try
         {
             Contexts = (await Client.GetContextsAsync()).ToList();
-            // If no active context set, pick the current one
             if (string.IsNullOrWhiteSpace(ActiveContext))
             {
                 var current = Contexts.FirstOrDefault(c => c.IsCurrent);
@@ -438,7 +456,6 @@
         if (newContext == ActiveContext) return;
         ActiveContext = newContext;
 
-        // Reconnect with the new context
         if (!AppState.UseDemoData)
         {
             var config = AppState.CurrentEnvironment?.AksConfig;
@@ -467,25 +484,140 @@
         StateHasChanged();
     }
 
-    private async Task OpenLogsForDeployment(DeploymentInfo deployment)
+    // ── Context menu show helpers ──
+
+    private void OnTableContextMenu(MouseEventArgs e)
     {
+        // Suppress browser context menu on the table area (handled per-row below)
+    }
+
+    private void ShowDeploymentMenu(MouseEventArgs e, DeploymentInfo d)
+    {
+        CtxDeployment = d;
+        DeploymentMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private void ShowPodMenu(MouseEventArgs e, PodInfo p)
+    {
+        CtxPod = p;
+        PodMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private void ShowIngressMenu(MouseEventArgs e, IngressInfo i)
+    {
+        CtxIngress = i;
+        IngressMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private void ShowHelmMenu(MouseEventArgs e, HelmReleaseInfo h)
+    {
+        CtxHelm = h;
+        HelmMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    // ── Context menu actions ──
+
+    private async Task OnCtxViewYaml(char source)
+    {
+        var (kind, name) = source switch
+        {
+            'D' => ("Deployment", CtxDeployment?.Name),
+            'P' => ("Pod", CtxPod?.Name),
+            'I' => ("Ingress", CtxIngress?.Name),
+            'H' => ("Helm", CtxHelm?.Name),
+            _ => ((string?)null, (string?)null)
+        };
+        CloseAllMenus();
+        if (kind is not null && name is not null)
+            await OpenYaml(kind, name);
+    }
+
+    private void OnCtxViewDeploymentLogs()
+    {
+        var deployment = CtxDeployment;
+        CloseAllMenus();
+        if (deployment is null) return;
         CloseYaml();
         var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
         if (pod is not null) { LogPodName = pod.Name; StateHasChanged(); }
     }
 
-    private void OpenLogsForPod(PodInfo pod)
+    private void OnCtxViewPodLogs()
     {
+        var pod = CtxPod;
+        CloseAllMenus();
+        if (pod is null) return;
         CloseYaml();
         LogPodName = pod.Name;
         StateHasChanged();
     }
 
+    private async Task OnCtxRestartDeployment()
+    {
+        var deployment = CtxDeployment;
+        CloseAllMenus();
+        if (deployment is null || Client is null) return;
+
+        var confirmed = await Confirm.ShowAsync(
+            $"Restart deployment \"{deployment.Name}\"?",
+            deployment.Name,
+            requireTypedName: IsProduction);
+        if (!confirmed) return;
+
+        try
+        {
+            await Client.RestartDeploymentAsync(CurrentNamespace, deployment.Name);
+            await LoadAsync();
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+    }
+
+    private async Task OnCtxKillPod()
+    {
+        var pod = CtxPod;
+        CloseAllMenus();
+        if (pod is null || Client is null) return;
+
+        var confirmed = await Confirm.ShowAsync(
+            $"Delete pod \"{pod.Name}\"? This is irreversible.",
+            pod.Name,
+            requireTypedName: IsProduction);
+        if (!confirmed) return;
+
+        try
+        {
+            await Client.DeletePodAsync(CurrentNamespace, pod.Name);
+            if (LogPodName == pod.Name) CloseLogs();
+            await LoadAsync();
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+    }
+
+    private void OnCtxCopyHostUrl()
+    {
+        var ingress = CtxIngress;
+        CloseAllMenus();
+        if (ingress is null) return;
+        var host = ingress.Rules.FirstOrDefault(r => r.Host is not null)?.Host;
+        // Clipboard copy handled via JS interop would go here; for now just a no-op
+        // TODO: wire clipboard via JSRuntime
+    }
+
+    private void CloseAllMenus()
+    {
+        DeploymentMenu.Close();
+        PodMenu.Close();
+        IngressMenu.Close();
+        HelmMenu.Close();
+    }
+
+    // ── Side panel helpers ──
+
     private void CloseLogs() { LogPodName = null; StateHasChanged(); }
 
     private async Task OpenYaml(string kind, string name)
     {
-        LogPodName = null; // close logs if open
+        LogPodName = null;
         YamlTarget = (kind, name);
         YamlText = null;
         YamlError = null;

@@ -340,6 +340,36 @@ public class KubernetesAksClient : IAksClient
         try { await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct); return true; }
         catch { return false; }
     }
+
+    public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
+    {
+        // Equivalent to `kubectl rollout restart deployment/<name> -n <ns>`
+        // Patches the pod template annotation with a restart timestamp.
+        var patch = new k8s.Models.V1Deployment
+        {
+            Spec = new k8s.Models.V1DeploymentSpec
+            {
+                Template = new k8s.Models.V1PodTemplateSpec
+                {
+                    Metadata = new k8s.Models.V1ObjectMeta
+                    {
+                        Annotations = new Dictionary<string, string>
+                        {
+                            ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                        }
+                    }
+                }
+            }
+        };
+        await _client.AppsV1.PatchNamespacedDeploymentAsync(
+            new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
+            deploymentName, ns, cancellationToken: ct);
+    }
+
+    public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
+    {
+        await _client.CoreV1.DeleteNamespacedPodAsync(podName, ns, cancellationToken: ct);
+    }
 }
 
 internal static class AksAzureAuthHelpers

@@ -17,4 +17,6 @@ public interface IAksClient
     Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default);
     Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
+    Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default);
+    Task DeletePodAsync(string ns, string podName, CancellationToken ct = default);
 }

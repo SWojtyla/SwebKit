@@ -397,4 +397,14 @@ public class DemoAksClient : IAksClient
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
         => Task.CompletedTask; // no-op in demo
+
+    public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
+    {
+        await Task.Delay(500, ct); // simulate restart
+    }
+
+    public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct); // simulate delete
+    }
 }

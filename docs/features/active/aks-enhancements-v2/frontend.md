@@ -104,20 +104,20 @@ All destructive actions show an inline confirmation bar (not a modal popup):
 
 ## Tasks
 
-- [ ] Create `ContextMenu.razor` — generic right-click context menu component
-- [ ] Create `ConfirmDialog.razor` — inline confirmation bar with production guard
+- [x] Create `ContextMenu.razor` — generic right-click context menu component
+- [x] Create `AksConfirmBar.razor` — inline confirmation bar with production guard
 - [ ] Create `ResizablePanel.razor` — draggable split panel with persistence
-- [ ] Replace inline Logs/YAML buttons with context menu on Deployments rows
-- [ ] Replace inline Logs/YAML buttons with context menu on Pods rows
-- [ ] Replace inline YAML button with context menu on Ingresses rows
-- [ ] Add context menu on Helm releases rows
-- [ ] Wire `RestartDeploymentAsync` through context menu with confirmation
-- [ ] Wire `DeletePodAsync` (kill) through context menu with confirmation
+- [x] Replace inline Logs/YAML buttons with context menu on Deployments rows
+- [x] Replace inline Logs/YAML buttons with context menu on Pods rows
+- [x] Replace inline YAML button with context menu on Ingresses rows
+- [x] Add context menu on Helm releases rows
+- [x] Wire `RestartDeploymentAsync` through context menu with confirmation
+- [x] Wire `DeletePodAsync` (kill) through context menu with confirmation
 - [ ] Wire `ScaleDeploymentAsync` through context menu with inline input
 - [ ] Add Helm release history view
 - [ ] Add Helm release values view
 - [ ] Wire `RollbackHelmReleaseAsync` through context menu with revision picker and confirmation
-- [ ] Add Copy Host URL action for Ingresses
+- [x] Add Copy Host URL action for Ingresses
 - [ ] Make log panel resizable with drag handle
 - [ ] Make YAML panel resizable with drag handle
 - [ ] Persist panel widths in UI state
