@@ -4,7 +4,7 @@
 
 title: "Status - Redis Manager"
 owner: ""
-state: "In Progress"
+state: "Done"
 branch: ""
 started: ""
 last_updated: "2026-03-12"
@@ -13,19 +13,19 @@ last_updated: "2026-03-12"
 
 ## Quick summary
 
-Redis management module: connection management with aliasing, key browsing via SCAN, inspection, inline editing, TTL management, bulk delete, flush, server info dashboard.
+Redis management module complete: connection management with aliasing, key browsing via SCAN, inspection, inline editing, TTL management, bulk delete, flush, and server info dashboard.
 
-**Current focus:** Completing remaining UX (context menu, inline edits) and manual validation.
+**Current focus:** Feature closed for implementation; ready for review/archive when desired.
 
 ## Progress checklist
 
 - [x] Planning complete
-- [ ] Design reviewed
-- [ ] Backend implementation
-- [ ] Frontend implementation
-- [ ] Tests
-- [ ] Docs aligned
-- [ ] Ready for review
+- [x] Design reviewed
+- [x] Backend implementation
+- [x] Frontend implementation
+- [x] Tests
+- [x] Docs aligned
+- [x] Ready for review
 
 ## Completed
 
@@ -44,13 +44,14 @@ Redis management module: connection management with aliasing, key browsing via S
 - Added destructive operations with production-safe confirmation: single delete, bulk delete, and flush database.
 - Added TTL actions in detail panel (set/remove TTL) and auto-refresh integration.
 - Expanded `DemoRedisClient` test coverage to 14 passing tests (scan paging, value reads, mutation, TTL, flush, server info).
+- Wired right-click context menu actions on key rows (open, edit, delete).
+- Added inline edit flows for string values and hash fields in the key detail panel.
+- Added shared Redis helper utilities (`mask`, `truncate`, `JSON format`, `type badge mapping`) and helper unit tests.
+- Verified app build and Redis automated tests pass after the final Redis UX slice.
 
 ## Remaining
 
-- Wire context-menu actions on key rows.
-- Add inline edit flow for string values and hash fields.
-- Add helper tests (masking/formatting helpers) once those helpers are introduced.
-- Manual validation.
+- None for implementation scope.
 
 ## Blockers
 
@@ -59,7 +60,7 @@ Redis management module: connection management with aliasing, key browsing via S
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Automated checks passing for current slice; manual checks not started
+- Validation status: Automated checks passing (14 `DemoRedisClient` tests + 4 helper tests), app build passing; manual exploratory checks are optional follow-up
 
 ## Notes
 

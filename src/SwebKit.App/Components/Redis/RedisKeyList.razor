@@ -1,3 +1,5 @@
+@using SwebKit.Redis
+
 <div class="redis-key-list">
     @if (IsLoading && Keys.Count == 0)
     {
@@ -17,15 +19,27 @@
             <span class="count">@SelectedKeys.Count selected</span>
         </div>
 
+        <div class="rows" @onclick="HideContextMenu">
         @foreach (var key in Keys)
         {
             var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
-            <button @onclick="() => OnSelectKey.InvokeAsync(key)"                    class="key-row @(SelectedKey == key ? "active" : "")">
+            <button @onclick="() => OnSelectKey.InvokeAsync(key)"                    @oncontextmenu="e => ShowContextMenu(e, key)"                    @oncontextmenu:preventDefault="true"
+                    class="key-row @(SelectedKey == key ? "active" : "")">
                 <input type="checkbox"                       checked="@isSelected"                       @onclick:stopPropagation="true"
                        @onchange="e => OnToggleSelection(key, e)" />
                 <span class="key-name">@key</span>
                 <span class="type-badge @(GetTypeClass(key))">@GetTypeLabel(key)</span>
             </button>
+        }
+        </div>
+
+        @if (ContextMenuVisible && ContextMenuKey is not null)
+        {
+            <div class="context-menu" style="left:@($"{ContextMenuX}px"); top:@($"{ContextMenuY}px");" @onclick:stopPropagation="true">
+                <button class="context-item" @onclick='() => InvokeContextActionAsync("open")'>Open</button>
+                <button class="context-item" @onclick='() => InvokeContextActionAsync("edit")'>Edit</button>
+                <button class="context-item" @onclick='() => InvokeContextActionAsync("delete")'>Delete</button>
+            </div>
         }
     }
 
@@ -47,6 +61,12 @@ HashSet<string>(StringComparer.Ordinal);
     [Parameter] public EventCallback OnLoadMore { get; set; }
     [Parameter] public EventCallback<(string key, bool selected)> OnToggleKeySelection { get; set; }
     [Parameter] public EventCallback<bool> OnToggleAllVisibleSelection { get; set; }
+    [Parameter] public EventCallback<(string Key, string Action)> OnContextMenuAction { get; set; }
+
+    private bool ContextMenuVisible;
+    private string? ContextMenuKey;
+    private double ContextMenuX;
+    private double ContextMenuY;
 
     private bool AllVisibleSelected => Keys.Count > 0 && Keys.All(k => SelectedKeys.Contains(k, StringComparer.Ordinal));
 
@@ -67,18 +87,31 @@ HashSet<string>(StringComparer.Ordinal);
         return KeyTypes.TryGetValue(key, out var type) ? type : "?";
     }
 
+    private void ShowContextMenu(MouseEventArgs e, string key)
+    {
+        ContextMenuVisible = true;
+        ContextMenuKey = key;
+        ContextMenuX = e.ClientX;
+        ContextMenuY = e.ClientY;
+    }
+
+    private async Task InvokeContextActionAsync(string action)
+    {
+        if (ContextMenuKey is null)
+            return;
+
+        await OnContextMenuAction.InvokeAsync((ContextMenuKey, action));
+        HideContextMenu();
+    }
+
+    private void HideContextMenu()
+    {
+        ContextMenuVisible = false;
+        ContextMenuKey = null;
+    }
+
     private string GetTypeClass(string key)
     {
-        var type = GetTypeLabel(key);
-        return type switch
-        {
-            "string" => "t-string",
-            "hash" => "t-hash",
-            "list" => "t-list",
-            "set" => "t-set",
-            "zset" => "t-zset",
-            "stream" => "t-stream",
-            _ => "t-unknown"
-        };
+        return RedisValueHelpers.TypeToBadgeClass(GetTypeLabel(key));
     }
 }

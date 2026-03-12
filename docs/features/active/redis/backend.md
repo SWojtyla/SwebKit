@@ -4,7 +4,7 @@
 
 title: "Backend Plan - Redis Manager"
 owner: ""
-status: "Not started"
+status: "Done"
 
 ---
 
@@ -152,7 +152,7 @@ public record DatabaseInfo(int Index, long Keys, long Expires, long AvgTtl);
 - [x] Implement `RedisClient` in `SwebKit.Redis` using `StackExchange.Redis`
 - [x] Implement `DemoRedisClient` in `SwebKit.Core` with realistic demo data
 - [x] Add unit tests for `DemoRedisClient`
-- [ ] Add unit tests for any parsing/formatting helpers
+- [x] Add unit tests for any parsing/formatting helpers
 
 ## Migration and runtime changes
 
@@ -162,7 +162,7 @@ public record DatabaseInfo(int Index, long Keys, long Expires, long AvgTtl);
 
 ## Validation
 
-- Unit tests: Not started
+- Unit tests: Passing (`DemoRedisClientTests` and `RedisValueHelpersTests`)
 - Integration tests: Deferred (requires live Redis instance)
 - Manual checks: See `test-plan.md`
 

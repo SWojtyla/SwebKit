@@ -43,14 +43,18 @@
                 <RedisKeyList Keys="@Keys"                              SelectedKeys="@SelectedKeys"                              SelectedKey="@SelectedKey"                              KeyTypes="@KeyTypes"
                               IsLoading="@IsLoading"                              IsComplete="@IsComplete"                              OnSelectKey="SelectKeyAsync"                              OnLoadMore="LoadMoreAsync"
                               OnToggleKeySelection="OnToggleKeySelectionAsync"
-                              OnToggleAllVisibleSelection="OnToggleAllVisibleAsync" />
+                              OnToggleAllVisibleSelection="OnToggleAllVisibleAsync"
+                              OnContextMenuAction="OnContextMenuActionAsync" />
             </div>
 
             <div class="panel detail-panel">
                 <RedisKeyDetail SelectedKey="@SelectedKey"                                KeyInfo="@SelectedInfo"                                StringValue="@SelectedStringValue"
                                 HashFields="@SelectedHashFields"                                Items="@SelectedItems"                                SortedSetItems="@SelectedSortedSetItems"
                                 OnRefresh="RefreshSelectedAsync"                                OnDelete="DeleteSelectedKeyAsync"                                OnSetTtl="SetTtlAsync"
-                                OnRemoveTtl="RemoveTtlAsync" />
+                                OnRemoveTtl="RemoveTtlAsync"
+                                OnSetStringValue="SetStringValueAsync"
+                                OnSetHashField="SetHashFieldAsync"
+                                StartEditRequestId="@StartEditRequestId" />
             </div>
         </div>
     }
@@ -77,6 +81,7 @@
     private List<RedisHashField> SelectedHashFields = [];
     private List<string> SelectedItems = [];
     private List<RedisSortedSetEntry> SelectedSortedSetItems = [];
+    private int StartEditRequestId;
 
     private bool ShowServerInfo;
     private SwebKit.Core.Models.RedisServerInfo? ServerInfo;
@@ -417,6 +422,59 @@
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnContextMenuActionAsync((string Key, string Action) context)
+    {
+        switch (context.Action)
+        {
+            case "open":
+                await SelectKeyAsync(context.Key);
+                break;
+            case "edit":
+                await SelectKeyAsync(context.Key);
+                StartEditRequestId++;
+                await InvokeAsync(StateHasChanged);
+                break;
+            case "delete":
+                SelectedKey = context.Key;
+                await DeleteSelectedKeyAsync();
+                break;
+        }
+    }
+
+    private async Task SetStringValueAsync(string value)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey))
+            return;
+
+        try
+        {
+            await Client.SetKeyValueAsync(SelectedKey, value);
+            await RefreshSelectedAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SetHashFieldAsync((string Field, string Value) entry)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey) || string.IsNullOrWhiteSpace(entry.Field))
+            return;
+
+        try
+        {
+            await Client.SetHashFieldAsync(SelectedKey, entry.Field, entry.Value);
+            await RefreshSelectedAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private Task ShowConfirmationAsync(string title, string message, string label, Func<Task> action)

@@ -1,3 +1,5 @@
+@using SwebKit.Redis
+
 <div class="redis-key-detail">
     @if (SelectedKey is null)
     {
@@ -22,6 +24,10 @@
         <div class="actions">
             <FluentButton Appearance="Appearance.Accent" @onclick="OnRefresh">Refresh</FluentButton>
             <FluentButton @onclick="OnDelete">Delete</FluentButton>
+            @if (CanEditCurrentType)
+            {
+                <FluentButton @onclick="BeginEdit">Edit</FluentButton>
+            }
         </div>
 
         <div class="ttl-actions">
@@ -32,7 +38,18 @@
 
         @if (KeyInfo.Type == "string")
         {
-            <pre class="blob">@StringValue</pre>
+            @if (IsEditingString)
+            {
+                <textarea class="editor" @bind="StringEditorValue"></textarea>
+                <div class="edit-actions">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveStringAsync">Save</FluentButton>
+                    <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                </div>
+            }
+            else
+            {
+                <pre class="blob">@DisplayStringValue</pre>
+            }
         }
         else if (KeyInfo.Type == "hash")
         {
@@ -43,7 +60,30 @@
                 <tbody>
                 @foreach (var field in HashFields)
                 {
-                    <tr><td>@field.Field</td><td>@field.Value</td></tr>
+                    <tr>
+                        <td>@field.Field</td>
+                        <td>
+                            @if (IsEditingHash && EditingHashField == field.Field)
+                            {
+                                <input class="hash-editor" type="text" @bind="HashEditorValue" />
+                            }
+                            else
+                            {
+                                @field.Value
+                            }
+                        </td>
+                        <td class="hash-actions">
+                            @if (IsEditingHash && EditingHashField == field.Field)
+                            {
+                                <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
+                                <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                            }
+                            else
+                            {
+                                <FluentButton @onclick="() => BeginHashFieldEdit(field.Field, field.Value)">Edit</FluentButton>
+                            }
+                        </td>
+                    </tr>
                 }
                 </tbody>
             </table>
@@ -86,10 +126,87 @@
     [Parameter] public EventCallback OnDelete { get; set; }
     [Parameter] public EventCallback<int> OnSetTtl { get; set; }
     [Parameter] public EventCallback OnRemoveTtl { get; set; }
+    [Parameter] public EventCallback<string> OnSetStringValue { get; set; }
+    [Parameter] public EventCallback<(string Field, string Value)> OnSetHashField { get; set; }
+    [Parameter] public int StartEditRequestId { get; set; }
 
     private int TtlSeconds = 300;
+    private bool IsEditingString;
+    private bool IsEditingHash;
+    private string? EditingHashField;
+    private string StringEditorValue = string.Empty;
+    private string HashEditorValue = string.Empty;
+    private int LastStartEditRequestId;
+    private string DisplayStringValue => RedisValueHelpers.TruncateValue(RedisValueHelpers.FormatJsonIfValid(StringValue));
+
+    private bool CanEditCurrentType => KeyInfo?.Type is "string" or "hash";
+
+    protected override void OnParametersSet()
+    {
+        if (StartEditRequestId != LastStartEditRequestId)
+        {
+            LastStartEditRequestId = StartEditRequestId;
+            BeginEdit();
+        }
+
+        if (KeyInfo?.Type != "string")
+            IsEditingString = false;
+
+        if (KeyInfo?.Type != "hash")
+            ResetHashEditState();
+    }
 
     private Task RemoveTtl() => OnRemoveTtl.InvokeAsync();
+
+    private void BeginEdit()
+    {
+        if (KeyInfo?.Type == "string")
+        {
+            IsEditingString = true;
+            StringEditorValue = StringValue ?? string.Empty;
+            return;
+        }
+
+        if (KeyInfo?.Type == "hash" && HashFields.Count > 0)
+        {
+            BeginHashFieldEdit(HashFields[0].Field, HashFields[0].Value);
+        }
+    }
+
+    private void BeginHashFieldEdit(string field, string value)
+    {
+        IsEditingHash = true;
+        EditingHashField = field;
+        HashEditorValue = value;
+    }
+
+    private async Task SaveStringAsync()
+    {
+        await OnSetStringValue.InvokeAsync(StringEditorValue ?? string.Empty);
+        IsEditingString = false;
+    }
+
+    private async Task SaveHashFieldAsync()
+    {
+        if (string.IsNullOrWhiteSpace(EditingHashField))
+            return;
+
+        await OnSetHashField.InvokeAsync((EditingHashField, HashEditorValue ?? string.Empty));
+        ResetHashEditState();
+    }
+
+    private void CancelEdit()
+    {
+        IsEditingString = false;
+        ResetHashEditState();
+    }
+
+    private void ResetHashEditState()
+    {
+        IsEditingHash = false;
+        EditingHashField = null;
+        HashEditorValue = string.Empty;
+    }
 
     private Task ApplyTtlAsync()
     {

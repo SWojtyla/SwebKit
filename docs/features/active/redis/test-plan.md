@@ -4,7 +4,7 @@
 
 title: "Test Plan - Redis Manager"
 owner: ""
-status: "Not started"
+status: "In Progress"
 created: "2026-03-12"
 updated: "2026-03-12"
 
@@ -59,10 +59,10 @@ Target: test all `IRedisClient` methods against the demo implementation.
 
 ### Unit tests — `RedisClient` helpers
 
-- [ ] Connection string password masking helper
-- [ ] Value truncation helper
-- [ ] JSON detection and formatting helper
-- [ ] Type icon/color mapping helper
+- [x] Connection string password masking helper
+- [x] Value truncation helper
+- [x] JSON detection and formatting helper
+- [x] Type icon/color mapping helper
 
 ## Test data and setup
 
@@ -110,11 +110,11 @@ Provide a realistic set of demo keys:
 
 - All DemoRedisClient unit tests pass
 - All helper unit tests pass
-- Build succeeds for all projects
+- Build succeeds for all Redis-touched projects (including `SwebKit.App`)
 - No regressions in existing tests
 - Manual checks pass on demo data
 
 ## Validation status
 
-- Automated: DemoRedisClient suite passing (14 tests)
+- Automated: DemoRedisClient suite passing (14 tests) + helper suite passing (4 tests)
 - Manual: Not started

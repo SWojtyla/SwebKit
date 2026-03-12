@@ -25,6 +25,11 @@
     flex-wrap: wrap;
 }
 
+.edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .ttl-input {
     width: 100px;
     padding: 6px 8px;
@@ -44,10 +49,31 @@
     word-break: break-word;
 }
 
+.editor,
+.hash-editor {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+
+.editor {
+    min-height: 180px;
+    resize: vertical;
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+}
+
+.hash-actions {
+    width: 120px;
 }
 
 .table th,

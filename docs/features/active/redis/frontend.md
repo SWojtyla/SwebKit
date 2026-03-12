@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - Redis Manager"
 owner: ""
-status: "Not started"
+status: "Done"
 
 ---
 
@@ -120,17 +120,17 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 - [x] Create RedisServerInfo.razor with INFO dashboard
 - [x] Create RedisConfigForm.razor for settings
 - [x] Add Redis accordion to SettingsPage
-- [ ] Wire context menus for key actions
+- [x] Wire context menus for key actions
 - [x] Add bulk selection and multi-delete
-- [ ] Add inline edit for string values and hash fields
+- [x] Add inline edit for string values and hash fields
 - [x] Add TTL management controls
 - [x] Add auto-refresh toggle (reuse AutoRefreshToggle component)
 - [x] Add scoped CSS for all Redis components
-- [ ] Handle all loading, error, and empty states
+- [x] Handle all loading, error, and empty states
 
 ## Validation
 
-- Component tests: Not started
+- Component tests: Deferred (no dedicated Redis UI component tests yet)
 - Manual UX checks: See `test-plan.md`
 
 ## Notes

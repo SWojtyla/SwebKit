@@ -4,7 +4,7 @@
 
 title: "Feature Overview - Redis Manager"
 owner: ""
-status: "Proposed"
+status: "Done"
 created: "2026-03-12"
 updated: "2026-03-12"
 
@@ -36,6 +36,7 @@ Redis is a core piece of most service architectures but lacks a lightweight, int
 - Auto-refresh with configurable interval (reuse `AutoRefreshToggle`)
 
 **Post-v1 enhancements (backlog):**
+
 - Pub/Sub monitor — live message viewer on selected channels
 - Slow log viewer — `SLOWLOG GET` with timestamp, duration, command
 - Key namespace grouping — tree view by prefix with counts
