@@ -4,26 +4,26 @@
 
 title: "Status - Redis Follow-up"
 owner: ""
-state: "Proposed"
-branch: ""
-started: ""
+state: "In Progress"
+branch: "sw/main/redis"
+started: "2026-03-12"
 last_updated: "2026-03-12"
 
 ---
 
 ## Quick summary
 
-Follow-up feature proposed to improve Redis usability for multi-cache and namespace-centric workflows.
+Redis follow-up feature implementing multi-cache support, namespace grouping, prefix memory analysis, and UX improvements.
 
-**Current focus:** Finalize technical design for multi-cache model and namespace/memory views.
+**Current focus:** Implementation complete, ready for review.
 
 ## Progress checklist
 
 - [x] Planning complete
-- [ ] Design reviewed
-- [ ] Backend implementation
-- [ ] Frontend implementation
-- [ ] Tests (unit/integration/e2e)
+- [x] Design reviewed
+- [x] Backend implementation
+- [x] Frontend implementation
+- [x] Tests (unit/integration/e2e)
 - [ ] Docs aligned
 - [ ] Ready for review
 
@@ -31,14 +31,22 @@ Follow-up feature proposed to improve Redis usability for multi-cache and namesp
 
 - Follow-up scope defined from post-archive enhancement requests.
 - Feature folder initialized with core docs and implementation modules.
+- Multi-cache config model (`RedisCacheEntry` collection) with backward-compatible migration from legacy `RedisConfig`.
+- Namespace grouping helper (`RedisKeyGrouper.BuildNamespaceTree`) with configurable separator.
+- Prefix memory analysis helper (`RedisKeyGrouper.ComputePrefixMemory`) with per-prefix distribution.
+- `RedisPage`: removed Server Info, renamed Flush DB → Purge All, added cache selector dropdown, editable cache name, pattern examples/help.
+- `RedisNamespaceTree` + `RedisNamespaceTreeNode`: collapsible tree view with filter-by-prefix action.
+- `RedisPrefixMemory`: memory distribution panel with visual bars and coverage indicator.
+- `RedisConfigForm`: multi-cache add/edit/remove management UI.
+- `RedisClient` updated to accept `RedisCacheEntry` instead of `RedisConfig`.
+- Extended demo seed data with namespace-rich keys for tree grouping demo.
+- Unit tests: config migration (8 tests), namespace grouping (6 tests), prefix memory (6 tests).
+- All 101 tests passing, zero build warnings.
 
 ## Remaining
 
-- Define updated Redis config model for multiple caches.
-- Define migration/backward-compatibility from current single-cache config.
-- Implement UI changes (cache dropdown, namespace tree, pattern examples, purge-all text, remove server info).
-- Implement prefix memory analysis.
-- Add/update tests and validation notes.
+- Final docs review and alignment.
+- Manual validation of all UX flows.
 
 ## Blockers
 
@@ -47,7 +55,7 @@ Follow-up feature proposed to improve Redis usability for multi-cache and namesp
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: Automated tests passing
 
 ## Notes
 

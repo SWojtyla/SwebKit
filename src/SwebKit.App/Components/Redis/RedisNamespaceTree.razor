@@ -1,0 +1,40 @@
+<div class="namespace-tree panel">
+    <div class="ns-header">
+        <strong>Namespaces</strong>
+        <div class="separator-control">
+            <label>Sep:</label>
+            <input type="text"
+                   value="@Separator"
+                   @onchange="OnSepChanged"
+                   class="sep-input"
+                   maxlength="4" />
+        </div>
+    </div>
+
+    @if (Nodes.Count == 0)
+    {
+        <div class="ns-empty">No namespaces found.</div>
+    }
+    else
+    {
+        <div class="ns-nodes">
+            @foreach (var node in Nodes)
+            {
+                <RedisNamespaceTreeNode Node="@node" OnPrefixSelected="OnPrefixSelected" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<NamespaceNode> Nodes { get; set; } = [];
+    [Parameter] public string Separator { get; set; } = ":";
+    [Parameter] public EventCallback<string> OnSeparatorChanged { get; set; }
+    [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
+
+    private Task OnSepChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? ":";
+        return OnSeparatorChanged.InvokeAsync(value);
+    }
+}

@@ -8,20 +8,20 @@ namespace SwebKit.Redis;
 
 public sealed class RedisClient : IRedisClient
 {
-    private readonly RedisConfig _config;
+    private readonly RedisCacheEntry _cacheEntry;
     private readonly ConnectionMultiplexer _mux;
     private readonly IDatabase _db;
     private readonly IServer _server;
 
-    public RedisClient(RedisConfig config)
+    public RedisClient(RedisCacheEntry cacheEntry)
     {
-        _config = config;
+        _cacheEntry = cacheEntry;
 
-        var options = ConfigurationOptions.Parse(config.ConnectionString);
+        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
         options.AbortOnConnectFail = false;
 
         _mux = ConnectionMultiplexer.Connect(options);
-        _db = _mux.GetDatabase(Math.Clamp(config.Database, 0, 15));
+        _db = _mux.GetDatabase(Math.Clamp(cacheEntry.Database, 0, 15));
 
         var endpoint = _mux.GetEndPoints().FirstOrDefault()
             ?? throw new InvalidOperationException("No Redis endpoints available.");
@@ -195,7 +195,7 @@ public sealed class RedisClient : IRedisClient
     public async Task FlushDatabaseAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _server.FlushDatabaseAsync(Math.Clamp(_config.Database, 0, 15));
+        await _server.FlushDatabaseAsync(Math.Clamp(_cacheEntry.Database, 0, 15));
     }
 
     public Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default)

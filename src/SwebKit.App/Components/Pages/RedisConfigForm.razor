@@ -1,10 +1,30 @@
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
 
-<div style="display:grid; gap:10px; padding:12px 0;">
+<div style="display:grid; gap:12px; padding:12px 0;">
+    @* ── Cache list ── *@
+    @if (Caches.Count > 0)
+    {
+        <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">Configured Caches</div>
+        @foreach (var cache in Caches)
+        {
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
+                <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@cache.DisplayName</span>
+                <span style="font-size:11px; color:var(--color-text-muted);">DB@cache.Database</span>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditCache(cache)">Edit</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => RemoveCache(cache)">Remove</FluentButton>
+            </div>
+        }
+    }
+
+    @* ── Edit / Add form ── *@
+    <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">
+        @(EditingCacheId is not null ? "Edit Cache" : "Add Cache")
+    </div>
+
     <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Connection Alias (optional)</label>
-        <input type="text" @bind="Alias" @bind:event="oninput"
+        <label style="font-size:12px; color:var(--color-text-muted);">Display Name</label>
+        <input type="text" @bind="DisplayName" @bind:event="oninput"
                style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
                placeholder="Dev Cache" />
     </div>
@@ -28,36 +48,44 @@
     </div>
 
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save Redis</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">
+            @(EditingCacheId is not null ? "Save Cache" : "Add Cache")
+        </FluentButton>
+        @if (EditingCacheId is not null)
+        {
+            <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+        }
         <FluentButton @onclick="TestConnectionAsync">Test Connection</FluentButton>
 
         @if (ConnectionStatus is not null)
         {
-            <span
-            style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
+            <span style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
         }
     </div>
-
-    @if (Environment.RedisConfig is not null)
-    {
-        <div style="font-size:12px; color:var(--color-text-muted); padding:4px 0;">
-            <strong>Current:</strong>
-            Alias: @(Environment.RedisConfig.Alias ?? "(none)") &middot;
-            DB: @Environment.RedisConfig.Database
-        </div>
-    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
-    private string Alias = string.Empty;
+    private string DisplayName = string.Empty;
     private string ConnectionString = string.Empty;
     private int Database;
     private string? ConnectionStatus;
     private bool ConnectionOk;
+    private string? EditingCacheId;
     private Guid? _loadedEnvironmentId;
+
+    private List<RedisCacheEntry> Caches
+    {
+        get
+        {
+            var config = Environment.RedisConfig;
+            if (config is null) return [];
+            config.EnsureMigrated();
+            return config.Caches;
+        }
+    }
 
     protected override void OnParametersSet()
     {
@@ -65,12 +93,45 @@
             return;
 
         _loadedEnvironmentId = Environment.Id;
-        var config = Environment.RedisConfig;
-        Alias = config?.Alias ?? string.Empty;
-        ConnectionString = config?.ConnectionString ?? string.Empty;
-        Database = Math.Clamp(config?.Database ?? 0, 0, 15);
+        Environment.RedisConfig?.EnsureMigrated();
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        EditingCacheId = null;
+        DisplayName = string.Empty;
+        ConnectionString = string.Empty;
+        Database = 0;
         ConnectionStatus = null;
         ConnectionOk = false;
+    }
+
+    private void EditCache(RedisCacheEntry cache)
+    {
+        EditingCacheId = cache.Id;
+        DisplayName = cache.DisplayName;
+        ConnectionString = cache.ConnectionString;
+        Database = cache.Database;
+        ConnectionStatus = null;
+    }
+
+    private void CancelEdit() => ResetForm();
+
+    private async Task RemoveCache(RedisCacheEntry cache)
+    {
+        var config = Environment.RedisConfig;
+        if (config is null) return;
+
+        config.Caches.Remove(cache);
+        if (config.ActiveCacheId == cache.Id)
+            config.ActiveCacheId = config.Caches.FirstOrDefault()?.Id;
+
+        if (EditingCacheId == cache.Id)
+            ResetForm();
+
+        await OnSaved.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task SaveAsync()
@@ -78,19 +139,40 @@
         if (string.IsNullOrWhiteSpace(ConnectionString))
         {
             ConnectionOk = false;
-            ConnectionStatus = "Connection string is required before saving.";
+            ConnectionStatus = "Connection string is required.";
             await InvokeAsync(StateHasChanged);
             return;
         }
 
         var config = Environment.RedisConfig ??= new RedisConfig();
-        config.Alias = string.IsNullOrWhiteSpace(Alias) ? null : Alias.Trim();
-        config.ConnectionString = ConnectionString.Trim();
-        config.Database = Math.Clamp(Database, 0, 15);
+
+        if (EditingCacheId is not null)
+        {
+            var existing = config.Caches.FirstOrDefault(c => c.Id == EditingCacheId);
+            if (existing is not null)
+            {
+                existing.DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? "Cache" : DisplayName.Trim();
+                existing.ConnectionString = ConnectionString.Trim();
+                existing.Database = Math.Clamp(Database, 0, 15);
+            }
+        }
+        else
+        {
+            var entry = new RedisCacheEntry
+            {
+                DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? "Cache" : DisplayName.Trim(),
+                ConnectionString = ConnectionString.Trim(),
+                Database = Math.Clamp(Database, 0, 15)
+            };
+            config.Caches.Add(entry);
+            config.ActiveCacheId ??= entry.Id;
+        }
 
         await OnSaved.InvokeAsync();
         ConnectionOk = true;
-        ConnectionStatus = "Redis settings saved.";
+        ConnectionStatus = EditingCacheId is not null ? "Cache updated." : "Cache added.";
+        ResetForm();
+        ConnectionStatus = "Saved.";
         await InvokeAsync(StateHasChanged);
     }
 
@@ -123,10 +205,10 @@
         if (string.IsNullOrWhiteSpace(ConnectionString))
             throw new InvalidOperationException("Provide a Redis connection string before testing.");
 
-        return new SwebKit.Redis.RedisClient(new RedisConfig
+        return new SwebKit.Redis.RedisClient(new RedisCacheEntry
         {
+            DisplayName = DisplayName,
             ConnectionString = ConnectionString,
-            Alias = string.IsNullOrWhiteSpace(Alias) ? null : Alias,
             Database = Database
         });
     }

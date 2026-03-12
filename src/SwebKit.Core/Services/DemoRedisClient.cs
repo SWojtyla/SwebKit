@@ -406,7 +406,45 @@ public sealed class DemoRedisClient : IRedisClient
             ["max_retries"] = "3"
         }, null);
         db["rate-limit:api:10.0.0.1"] = new DemoValue("string", "42", DateTimeOffset.UtcNow.AddSeconds(60));
+        db["rate-limit:api:10.0.0.2"] = new DemoValue("string", "17", DateTimeOffset.UtcNow.AddSeconds(45));
         db["lock:inventory-sync"] = new DemoValue("string", "worker-1", DateTimeOffset.UtcNow.AddSeconds(30));
+        db["lock:payment-batch"] = new DemoValue("string", "worker-2", DateTimeOffset.UtcNow.AddSeconds(120));
+
+        // Additional namespace-rich keys for tree grouping demo
+        db["user:profile:1001"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["display_name"] = "Alice",
+            ["avatar_url"] = "https://example.com/alice.png",
+            ["locale"] = "en-US"
+        }, null);
+        db["user:profile:1002"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["display_name"] = "Bob",
+            ["avatar_url"] = "https://example.com/bob.png",
+            ["locale"] = "fr-FR"
+        }, null);
+        db["user:preferences:1001"] = new DemoValue("string", "{\"theme\":\"dark\",\"notifications\":true}", null);
+        db["session:ghi789"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["user_id"] = "1001",
+            ["ip"] = "10.0.0.3",
+            ["created"] = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O")
+        }, DateTimeOffset.UtcNow.AddMinutes(30));
+        db["cache:homepage"] = new DemoValue("string", "<html>cached homepage</html>", DateTimeOffset.UtcNow.AddMinutes(10));
+        db["cache:search:results:electronics"] = new DemoValue("list", new List<string> { "item-1", "item-2", "item-3" }, DateTimeOffset.UtcNow.AddMinutes(2));
+        db["config:rate-limits"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["api_calls_per_minute"] = "100",
+            ["websocket_connections"] = "50"
+        }, null);
+        db["metrics:api:latency"] = new DemoValue("zset", new List<RedisSortedSetEntry>
+        {
+            new() { Member = "/users", Score = 42.5 },
+            new() { Member = "/orders", Score = 85.2 },
+            new() { Member = "/products", Score = 23.1 }
+        }, null);
+        db["queue:emails:pending"] = new DemoValue("list", new List<string> { "msg-001", "msg-002", "msg-003", "msg-004" }, null);
+        db["queue:notifications:pending"] = new DemoValue("list", new List<string> { "notif-001", "notif-002" }, null);
     }
 
     private sealed class DemoValue

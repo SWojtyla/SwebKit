@@ -1,0 +1,42 @@
+<div class="ns-node" style="padding-left: @($"{Depth * 16}px")">
+    <button class="ns-row" @onclick="Toggle">
+        @if (Node.Children.Count > 0)
+        {
+            <span class="ns-toggle">@(IsExpanded ? "▾" : "▸")</span>
+        }
+        else
+        {
+            <span class="ns-toggle-placeholder"></span>
+        }
+        <span class="ns-name">@Node.Name</span>
+        <span class="ns-count">@Node.KeyCount</span>
+        <button class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true" title="Filter by this prefix">⊞</button>
+    </button>
+
+    @if (IsExpanded)
+    {
+        @foreach (var child in Node.Children)
+        {
+            <RedisNamespaceTreeNode Node="@child" OnPrefixSelected="OnPrefixSelected" Depth="@(Depth + 1)" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NamespaceNode Node { get; set; } = default!;
+    [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
+    [Parameter] public int Depth { get; set; }
+
+    private bool IsExpanded;
+
+    private void Toggle()
+    {
+        if (Node.Children.Count > 0)
+            IsExpanded = !IsExpanded;
+    }
+
+    private Task FilterPrefix()
+    {
+        return OnPrefixSelected.InvokeAsync(Node.FullPrefix);
+    }
+}

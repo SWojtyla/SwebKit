@@ -1,0 +1,55 @@
+<div class="prefix-memory panel">
+    <div class="pm-header">
+        <strong>Memory by Prefix</strong>
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
+            @(IsLoading ? "Analyzing..." : "Analyze")
+        </FluentButton>
+    </div>
+
+    @if (Buckets.Count == 0 && !IsLoading)
+    {
+        <div class="pm-empty">Click Analyze to scan memory usage by prefix.</div>
+    }
+    else if (Buckets.Count > 0)
+    {
+        <div class="pm-coverage">
+            Sampled @ScannedKeyCount of @TotalKeyCount loaded keys.
+        </div>
+
+        <div class="pm-buckets">
+            @foreach (var bucket in Buckets)
+            {
+                <div class="pm-row">
+                    <span class="pm-prefix">@bucket.Prefix</span>
+                    <div class="pm-bar-track">
+                        <div class="pm-bar-fill" style="width: @($"{bucket.Percentage:0.#}%")"></div>
+                    </div>
+                    <span class="pm-pct">@($"{bucket.Percentage:0.#}%")</span>
+                    <span class="pm-bytes">@FormatBytes(bucket.TotalBytes)</span>
+                    <span class="pm-keys">@bucket.KeyCount keys</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<PrefixMemoryBucket> Buckets { get; set; } = [];
+    [Parameter] public int ScannedKeyCount { get; set; }
+    [Parameter] public int TotalKeyCount { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback OnAnalyze { get; set; }
+
+    private static string FormatBytes(long bytes)
+    {
+        const double kb = 1024;
+        const double mb = kb * 1024;
+
+        if (bytes >= mb)
+            return $"{bytes / mb:0.##} MB";
+        if (bytes >= kb)
+            return $"{bytes / kb:0.##} KB";
+
+        return $"{bytes} B";
+    }
+}

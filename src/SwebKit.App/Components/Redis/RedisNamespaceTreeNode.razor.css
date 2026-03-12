@@ -1,0 +1,69 @@
+.ns-node {
+    font-size: 12px;
+}
+
+.ns-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.ns-row:hover {
+    background: rgba(64, 170, 255, 0.10);
+}
+
+.ns-toggle {
+    width: 14px;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.ns-toggle-placeholder {
+    width: 14px;
+    flex-shrink: 0;
+}
+
+.ns-name {
+    font-family: Consolas, monospace;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-count {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    background: rgba(127, 127, 127, 0.15);
+    padding: 1px 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.ns-filter {
+    font-size: 10px;
+    background: transparent;
+    border: 0;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    opacity: 0;
+}
+
+.ns-row:hover .ns-filter {
+    opacity: 1;
+}
+
+.ns-filter:hover {
+    background: rgba(64, 170, 255, 0.2);
+    color: var(--color-text);
+}

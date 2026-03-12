@@ -47,3 +47,25 @@ public class RedisDatabaseInfo
     public long Expires { get; set; }
     public long AvgTtl { get; set; }
 }
+
+/// <summary>
+/// A node in a namespace tree, representing keys grouped by a separator.
+/// </summary>
+public class NamespaceNode
+{
+    public string Name { get; set; } = string.Empty;
+    public string FullPrefix { get; set; } = string.Empty;
+    public int KeyCount { get; set; }
+    public List<NamespaceNode> Children { get; set; } = [];
+}
+
+/// <summary>
+/// Memory distribution for a key prefix.
+/// </summary>
+public class PrefixMemoryBucket
+{
+    public string Prefix { get; set; } = string.Empty;
+    public int KeyCount { get; set; }
+    public long TotalBytes { get; set; }
+    public double Percentage { get; set; }
+}

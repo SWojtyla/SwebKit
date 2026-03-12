@@ -53,7 +53,7 @@ This follow-up removes friction in core Redis workflows: selecting among multipl
 
 ## Related documents
 
-- Archived Redis feature: `docs/features/archive/2026/redis/`
+- Archived Redis feature: `docs/features/archive/redis/`
 - Architecture: `docs/architecture/architecture.md`
 - Pitfalls: `docs/pitfalls/blazor-maui.md`
 
