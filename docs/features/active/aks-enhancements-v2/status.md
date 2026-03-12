@@ -67,6 +67,23 @@ Second enhancement phase for AKS: UX improvements (resizable panels, context men
 - Persist panel widths in UI state (minor polish).
 - Label selector advanced filtering (minor polish).
 
+## Known Bugs
+
+### BUG-1: "Unsupported resource kind: Helm" when viewing Helm release YAML
+- **Symptom:** Clicking "View Release YAML" in the Helm context menu shows error "Unsupported resource kind: Helm" in the side panel.
+- **Root cause:** `KubernetesAksClient.GetResourceYamlAsync` handles "deployment", "pod", "ingress", "service" via Kubernetes API but has no case for "helm". Helm releases are not native Kubernetes resources — they require the `helm get manifest` CLI command.
+- **Fix:** Add a "helm" case that runs `helm get manifest <release> --namespace <ns>` via subprocess (consistent with other Helm CLI calls in the client).
+
+### BUG-2: Auto-refresh does not update the UI
+- **Symptom:** Enabling auto-refresh and switching tabs (e.g., restarting a pod on Deployments, then checking Pods) shows no updates until a manual refresh.
+- **Root cause:** `AutoRefreshToggle` uses `System.Threading.Timer` with an `async void` callback. If `LoadAsync` throws a transient error, the exception is unobserved and silently swallowed, breaking subsequent ticks. The `async void` pattern also prevents proper error handling and reentrancy control.
+- **Fix:** Replace `System.Threading.Timer` with `PeriodicTimer` + async loop with proper cancellation and error handling.
+
+### BUG-3: Helm rollback doesn't allow choosing a target revision
+- **Symptom:** Clicking "Rollback..." always rolls back to the most recent superseded revision with no way to pick an older revision.
+- **Root cause:** `OnCtxRollbackHelm` hardcodes `previousRevisions[0].Revision` as the target and goes straight to the confirmation dialog.
+- **Fix:** Show the history panel with clickable "Rollback to this revision" buttons on each superseded row, allowing the user to select which revision to rollback to.
+
 ## Blockers
 
 - None.

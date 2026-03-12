@@ -431,6 +431,21 @@
     background: rgba(67, 160, 71, 0.06);
 }
 
+.aks-rollback-hint {
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--color-text-secondary, #888);
+    border-bottom: 1px solid var(--color-border, #333);
+}
+
+.aks-rollback-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
 /* ── Selected row ── */
 ::deep .selected-row {
     background: rgba(0, 120, 212, 0.08);

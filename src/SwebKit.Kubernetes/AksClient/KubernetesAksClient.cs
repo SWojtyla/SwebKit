@@ -249,6 +249,9 @@ public class KubernetesAksClient : IAksClient
 
     public async Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
     {
+        if (kind.Equals("helm", StringComparison.OrdinalIgnoreCase))
+            return await GetHelmManifestAsync(ns, name, ct);
+
         object resource = kind.ToLowerInvariant() switch
         {
             "deployment" => await _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct),
@@ -259,6 +262,33 @@ public class KubernetesAksClient : IAksClient
         };
 
         return KubernetesYaml.Serialize(resource);
+    }
+
+    private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
+    {
+        var args = $"get manifest {releaseName} --namespace {ns}";
+        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
+            args += $" --kubeconfig \"{_kubeconfigPath}\"";
+
+        var psi = new ProcessStartInfo("helm")
+        {
+            Arguments = args,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start helm process.");
+        var stdout = await process.StandardOutput.ReadToEndAsync(ct);
+        var stderr = await process.StandardError.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"helm get manifest failed (exit {process.ExitCode}): {stderr}");
+
+        return stdout;
     }
 
     public async IAsyncEnumerable<string> StreamPodLogsAsync(

@@ -355,9 +355,13 @@
             {
                 <ResizablePanel DefaultWidth="480" MinWidth="300" MaxWidth="700">
                     <div class="aks-section-header">
-                        <span class="aks-section-title">History: @HelmHistoryTarget</span>
+                        <span class="aks-section-title">@(HelmRollbackMode ? "Rollback" : "History"): @HelmHistoryTarget</span>
                         <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmHistory" Title="Close">✕</FluentButton>
                     </div>
+                    @if (HelmRollbackMode)
+                    {
+                        <div class="aks-rollback-hint">Select a revision to rollback to:</div>
+                    }
                     <div class="aks-yaml-content">
                         @if (HelmHistoryLoading)
                         {
@@ -367,7 +371,10 @@
                         {
                             <table class="aks-history-table">
                                 <thead>
-                                    <tr><th>Rev</th><th>Status</th><th>Chart</th><th>App Version</th><th>Updated</th><th>Description</th></tr>
+                                    <tr>
+                                        <th>Rev</th><th>Status</th><th>Chart</th><th>App Version</th><th>Updated</th><th>Description</th>
+                                        @if (HelmRollbackMode) { <th></th> }
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     @foreach (var rev in HelmHistory)
@@ -379,6 +386,18 @@
                                             <td>@rev.AppVersion</td>
                                             <td>@rev.Updated?.ToString("yyyy-MM-dd HH:mm")</td>
                                             <td>@rev.Description</td>
+                                            @if (HelmRollbackMode)
+                                            {
+                                                <td>
+                                                    @if (rev.Status == "superseded")
+                                                    {
+                                                        var r = rev;
+                                                        <button class="ctx-item destructive aks-rollback-btn" @onclick="() => OnRollbackToRevision(r)">
+                                                            &#8634; Rollback
+                                                        </button>
+                                                    }
+                                                </td>
+                                            }
                                         </tr>
                                     }
                                 </tbody>
@@ -497,6 +516,9 @@
     private string? HelmHistoryTarget;
     private List<HelmRevisionInfo> HelmHistory = [];
     private bool HelmHistoryLoading;
+
+    // Helm rollback mode (history panel shows rollback buttons)
+    private bool HelmRollbackMode;
 
     // Helm Values state
     private string? HelmValuesTarget;
@@ -926,6 +948,7 @@
     {
         HelmHistoryTarget = null;
         HelmHistory = [];
+        HelmRollbackMode = false;
         StateHasChanged();
     }
 
@@ -962,32 +985,44 @@
         CloseAllMenus();
         if (helm is null || Client is null) return;
 
-        // Load history to show revision picker
-        List<HelmRevisionInfo> history;
+        // Open history panel in rollback mode so user can pick a revision
+        CloseYaml();
+        CloseHelmValues();
+        HelmHistoryTarget = helm.Name;
+        HelmRollbackMode = true;
+        HelmHistoryLoading = true;
+        StateHasChanged();
+
         try
         {
-            history = (await Client.GetHelmReleaseHistoryAsync(CurrentNamespace, helm.Name)).ToList();
+            HelmHistory = (await Client.GetHelmReleaseHistoryAsync(CurrentNamespace, helm.Name)).ToList();
+            var hasPrevious = HelmHistory.Any(r => r.Status == "superseded");
+            if (!hasPrevious)
+            {
+                ErrorMessage = $"No previous revisions available for \"{helm.Name}\".";
+                CloseHelmHistory();
+                return;
+            }
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; return; }
+        catch (Exception ex) { ErrorMessage = ex.Message; CloseHelmHistory(); return; }
+        finally { HelmHistoryLoading = false; StateHasChanged(); }
+    }
 
-        var previousRevisions = history.Where(r => r.Status == "superseded").OrderByDescending(r => r.Revision).ToList();
-        if (previousRevisions.Count == 0)
-        {
-            ErrorMessage = $"No previous revisions available for \"{helm.Name}\".";
-            return;
-        }
+    private async Task OnRollbackToRevision(HelmRevisionInfo rev)
+    {
+        if (HelmHistoryTarget is null || Client is null) return;
+        var releaseName = HelmHistoryTarget;
 
-        // Default to the most recent superseded revision
-        var targetRevision = previousRevisions[0].Revision;
         var confirmed = await Confirm.ShowAsync(
-            $"Rollback \"{helm.Name}\" to revision {targetRevision} ({previousRevisions[0].Chart})?",
-            helm.Name,
+            $"Rollback \"{releaseName}\" to revision {rev.Revision} ({rev.Chart})?",
+            releaseName,
             requireTypedName: IsProduction);
         if (!confirmed) return;
 
         try
         {
-            await Client.RollbackHelmReleaseAsync(CurrentNamespace, helm.Name, targetRevision);
+            await Client.RollbackHelmReleaseAsync(CurrentNamespace, releaseName, rev.Revision);
+            CloseHelmHistory();
             await LoadAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }

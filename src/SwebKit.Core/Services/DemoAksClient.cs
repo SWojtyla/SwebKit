@@ -294,6 +294,64 @@ public class DemoAksClient : IAksClient
 
     public Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
     {
+        if (kind.Equals("Helm", StringComparison.OrdinalIgnoreCase))
+        {
+            var helmYaml = $"""
+                ---
+                # Source: {name}/templates/deployment.yaml
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app.kubernetes.io/name: {name}
+                    app.kubernetes.io/managed-by: Helm
+                    helm.sh/chart: {name}-1.3.0
+                spec:
+                  replicas: 3
+                  selector:
+                    matchLabels:
+                      app.kubernetes.io/name: {name}
+                  template:
+                    metadata:
+                      labels:
+                        app.kubernetes.io/name: {name}
+                    spec:
+                      containers:
+                      - name: {name}
+                        image: acr.azurecr.io/{name}:1.3.0
+                        ports:
+                        - containerPort: 8080
+                        resources:
+                          requests:
+                            cpu: 100m
+                            memory: 128Mi
+                          limits:
+                            cpu: 500m
+                            memory: 512Mi
+                ---
+                # Source: {name}/templates/service.yaml
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app.kubernetes.io/name: {name}
+                    app.kubernetes.io/managed-by: Helm
+                spec:
+                  type: ClusterIP
+                  ports:
+                  - port: 80
+                    targetPort: 8080
+                    protocol: TCP
+                  selector:
+                    app.kubernetes.io/name: {name}
+                """;
+            return Task.FromResult(helmYaml);
+        }
+
         var yaml = $"""
             apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}
             kind: {kind}
