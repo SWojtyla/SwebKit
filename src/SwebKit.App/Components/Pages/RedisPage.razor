@@ -1,0 +1,469 @@
+@page "/redis"
+@inject AppStateService AppState
+@implements IDisposable
+
+<div class="redis-page">
+    <h2>Redis</h2>
+
+    @if (!AppState.UseDemoData && !IsConfigured)
+    {
+        <div class="not-configured">
+            Redis is not configured for this environment. Configure it in Settings.
+        </div>
+    }
+    else
+    {
+        <div class="toolbar">
+            <div class="field">
+                <label>Pattern</label>
+                <input @bind="Pattern" />
+            </div>
+
+            <FluentButton Appearance="Appearance.Accent" @onclick="ScanAsync" Disabled="@IsLoading">Scan</FluentButton>
+            <FluentButton @onclick="RefreshSelectedAsync" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
+            </FluentButton>
+            <FluentButton @onclick="DeleteSelectedAsync" Disabled="@(IsLoading || SelectedKeys.Count == 0)">Delete Selected
+            </FluentButton>
+            <FluentButton @onclick="FlushDatabaseAsync" Disabled="@IsLoading">Flush DB</FluentButton>
+            <FluentButton @onclick="LoadServerInfoAsync" Disabled="@IsLoading">Server Info</FluentButton>
+            <AutoRefreshToggle OnRefresh="ScanAsync" Paused="@IsLoading" />
+
+            <span class="connection">@ConnectionLabel</span>
+        </div>
+
+        @if (ErrorMessage is not null)
+        {
+            <ErrorCallout Message="@ErrorMessage" />
+        }
+
+        <RedisServerInfo Visible="@ShowServerInfo" Info="@ServerInfo" />
+
+        <div class="content-grid">
+            <div class="panel">
+                <RedisKeyList Keys="@Keys"                              SelectedKeys="@SelectedKeys"                              SelectedKey="@SelectedKey"                              KeyTypes="@KeyTypes"
+                              IsLoading="@IsLoading"                              IsComplete="@IsComplete"                              OnSelectKey="SelectKeyAsync"                              OnLoadMore="LoadMoreAsync"
+                              OnToggleKeySelection="OnToggleKeySelectionAsync"
+                              OnToggleAllVisibleSelection="OnToggleAllVisibleAsync" />
+            </div>
+
+            <div class="panel detail-panel">
+                <RedisKeyDetail SelectedKey="@SelectedKey"                                KeyInfo="@SelectedInfo"                                StringValue="@SelectedStringValue"
+                                HashFields="@SelectedHashFields"                                Items="@SelectedItems"                                SortedSetItems="@SelectedSortedSetItems"
+                                OnRefresh="RefreshSelectedAsync"                                OnDelete="DeleteSelectedKeyAsync"                                OnSetTtl="SetTtlAsync"
+                                OnRemoveTtl="RemoveTtlAsync" />
+            </div>
+        </div>
+    }
+</div>
+
+<ConfirmDialog Visible="@ConfirmVisible"               Title="@ConfirmTitle"               Message="@ConfirmMessage"               ConfirmLabel="@ConfirmLabel"
+               IsProduction="@IsProduction"               RequireTyping="true"               OnConfirm="OnConfirmAsync"               OnCancel="OnCancelConfirmAsync" />
+
+@code {
+    private IRedisClient? Client;
+    private string Pattern = "*";
+    private bool IsLoading;
+    private string? ErrorMessage;
+
+    private readonly List<string> Keys = [];
+    private readonly HashSet<string> SelectedKeys = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
+    private long Cursor;
+    private bool IsComplete;
+
+    private string? SelectedKey;
+    private RedisKeyInfo? SelectedInfo;
+    private string? SelectedStringValue;
+    private List<RedisHashField> SelectedHashFields = [];
+    private List<string> SelectedItems = [];
+    private List<RedisSortedSetEntry> SelectedSortedSetItems = [];
+
+    private bool ShowServerInfo;
+    private SwebKit.Core.Models.RedisServerInfo? ServerInfo;
+
+    private bool ConfirmVisible;
+    private string ConfirmTitle = "Confirm";
+    private string ConfirmMessage = "Are you sure?";
+    private string ConfirmLabel = "Confirm";
+    private Func<Task>? ConfirmAction;
+
+    private bool IsConfigured => !string.IsNullOrWhiteSpace(AppState.CurrentEnvironment?.RedisConfig?.ConnectionString);
+    private bool IsProduction => AppState.CurrentEnvironment?.IsProduction ?? false;
+
+    private string ConnectionLabel => AppState.UseDemoData
+        ? "Connected: demo"
+        : $"Connected: {(AppState.CurrentEnvironment?.RedisConfig?.Alias ?? "Redis")}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ConnectAsync();
+        await ScanAsync();
+    }
+
+    private async Task ConnectAsync()
+    {
+        DisposeClient();
+        ErrorMessage = null;
+
+        try
+        {
+            if (AppState.UseDemoData)
+            {
+                var db = AppState.CurrentEnvironment?.RedisConfig?.Database ?? 0;
+                Client = new DemoRedisClient(db);
+                return;
+            }
+
+            var config = AppState.CurrentEnvironment?.RedisConfig;
+            if (config is null || string.IsNullOrWhiteSpace(config.ConnectionString))
+                return;
+
+            Client = new SwebKit.Redis.RedisClient(config);
+            await Client.TestConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            DisposeClient();
+        }
+    }
+
+    private async Task ScanAsync()
+    {
+        if (Client is null)
+            return;
+
+        IsLoading = true;
+        ErrorMessage = null;
+        Cursor = 0;
+        IsComplete = false;
+        Keys.Clear();
+        KeyTypes.Clear();
+        SelectedKeys.Clear();
+
+        try
+        {
+            var result = await Client.ScanKeysAsync(string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern, 0, 100);
+            Keys.AddRange(result.Keys);
+            Cursor = result.Cursor;
+            IsComplete = result.IsComplete;
+            await LoadVisibleKeyTypesAsync(result.Keys);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (Client is null || IsComplete)
+            return;
+
+        IsLoading = true;
+        ErrorMessage = null;
+
+        try
+        {
+            var result = await Client.ScanKeysAsync(string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern, Cursor, 100);
+            var newKeys = result.Keys.Where(k => !Keys.Contains(k, StringComparer.Ordinal)).ToList();
+            Keys.AddRange(newKeys);
+            Cursor = result.Cursor;
+            IsComplete = result.IsComplete;
+            await LoadVisibleKeyTypesAsync(newKeys);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys)
+    {
+        if (Client is null || targetKeys.Count == 0)
+            return;
+
+        var tasks = targetKeys.Select(async key =>
+        {
+            try
+            {
+                var info = await Client.GetKeyInfoAsync(key);
+                KeyTypes[key] = info.Type;
+            }
+            catch
+            {
+                KeyTypes[key] = "?";
+            }
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task SelectKeyAsync(string key)
+    {
+        SelectedKey = key;
+        await RefreshSelectedAsync();
+    }
+
+    private async Task RefreshSelectedAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey))
+            return;
+
+        ErrorMessage = null;
+
+        try
+        {
+            SelectedInfo = await Client.GetKeyInfoAsync(SelectedKey);
+            KeyTypes[SelectedKey] = SelectedInfo.Type;
+            SelectedStringValue = null;
+            SelectedHashFields = [];
+            SelectedItems = [];
+            SelectedSortedSetItems = [];
+
+            switch (SelectedInfo.Type)
+            {
+                case "string":
+                    SelectedStringValue = await Client.GetKeyValueAsync(SelectedKey);
+                    break;
+                case "hash":
+                    SelectedHashFields = (await Client.GetHashFieldsAsync(SelectedKey)).ToList();
+                    break;
+                case "list":
+                    SelectedItems = (await Client.GetListItemsAsync(SelectedKey, 0, 100)).ToList();
+                    break;
+                case "set":
+                    SelectedItems = (await Client.GetSetMembersAsync(SelectedKey)).ToList();
+                    break;
+                case "zset":
+                    SelectedSortedSetItems = (await Client.GetSortedSetMembersAsync(SelectedKey, 0, 100)).ToList();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnToggleKeySelectionAsync((string key, bool selected) change)
+    {
+        if (change.selected)
+            SelectedKeys.Add(change.key);
+        else
+            SelectedKeys.Remove(change.key);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnToggleAllVisibleAsync(bool selected)
+    {
+        foreach (var key in Keys)
+        {
+            if (selected)
+                SelectedKeys.Add(key);
+            else
+                SelectedKeys.Remove(key);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task DeleteSelectedKeyAsync()
+    {
+        if (SelectedKey is null)
+            return Task.CompletedTask;
+
+        return ShowConfirmationAsync(
+            title: "Delete Key",
+            message: $"Delete key '{SelectedKey}'?",
+            label: "Delete",
+            action: async () =>
+            {
+                if (Client is null || SelectedKey is null)
+                    return;
+
+                await Client.DeleteKeysAsync([SelectedKey]);
+                Keys.Remove(SelectedKey);
+                SelectedKeys.Remove(SelectedKey);
+                KeyTypes.Remove(SelectedKey);
+                SelectedKey = null;
+                SelectedInfo = null;
+                SelectedStringValue = null;
+                SelectedHashFields = [];
+                SelectedItems = [];
+                SelectedSortedSetItems = [];
+            });
+    }
+
+    private Task DeleteSelectedAsync()
+    {
+        if (SelectedKeys.Count == 0)
+            return Task.CompletedTask;
+
+        var count = SelectedKeys.Count;
+        return ShowConfirmationAsync(
+            title: "Delete Keys",
+            message: $"Delete {count} selected key(s)?",
+            label: "Delete",
+            action: async () =>
+            {
+                if (Client is null || SelectedKeys.Count == 0)
+                    return;
+
+                var keysToDelete = SelectedKeys.ToList();
+                await Client.DeleteKeysAsync(keysToDelete);
+
+                foreach (var key in keysToDelete)
+                {
+                    Keys.Remove(key);
+                    KeyTypes.Remove(key);
+                }
+
+                SelectedKeys.Clear();
+                if (SelectedKey is not null && !Keys.Contains(SelectedKey, StringComparer.Ordinal))
+                {
+                    SelectedKey = null;
+                    SelectedInfo = null;
+                }
+            });
+    }
+
+    private Task FlushDatabaseAsync()
+    {
+        return ShowConfirmationAsync(
+            title: "Flush Database",
+            message: "Flush the active Redis database? This removes all keys.",
+            label: "Flush",
+            action: async () =>
+            {
+                if (Client is null)
+                    return;
+
+                await Client.FlushDatabaseAsync();
+                Keys.Clear();
+                KeyTypes.Clear();
+                SelectedKeys.Clear();
+                SelectedKey = null;
+                SelectedInfo = null;
+                SelectedStringValue = null;
+                SelectedHashFields = [];
+                SelectedItems = [];
+                SelectedSortedSetItems = [];
+                Cursor = 0;
+                IsComplete = true;
+            });
+    }
+
+    private async Task SetTtlAsync(int ttlSeconds)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey))
+            return;
+
+        try
+        {
+            await Client.SetTtlAsync(SelectedKey, TimeSpan.FromSeconds(Math.Max(1, ttlSeconds)));
+            await RefreshSelectedAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RemoveTtlAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey))
+            return;
+
+        try
+        {
+            await Client.RemoveTtlAsync(SelectedKey);
+            await RefreshSelectedAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadServerInfoAsync()
+    {
+        if (Client is null)
+            return;
+
+        try
+        {
+            ServerInfo = await Client.GetServerInfoAsync();
+            ShowServerInfo = true;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task ShowConfirmationAsync(string title, string message, string label, Func<Task> action)
+    {
+        ConfirmTitle = title;
+        ConfirmMessage = message;
+        ConfirmLabel = label;
+        ConfirmAction = action;
+        ConfirmVisible = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnConfirmAsync()
+    {
+        ConfirmVisible = false;
+
+        try
+        {
+            if (ConfirmAction is not null)
+                await ConfirmAction();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            ConfirmAction = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task OnCancelConfirmAsync()
+    {
+        ConfirmVisible = false;
+        ConfirmAction = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void DisposeClient()
+    {
+        Client?.Dispose();
+        Client = null;
+    }
+
+    public void Dispose()
+    {
+        DisposeClient();
+    }
+}

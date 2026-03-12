@@ -37,25 +37,25 @@ Validate Redis connection management, key browsing, inspection, mutation, TTL ma
 
 Target: test all `IRedisClient` methods against the demo implementation.
 
-- [ ] `TestConnectionAsync` returns true
-- [ ] `ScanKeysAsync` with `*` returns demo keys
-- [ ] `ScanKeysAsync` with pattern filters correctly
-- [ ] `ScanKeysAsync` cursor pagination exhausts all keys
-- [ ] `GetKeyInfoAsync` returns correct type per key
-- [ ] `GetKeyInfoAsync` returns TTL for keys with expiry
-- [ ] `GetKeyValueAsync` returns string value
-- [ ] `GetHashFieldsAsync` returns field/value pairs
-- [ ] `GetListItemsAsync` returns items in range
-- [ ] `GetSetMembersAsync` returns all members
-- [ ] `GetSortedSetMembersAsync` returns members with scores
-- [ ] `SetKeyValueAsync` creates/updates key
-- [ ] `SetHashFieldAsync` adds/updates hash field
-- [ ] `DeleteKeysAsync` removes keys from keyspace
-- [ ] `GetTtlAsync` returns correct TTL
-- [ ] `SetTtlAsync` updates TTL
-- [ ] `RemoveTtlAsync` clears TTL
-- [ ] `FlushDatabaseAsync` empties keyspace
-- [ ] `GetServerInfoAsync` returns populated info
+- [x] `TestConnectionAsync` returns true
+- [x] `ScanKeysAsync` with `*` returns demo keys
+- [x] `ScanKeysAsync` with pattern filters correctly
+- [x] `ScanKeysAsync` cursor pagination exhausts all keys
+- [x] `GetKeyInfoAsync` returns correct type per key
+- [x] `GetKeyInfoAsync` returns TTL for keys with expiry
+- [x] `GetKeyValueAsync` returns string value
+- [x] `GetHashFieldsAsync` returns field/value pairs
+- [x] `GetListItemsAsync` returns items in range
+- [x] `GetSetMembersAsync` returns all members
+- [x] `GetSortedSetMembersAsync` returns members with scores
+- [x] `SetKeyValueAsync` creates/updates key
+- [x] `SetHashFieldAsync` adds/updates hash field
+- [x] `DeleteKeysAsync` removes keys from keyspace
+- [x] `GetTtlAsync` returns correct TTL
+- [x] `SetTtlAsync` updates TTL
+- [x] `RemoveTtlAsync` clears TTL
+- [x] `FlushDatabaseAsync` empties keyspace
+- [x] `GetServerInfoAsync` returns populated info
 
 ### Unit tests — `RedisClient` helpers
 
@@ -70,18 +70,18 @@ Target: test all `IRedisClient` methods against the demo implementation.
 
 Provide a realistic set of demo keys:
 
-| Key | Type | TTL | Value |
-|---|---|---|---|
-| `user:1001` | string | 3600s | `{"id":1001,"name":"Alice","email":"alice@example.com"}` |
-| `user:1002` | string | 3600s | `{"id":1002,"name":"Bob","email":"bob@example.com"}` |
-| `session:abc123` | hash | 1800s | `{user_id: "1001", ip: "10.0.0.1", created: "..."}` |
-| `session:def456` | hash | 1800s | `{user_id: "1002", ip: "10.0.0.2", created: "..."}` |
-| `cache:products` | list | 300s | `["product-1", "product-2", ..., "product-10"]` |
-| `cache:categories` | set | none | `{"electronics", "clothing", "food", "books"}` |
-| `leaderboard:daily` | zset | none | `{("alice", 1500), ("bob", 1200), ("charlie", 900)}` |
-| `config:feature-flags` | hash | none | `{dark_mode: "true", beta_api: "false", max_retries: "3"}` |
-| `rate-limit:api:10.0.0.1` | string | 60s | `"42"` |
-| `lock:inventory-sync` | string | 30s | `"worker-1"` |
+| Key                       | Type   | TTL   | Value                                                      |
+| ------------------------- | ------ | ----- | ---------------------------------------------------------- |
+| `user:1001`               | string | 3600s | `{"id":1001,"name":"Alice","email":"alice@example.com"}`   |
+| `user:1002`               | string | 3600s | `{"id":1002,"name":"Bob","email":"bob@example.com"}`       |
+| `session:abc123`          | hash   | 1800s | `{user_id: "1001", ip: "10.0.0.1", created: "..."}`        |
+| `session:def456`          | hash   | 1800s | `{user_id: "1002", ip: "10.0.0.2", created: "..."}`        |
+| `cache:products`          | list   | 300s  | `["product-1", "product-2", ..., "product-10"]`            |
+| `cache:categories`        | set    | none  | `{"electronics", "clothing", "food", "books"}`             |
+| `leaderboard:daily`       | zset   | none  | `{("alice", 1500), ("bob", 1200), ("charlie", 900)}`       |
+| `config:feature-flags`    | hash   | none  | `{dark_mode: "true", beta_api: "false", max_retries: "3"}` |
+| `rate-limit:api:10.0.0.1` | string | 60s   | `"42"`                                                     |
+| `lock:inventory-sync`     | string | 30s   | `"worker-1"`                                               |
 
 ### Mocking strategy
 
@@ -116,5 +116,5 @@ Provide a realistic set of demo keys:
 
 ## Validation status
 
-- Automated: Not started
+- Automated: DemoRedisClient suite passing (14 tests)
 - Manual: Not started

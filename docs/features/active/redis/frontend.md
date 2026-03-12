@@ -55,6 +55,7 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 ## Components
 
 ### RedisPage.razor (main page)
+
 - Toolbar: connection selector, DB selector (0-15), pattern input, scan/refresh buttons, auto-refresh toggle, server info button
 - Key list: left panel with virtual scroll, type icon per key, click to inspect
 - Key detail: right slide-out panel (ResizablePanel) showing key info, value, and actions
@@ -62,6 +63,7 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 - Context menu on key rows: View, Edit, Copy Value, Set TTL, Delete
 
 ### RedisKeyList.razor (key browser)
+
 - Cursor-based scan with "Load more" button
 - Pattern input with debounced search
 - Type indicators: color-coded badges (string=blue, hash=green, list=orange, set=purple, zset=red, stream=cyan)
@@ -69,6 +71,7 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 - Sort by name (default)
 
 ### RedisKeyDetail.razor (inspection/edit panel)
+
 - Key metadata: type, TTL, encoding, memory usage
 - Value viewer: type-aware rendering:
   - **String**: raw text with JSON pretty-print detection
@@ -81,11 +84,13 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 - Actions: Delete key, Copy value to clipboard
 
 ### RedisServerInfo.razor (server dashboard)
+
 - Modal or slide-out panel showing `INFO` output
 - Sections: Server (version, uptime), Clients (connected), Memory (used, peak, fragmentation), Stats (commands processed, hit/miss ratio), Keyspace (per-DB key counts)
 - Auto-refresh while open
 
 ### RedisConfigForm.razor (settings)
+
 - Connection string input (password masked)
 - Alias input (friendly name)
 - Default database selector (0-15)
@@ -94,33 +99,33 @@ Deliver a Redis management UI integrated into the SwebKit app shell with key bro
 
 ## States
 
-| State | UI |
-|---|---|
-| Not configured | "Go to Settings to configure Redis" link |
-| Connecting | Loading spinner in toolbar |
-| Connected | Green dot, alias shown, key list populated |
-| Connection failed | Red dot, error message, retry button |
-| Scanning | Spinner in key list, "Scanning..." text |
-| Empty keyspace | "No keys found" with pattern hint |
-| Key selected | Detail panel slides open |
-| Edit mode | Input fields replace read-only values, Save/Cancel buttons |
-| Bulk select | Checkbox column visible, "Delete N keys" button in toolbar |
+| State             | UI                                                         |
+| ----------------- | ---------------------------------------------------------- |
+| Not configured    | "Go to Settings to configure Redis" link                   |
+| Connecting        | Loading spinner in toolbar                                 |
+| Connected         | Green dot, alias shown, key list populated                 |
+| Connection failed | Red dot, error message, retry button                       |
+| Scanning          | Spinner in key list, "Scanning..." text                    |
+| Empty keyspace    | "No keys found" with pattern hint                          |
+| Key selected      | Detail panel slides open                                   |
+| Edit mode         | Input fields replace read-only values, Save/Cancel buttons |
+| Bulk select       | Checkbox column visible, "Delete N keys" button in toolbar |
 
 ## Tasks
 
-- [ ] Add Redis nav item to LeftNav (icon: database/cache icon)
-- [ ] Create RedisPage.razor with toolbar and layout
-- [ ] Create RedisKeyList.razor with SCAN-based browsing
-- [ ] Create RedisKeyDetail.razor with type-aware value display
-- [ ] Create RedisServerInfo.razor with INFO dashboard
-- [ ] Create RedisConfigForm.razor for settings
-- [ ] Add Redis accordion to SettingsPage
+- [x] Add Redis nav item to LeftNav (icon: database/cache icon)
+- [x] Create RedisPage.razor with toolbar and layout
+- [x] Create RedisKeyList.razor with SCAN-based browsing
+- [x] Create RedisKeyDetail.razor with type-aware value display
+- [x] Create RedisServerInfo.razor with INFO dashboard
+- [x] Create RedisConfigForm.razor for settings
+- [x] Add Redis accordion to SettingsPage
 - [ ] Wire context menus for key actions
-- [ ] Add bulk selection and multi-delete
+- [x] Add bulk selection and multi-delete
 - [ ] Add inline edit for string values and hash fields
-- [ ] Add TTL management controls
-- [ ] Add auto-refresh toggle (reuse AutoRefreshToggle component)
-- [ ] Add scoped CSS for all Redis components
+- [x] Add TTL management controls
+- [x] Add auto-refresh toggle (reuse AutoRefreshToggle component)
+- [x] Add scoped CSS for all Redis components
 - [ ] Handle all loading, error, and empty states
 
 ## Validation

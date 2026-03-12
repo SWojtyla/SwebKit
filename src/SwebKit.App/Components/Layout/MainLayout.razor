@@ -132,6 +132,18 @@
 
         Commands.Register(new AppCommand
         {
+            Id = "navigate-redis",
+            Label = "Navigate to Redis",
+            Category = "Navigation",
+            Execute = () =>
+            {
+                NavigateTo("redis");
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
             Id = "navigate-settings",
             Label = "Navigate to Settings",
             Category = "Navigation",

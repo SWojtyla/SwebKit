@@ -1,0 +1,78 @@
+.redis-page {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.redis-page h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.not-configured {
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+}
+
+.toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.field {
+    display: grid;
+    gap: 4px;
+}
+
+.field label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.field input {
+    width: 220px;
+    padding: 6px 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.connection {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-left: 8px;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 12px;
+    min-height: 0;
+    flex: 1;
+}
+
+.panel {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    overflow: auto;
+}
+
+.detail-panel {
+    padding: 12px;
+}
+
+@media (max-width: 1000px) {
+    .content-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(220px, 40%) 1fr;
+    }
+}

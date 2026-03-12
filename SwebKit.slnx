@@ -5,6 +5,7 @@
     <Project Path="src/SwebKit.Core/SwebKit.Core.csproj" />
     <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />
     <Project Path="src/SwebKit.OpenTelemetry/SwebKit.OpenTelemetry.csproj" />
+    <Project Path="src/SwebKit.Redis/SwebKit.Redis.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj" />

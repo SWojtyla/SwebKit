@@ -69,6 +69,7 @@ public class RedisConfig
 ```
 
 Added to `ProjectEnvironment`:
+
 ```csharp
 public RedisConfig? RedisConfig { get; set; }
 ```
@@ -143,14 +144,14 @@ public record DatabaseInfo(int Index, long Keys, long Expires, long AvgTtl);
 
 ## Tasks
 
-- [ ] Create `SwebKit.Redis` project with `StackExchange.Redis` dependency
-- [ ] Add `RedisConfig` domain model
-- [ ] Add `RedisConfig` to `ProjectEnvironment`
-- [ ] Define `IRedisClient` interface in `SwebKit.Core`
-- [ ] Add Redis model DTOs
-- [ ] Implement `RedisClient` in `SwebKit.Redis` using `StackExchange.Redis`
-- [ ] Implement `DemoRedisClient` in `SwebKit.Core` with realistic demo data
-- [ ] Add unit tests for `DemoRedisClient`
+- [x] Create `SwebKit.Redis` project with `StackExchange.Redis` dependency
+- [x] Add `RedisConfig` domain model
+- [x] Add `RedisConfig` to `ProjectEnvironment`
+- [x] Define `IRedisClient` interface in `SwebKit.Core`
+- [x] Add Redis model DTOs
+- [x] Implement `RedisClient` in `SwebKit.Redis` using `StackExchange.Redis`
+- [x] Implement `DemoRedisClient` in `SwebKit.Core` with realistic demo data
+- [x] Add unit tests for `DemoRedisClient`
 - [ ] Add unit tests for any parsing/formatting helpers
 
 ## Migration and runtime changes

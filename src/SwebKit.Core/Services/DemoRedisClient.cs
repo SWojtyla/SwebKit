@@ -1,0 +1,425 @@
+using System.Text.RegularExpressions;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Models;
+
+namespace SwebKit.Core.Services;
+
+/// <summary>
+/// In-memory Redis-like client that supports key browsing, inspection, and mutation for demo/testing.
+/// </summary>
+public sealed class DemoRedisClient : IRedisClient
+{
+    private readonly int _database;
+    private readonly Dictionary<int, Dictionary<string, DemoValue>> _databases = [];
+
+    public DemoRedisClient(int database = 0)
+    {
+        _database = Math.Clamp(database, 0, 15);
+        Seed();
+    }
+
+    public Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(true);
+    }
+
+    public Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        PruneExpired(db);
+
+        pageSize = Math.Max(1, pageSize);
+        var start = (int)Math.Max(0, cursor);
+        var keys = db.Keys
+            .Where(k => MatchesPattern(k, pattern))
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
+
+        if (start >= keys.Count)
+        {
+            return Task.FromResult(new KeyScanResult
+            {
+                Cursor = 0,
+                Keys = [],
+                IsComplete = true
+            });
+        }
+
+        var page = keys.Skip(start).Take(pageSize).ToList();
+        var nextCursor = start + page.Count;
+        var isComplete = nextCursor >= keys.Count;
+
+        return Task.FromResult(new KeyScanResult
+        {
+            Cursor = isComplete ? 0 : nextCursor,
+            Keys = page,
+            IsComplete = isComplete
+        });
+    }
+
+    public Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value))
+        {
+            return Task.FromResult(new RedisKeyInfo
+            {
+                Key = key,
+                Type = "none",
+                Ttl = null,
+                MemoryBytes = null,
+                Encoding = null
+            });
+        }
+
+        return Task.FromResult(new RedisKeyInfo
+        {
+            Key = key,
+            Type = value.Type,
+            Ttl = GetTtl(value),
+            MemoryBytes = EstimateBytes(value),
+            Encoding = GetEncoding(value.Type)
+        });
+    }
+
+    public Task<string?> GetKeyValueAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "string")
+            return Task.FromResult<string?>(null);
+
+        return Task.FromResult(value.Value as string);
+    }
+
+    public Task<IReadOnlyList<RedisHashField>> GetHashFieldsAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "hash")
+            return Task.FromResult<IReadOnlyList<RedisHashField>>([]);
+
+        var fields = ((Dictionary<string, string>)value.Value)
+            .Select(kvp => new RedisHashField { Field = kvp.Key, Value = kvp.Value })
+            .OrderBy(x => x.Field, StringComparer.Ordinal)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<RedisHashField>>(fields);
+    }
+
+    public Task<IReadOnlyList<string>> GetListItemsAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "list")
+            return Task.FromResult<IReadOnlyList<string>>([]);
+
+        var items = (List<string>)value.Value;
+        var (from, to) = NormalizeRange(items.Count, start, stop);
+        if (from > to)
+            return Task.FromResult<IReadOnlyList<string>>([]);
+
+        return Task.FromResult<IReadOnlyList<string>>(items.Skip(from).Take(to - from + 1).ToList());
+    }
+
+    public Task<IReadOnlyList<string>> GetSetMembersAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "set")
+            return Task.FromResult<IReadOnlyList<string>>([]);
+
+        var members = ((HashSet<string>)value.Value).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        return Task.FromResult<IReadOnlyList<string>>(members);
+    }
+
+    public Task<IReadOnlyList<RedisSortedSetEntry>> GetSortedSetMembersAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "zset")
+            return Task.FromResult<IReadOnlyList<RedisSortedSetEntry>>([]);
+
+        var entries = ((List<RedisSortedSetEntry>)value.Value)
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Member, StringComparer.Ordinal)
+            .ToList();
+
+        var (from, to) = NormalizeRange(entries.Count, start, stop);
+        if (from > to)
+            return Task.FromResult<IReadOnlyList<RedisSortedSetEntry>>([]);
+
+        return Task.FromResult<IReadOnlyList<RedisSortedSetEntry>>(entries.Skip(from).Take(to - from + 1).ToList());
+    }
+
+    public Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        db[key] = new DemoValue("string", value, ToExpiry(expiry));
+        return Task.CompletedTask;
+    }
+
+    public Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+
+        if (!TryGetValue(db, key, out var existing) || existing.Type != "hash")
+        {
+            existing = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal), null);
+            db[key] = existing;
+        }
+
+        ((Dictionary<string, string>)existing.Value)[field] = value;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        foreach (var key in keys)
+            db.Remove(key);
+
+        return Task.CompletedTask;
+    }
+
+    public Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value))
+            return Task.FromResult<TimeSpan?>(null);
+
+        return Task.FromResult(GetTtl(value));
+    }
+
+    public Task SetTtlAsync(string key, TimeSpan ttl, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (TryGetValue(db, key, out var value))
+            value.ExpiresAt = DateTimeOffset.UtcNow.Add(ttl);
+
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveTtlAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (TryGetValue(db, key, out var value))
+            value.ExpiresAt = null;
+
+        return Task.CompletedTask;
+    }
+
+    public Task FlushDatabaseAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        db.Clear();
+        return Task.CompletedTask;
+    }
+
+    public Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        PruneExpired(db);
+
+        var totalBytes = db.Values.Sum(EstimateBytes);
+        var expiring = db.Values.Count(v => v.ExpiresAt.HasValue);
+
+        var info = new RedisServerInfo
+        {
+            RedisVersion = "7.2-demo",
+            UptimeSeconds = 86_400,
+            ConnectedClients = 3,
+            UsedMemoryBytes = totalBytes,
+            UsedMemoryHuman = ToHumanBytes(totalBytes),
+            TotalCommandsProcessed = 1_024,
+            KeyspaceHitRatio = 0.93,
+            Databases =
+            [
+                new RedisDatabaseInfo
+                {
+                    Index = _database,
+                    Keys = db.Count,
+                    Expires = expiring,
+                    AvgTtl = expiring == 0
+                        ? 0
+                        : (long)db.Values
+                            .Where(v => v.ExpiresAt.HasValue)
+                            .Select(v => Math.Max(0, (v.ExpiresAt!.Value - DateTimeOffset.UtcNow).TotalMilliseconds))
+                            .DefaultIfEmpty(0)
+                            .Average()
+                }
+            ]
+        };
+
+        return Task.FromResult(info);
+    }
+
+    public void Dispose()
+    {
+    }
+
+    private Dictionary<string, DemoValue> GetDb()
+    {
+        if (!_databases.TryGetValue(_database, out var db))
+        {
+            db = new Dictionary<string, DemoValue>(StringComparer.Ordinal);
+            _databases[_database] = db;
+        }
+
+        return db;
+    }
+
+    private static bool TryGetValue(Dictionary<string, DemoValue> db, string key, out DemoValue value)
+    {
+        if (!db.TryGetValue(key, out value!))
+            return false;
+
+        if (value.ExpiresAt.HasValue && value.ExpiresAt.Value <= DateTimeOffset.UtcNow)
+        {
+            db.Remove(key);
+            value = default!;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static TimeSpan? GetTtl(DemoValue value)
+    {
+        if (!value.ExpiresAt.HasValue)
+            return null;
+
+        var ttl = value.ExpiresAt.Value - DateTimeOffset.UtcNow;
+        return ttl <= TimeSpan.Zero ? TimeSpan.Zero : ttl;
+    }
+
+    private static DateTimeOffset? ToExpiry(TimeSpan? ttl) =>
+        ttl.HasValue ? DateTimeOffset.UtcNow.Add(ttl.Value) : null;
+
+    private static string GetEncoding(string type) => type switch
+    {
+        "string" => "embstr",
+        "hash" => "hashtable",
+        "list" => "quicklist",
+        "set" => "hashtable",
+        "zset" => "skiplist",
+        "stream" => "listpack",
+        _ => "unknown"
+    };
+
+    private static long EstimateBytes(DemoValue value) => value.Type switch
+    {
+        "string" => ((string)value.Value).Length,
+        "hash" => ((Dictionary<string, string>)value.Value).Sum(x => x.Key.Length + x.Value.Length),
+        "list" => ((List<string>)value.Value).Sum(x => x.Length),
+        "set" => ((HashSet<string>)value.Value).Sum(x => x.Length),
+        "zset" => ((List<RedisSortedSetEntry>)value.Value).Sum(x => x.Member.Length + sizeof(double)),
+        _ => 0
+    };
+
+    private static void PruneExpired(Dictionary<string, DemoValue> db)
+    {
+        var expired = db.Where(x => x.Value.ExpiresAt.HasValue && x.Value.ExpiresAt.Value <= DateTimeOffset.UtcNow)
+            .Select(x => x.Key)
+            .ToList();
+
+        foreach (var key in expired)
+            db.Remove(key);
+    }
+
+    private static bool MatchesPattern(string input, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern) || pattern == "*")
+            return true;
+
+        var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+        return Regex.IsMatch(input, regex, RegexOptions.CultureInvariant);
+    }
+
+    private static (int Start, int End) NormalizeRange(int count, long start, long stop)
+    {
+        if (count == 0)
+            return (1, 0);
+
+        var from = start < 0 ? count + (int)start : (int)start;
+        var to = stop < 0 ? count + (int)stop : (int)stop;
+
+        from = Math.Clamp(from, 0, count - 1);
+        to = Math.Clamp(to, 0, count - 1);
+        return (from, to);
+    }
+
+    private static string ToHumanBytes(long bytes)
+    {
+        const double kb = 1024;
+        const double mb = kb * 1024;
+
+        if (bytes >= mb)
+            return $"{bytes / mb:0.00}M";
+        if (bytes >= kb)
+            return $"{bytes / kb:0.00}K";
+
+        return $"{bytes}B";
+    }
+
+    private void Seed()
+    {
+        var db = GetDb();
+
+        db["user:1001"] = new DemoValue("string", "{\"id\":1001,\"name\":\"Alice\",\"email\":\"alice@example.com\"}", DateTimeOffset.UtcNow.AddHours(1));
+        db["user:1002"] = new DemoValue("string", "{\"id\":1002,\"name\":\"Bob\",\"email\":\"bob@example.com\"}", DateTimeOffset.UtcNow.AddHours(1));
+        db["session:abc123"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["user_id"] = "1001",
+            ["ip"] = "10.0.0.1",
+            ["created"] = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("O")
+        }, DateTimeOffset.UtcNow.AddMinutes(30));
+        db["session:def456"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["user_id"] = "1002",
+            ["ip"] = "10.0.0.2",
+            ["created"] = DateTimeOffset.UtcNow.AddMinutes(-8).ToString("O")
+        }, DateTimeOffset.UtcNow.AddMinutes(30));
+        db["cache:products"] = new DemoValue("list", Enumerable.Range(1, 10).Select(x => $"product-{x}").ToList(), DateTimeOffset.UtcNow.AddMinutes(5));
+        db["cache:categories"] = new DemoValue("set", new HashSet<string>(["electronics", "clothing", "food", "books"], StringComparer.Ordinal), null);
+        db["leaderboard:daily"] = new DemoValue("zset", new List<RedisSortedSetEntry>
+        {
+            new() { Member = "alice", Score = 1500 },
+            new() { Member = "bob", Score = 1200 },
+            new() { Member = "charlie", Score = 900 }
+        }, null);
+        db["config:feature-flags"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["dark_mode"] = "true",
+            ["beta_api"] = "false",
+            ["max_retries"] = "3"
+        }, null);
+        db["rate-limit:api:10.0.0.1"] = new DemoValue("string", "42", DateTimeOffset.UtcNow.AddSeconds(60));
+        db["lock:inventory-sync"] = new DemoValue("string", "worker-1", DateTimeOffset.UtcNow.AddSeconds(30));
+    }
+
+    private sealed class DemoValue
+    {
+        public DemoValue(string type, object value, DateTimeOffset? expiresAt)
+        {
+            Type = type;
+            Value = value;
+            ExpiresAt = expiresAt;
+        }
+
+        public string Type { get; }
+        public object Value { get; }
+        public DateTimeOffset? ExpiresAt { get; set; }
+    }
+}

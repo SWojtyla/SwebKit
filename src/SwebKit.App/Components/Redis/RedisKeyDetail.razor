@@ -1,0 +1,110 @@
+<div class="redis-key-detail">
+    @if (SelectedKey is null)
+    {
+        <div class="empty">Select a key to inspect.</div>
+    }
+    else if (KeyInfo is null)
+    {
+        <div class="empty">Loading key details...</div>
+    }
+    else
+    {
+        <div class="meta">
+            <div class="key-name">@KeyInfo.Key</div>
+            <div class="kv">Type: @KeyInfo.Type</div>
+            <div class="kv">TTL: @FormatTtl(KeyInfo.Ttl)</div>
+            @if (KeyInfo.MemoryBytes.HasValue)
+            {
+                <div class="kv">Memory: @KeyInfo.MemoryBytes bytes</div>
+            }
+        </div>
+
+        <div class="actions">
+            <FluentButton Appearance="Appearance.Accent" @onclick="OnRefresh">Refresh</FluentButton>
+            <FluentButton @onclick="OnDelete">Delete</FluentButton>
+        </div>
+
+        <div class="ttl-actions">
+            <input type="number" min="1" @bind="TtlSeconds" class="ttl-input" />
+            <FluentButton @onclick="ApplyTtlAsync">Set TTL (s)</FluentButton>
+            <FluentButton @onclick="RemoveTtl">Remove TTL</FluentButton>
+        </div>
+
+        @if (KeyInfo.Type == "string")
+        {
+            <pre class="blob">@StringValue</pre>
+        }
+        else if (KeyInfo.Type == "hash")
+        {
+            <table class="table">
+                <thead>
+                <tr><th>Field</th><th>Value</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var field in HashFields)
+                {
+                    <tr><td>@field.Field</td><td>@field.Value</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+        else if (KeyInfo.Type == "list" || KeyInfo.Type == "set")
+        {
+            <ul class="list">
+                @foreach (var item in Items)
+                {
+                    <li>@item</li>
+                }
+            </ul>
+        }
+        else if (KeyInfo.Type == "zset")
+        {
+            <table class="table">
+                <thead>
+                <tr><th>Member</th><th>Score</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var item in SortedSetItems)
+                {
+                    <tr><td>@item.Member</td><td>@item.Score</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public RedisKeyInfo? KeyInfo { get; set; }
+    [Parameter] public string? StringValue { get; set; }
+    [Parameter] public IReadOnlyList<RedisHashField> HashFields { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> Items { get; set; } = [];
+    [Parameter] public IReadOnlyList<RedisSortedSetEntry> SortedSetItems { get; set; } = [];
+
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback<int> OnSetTtl { get; set; }
+    [Parameter] public EventCallback OnRemoveTtl { get; set; }
+
+    private int TtlSeconds = 300;
+
+    private Task RemoveTtl() => OnRemoveTtl.InvokeAsync();
+
+    private Task ApplyTtlAsync()
+    {
+        var value = Math.Max(1, TtlSeconds);
+        return OnSetTtl.InvokeAsync(value);
+    }
+
+    private static string FormatTtl(TimeSpan? ttl)
+    {
+        if (!ttl.HasValue)
+            return "none";
+
+        if (ttl.Value <= TimeSpan.Zero)
+            return "expired";
+
+        return $"{ttl.Value.TotalSeconds:0}s";
+    }
+}
