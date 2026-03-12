@@ -1,39 +1,62 @@
 @using SwebKit.Core.Domain
 
 <div style="display:grid; gap:10px; padding:12px 0;">
-    <FluentTextField Label="Kubeconfig Context" @bind-Value="KubeconfigContext" style="width:100%;"
+    <FluentTextField Label="Kubeconfig Path (optional)" @bind-Value="KubeconfigPath" style="width:100%;"
+                     Placeholder="C:\\Users\\you\\.kube\\config" />
+    <FluentTextField Label="Default Context (optional)" @bind-Value="KubeconfigContext" style="width:100%;"
                      Placeholder="my-aks-context" />
-    <FluentTextField Label="Default Namespace" @bind-Value="DefaultNamespace" style="width:100%;"
+    <FluentTextField Label="Default Namespace (optional)" @bind-Value="DefaultNamespace" style="width:100%;"
                      Placeholder="default" />
-    <FluentTextField Label="Explicit Cluster URL (optional)" @bind-Value="ExplicitClusterUrl" style="width:100%;"
-                     Placeholder="https://..." />
 
-    <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
+    <div style="display:flex; align-items:center; gap:8px;">
+        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
+        @if (ShowSaved)
+        {
+            <span style="font-size:12px; color:var(--color-success);">Saved</span>
+        }
+    </div>
+
+    @if (Environment.AksConfig is not null)
+    {
+        <div style="font-size:12px; color:var(--color-text-muted); padding:4px 0;">
+            <strong>Current:</strong>
+            Path: @(Environment.AksConfig.KubeconfigPath ?? "(default)") &middot;
+            Context: @(Environment.AksConfig.KubeconfigContext ?? "(current)") &middot;
+            Namespace: @Environment.AksConfig.DefaultNamespace
+        </div>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    private string KubeconfigPath = string.Empty;
     private string KubeconfigContext = string.Empty;
     private string DefaultNamespace = "default";
-    private string ExplicitClusterUrl = string.Empty;
+    private bool ShowSaved;
 
     protected override void OnParametersSet()
     {
         var config = Environment.AksConfig;
+        KubeconfigPath = config?.KubeconfigPath ?? string.Empty;
         KubeconfigContext = config?.KubeconfigContext ?? string.Empty;
         DefaultNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
-        ExplicitClusterUrl = config?.ExplicitClusterUrl ?? string.Empty;
     }
 
     private async Task SaveAsync()
     {
         var config = Environment.AksConfig ??= new AksConfig();
+        config.KubeconfigPath = string.IsNullOrWhiteSpace(KubeconfigPath) ? null : KubeconfigPath.Trim();
         config.KubeconfigContext = string.IsNullOrWhiteSpace(KubeconfigContext) ? null : KubeconfigContext.Trim();
         config.DefaultNamespace = string.IsNullOrWhiteSpace(DefaultNamespace) ? "default" : DefaultNamespace.Trim();
-        config.ExplicitClusterUrl = string.IsNullOrWhiteSpace(ExplicitClusterUrl) ? null : ExplicitClusterUrl.Trim();
 
         await OnSaved.InvokeAsync();
+
+        ShowSaved = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ShowSaved = false;
+        StateHasChanged();
     }
 }

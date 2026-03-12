@@ -2,9 +2,9 @@
 
 ---
 
-title: "Decisions - AKS"
+title: "Decisions - AKS Connectivity Foundation"
 owner: ""
-status: "In Progress"
+status: "Archived"
 
 ---
 
@@ -80,3 +80,29 @@ Expose read-only YAML viewing for supported resource kinds; defer edit/apply/del
 ### Alternatives considered
 
 - Full inline YAML editor with apply — rejected for initial scope and safety concerns.
+
+---
+
+## Decision 004 — Add Azure Identity fallback when kubeconfig auth has no token
+
+**Status:** Accepted
+
+**Date:** 2026-03-10
+
+### Context
+
+AKS kubeconfig authentication may rely on external exec providers or Azure CLI token acquisition. Runtime environments can differ, and not every machine setup guarantees the same auth plugin behavior out of the box.
+
+### Decision
+
+Keep kubeconfig loading and context resolution as the primary auth path, but add an AKS-focused Azure Identity fallback that requests an Entra access token when kubeconfig authentication does not provide one.
+
+### Consequences
+
+- Improves resilience for local and hosted environments where kubeconfig exec auth is incomplete.
+- Keeps existing kubeconfig-based behavior intact and non-breaking.
+- Requires clear testing around token scope derivation and fallback gating.
+
+### Alternatives considered
+
+- Keep Azure CLI-only token behavior — rejected due to environment coupling and weaker portability.

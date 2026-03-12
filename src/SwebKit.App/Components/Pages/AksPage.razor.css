@@ -1,0 +1,481 @@
+/* ── Page shell ── */
+.aks-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Toolbar ── */
+.aks-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-context-label {
+    font-size: 12px;
+    color: var(--color-text);
+}
+
+.aks-toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-toolbar-spacer {
+    flex: 1;
+}
+
+/* ── Namespace dropdown ── */
+.aks-ns-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.aks-ns-select {
+    padding: 3px 8px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+    min-width: 120px;
+    cursor: pointer;
+}
+
+.aks-ns-select:focus {
+    border-color: var(--color-accent);
+}
+
+/* ── Resource type tabs ── */
+.aks-resource-tab {
+    padding: 4px 12px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+}
+
+.aks-resource-tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-resource-tab.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(0, 120, 212, 0.08);
+}
+
+/* ── Empty state ── */
+.aks-empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--color-text-muted);
+    padding: 48px;
+}
+
+.aks-empty-icon {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: 8px;
+}
+
+.aks-empty-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.aks-empty-subtitle {
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 400px;
+}
+
+.aks-empty-subtitle a {
+    color: var(--color-accent);
+    text-decoration: none;
+}
+
+.aks-empty-subtitle a:hover {
+    text-decoration: underline;
+}
+
+/* ── Main content area ── */
+.aks-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.aks-content.events-collapsed {
+    grid-template-columns: 1fr auto;
+}
+
+.aks-content.side-open {
+    grid-template-columns: 1fr 280px auto;
+}
+
+.aks-content.side-open.events-collapsed {
+    grid-template-columns: 1fr auto auto;
+}
+
+/* ── Section header (shared) ── */
+.aks-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aks-section-count {
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ── Resource panel (main table area) ── */
+.aks-resource-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.aks-table-wrap {
+    flex: 1;
+    overflow: auto;
+    font-size: 12px;
+}
+
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: 4px 8px;
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-ready-badge.healthy {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.aks-ready-badge.degraded {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.aks-status {
+    font-size: 11px;
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.error {
+    color: var(--color-error);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+.aks-ingress-hosts {
+    font-size: 11px;
+    color: var(--color-accent);
+}
+
+/* ── Events panel ── */
+.aks-events-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid var(--color-border);
+}
+
+.aks-events-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.aks-events-empty {
+    padding: 32px 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.aks-collapse-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.aks-collapse-btn:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+/* ── Events collapsed tab (vertical strip) ── */
+.aks-events-collapsed-tab {
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    padding: 12px 6px;
+    background: var(--color-surface);
+    border: none;
+    border-left: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+}
+
+.aks-events-collapsed-tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-event-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 11px;
+    transition: background 0.1s;
+}
+
+.aks-event-item:hover {
+    background: var(--color-surface-2);
+}
+
+.aks-event-item.warning {
+    border-left: 2px solid var(--color-warning);
+}
+
+.aks-event-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.aks-event-icon {
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.aks-event-icon.warning {
+    color: var(--color-warning);
+}
+
+.aks-event-icon.normal {
+    color: var(--color-text-muted);
+    font-size: 6px;
+}
+
+.aks-event-reason {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.aks-event-item.warning .aks-event-reason {
+    color: var(--color-warning);
+}
+
+.aks-event-count {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    background: var(--color-surface-2);
+    padding: 0 5px;
+    border-radius: 6px;
+}
+
+.aks-event-time {
+    margin-left: auto;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.aks-event-detail {
+    color: var(--color-text-muted);
+    margin-top: 3px;
+    padding-left: 16px;
+    line-height: 1.4;
+}
+
+.aks-event-object {
+    color: var(--color-accent);
+    margin-right: 4px;
+}
+
+/* ── Side panel header (used inside ResizablePanel) ── */
+.aks-log-header {
+    background: var(--color-surface);
+}
+
+.aks-yaml-content {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+}
+
+.aks-yaml-pre {
+    margin: 0;
+    padding: 12px;
+    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--color-text);
+    white-space: pre;
+    tab-size: 2;
+}
+
+.aks-yaml-error {
+    padding: 16px;
+    color: var(--color-error);
+    font-size: 12px;
+}
+
+/* ── Helm age suffix ── */
+.aks-age-suffix {
+    color: var(--color-text-muted);
+    font-size: 10px;
+}
+
+/* ── Helm history table ── */
+.aks-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.aks-history-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.aks-history-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.aks-history-table tr:hover td {
+    background: var(--color-surface-2);
+}
+
+.aks-rev-current td {
+    background: rgba(67, 160, 71, 0.06);
+}
+
+.aks-rollback-hint {
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--color-text-secondary, #888);
+    border-bottom: 1px solid var(--color-border, #333);
+}
+
+.aks-rollback-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* ── Selected row ── */
+::deep .selected-row {
+    background: rgba(0, 120, 212, 0.08);
+}
+
+/* ── Pod metrics ── */
+.aks-metric {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-metric.metric-low {
+    color: var(--color-success);
+}
+
+.aks-metric.metric-med {
+    color: var(--color-warning);
+}
+
+.aks-metric.metric-high {
+    color: var(--color-error);
+}
+
+/* ── Namespace cell (multi-namespace mode) ── */
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}

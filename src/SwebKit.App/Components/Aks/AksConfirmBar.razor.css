@@ -1,0 +1,73 @@
+.confirm-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: rgba(251, 140, 0, 0.08);
+    border: 1px solid var(--color-warning);
+    border-radius: 4px;
+    margin: 8px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.confirm-bar.destructive {
+    background: rgba(244, 67, 54, 0.08);
+    border-color: var(--color-error);
+}
+
+.confirm-message {
+    flex: 1;
+    color: var(--color-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.confirm-input {
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 12px;
+    min-width: 180px;
+    outline: none;
+}
+
+.confirm-input:focus {
+    border-color: var(--color-accent);
+}
+
+.confirm-btn {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.confirm-yes {
+    background: var(--color-error);
+    color: white;
+}
+
+.confirm-yes:hover:not(.disabled) {
+    filter: brightness(1.1);
+}
+
+.confirm-yes.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.confirm-no {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+}
+
+.confirm-no:hover {
+    background: var(--color-border);
+}

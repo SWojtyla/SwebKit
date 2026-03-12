@@ -1,0 +1,60 @@
+@if (Visible)
+{
+    <div class="confirm-bar @(IsDestructive ? "destructive" : "")">
+        <span class="confirm-message">@Message</span>
+        @if (RequireTypedName)
+        {
+            <input class="confirm-input" placeholder="Type resource name to confirm"
+                   @bind="TypedName" @bind:event="oninput" />
+        }
+        <button class="confirm-btn confirm-yes @(CanConfirm ? "" : "disabled")"
+                disabled="@(!CanConfirm)" @onclick="OnConfirm">
+            Confirm
+        </button>
+        <button class="confirm-btn confirm-no" @onclick="OnCancel">Cancel</button>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsDestructive { get; set; } = true;
+
+    private bool Visible;
+    private string Message = string.Empty;
+    private string? ExpectedName;
+    private bool RequireTypedName;
+    private string TypedName = string.Empty;
+    private TaskCompletionSource<bool>? _tcs;
+
+    private bool CanConfirm => !RequireTypedName ||
+        string.Equals(TypedName.Trim(), ExpectedName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Shows the confirmation bar and returns true if the user confirms.
+    /// </summary>
+    public Task<bool> ShowAsync(string message, string? resourceName = null, bool requireTypedName = false)
+    {
+        Message = message;
+        ExpectedName = resourceName;
+        RequireTypedName = requireTypedName;
+        TypedName = string.Empty;
+        Visible = true;
+        _tcs = new TaskCompletionSource<bool>();
+        StateHasChanged();
+        return _tcs.Task;
+    }
+
+    private void OnConfirm()
+    {
+        if (!CanConfirm) return;
+        Visible = false;
+        _tcs?.TrySetResult(true);
+        StateHasChanged();
+    }
+
+    private void OnCancel()
+    {
+        Visible = false;
+        _tcs?.TrySetResult(false);
+        StateHasChanged();
+    }
+}

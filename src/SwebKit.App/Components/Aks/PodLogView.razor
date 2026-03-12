@@ -1,27 +1,36 @@
 @inject IAppEventBus Events
 @implements IAsyncDisposable
 
-<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
-    <div class="filter-bar">
-        <label style="font-size:11px; display:flex; align-items:center; gap:4px;">
+<div class="log-viewer">
+    <div class="log-toolbar">
+        <label class="log-live-toggle">
             <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" />
-            Live tail
+            <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
+            Live
         </label>
-        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter lines..."
-               style="flex:1; padding:3px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:12px;" />
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs">Clear</FluentButton>
+        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…"
+               class="log-filter-input" />
+        <span class="log-line-count">@FilteredLines.Count lines</span>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
     </div>
 
-    <div style="flex:1; overflow-y:auto; font-family:monospace; font-size:11px; padding:6px 10px; line-height:1.5;" @ref="_logContainer">
-        @foreach (var line in FilteredLines)
+    <div class="log-output" @ref="_logContainer">
+        @if (FilteredLines.Count == 0 && !IsLoading)
         {
-            <div style="@GetLineStyle(line)">@line</div>
+            <div class="log-empty">No log lines yet</div>
         }
-        @if (IsLive && IsLoading)
+        else
         {
-            <div style="color:var(--color-text-muted); padding:4px 0;">
-                <FluentProgressRing Width="12px" /> Tailing logs...
-            </div>
+            @foreach (var line in FilteredLines)
+            {
+                <div class="log-line @GetLineClass(line)">@line</div>
+            }
+            @if (IsLive && IsLoading)
+            {
+                <div class="log-tailing">
+                    <FluentProgressRing Width="12px" /> Tailing…
+                </div>
+            }
         }
     </div>
 </div>
@@ -73,7 +82,7 @@
                     Lines.Add(line);
                     if (Lines.Count > 10000) Lines.RemoveAt(0);
                     await InvokeAsync(StateHasChanged);
-                    await Task.Delay(50); // throttle
+                    await Task.Delay(50); // throttle UI updates
                 }
                 await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
             });
@@ -83,14 +92,14 @@
 
     private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
 
-    private static string GetLineStyle(string line)
+    private static string GetLineClass(string line)
     {
         if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
-            return "color: #FF6B6B;";
+            return "error";
         if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN", StringComparison.OrdinalIgnoreCase))
-            return "color: #FFB86C;";
+            return "warn";
         if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
-            return "color: var(--color-text-muted);";
+            return "debug";
         return "";
     }
 

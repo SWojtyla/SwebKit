@@ -177,6 +177,235 @@ public class DemoAksClient : IAksClient
         return events.OrderByDescending(e => e.LastTimestamp).ToList();
     }
 
+    public async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        return new List<IngressInfo>
+        {
+            new()
+            {
+                Name = "main-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.52"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "api.ecommerce.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/orders", PathType = "Prefix", ServiceName = "order-api", ServicePort = 80 },
+                            new IngressPath { Path = "/products", PathType = "Prefix", ServiceName = "product-catalog", ServicePort = 80 },
+                            new IngressPath { Path = "/cart", PathType = "Prefix", ServiceName = "cart-api", ServicePort = 80 },
+                            new IngressPath { Path = "/auth", PathType = "Prefix", ServiceName = "auth-service", ServicePort = 80 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "admin-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.52"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "admin.ecommerce.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "admin-dashboard", ServicePort = 8080 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "monitoring-ingress", Namespace = ns, IngressClass = "nginx",
+                Addresses = ["20.93.141.53"],
+                Rules =
+                [
+                    new IngressRule
+                    {
+                        Host = "grafana.internal.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "grafana", ServicePort = 3000 },
+                        ]
+                    },
+                    new IngressRule
+                    {
+                        Host = "prometheus.internal.example.com",
+                        Paths =
+                        [
+                            new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "prometheus-server", ServicePort = 9090 },
+                        ]
+                    }
+                ],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm", ["tier"] = "monitoring" }
+            }
+        };
+    }
+
+    public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<string> namespaces = new List<string>
+        {
+            "default",
+            "ecommerce",
+            "kube-system",
+            "monitoring",
+            "ingress-nginx",
+            "cert-manager",
+            "istio-system"
+        };
+        return Task.FromResult(namespaces);
+    }
+
+    public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<KubeContextInfo> contexts =
+        [
+            new KubeContextInfo { Name = "aks-ecommerce-dev", Cluster = "aks-ecommerce-dev-westeu", User = "clusterUser_rg-ecommerce-dev", Namespace = "ecommerce", IsCurrent = true },
+            new KubeContextInfo { Name = "aks-ecommerce-staging", Cluster = "aks-ecommerce-stg-westeu", User = "clusterUser_rg-ecommerce-stg", Namespace = "ecommerce" },
+            new KubeContextInfo { Name = "aks-ecommerce-prod", Cluster = "aks-ecommerce-prod-westeu", User = "clusterUser_rg-ecommerce-prod", Namespace = "ecommerce" },
+            new KubeContextInfo { Name = "aks-platform-dev", Cluster = "aks-platform-dev-northeu", User = "clusterUser_rg-platform-dev" },
+            new KubeContextInfo { Name = "minikube", Cluster = "minikube", User = "minikube", Namespace = "default" }
+        ];
+        return Task.FromResult(contexts);
+    }
+
+    public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        var now = DateTimeOffset.UtcNow;
+        return new List<HelmReleaseInfo>
+        {
+            new() { Name = "order-api", Namespace = ns, Chart = "order-api-1.8.3", AppVersion = "1.8.3", ChartVersion = "1.8.3", Status = "deployed", Revision = 12, Updated = now.AddHours(-6) },
+            new() { Name = "product-catalog", Namespace = ns, Chart = "product-catalog-2.1.0", AppVersion = "2.1.0", ChartVersion = "2.1.0", Status = "deployed", Revision = 8, Updated = now.AddDays(-1) },
+            new() { Name = "user-service", Namespace = ns, Chart = "user-service-1.4.7", AppVersion = "1.4.7", ChartVersion = "1.4.7", Status = "deployed", Revision = 15, Updated = now.AddHours(-2) },
+            new() { Name = "payment-gateway", Namespace = ns, Chart = "payment-gateway-3.0.1", AppVersion = "3.0.1", ChartVersion = "3.0.1", Status = "deployed", Revision = 5, Updated = now.AddDays(-3) },
+            new() { Name = "ingress-nginx", Namespace = ns, Chart = "ingress-nginx-4.9.1", AppVersion = "1.9.6", ChartVersion = "4.9.1", Status = "deployed", Revision = 3, Updated = now.AddDays(-14) },
+            new() { Name = "cert-manager", Namespace = ns, Chart = "cert-manager-1.14.4", AppVersion = "1.14.4", ChartVersion = "1.14.4", Status = "deployed", Revision = 2, Updated = now.AddDays(-30) },
+            new() { Name = "search-indexer", Namespace = ns, Chart = "search-indexer-0.9.2", AppVersion = "0.9.2", ChartVersion = "0.9.2", Status = "failed", Revision = 4, Updated = now.AddMinutes(-45) },
+            new() { Name = "istio-base", Namespace = ns, Chart = "base-1.20.3", AppVersion = "1.20.3", ChartVersion = "1.20.3", Status = "deployed", Revision = 1, Updated = now.AddDays(-60) },
+        };
+    }
+
+    public Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
+    {
+        if (kind.Equals("Helm", StringComparison.OrdinalIgnoreCase))
+        {
+            var helmYaml = $"""
+                ---
+                # Source: {name}/templates/deployment.yaml
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app.kubernetes.io/name: {name}
+                    app.kubernetes.io/managed-by: Helm
+                    helm.sh/chart: {name}-1.3.0
+                spec:
+                  replicas: 3
+                  selector:
+                    matchLabels:
+                      app.kubernetes.io/name: {name}
+                  template:
+                    metadata:
+                      labels:
+                        app.kubernetes.io/name: {name}
+                    spec:
+                      containers:
+                      - name: {name}
+                        image: acr.azurecr.io/{name}:1.3.0
+                        ports:
+                        - containerPort: 8080
+                        resources:
+                          requests:
+                            cpu: 100m
+                            memory: 128Mi
+                          limits:
+                            cpu: 500m
+                            memory: 512Mi
+                ---
+                # Source: {name}/templates/service.yaml
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app.kubernetes.io/name: {name}
+                    app.kubernetes.io/managed-by: Helm
+                spec:
+                  type: ClusterIP
+                  ports:
+                  - port: 80
+                    targetPort: 8080
+                    protocol: TCP
+                  selector:
+                    app.kubernetes.io/name: {name}
+                """;
+            return Task.FromResult(helmYaml);
+        }
+
+        var yaml = $"""
+            apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}
+            kind: {kind}
+            metadata:
+              name: {name}
+              namespace: {ns}
+              labels:
+                app: {name}
+                version: "1.8.3"
+                team: commerce
+              annotations:
+                deployment.kubernetes.io/revision: "12"
+            spec:
+              replicas: 3
+              selector:
+                matchLabels:
+                  app: {name}
+              template:
+                metadata:
+                  labels:
+                    app: {name}
+                spec:
+                  containers:
+                  - name: {name}
+                    image: acr.azurecr.io/{name}:1.8.3
+                    ports:
+                    - containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                    readinessProbe:
+                      httpGet:
+                        path: /ready
+                        port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                  - name: istio-proxy
+                    image: docker.io/istio/proxyv2:1.20.3
+                    ports:
+                    - containerPort: 15090
+            """;
+        return Task.FromResult(yaml);
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -226,4 +455,106 @@ public class DemoAksClient : IAksClient
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
         => Task.CompletedTask; // no-op in demo
+
+    public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
+    {
+        await Task.Delay(500, ct); // simulate restart
+    }
+
+    public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct); // simulate delete
+    }
+
+    public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
+    {
+        await Task.Delay(400, ct); // simulate scale
+    }
+
+    public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct);
+        var now = DateTimeOffset.UtcNow;
+        return new List<HelmRevisionInfo>
+        {
+            new() { Revision = 1, Status = "superseded", Chart = $"{releaseName}-1.0.0", AppVersion = "1.0.0", Updated = now.AddDays(-30), Description = "Install complete" },
+            new() { Revision = 2, Status = "superseded", Chart = $"{releaseName}-1.1.0", AppVersion = "1.1.0", Updated = now.AddDays(-20), Description = "Upgrade complete" },
+            new() { Revision = 3, Status = "superseded", Chart = $"{releaseName}-1.2.0", AppVersion = "1.2.0", Updated = now.AddDays(-10), Description = "Upgrade complete" },
+            new() { Revision = 4, Status = "deployed", Chart = $"{releaseName}-1.3.0", AppVersion = "1.3.0", Updated = now.AddDays(-2), Description = "Upgrade complete" },
+        };
+    }
+
+    public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(250, ct);
+        return $"""
+            replicaCount: 3
+            image:
+              repository: acr.azurecr.io/{releaseName}
+              tag: "1.3.0"
+              pullPolicy: IfNotPresent
+            service:
+              type: ClusterIP
+              port: 80
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            ingress:
+              enabled: true
+              className: nginx
+              hosts:
+                - host: {releaseName}.example.com
+                  paths:
+                    - path: /
+                      pathType: Prefix
+            autoscaling:
+              enabled: true
+              minReplicas: 2
+              maxReplicas: 10
+              targetCPUUtilizationPercentage: 75
+            """;
+    }
+
+    public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
+    {
+        await Task.Delay(800, ct); // simulate rollback
+    }
+
+    public async Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        var metrics = new List<PodMetrics>();
+        foreach (var d in DemoDeployments)
+        {
+            for (var i = 0; i < d.Replicas; i++)
+            {
+                var suffix = $"{d.Name}-{i:D5}";
+                metrics.Add(new PodMetrics
+                {
+                    PodName = suffix,
+                    Namespace = ns,
+                    Containers =
+                    [
+                        new ContainerMetrics
+                        {
+                            Name = d.Name,
+                            CpuCores = 0.01 + Rng.NextDouble() * 0.4,
+                            MemoryBytes = (long)((50 + Rng.NextDouble() * 400) * 1024 * 1024)
+                        },
+                        new ContainerMetrics
+                        {
+                            Name = "istio-proxy",
+                            CpuCores = 0.005 + Rng.NextDouble() * 0.05,
+                            MemoryBytes = (long)((20 + Rng.NextDouble() * 60) * 1024 * 1024)
+                        }
+                    ]
+                });
+            }
+        }
+        return metrics;
+    }
 }

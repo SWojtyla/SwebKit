@@ -1,0 +1,98 @@
+@implements IDisposable
+
+<div class="auto-refresh-toggle">
+    <button class="auto-refresh-btn @(IsActive ? "active" : "")" @onclick="Toggle"
+            title="@(IsActive ? $"Auto-refresh every {IntervalSeconds}s" : "Auto-refresh off")">
+        @if (IsActive)
+        {
+            <span class="auto-refresh-dot"></span>
+        }
+        <span>Auto</span>
+    </button>
+    @if (IsActive)
+    {
+        <select class="auto-refresh-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+        </select>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public bool Paused { get; set; }
+
+    private bool IsActive;
+    private int IntervalSeconds = 30;
+    private CancellationTokenSource? _cts;
+
+    private void Toggle()
+    {
+        IsActive = !IsActive;
+        if (IsActive)
+            StartTimer();
+        else
+            StopTimer();
+        StateHasChanged();
+    }
+
+    private void OnIntervalChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+        {
+            IntervalSeconds = val;
+            if (IsActive)
+            {
+                StopTimer();
+                StartTimer();
+            }
+        }
+    }
+
+    private void StartTimer()
+    {
+        _cts = new CancellationTokenSource();
+        _ = RunTimerLoop(_cts.Token);
+    }
+
+    private async Task RunTimerLoop(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(IntervalSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (Paused) continue;
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await OnRefresh.InvokeAsync();
+                    }
+                    catch
+                    {
+                        // Swallow transient refresh errors to keep the timer alive
+                    }
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on stop/dispose
+        }
+    }
+
+    private void StopTimer()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

@@ -1,0 +1,39 @@
+@implements IDisposable
+
+@if (Visible)
+{
+    <div class="ctx-backdrop" @onclick="Close" @oncontextmenu="Close" @oncontextmenu:preventDefault></div>
+    <div class="ctx-menu" style="left:@(X)px; top:@(Y)px;" @onkeydown="OnKeyDown">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool Visible;
+    private double X;
+    private double Y;
+
+    public void Show(double x, double y)
+    {
+        X = x;
+        Y = y;
+        Visible = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        if (!Visible) return;
+        Visible = false;
+        StateHasChanged();
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Close();
+    }
+
+    public void Dispose() { }
+}

@@ -1,0 +1,63 @@
+<div class="resizable-panel" style="width:@(Width)px; min-width:@(MinWidth)px;">
+    <div class="resize-handle"
+         @onmousedown="OnMouseDown"
+         @ondblclick="ResetWidth"
+         title="Drag to resize, double-click to reset"></div>
+    <div class="resizable-panel-content">
+        @ChildContent
+    </div>
+</div>
+
+@if (_dragging)
+{
+    <div class="resize-overlay"
+         @onmousemove="OnMouseMove"
+         @onmouseup="OnMouseUp"
+         @onmouseleave="OnMouseUp"></div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public int DefaultWidth { get; set; } = 380;
+    [Parameter] public int MinWidth { get; set; } = 200;
+    [Parameter] public int MaxWidth { get; set; } = 800;
+
+    private int Width;
+    private bool _dragging;
+    private double _startX;
+    private int _startWidth;
+
+    protected override void OnInitialized()
+    {
+        Width = DefaultWidth;
+    }
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        _dragging = true;
+        _startX = e.ClientX;
+        _startWidth = Width;
+    }
+
+    private void OnMouseMove(MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        // Handle is on the left edge, so dragging left = wider
+        var delta = _startX - e.ClientX;
+        var newWidth = _startWidth + (int)delta;
+        Width = Math.Clamp(newWidth, MinWidth, MaxWidth);
+        StateHasChanged();
+    }
+
+    private void OnMouseUp(MouseEventArgs e)
+    {
+        _dragging = false;
+    }
+
+    private void ResetWidth()
+    {
+        Width = DefaultWidth;
+        _dragging = false;
+        StateHasChanged();
+    }
+}

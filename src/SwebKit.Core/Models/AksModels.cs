@@ -54,3 +54,72 @@ public class KubernetesEvent
     public DateTimeOffset? LastTimestamp { get; set; }
     public int Count { get; set; }
 }
+
+public class IngressInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? IngressClass { get; set; }
+    public List<IngressRule> Rules { get; set; } = [];
+    public List<string> Addresses { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+public class IngressRule
+{
+    public string? Host { get; set; }
+    public List<IngressPath> Paths { get; set; } = [];
+}
+
+public class IngressPath
+{
+    public string Path { get; set; } = "/";
+    public string? PathType { get; set; }
+    public string? ServiceName { get; set; }
+    public int? ServicePort { get; set; }
+}
+
+public class HelmReleaseInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? Chart { get; set; }
+    public string? AppVersion { get; set; }
+    public string? ChartVersion { get; set; }
+    public string Status { get; set; } = "unknown";
+    public int Revision { get; set; }
+    public DateTimeOffset? Updated { get; set; }
+}
+
+public class KubeContextInfo
+{
+    public required string Name { get; set; }
+    public string? Cluster { get; set; }
+    public string? User { get; set; }
+    public string? Namespace { get; set; }
+    public bool IsCurrent { get; set; }
+}
+
+public class HelmRevisionInfo
+{
+    public int Revision { get; set; }
+    public string Status { get; set; } = "unknown";
+    public string? Chart { get; set; }
+    public string? AppVersion { get; set; }
+    public DateTimeOffset? Updated { get; set; }
+    public string? Description { get; set; }
+}
+
+public class PodMetrics
+{
+    public required string PodName { get; set; }
+    public required string Namespace { get; set; }
+    public List<ContainerMetrics> Containers { get; set; } = [];
+}
+
+public class ContainerMetrics
+{
+    public required string Name { get; set; }
+    public double CpuCores { get; set; }
+    public long MemoryBytes { get; set; }
+}
