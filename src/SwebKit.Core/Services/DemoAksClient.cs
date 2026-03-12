@@ -407,4 +407,96 @@ public class DemoAksClient : IAksClient
     {
         await Task.Delay(300, ct); // simulate delete
     }
+
+    public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
+    {
+        await Task.Delay(400, ct); // simulate scale
+    }
+
+    public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct);
+        var now = DateTimeOffset.UtcNow;
+        return new List<HelmRevisionInfo>
+        {
+            new() { Revision = 1, Status = "superseded", Chart = $"{releaseName}-1.0.0", AppVersion = "1.0.0", Updated = now.AddDays(-30), Description = "Install complete" },
+            new() { Revision = 2, Status = "superseded", Chart = $"{releaseName}-1.1.0", AppVersion = "1.1.0", Updated = now.AddDays(-20), Description = "Upgrade complete" },
+            new() { Revision = 3, Status = "superseded", Chart = $"{releaseName}-1.2.0", AppVersion = "1.2.0", Updated = now.AddDays(-10), Description = "Upgrade complete" },
+            new() { Revision = 4, Status = "deployed", Chart = $"{releaseName}-1.3.0", AppVersion = "1.3.0", Updated = now.AddDays(-2), Description = "Upgrade complete" },
+        };
+    }
+
+    public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        await Task.Delay(250, ct);
+        return $"""
+            replicaCount: 3
+            image:
+              repository: acr.azurecr.io/{releaseName}
+              tag: "1.3.0"
+              pullPolicy: IfNotPresent
+            service:
+              type: ClusterIP
+              port: 80
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            ingress:
+              enabled: true
+              className: nginx
+              hosts:
+                - host: {releaseName}.example.com
+                  paths:
+                    - path: /
+                      pathType: Prefix
+            autoscaling:
+              enabled: true
+              minReplicas: 2
+              maxReplicas: 10
+              targetCPUUtilizationPercentage: 75
+            """;
+    }
+
+    public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
+    {
+        await Task.Delay(800, ct); // simulate rollback
+    }
+
+    public async Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        var metrics = new List<PodMetrics>();
+        foreach (var d in DemoDeployments)
+        {
+            for (var i = 0; i < d.Replicas; i++)
+            {
+                var suffix = $"{d.Name}-{i:D5}";
+                metrics.Add(new PodMetrics
+                {
+                    PodName = suffix,
+                    Namespace = ns,
+                    Containers =
+                    [
+                        new ContainerMetrics
+                        {
+                            Name = d.Name,
+                            CpuCores = 0.01 + Rng.NextDouble() * 0.4,
+                            MemoryBytes = (long)((50 + Rng.NextDouble() * 400) * 1024 * 1024)
+                        },
+                        new ContainerMetrics
+                        {
+                            Name = "istio-proxy",
+                            CpuCores = 0.005 + Rng.NextDouble() * 0.05,
+                            MemoryBytes = (long)((20 + Rng.NextDouble() * 60) * 1024 * 1024)
+                        }
+                    ]
+                });
+            }
+        }
+        return metrics;
+    }
 }

@@ -99,3 +99,27 @@ public class KubeContextInfo
     public string? Namespace { get; set; }
     public bool IsCurrent { get; set; }
 }
+
+public class HelmRevisionInfo
+{
+    public int Revision { get; set; }
+    public string Status { get; set; } = "unknown";
+    public string? Chart { get; set; }
+    public string? AppVersion { get; set; }
+    public DateTimeOffset? Updated { get; set; }
+    public string? Description { get; set; }
+}
+
+public class PodMetrics
+{
+    public required string PodName { get; set; }
+    public required string Namespace { get; set; }
+    public List<ContainerMetrics> Containers { get; set; } = [];
+}
+
+public class ContainerMetrics
+{
+    public required string Name { get; set; }
+    public double CpuCores { get; set; }
+    public long MemoryBytes { get; set; }
+}

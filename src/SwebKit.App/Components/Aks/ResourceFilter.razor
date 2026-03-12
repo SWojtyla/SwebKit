@@ -1,0 +1,26 @@
+<div class="resource-filter">
+    <input class="resource-filter-input" type="text" placeholder="@Placeholder"
+           value="@Value" @oninput="OnInput" />
+    @if (!string.IsNullOrEmpty(Value))
+    {
+        <button class="resource-filter-clear" @onclick="OnClear" title="Clear filter">✕</button>
+    }
+</div>
+
+@code {
+    [Parameter] public string Placeholder { get; set; } = "Filter…";
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? string.Empty;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task OnClear()
+    {
+        Value = string.Empty;
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

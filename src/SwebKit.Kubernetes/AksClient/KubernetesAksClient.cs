@@ -7,6 +7,7 @@ using SwebKit.Core.Models;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Text;
 
@@ -369,6 +370,198 @@ public class KubernetesAksClient : IAksClient
     public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
     {
         await _client.CoreV1.DeleteNamespacedPodAsync(podName, ns, cancellationToken: ct);
+    }
+
+    public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
+    {
+        var patch = new k8s.Models.V1Deployment
+        {
+            Spec = new k8s.Models.V1DeploymentSpec
+            {
+                Replicas = replicas
+            }
+        };
+        await _client.AppsV1.PatchNamespacedDeploymentAsync(
+            new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
+            deploymentName, ns, cancellationToken: ct);
+    }
+
+    public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+            ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
+
+        var revisions = new List<HelmRevisionInfo>();
+        foreach (var secret in secrets.Items)
+        {
+            var labels = secret.Metadata.Labels;
+            var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+            var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+            var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
+            var chartVersion = TryParseChartVersion(chart);
+
+            revisions.Add(new HelmRevisionInfo
+            {
+                Revision = version,
+                Status = status,
+                Chart = chart,
+                AppVersion = chartVersion,
+                Updated = secret.Metadata.CreationTimestamp.HasValue
+                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                    : null,
+                Description = status switch
+                {
+                    "deployed" => "Upgrade complete",
+                    "superseded" => "Superseded by new release",
+                    "failed" => "Upgrade failed",
+                    _ => null
+                }
+            });
+        }
+
+        return revisions.OrderBy(r => r.Revision).ToList();
+    }
+
+    public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
+    {
+        // Find the latest release secret
+        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+            ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
+
+        var latest = secrets.Items
+            .OrderByDescending(s =>
+            {
+                var labels = s.Metadata.Labels;
+                return labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 0;
+            })
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException($"Helm release '{releaseName}' not found in namespace '{ns}'.");
+
+        if (latest.Data is null || !latest.Data.TryGetValue("release", out var releaseData))
+            return "# No values found";
+
+        // Helm stores release data as base64 -> gzip -> base64 -> protobuf/json
+        // The outer base64 is already decoded by the K8s client into byte[].
+        // Inner layer is base64-encoded gzip data.
+        var innerBase64 = Encoding.UTF8.GetString(releaseData);
+        try
+        {
+            var gzipBytes = Convert.FromBase64String(innerBase64);
+            using var gzipStream = new GZipStream(
+                new MemoryStream(gzipBytes), CompressionMode.Decompress);
+            using var reader = new StreamReader(gzipStream, Encoding.UTF8);
+            var json = await reader.ReadToEndAsync(ct);
+
+            // Extract the "config" field which contains the user-supplied values
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("config", out var config))
+                return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+            return json;
+        }
+        catch
+        {
+            return "# Unable to decode release values";
+        }
+    }
+
+    public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
+    {
+        var psi = new ProcessStartInfo("helm")
+        {
+            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
+
+        await process.WaitForExitAsync(ct);
+
+        if (process.ExitCode != 0)
+        {
+            var stderr = await process.StandardError.ReadToEndAsync(ct);
+            throw new InvalidOperationException($"Helm rollback failed (exit code {process.ExitCode}): {stderr}");
+        }
+    }
+
+    public async Task<IReadOnlyList<Core.Models.PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _client.CustomObjects.ListNamespacedCustomObjectAsync(
+                "metrics.k8s.io", "v1beta1", ns, "pods", cancellationToken: ct);
+
+            var json = System.Text.Json.JsonSerializer.Serialize(result);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            var metrics = new List<Core.Models.PodMetrics>();
+            if (!doc.RootElement.TryGetProperty("items", out var items))
+                return metrics;
+
+            foreach (var item in items.EnumerateArray())
+            {
+                var podName = item.GetProperty("metadata").GetProperty("name").GetString()!;
+                var podNs = item.GetProperty("metadata").GetProperty("namespace").GetString()!;
+                var containers = new List<Core.Models.ContainerMetrics>();
+
+                if (item.TryGetProperty("containers", out var containersEl))
+                {
+                    foreach (var c in containersEl.EnumerateArray())
+                    {
+                        var name = c.GetProperty("name").GetString()!;
+                        var cpuStr = c.GetProperty("usage").GetProperty("cpu").GetString() ?? "0";
+                        var memStr = c.GetProperty("usage").GetProperty("memory").GetString() ?? "0";
+
+                        containers.Add(new Core.Models.ContainerMetrics
+                        {
+                            Name = name,
+                            CpuCores = ParseCpuToMillicores(cpuStr),
+                            MemoryBytes = ParseMemoryToBytes(memStr)
+                        });
+                    }
+                }
+
+                metrics.Add(new Core.Models.PodMetrics
+                {
+                    PodName = podName,
+                    Namespace = podNs,
+                    Containers = containers
+                });
+            }
+
+            return metrics;
+        }
+        catch
+        {
+            // Metrics API not installed or unavailable — return empty list
+            return [];
+        }
+    }
+
+    internal static double ParseCpuToMillicores(string cpu)
+    {
+        if (cpu.EndsWith('n'))
+            return double.TryParse(cpu[..^1], NumberStyles.Any, CultureInfo.InvariantCulture, out var nanos) ? nanos / 1_000_000_000.0 : 0;
+        if (cpu.EndsWith('u'))
+            return double.TryParse(cpu[..^1], NumberStyles.Any, CultureInfo.InvariantCulture, out var micros) ? micros / 1_000_000.0 : 0;
+        if (cpu.EndsWith('m'))
+            return double.TryParse(cpu[..^1], NumberStyles.Any, CultureInfo.InvariantCulture, out var millis) ? millis / 1_000.0 : 0;
+        return double.TryParse(cpu, NumberStyles.Any, CultureInfo.InvariantCulture, out var cores) ? cores : 0;
+    }
+
+    internal static long ParseMemoryToBytes(string mem)
+    {
+        if (mem.EndsWith("Ki"))
+            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var ki) ? ki * 1024 : 0;
+        if (mem.EndsWith("Mi"))
+            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var mi) ? mi * 1024 * 1024 : 0;
+        if (mem.EndsWith("Gi"))
+            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var gi) ? gi * 1024 * 1024 * 1024 : 0;
+        return long.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
     }
 }
 

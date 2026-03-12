@@ -1,0 +1,59 @@
+.auto-refresh-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.auto-refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.auto-refresh-btn:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.auto-refresh-btn.active {
+    color: var(--color-success);
+    border-color: var(--color-success);
+    background: rgba(67, 160, 71, 0.06);
+}
+
+.auto-refresh-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-success);
+    animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.auto-refresh-select {
+    padding: 2px 4px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+    cursor: pointer;
+}
+
+.auto-refresh-select:focus {
+    border-color: var(--color-accent);
+}

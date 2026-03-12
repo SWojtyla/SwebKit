@@ -106,32 +106,32 @@ All destructive actions show an inline confirmation bar (not a modal popup):
 
 - [x] Create `ContextMenu.razor` — generic right-click context menu component
 - [x] Create `AksConfirmBar.razor` — inline confirmation bar with production guard
-- [ ] Create `ResizablePanel.razor` — draggable split panel with persistence
+- [x] Create `ResizablePanel.razor` — draggable split panel with persistence
 - [x] Replace inline Logs/YAML buttons with context menu on Deployments rows
 - [x] Replace inline Logs/YAML buttons with context menu on Pods rows
 - [x] Replace inline YAML button with context menu on Ingresses rows
 - [x] Add context menu on Helm releases rows
 - [x] Wire `RestartDeploymentAsync` through context menu with confirmation
 - [x] Wire `DeletePodAsync` (kill) through context menu with confirmation
-- [ ] Wire `ScaleDeploymentAsync` through context menu with inline input
-- [ ] Add Helm release history view
-- [ ] Add Helm release values view
-- [ ] Wire `RollbackHelmReleaseAsync` through context menu with revision picker and confirmation
+- [x] Wire `ScaleDeploymentAsync` through context menu with inline input
+- [x] Add Helm release history view
+- [x] Add Helm release values view
+- [x] Wire `RollbackHelmReleaseAsync` through context menu with revision picker and confirmation
 - [x] Add Copy Host URL action for Ingresses
-- [ ] Make log panel resizable with drag handle
-- [ ] Make YAML panel resizable with drag handle
+- [x] Make log panel resizable with drag handle
+- [x] Make YAML panel resizable with drag handle
 - [ ] Persist panel widths in UI state
-- [ ] Create `ResourceFilter.razor` — search/filter bar with per-tab state and clear button
-- [ ] Add filter bar to Deployments, Pods, Ingresses, and Helm tabs
+- [x] Create `ResourceFilter.razor` — search/filter bar with per-tab state and clear button
+- [x] Add filter bar to Deployments, Pods, Ingresses, and Helm tabs
 - [ ] Add label selector advanced filtering
-- [ ] Create `AutoRefreshToggle.razor` — toolbar toggle with interval dropdown
-- [ ] Wire auto-refresh timer to current tab reload
-- [ ] Pause auto-refresh when dialogs/panels are open
-- [ ] Add CPU/Memory columns to Pods tab from `GetPodMetricsAsync`
-- [ ] Gracefully hide metrics columns when Metrics API unavailable
-- [ ] Add "All namespaces" option to namespace dropdown
-- [ ] Add Namespace column to grids in multi-namespace mode
-- [ ] Load resources in parallel per namespace with per-namespace loading state
+- [x] Create `AutoRefreshToggle.razor` — toolbar toggle with interval dropdown
+- [x] Wire auto-refresh timer to current tab reload
+- [x] Pause auto-refresh when dialogs/panels are open
+- [x] Add CPU/Memory columns to Pods tab from `GetPodMetricsAsync`
+- [x] Gracefully hide metrics columns when Metrics API unavailable
+- [x] Add "All namespaces" option to namespace dropdown
+- [x] Add Namespace column to grids in multi-namespace mode
+- [x] Load resources in parallel per namespace with per-namespace loading state
 
 ## Validation
 

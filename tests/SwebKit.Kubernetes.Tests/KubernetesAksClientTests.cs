@@ -156,4 +156,37 @@ users:
 
         Assert.NotNull(ex);
     }
+
+    // ── CPU parsing tests ──
+
+    [Theory]
+    [InlineData("100m", 0.1)]
+    [InlineData("250m", 0.25)]
+    [InlineData("1000m", 1.0)]
+    [InlineData("1", 1.0)]
+    [InlineData("0.5", 0.5)]
+    [InlineData("500000000n", 0.5)]
+    [InlineData("100000u", 0.1)]
+    [InlineData("0", 0)]
+    public void ParseCpuToMillicores_ConvertsCorrectly(string input, double expected)
+    {
+        var actual = KubernetesAksClient.ParseCpuToMillicores(input);
+
+        Assert.Equal(expected, actual, precision: 6);
+    }
+
+    // ── Memory parsing tests ──
+
+    [Theory]
+    [InlineData("128Mi", 128L * 1024 * 1024)]
+    [InlineData("1Gi", 1L * 1024 * 1024 * 1024)]
+    [InlineData("256Ki", 256L * 1024)]
+    [InlineData("1048576", 1048576L)]
+    [InlineData("0", 0)]
+    public void ParseMemoryToBytes_ConvertsCorrectly(string input, long expected)
+    {
+        var actual = KubernetesAksClient.ParseMemoryToBytes(input);
+
+        Assert.Equal(expected, actual);
+    }
 }

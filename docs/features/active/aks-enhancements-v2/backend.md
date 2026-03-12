@@ -55,16 +55,16 @@ Extend `IAksClient` with mutative operations, Helm release inspection, pod metri
 
 - [x] Add `DeletePodAsync` to `IAksClient` and implement in both clients
 - [x] Add `RestartDeploymentAsync` to `IAksClient` and implement (patch pod template annotation)
-- [ ] Add `ScaleDeploymentAsync` to `IAksClient` and implement
-- [ ] Add `GetHelmReleaseHistoryAsync` to `IAksClient` and implement (query all secrets per release)
-- [ ] Add `GetHelmReleaseValuesAsync` to `IAksClient` and implement (decode release secret data)
-- [ ] Add `RollbackHelmReleaseAsync` to `IAksClient` and implement (CLI subprocess)
-- [ ] Add `HelmRevisionInfo` model
-- [ ] Add `GetPodMetricsAsync` to `IAksClient` and implement (Metrics API with graceful fallback)
-- [ ] Add `PodMetrics` and `ContainerMetrics` models
-- [ ] Add multi-namespace overloads for `GetPodsAsync` and `GetDeploymentsAsync`
-- [ ] Update `DemoAksClient` with demo data for all new methods
-- [ ] Add unit tests for new methods and edge cases
+- [x] Add `ScaleDeploymentAsync` to `IAksClient` and implement
+- [x] Add `GetHelmReleaseHistoryAsync` to `IAksClient` and implement (query all secrets per release)
+- [x] Add `GetHelmReleaseValuesAsync` to `IAksClient` and implement (decode release secret data)
+- [x] Add `RollbackHelmReleaseAsync` to `IAksClient` and implement (CLI subprocess)
+- [x] Add `HelmRevisionInfo` model
+- [x] Add `GetPodMetricsAsync` to `IAksClient` and implement (Metrics API with graceful fallback)
+- [x] Add `PodMetrics` and `ContainerMetrics` models
+- [x] Add multi-namespace overloads for `GetPodsAsync` and `GetDeploymentsAsync`
+- [x] Update `DemoAksClient` with demo data for all new methods
+- [x] Add unit tests for new methods and edge cases
 
 ## Concern-specific risks
 
@@ -76,6 +76,6 @@ Extend `IAksClient` with mutative operations, Helm release inspection, pod metri
 
 ## Validation
 
-- Unit tests: Planned
+- Unit tests: Done (31 tests: DemoAksClient coverage + CPU/memory parsing)
 - Integration tests: Planned (requires cluster or mocked API)
 - Manual checks: Planned (see `test-plan.md`)

@@ -134,11 +134,11 @@
 }
 
 .aks-content.side-open {
-    grid-template-columns: 1fr 280px 380px;
+    grid-template-columns: 1fr 280px auto;
 }
 
 .aks-content.side-open.events-collapsed {
-    grid-template-columns: 1fr auto 380px;
+    grid-template-columns: 1fr auto auto;
 }
 
 /* ── Section header (shared) ── */
@@ -365,29 +365,8 @@
     margin-right: 4px;
 }
 
-/* ── Log slide-out panel ── */
-.aks-log-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-left: 1px solid var(--color-border);
-    background: var(--color-bg);
-}
-
-.aks-log-panel .aks-section-header {
-    background: var(--color-surface);
-}
-
-/* ── YAML viewer panel ── */
-.aks-yaml-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-left: 1px solid var(--color-border);
-    background: var(--color-bg);
-}
-
-.aks-yaml-panel .aks-section-header {
+/* ── Side panel header (used inside ResizablePanel) ── */
+.aks-log-header {
     background: var(--color-surface);
 }
 
@@ -418,4 +397,70 @@
 .aks-age-suffix {
     color: var(--color-text-muted);
     font-size: 10px;
+}
+
+/* ── Helm history table ── */
+.aks-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.aks-history-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.aks-history-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.aks-history-table tr:hover td {
+    background: var(--color-surface-2);
+}
+
+.aks-rev-current td {
+    background: rgba(67, 160, 71, 0.06);
+}
+
+/* ── Selected row ── */
+::deep .selected-row {
+    background: rgba(0, 120, 212, 0.08);
+}
+
+/* ── Pod metrics ── */
+.aks-metric {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-metric.metric-low {
+    color: var(--color-success);
+}
+
+.aks-metric.metric-med {
+    color: var(--color-warning);
+}
+
+.aks-metric.metric-high {
+    color: var(--color-error);
+}
+
+/* ── Namespace cell (multi-namespace mode) ── */
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
 }
