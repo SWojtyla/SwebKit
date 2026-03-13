@@ -45,12 +45,11 @@ Deliver a usable Redis management module inside SwebKit for day-to-day cache ins
 
 ## Follow-up
 
-- Follow-up feature created: `docs/features/active/redis-follow-up/`.
-- Planned enhancements include namespace grouping, prefix memory analysis, multi-cache selector, purge-all wording, pattern examples, and replacing static Redis label with editable cache name.
-- Server info dashboard/button will be removed in the follow-up scope.
+- Follow-up feature completed and archived: `docs/features/archive/redis-follow-up/`.
+- Delivered: namespace grouping, prefix memory analysis, multi-cache selector, unified key tree, non-blocking navigation, separator persistence, purge-all wording, pattern examples, editable cache name, server info removal.
 
 ## Archive metadata
 
 - Archive location: `docs/features/archive/redis/`
-- Related active feature: `docs/features/active/redis-follow-up/`
+- Related archived feature: `docs/features/archive/redis-follow-up/`
 - Tags: redis, cache, diagnostics, ui

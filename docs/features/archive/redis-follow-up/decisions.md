@@ -4,7 +4,7 @@
 
 title: "Decisions - Redis Follow-up"
 owner: ""
-status: "Proposed"
+status: "Done"
 
 ---
 

@@ -4,9 +4,9 @@
 
 title: "Feature Overview - Redis Follow-up"
 owner: ""
-status: "Proposed"
+status: "Done"
 created: "2026-03-12"
-updated: "2026-03-12"
+updated: "2026-03-13"
 
 ---
 

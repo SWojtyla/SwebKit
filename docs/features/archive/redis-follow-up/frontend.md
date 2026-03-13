@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - Redis Follow-up"
 owner: ""
-status: "Not started"
+status: "Done"
 
 ---
 

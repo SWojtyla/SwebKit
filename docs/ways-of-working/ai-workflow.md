@@ -232,5 +232,5 @@ When a feature is complete:
 - remove active-only execution noise if no longer useful
 - keep reusable decisions and lessons
 - create an archive summary
-- move the feature under `docs/features/archive/<year>/<feature-name>/`
+- move the feature under `docs/features/archive/<feature-name>/`
 - stop treating it as
