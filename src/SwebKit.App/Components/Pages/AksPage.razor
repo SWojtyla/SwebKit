@@ -608,10 +608,11 @@
 
     private bool IsProduction => AppState.CurrentEnvironment?.IsProduction ?? false;
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         SyncFromEnvironment();
-        await ConnectAndLoadAsync();
+        // Fire-and-forget so the UI renders immediately with loading state
+        _ = ConnectAndLoadAsync();
     }
 
     private void SyncFromEnvironment()
@@ -623,6 +624,9 @@
 
     private async Task ConnectAndLoadAsync()
     {
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
         if (AppState.UseDemoData)
         {
             Client = new SwebKit.Core.Services.DemoAksClient();

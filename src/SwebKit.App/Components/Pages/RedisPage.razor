@@ -71,11 +71,9 @@
                                         SelectedKey="@SelectedKey"
                                         KeyTypes="@KeyTypes"
                                         IsLoading="@IsLoading"
-                                        IsComplete="@IsComplete"
                                         OnSeparatorChanged="OnSeparatorChangedAsync"
                                         OnPrefixSelected="OnPrefixSelectedAsync"
-                                        OnKeySelected="SelectKeyAsync"
-                                        OnLoadMore="LoadMoreAsync" />
+                                        OnKeySelected="SelectKeyAsync" />
                 </div>
             </div>
 
@@ -123,8 +121,6 @@
 
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
-    private long Cursor;
-    private bool IsComplete;
 
     private string? SelectedKey;
     private RedisKeyInfo? SelectedInfo;
@@ -183,7 +179,7 @@
         }
     }
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         // Initialize separator from config
         CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? "-";
@@ -196,6 +192,12 @@
             SelectedCacheId = config.ActiveCacheId ?? config.Caches.FirstOrDefault()?.Id ?? "";
         }
 
+        // Fire-and-forget so the UI renders immediately with loading state
+        _ = ConnectAndScanAsync();
+    }
+
+    private async Task ConnectAndScanAsync()
+    {
         await ConnectAsync();
         await ScanAsync();
     }
@@ -235,50 +237,30 @@
 
         IsLoading = true;
         ErrorMessage = null;
-        Cursor = 0;
-        IsComplete = false;
         Keys.Clear();
         KeyTypes.Clear();
-
         ScannedKeyInfos.Clear();
         PrefixMemoryBuckets.Clear();
+        await InvokeAsync(StateHasChanged);
 
         try
         {
-            var result = await Client.ScanKeysAsync(string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern, 0, 100);
-            Keys.AddRange(result.Keys);
-            Cursor = result.Cursor;
-            IsComplete = result.IsComplete;
-            await LoadVisibleKeyTypesAsync(result.Keys);
-            RebuildNamespaceTree();
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-        finally
-        {
-            IsLoading = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
+            var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
+            long cursor = 0;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
 
-    private async Task LoadMoreAsync()
-    {
-        if (Client is null || IsComplete)
-            return;
+            do
+            {
+                var result = await Client.ScanKeysAsync(pattern, cursor, 500);
+                var newKeys = result.Keys.Where(k => seen.Add(k)).ToList();
+                Keys.AddRange(newKeys);
+                cursor = result.Cursor;
 
-        IsLoading = true;
-        ErrorMessage = null;
+                if (result.IsComplete || cursor == 0)
+                    break;
+            } while (true);
 
-        try
-        {
-            var result = await Client.ScanKeysAsync(string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern, Cursor, 100);
-            var newKeys = result.Keys.Where(k => !Keys.Contains(k, StringComparer.Ordinal)).ToList();
-            Keys.AddRange(newKeys);
-            Cursor = result.Cursor;
-            IsComplete = result.IsComplete;
-            await LoadVisibleKeyTypesAsync(newKeys);
+            await LoadVisibleKeyTypesAsync(Keys);
             RebuildNamespaceTree();
         }
         catch (Exception ex)
@@ -414,8 +396,6 @@
                 NamespaceNodes = [];
                 PrefixMemoryBuckets = [];
                 ScannedKeyInfos.Clear();
-                Cursor = 0;
-                IsComplete = true;
             });
     }
 
