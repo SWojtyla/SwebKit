@@ -1,0 +1,54 @@
+<div class="namespace-tree">
+    <div class="ns-header">
+        <div class="separator-control">
+            <label>Sep:</label>
+            <input type="text"
+                   value="@Separator"
+                   @onchange="OnSepChanged"
+                   class="sep-input"
+                   maxlength="4" />
+        </div>
+    </div>
+
+    @if (IsLoading && Nodes.Count == 0)
+    {
+        <div class="ns-loading">
+            <FluentProgressRing Width="20px" />
+            <span>Scanning keys...</span>
+        </div>
+    }
+    else if (Nodes.Count == 0)
+    {
+        <div class="ns-empty">No keys found.</div>
+    }
+    else
+    {
+        <div class="ns-nodes">
+            @foreach (var node in Nodes)
+            {
+                <RedisNamespaceTreeNode Node="@node"
+                                        OnPrefixSelected="OnPrefixSelected"
+                                        OnKeySelected="OnKeySelected"
+                                        SelectedKey="@SelectedKey"
+                                        KeyTypes="@KeyTypes" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<NamespaceNode> Nodes { get; set; } = [];
+    [Parameter] public string Separator { get; set; } = "-";
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public Dictionary<string, string> KeyTypes { get; set; } = new();
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback<string> OnSeparatorChanged { get; set; }
+    [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
+    [Parameter] public EventCallback<string> OnKeySelected { get; set; }
+
+    private Task OnSepChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "-";
+        return OnSeparatorChanged.InvokeAsync(value);
+    }
+}

@@ -1,0 +1,36 @@
+.server-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    padding: 10px;
+    display: grid;
+    gap: 6px;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.row span {
+    color: var(--color-text-muted);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+.table th,
+.table td {
+    text-align: left;
+    padding: 4px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.empty {
+    color: var(--color-text-muted);
+}

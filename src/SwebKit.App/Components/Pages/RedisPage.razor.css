@@ -1,0 +1,142 @@
+.redis-page {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.redis-page h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cache-title {
+    display: flex;
+    align-items: center;
+}
+
+.cache-name-input {
+    font-size: 18px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--color-text);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    width: 200px;
+}
+
+.cache-name-input:hover,
+.cache-name-input:focus {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    outline: none;
+}
+
+.cache-selector {
+    padding: 4px 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.not-configured {
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+}
+
+.toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.field {
+    display: grid;
+    gap: 4px;
+}
+
+.field label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.field input {
+    width: 220px;
+    padding: 6px 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.pattern-help {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.pattern-help code {
+    background: rgba(127, 127, 127, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.connection {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-left: 8px;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 12px;
+    min-height: 0;
+    flex: 1;
+}
+
+.left-column,
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.panel {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    overflow: auto;
+}
+
+.key-tree-panel {
+    flex: 1;
+}
+
+.detail-panel {
+    padding: 12px;
+    flex: 1;
+}
+
+@media (max-width: 1000px) {
+    .content-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(220px, 40%) 1fr;
+    }
+}

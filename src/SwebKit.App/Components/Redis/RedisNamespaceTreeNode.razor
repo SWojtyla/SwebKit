@@ -1,0 +1,73 @@
+@using SwebKit.Redis
+
+<div class="ns-node" style="padding-left: @($"{Depth * 16}px")">
+    @if (Node.IsKey)
+    {
+        <button class="ns-row @(IsActive ? "active" : "")" @onclick="SelectKey" title="@Node.FullKey">
+            <span class="ns-toggle-placeholder"></span>
+            <span class="ns-name">@Node.Name</span>
+            @if (KeyType is not null)
+            {
+                <span class="type-badge @RedisValueHelpers.TypeToBadgeClass(KeyType)">@KeyType</span>
+            }
+        </button>
+    }
+    else
+    {
+        <button class="ns-row" @onclick="Toggle">
+            @if (Node.Children.Count > 0)
+            {
+                <span class="ns-toggle">@(IsExpanded ? "▾" : "▸")</span>
+            }
+            else
+            {
+                <span class="ns-toggle-placeholder"></span>
+            }
+            <span class="ns-name">@Node.Name</span>
+            <span class="ns-count">@Node.KeyCount</span>
+            <button class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true" title="Filter by this prefix">&#x229e;</button>
+        </button>
+    }
+
+    @if (IsExpanded)
+    {
+        @foreach (var child in Node.Children)
+        {
+            <RedisNamespaceTreeNode Node="@child"
+                                    OnPrefixSelected="OnPrefixSelected"
+                                    OnKeySelected="OnKeySelected"
+                                    SelectedKey="@SelectedKey"
+                                    KeyTypes="@KeyTypes"
+                                    Depth="@(Depth + 1)" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NamespaceNode Node { get; set; } = default!;
+    [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
+    [Parameter] public EventCallback<string> OnKeySelected { get; set; }
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public Dictionary<string, string> KeyTypes { get; set; } = new();
+    [Parameter] public int Depth { get; set; }
+
+    private bool IsExpanded;
+    private bool IsActive => Node.IsKey && Node.FullKey == SelectedKey;
+    private string? KeyType => Node.FullKey is not null && KeyTypes.TryGetValue(Node.FullKey, out var t) ? t : null;
+
+    private void Toggle()
+    {
+        if (Node.Children.Count > 0)
+            IsExpanded = !IsExpanded;
+    }
+
+    private Task SelectKey()
+    {
+        return Node.FullKey is not null ? OnKeySelected.InvokeAsync(Node.FullKey) : Task.CompletedTask;
+    }
+
+    private Task FilterPrefix()
+    {
+        return OnPrefixSelected.InvokeAsync(Node.FullPrefix);
+    }
+}

@@ -4,14 +4,14 @@
 
 title: "Decisions - Redis Manager"
 owner: ""
-status: "Proposed"
+status: "Done"
 created: "2026-03-12"
 
 ---
 
 ## Decision 001 — Use StackExchange.Redis
 
-**Status:** Proposed
+**Status:** Accepted
 
 ### Context
 
@@ -47,6 +47,7 @@ Several post-MVP enhancements were evaluated for inclusion in the first release.
 ### Decision
 
 Include four high-value, low-effort enhancements in v1:
+
 - **Key value editing** — inline edit for strings and hash fields.
 - **TTL management** — set/update/remove per key.
 - **Server info dashboard** — `INFO` command output (version, memory, clients, hit/miss, keyspace).
@@ -64,7 +65,7 @@ Defer the remaining enhancements (pub/sub, slow log, namespace grouping, import/
 
 ## Decision 002 — Cursor-based SCAN for key browsing (never KEYS)
 
-**Status:** Proposed
+**Status:** Accepted
 
 ### Context
 
@@ -84,7 +85,7 @@ Always use `SCAN` with cursor-based pagination. Load keys in batches (e.g., 100 
 
 ## Decision 003 — Production guard for destructive operations
 
-**Status:** Proposed
+**Status:** Accepted
 
 ### Context
 
@@ -103,7 +104,7 @@ Reuse the `AksConfirmBar` pattern (rename to a shared component). Production env
 
 ## Decision 004 — Connection string storage
 
-**Status:** Proposed
+**Status:** Accepted
 
 ### Context
 

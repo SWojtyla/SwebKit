@@ -10,6 +10,7 @@ public class ProjectEnvironment
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public ObservabilityConfig? ObservabilityConfig { get; set; }
     public AksConfig? AksConfig { get; set; }
+    public RedisConfig? RedisConfig { get; set; }
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];
     public List<SavedQuery> SavedQueries { get; set; } = [];
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];

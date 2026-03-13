@@ -134,4 +134,6 @@ public class AppStateService
         _profiles.DeleteMessageTemplate(id);
         await _profiles.SaveAsync();
     }
+
+    public Task SaveProfilesAsync() => _profiles.SaveAsync();
 }

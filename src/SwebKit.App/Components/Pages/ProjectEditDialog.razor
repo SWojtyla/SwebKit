@@ -46,6 +46,7 @@
                             <ServiceBusConfigForm Environment="env" OnSaved="NoOpSave" />
                             <ObservabilityConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="NoOpSave" />
                             <AksConfigForm Environment="env" OnSaved="NoOpSave" />
+                            <RedisConfigForm Environment="env" OnSaved="NoOpSave" />
                         </div>
                     </details>
                 </div>
@@ -113,6 +114,12 @@
                         KubeconfigContext = e.AksConfig.KubeconfigContext,
                         DefaultNamespace = e.AksConfig.DefaultNamespace,
                         WatchedDeployments = [.. e.AksConfig.WatchedDeployments]
+                    },
+                    RedisConfig = e.RedisConfig is null ? null : new RedisConfig
+                    {
+                        ConnectionString = e.RedisConfig.ConnectionString,
+                        Alias = e.RedisConfig.Alias,
+                        Database = e.RedisConfig.Database
                     }
                 }).ToList()
             };

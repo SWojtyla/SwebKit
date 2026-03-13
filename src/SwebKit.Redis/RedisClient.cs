@@ -1,0 +1,330 @@
+using System.Globalization;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Domain;
+using SwebKit.Core.Models;
+using StackExchange.Redis;
+
+namespace SwebKit.Redis;
+
+public sealed class RedisClient : IRedisClient
+{
+    private readonly RedisCacheEntry _cacheEntry;
+    private readonly ConnectionMultiplexer _mux;
+    private readonly IDatabase _db;
+    private readonly IServer _server;
+
+    public RedisClient(RedisCacheEntry cacheEntry)
+    {
+        _cacheEntry = cacheEntry;
+
+        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
+        options.AbortOnConnectFail = false;
+
+        _mux = ConnectionMultiplexer.Connect(options);
+        _db = _mux.GetDatabase(Math.Clamp(cacheEntry.Database, 0, 15));
+
+        var endpoint = _mux.GetEndPoints().FirstOrDefault()
+            ?? throw new InvalidOperationException("No Redis endpoints available.");
+        _server = _mux.GetServer(endpoint);
+    }
+
+    public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.PingAsync();
+        return true;
+    }
+
+    public async Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        pageSize = Math.Max(1, pageSize);
+        var result = await _db.ExecuteAsync("SCAN", cursor, "MATCH", pattern, "COUNT", pageSize);
+        if (result.IsNull)
+        {
+            return new KeyScanResult
+            {
+                Cursor = 0,
+                Keys = [],
+                IsComplete = true
+            };
+        }
+
+        var parts = (RedisResult[])result!;
+        if (parts.Length < 2)
+        {
+            return new KeyScanResult
+            {
+                Cursor = 0,
+                Keys = [],
+                IsComplete = true
+            };
+        }
+
+        var nextCursor = ParseLong(parts[0].ToString());
+        var keys = ((RedisResult[])parts[1]!)
+            .Select(k => k.ToString())
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Select(k => k!)
+            .ToList();
+
+        return new KeyScanResult
+        {
+            Cursor = nextCursor,
+            Keys = keys,
+            IsComplete = nextCursor == 0
+        };
+    }
+
+    public async Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var exists = await _db.KeyExistsAsync(key);
+        if (!exists)
+        {
+            return new RedisKeyInfo
+            {
+                Key = key,
+                Type = "none"
+            };
+        }
+
+        var keyType = await _db.KeyTypeAsync(key);
+        var ttl = await _db.KeyTimeToLiveAsync(key);
+        var memoryBytes = await TryGetMemoryUsageAsync(key);
+        var encoding = await TryGetEncodingAsync(key);
+
+        return new RedisKeyInfo
+        {
+            Key = key,
+            Type = ToTypeString(keyType),
+            Ttl = ttl,
+            MemoryBytes = memoryBytes,
+            Encoding = encoding
+        };
+    }
+
+    public async Task<string?> GetKeyValueAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var value = await _db.StringGetAsync(key);
+        return value.IsNull ? null : value.ToString();
+    }
+
+    public async Task<IReadOnlyList<RedisHashField>> GetHashFieldsAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var fields = await _db.HashGetAllAsync(key);
+        return fields
+            .Select(x => new RedisHashField
+            {
+                Field = x.Name.ToString(),
+                Value = x.Value.ToString()
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetListItemsAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var values = await _db.ListRangeAsync(key, start, stop);
+        return values.Select(v => v.ToString()).ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetSetMembersAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var values = await _db.SetMembersAsync(key);
+        return values.Select(v => v.ToString()).ToList();
+    }
+
+    public async Task<IReadOnlyList<RedisSortedSetEntry>> GetSortedSetMembersAsync(string key, long start = 0, long stop = -1, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var values = await _db.SortedSetRangeByRankWithScoresAsync(key, start, stop, Order.Descending);
+        return values
+            .Select(v => new RedisSortedSetEntry
+            {
+                Member = v.Element.ToString(),
+                Score = v.Score
+            })
+            .ToList();
+    }
+
+    public async Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.StringSetAsync(key, value, expiry);
+    }
+
+    public async Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.HashSetAsync(key, field, value);
+    }
+
+    public async Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (keys.Count == 0)
+            return;
+
+        await _db.KeyDeleteAsync(keys.Select(k => (RedisKey)k).ToArray());
+    }
+
+    public async Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return await _db.KeyTimeToLiveAsync(key);
+    }
+
+    public async Task SetTtlAsync(string key, TimeSpan ttl, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.KeyExpireAsync(key, ttl);
+    }
+
+    public async Task RemoveTtlAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.KeyPersistAsync(key);
+    }
+
+    public async Task FlushDatabaseAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _server.FlushDatabaseAsync(Math.Clamp(_cacheEntry.Database, 0, 15));
+    }
+
+    public Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var metrics = ParseInfo(_server.Info());
+        var keyspace = ParseDbStats(_server.Info("keyspace"));
+
+        var hits = GetLong(metrics, "keyspace_hits");
+        var misses = GetLong(metrics, "keyspace_misses");
+        var ratio = hits + misses == 0 ? 0 : (double)hits / (hits + misses);
+
+        var info = new RedisServerInfo
+        {
+            RedisVersion = GetString(metrics, "redis_version"),
+            UptimeSeconds = GetLong(metrics, "uptime_in_seconds"),
+            ConnectedClients = GetLong(metrics, "connected_clients"),
+            UsedMemoryBytes = GetLong(metrics, "used_memory"),
+            UsedMemoryHuman = GetString(metrics, "used_memory_human"),
+            TotalCommandsProcessed = GetLong(metrics, "total_commands_processed"),
+            KeyspaceHitRatio = ratio,
+            Databases = keyspace
+        };
+
+        return Task.FromResult(info);
+    }
+
+    public void Dispose()
+    {
+        _mux.Dispose();
+    }
+
+    private async Task<long?> TryGetMemoryUsageAsync(string key)
+    {
+        try
+        {
+            var result = await _db.ExecuteAsync("MEMORY", "USAGE", key);
+            return ParseLong(result.ToString());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<string?> TryGetEncodingAsync(string key)
+    {
+        try
+        {
+            var result = await _db.ExecuteAsync("OBJECT", "ENCODING", key);
+            var value = result.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ToTypeString(RedisType type) => type switch
+    {
+        RedisType.String => "string",
+        RedisType.Hash => "hash",
+        RedisType.List => "list",
+        RedisType.Set => "set",
+        RedisType.SortedSet => "zset",
+        RedisType.Stream => "stream",
+        _ => "none"
+    };
+
+    private static Dictionary<string, string> ParseInfo(IGrouping<string, KeyValuePair<string, string>>[] sections)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var section in sections)
+        {
+            foreach (var kvp in section)
+            {
+                map[kvp.Key] = kvp.Value;
+            }
+        }
+
+        return map;
+    }
+
+    private static IReadOnlyList<RedisDatabaseInfo> ParseDbStats(IGrouping<string, KeyValuePair<string, string>>[] sections)
+    {
+        var result = new List<RedisDatabaseInfo>();
+
+        foreach (var section in sections)
+        {
+            foreach (var kvp in section)
+            {
+                if (!kvp.Key.StartsWith("db", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!int.TryParse(kvp.Key.AsSpan(2), NumberStyles.Integer, CultureInfo.InvariantCulture, out var dbIndex))
+                    continue;
+
+                var parts = kvp.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var part in parts)
+                {
+                    var idx = part.IndexOf('=');
+                    if (idx <= 0 || idx >= part.Length - 1)
+                        continue;
+
+                    values[part[..idx]] = part[(idx + 1)..];
+                }
+
+                result.Add(new RedisDatabaseInfo
+                {
+                    Index = dbIndex,
+                    Keys = ParseLong(values.GetValueOrDefault("keys")),
+                    Expires = ParseLong(values.GetValueOrDefault("expires")),
+                    AvgTtl = ParseLong(values.GetValueOrDefault("avg_ttl"))
+                });
+            }
+        }
+
+        return result.OrderBy(x => x.Index).ToList();
+    }
+
+    private static long ParseLong(string? value) =>
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+
+    private static string GetString(Dictionary<string, string> metrics, string key) =>
+        metrics.TryGetValue(key, out var value) ? value : string.Empty;
+
+    private static long GetLong(Dictionary<string, string> metrics, string key) =>
+        ParseLong(GetString(metrics, key));
+}

@@ -1,0 +1,110 @@
+.redis-key-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+}
+
+.rows {
+    flex: 1;
+}
+
+.bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+}
+
+.checkbox-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.count {
+    color: var(--color-text-muted);
+}
+
+.key-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
+    padding: 8px 10px;
+    cursor: pointer;
+}
+
+.key-row.active {
+    background: rgba(64, 170, 255, 0.16);
+}
+
+.key-name {
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.type-badge {
+    font-size: 10px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    text-transform: uppercase;
+}
+
+.t-string { background: rgba(0, 120, 212, 0.22); }
+.t-hash { background: rgba(16, 124, 16, 0.24); }
+.t-list { background: rgba(232, 114, 12, 0.24); }
+.t-set { background: rgba(139, 47, 201, 0.24); }
+.t-zset { background: rgba(200, 0, 42, 0.24); }
+.t-stream { background: rgba(0, 183, 195, 0.24); }
+.t-unknown { background: rgba(127, 127, 127, 0.24); }
+
+.footer {
+    margin-top: auto;
+    padding: 8px;
+    border-top: 1px solid var(--color-border);
+}
+
+.context-menu {
+    position: fixed;
+    z-index: 100;
+    min-width: 140px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface-2);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    display: grid;
+    gap: 4px;
+}
+
+.context-item {
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.context-item:hover {
+    background: rgba(64, 170, 255, 0.16);
+}
+
+.empty {
+    padding: 12px;
+    color: var(--color-text-muted);
+}
