@@ -21,20 +21,21 @@ public static class RedisKeyGrouper
         foreach (var key in keys)
         {
             var parts = key.Split(separator, StringSplitOptions.None);
-            Insert(root, parts, separator);
+            Insert(root, parts, separator, key);
         }
 
         return root.Children;
     }
 
-    private static void Insert(NamespaceNode parent, string[] parts, string separator)
+    private static void Insert(NamespaceNode parent, string[] parts, string separator, string fullKey)
     {
         var current = parent;
 
         for (var i = 0; i < parts.Length; i++)
         {
             var segment = parts[i];
-            var child = current.Children.FirstOrDefault(c => c.Name == segment);
+            var isLast = i == parts.Length - 1;
+            var child = current.Children.FirstOrDefault(c => c.Name == segment && c.IsKey == isLast);
 
             if (child is null)
             {
@@ -42,11 +43,18 @@ public static class RedisKeyGrouper
                     ? segment
                     : $"{current.FullPrefix}{separator}{segment}";
 
-                child = new NamespaceNode { Name = segment, FullPrefix = prefix };
+                child = new NamespaceNode
+                {
+                    Name = segment,
+                    FullPrefix = prefix,
+                    IsKey = isLast,
+                    FullKey = isLast ? fullKey : null
+                };
 
-                // Insert sorted
+                // Insert sorted: namespace nodes first, then key nodes
                 var idx = current.Children.FindIndex(c =>
-                    string.Compare(c.Name, segment, StringComparison.Ordinal) > 0);
+                    (c.IsKey && !child.IsKey) || // namespaces before keys
+                    (c.IsKey == child.IsKey && string.Compare(c.Name, segment, StringComparison.Ordinal) > 0));
                 if (idx < 0)
                     current.Children.Add(child);
                 else

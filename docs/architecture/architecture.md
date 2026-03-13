@@ -15,6 +15,29 @@ A .NET MAUI Blazor Hybrid desktop tool for .NET developers who work daily with:
 Everything is organized around a **Project + Environment** selector. Switching the environment
 (Dev / Test / Acc / Prod) instantly reconfigures all open tool panes.
 
+## Functional Deep Dives
+
+Per-functionality architecture notes live in `docs/architecture/functionalities/`.
+
+### Scope
+
+- What each functionality supports today.
+- Core technical flow and runtime behavior.
+- Main code locations to inspect first.
+- Important implementation notes and known constraints.
+
+- [Projects and Environments](functionalities/projects-and-environments.md)
+- [Service Bus](functionalities/service-bus.md)
+- [Observability](functionalities/observability.md)
+- [AKS](functionalities/aks.md)
+- [Redis](functionalities/redis.md)
+- [Settings and Configuration](functionalities/settings-and-configuration.md)
+
+### Update Rule
+
+Whenever behavior changes in one of these areas, update the corresponding file under
+`docs/architecture/functionalities/` in the same change set as the code.
+
 ---
 
 ## Tech Stack

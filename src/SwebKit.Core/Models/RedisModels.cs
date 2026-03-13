@@ -57,6 +57,12 @@ public class NamespaceNode
     public string FullPrefix { get; set; } = string.Empty;
     public int KeyCount { get; set; }
     public List<NamespaceNode> Children { get; set; } = [];
+
+    /// <summary>True when this node represents an actual Redis key (leaf).</summary>
+    public bool IsKey { get; set; }
+
+    /// <summary>The full original Redis key, set only when <see cref="IsKey"/> is true.</summary>
+    public string? FullKey { get; set; }
 }
 
 /// <summary>

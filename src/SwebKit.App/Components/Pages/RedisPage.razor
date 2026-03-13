@@ -50,7 +50,7 @@
             <FluentButton Appearance="Appearance.Accent" @onclick="ScanAsync" Disabled="@IsLoading">Scan</FluentButton>
             <FluentButton @onclick="RefreshSelectedAsync" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
             </FluentButton>
-            <FluentButton @onclick="DeleteSelectedAsync" Disabled="@(IsLoading || SelectedKeys.Count == 0)">Delete Selected
+            <FluentButton @onclick="DeleteSelectedKeyAsync" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
             </FluentButton>
             <FluentButton @onclick="PurgeAllAsync" Disabled="@IsLoading">Purge All</FluentButton>
             <AutoRefreshToggle OnRefresh="ScanAsync" Paused="@IsLoading" />
@@ -65,24 +65,18 @@
 
         <div class="content-grid">
             <div class="left-column">
-                <div class="panel">
-                    <RedisKeyList Keys="@Keys"
-                                  SelectedKeys="@SelectedKeys"
-                                  SelectedKey="@SelectedKey"
-                                  KeyTypes="@KeyTypes"
-                                  IsLoading="@IsLoading"
-                                  IsComplete="@IsComplete"
-                                  OnSelectKey="SelectKeyAsync"
-                                  OnLoadMore="LoadMoreAsync"
-                                  OnToggleKeySelection="OnToggleKeySelectionAsync"
-                                  OnToggleAllVisibleSelection="OnToggleAllVisibleAsync"
-                                  OnContextMenuAction="OnContextMenuActionAsync" />
+                <div class="panel key-tree-panel">
+                    <RedisNamespaceTree Nodes="@NamespaceNodes"
+                                        Separator="@CurrentSeparator"
+                                        SelectedKey="@SelectedKey"
+                                        KeyTypes="@KeyTypes"
+                                        IsLoading="@IsLoading"
+                                        IsComplete="@IsComplete"
+                                        OnSeparatorChanged="OnSeparatorChangedAsync"
+                                        OnPrefixSelected="OnPrefixSelectedAsync"
+                                        OnKeySelected="SelectKeyAsync"
+                                        OnLoadMore="LoadMoreAsync" />
                 </div>
-
-                <RedisNamespaceTree Nodes="@NamespaceNodes"
-                                    Separator="@CurrentSeparator"
-                                    OnSeparatorChanged="OnSeparatorChangedAsync"
-                                    OnPrefixSelected="OnPrefixSelectedAsync" />
             </div>
 
             <div class="right-column">
@@ -128,7 +122,6 @@
     private string? ErrorMessage;
 
     private readonly List<string> Keys = [];
-    private readonly HashSet<string> SelectedKeys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
     private long Cursor;
     private bool IsComplete;
@@ -143,7 +136,7 @@
 
     // Namespace tree
     private List<NamespaceNode> NamespaceNodes = [];
-    private string CurrentSeparator = ":";
+    private string CurrentSeparator = "-";
 
     // Prefix memory
     private List<PrefixMemoryBucket> PrefixMemoryBuckets = [];
@@ -193,7 +186,7 @@
     protected override async Task OnParametersSetAsync()
     {
         // Initialize separator from config
-        CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? ":";
+        CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? "-";
 
         // Initialize selected cache
         var config = CurrentRedisConfig;
@@ -246,7 +239,7 @@
         IsComplete = false;
         Keys.Clear();
         KeyTypes.Clear();
-        SelectedKeys.Clear();
+
         ScannedKeyInfos.Clear();
         PrefixMemoryBuckets.Clear();
 
@@ -369,29 +362,6 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnToggleKeySelectionAsync((string key, bool selected) change)
-    {
-        if (change.selected)
-            SelectedKeys.Add(change.key);
-        else
-            SelectedKeys.Remove(change.key);
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task OnToggleAllVisibleAsync(bool selected)
-    {
-        foreach (var key in Keys)
-        {
-            if (selected)
-                SelectedKeys.Add(key);
-            else
-                SelectedKeys.Remove(key);
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
     private Task DeleteSelectedKeyAsync()
     {
         if (SelectedKey is null)
@@ -408,7 +378,7 @@
 
                 await Client.DeleteKeysAsync([SelectedKey]);
                 Keys.Remove(SelectedKey);
-                SelectedKeys.Remove(SelectedKey);
+
                 KeyTypes.Remove(SelectedKey);
                 SelectedKey = null;
                 SelectedInfo = null;
@@ -416,41 +386,6 @@
                 SelectedHashFields = [];
                 SelectedItems = [];
                 SelectedSortedSetItems = [];
-                RebuildNamespaceTree();
-            });
-    }
-
-    private Task DeleteSelectedAsync()
-    {
-        if (SelectedKeys.Count == 0)
-            return Task.CompletedTask;
-
-        var count = SelectedKeys.Count;
-        return ShowConfirmationAsync(
-            title: "Delete Keys",
-            message: $"Delete {count} selected key(s)?",
-            label: "Delete",
-            action: async () =>
-            {
-                if (Client is null || SelectedKeys.Count == 0)
-                    return;
-
-                var keysToDelete = SelectedKeys.ToList();
-                await Client.DeleteKeysAsync(keysToDelete);
-
-                foreach (var key in keysToDelete)
-                {
-                    Keys.Remove(key);
-                    KeyTypes.Remove(key);
-                }
-
-                SelectedKeys.Clear();
-                if (SelectedKey is not null && !Keys.Contains(SelectedKey, StringComparer.Ordinal))
-                {
-                    SelectedKey = null;
-                    SelectedInfo = null;
-                }
-
                 RebuildNamespaceTree();
             });
     }
@@ -469,7 +404,7 @@
                 await Client.FlushDatabaseAsync();
                 Keys.Clear();
                 KeyTypes.Clear();
-                SelectedKeys.Clear();
+        
                 SelectedKey = null;
                 SelectedInfo = null;
                 SelectedStringValue = null;
@@ -515,25 +450,6 @@
         {
             ErrorMessage = ex.Message;
             await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task OnContextMenuActionAsync((string Key, string Action) context)
-    {
-        switch (context.Action)
-        {
-            case "open":
-                await SelectKeyAsync(context.Key);
-                break;
-            case "edit":
-                await SelectKeyAsync(context.Key);
-                StartEditRequestId++;
-                await InvokeAsync(StateHasChanged);
-                break;
-            case "delete":
-                SelectedKey = context.Key;
-                await DeleteSelectedKeyAsync();
-                break;
         }
     }
 
@@ -600,10 +516,13 @@
 
     private async Task OnSeparatorChangedAsync(string separator)
     {
-        CurrentSeparator = string.IsNullOrEmpty(separator) ? ":" : separator;
+        CurrentSeparator = string.IsNullOrEmpty(separator) ? "-" : separator;
         var config = CurrentRedisConfig;
         if (config is not null)
+        {
             config.NamespaceSeparator = CurrentSeparator;
+            await AppState.SaveProfilesAsync();
+        }
 
         RebuildNamespaceTree();
         await InvokeAsync(StateHasChanged);

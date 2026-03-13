@@ -19,10 +19,20 @@ The purpose of this workflow is to keep implementation, validation, decisions, a
 Use this structure as the default model:
 
 - `docs/architecture/` for stable architecture and design context
+- `docs/architecture/functionalities/` for per-functionality implementation deep dives
 - `docs/ways-of-working/` for process and quality rules
 - `docs/pitfalls/` for recurring AI or implementation mistakes
 - `docs/features/active/<feature-name>/` for active feature work
 - `docs/features/archive/<year>/<feature-name>/` for completed feature history
+
+## Functional architecture maintenance
+
+When behavior changes in a supported app functionality (for example Projects, Service Bus,
+Observability, AKS, Redis, Settings), update the matching file under
+`docs/architecture/functionalities/` in the same change set.
+
+If a new top-level functionality is added, create a new deep-dive file and add it to
+the Functional Deep Dives list in `docs/architecture/architecture.md`.
 
 ## Feature model
 

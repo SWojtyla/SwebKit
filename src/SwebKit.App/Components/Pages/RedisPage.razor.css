@@ -125,6 +125,10 @@
     overflow: auto;
 }
 
+.key-tree-panel {
+    flex: 1;
+}
+
 .detail-panel {
     padding: 12px;
     flex: 1;

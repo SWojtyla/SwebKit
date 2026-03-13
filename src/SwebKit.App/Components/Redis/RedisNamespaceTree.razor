@@ -1,6 +1,5 @@
-<div class="namespace-tree panel">
+<div class="namespace-tree">
     <div class="ns-header">
-        <strong>Namespaces</strong>
         <div class="separator-control">
             <label>Sep:</label>
             <input type="text"
@@ -9,18 +8,30 @@
                    class="sep-input"
                    maxlength="4" />
         </div>
+        @if (!IsComplete)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" Disabled="@IsLoading" @onclick="OnLoadMore">Load More</FluentButton>
+        }
     </div>
 
-    @if (Nodes.Count == 0)
+    @if (IsLoading && Nodes.Count == 0)
     {
-        <div class="ns-empty">No namespaces found.</div>
+        <div class="ns-empty">Scanning...</div>
+    }
+    else if (Nodes.Count == 0)
+    {
+        <div class="ns-empty">No keys found.</div>
     }
     else
     {
         <div class="ns-nodes">
             @foreach (var node in Nodes)
             {
-                <RedisNamespaceTreeNode Node="@node" OnPrefixSelected="OnPrefixSelected" />
+                <RedisNamespaceTreeNode Node="@node"
+                                        OnPrefixSelected="OnPrefixSelected"
+                                        OnKeySelected="OnKeySelected"
+                                        SelectedKey="@SelectedKey"
+                                        KeyTypes="@KeyTypes" />
             }
         </div>
     }
@@ -28,13 +39,19 @@
 
 @code {
     [Parameter, EditorRequired] public List<NamespaceNode> Nodes { get; set; } = [];
-    [Parameter] public string Separator { get; set; } = ":";
+    [Parameter] public string Separator { get; set; } = "-";
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public Dictionary<string, string> KeyTypes { get; set; } = new();
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool IsComplete { get; set; }
     [Parameter] public EventCallback<string> OnSeparatorChanged { get; set; }
     [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
+    [Parameter] public EventCallback<string> OnKeySelected { get; set; }
+    [Parameter] public EventCallback OnLoadMore { get; set; }
 
     private Task OnSepChanged(ChangeEventArgs e)
     {
-        var value = e.Value?.ToString() ?? ":";
+        var value = e.Value?.ToString() ?? "-";
         return OnSeparatorChanged.InvokeAsync(value);
     }
 }

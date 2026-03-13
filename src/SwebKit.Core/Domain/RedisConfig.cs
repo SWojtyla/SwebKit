@@ -16,8 +16,8 @@ public class RedisConfig
     /// <summary>Id of the currently active cache.</summary>
     public string? ActiveCacheId { get; set; }
 
-    /// <summary>Separator used for namespace grouping (default ':').</summary>
-    public string NamespaceSeparator { get; set; } = ":";
+    /// <summary>Separator used for namespace grouping (default '-').</summary>
+    public string NamespaceSeparator { get; set; } = "-";
 
     // ── Legacy fields (kept for backward-compatible deserialization) ──
 
