@@ -153,4 +153,45 @@ while (await _flushTimer.WaitForNextTickAsync(_cts.Token))
 
 ---
 
+## BL-9 — CSS isolation does not apply to HTML injected via `MarkupString`
+
+**Symptom:** CSS rules defined in a `.razor.css` scoped stylesheet have no visible effect on elements that were injected at runtime via a `MarkupString` (e.g., syntax-highlighted `<span>` elements produced by a JS highlighter).
+
+**Cause:** Blazor CSS isolation works by stamping every element rendered by the component with a unique scope attribute (e.g., `b-xxxxxxxx`) and rewriting CSS selectors to require that attribute (`.my-class[b-xxxxxxxx]`). HTML injected via `MarkupString` at runtime is never processed by the Blazor compiler, so those elements do not receive the scope attribute and no scoped rule matches them.
+
+**Fix:** Use the `::deep` combinator in the scoped stylesheet. It tells the CSS isolation build step to emit the scope attribute only on the ancestor, not on the descendant selector.
+
+```css
+/* Wrong — spans inside MarkupString never receive [b-xxxxxxxx] */
+.aks-yaml-pre .yml-key { color: #9cdcfe; }
+
+/* Correct — ::deep drops the scope requirement on the child */
+.aks-yaml-pre ::deep .yml-key { color: #9cdcfe; }
+```
+
+**Rule:** any time a component injects raw HTML via `MarkupString` (syntax highlighters, sanitised user content, server-rendered fragments) and needs to style the injected content from a scoped stylesheet, every CSS rule that targets a child element inside the injected HTML must use `::deep`.
+
+---
+
+## BL-10 — Windows `\r\n` line endings survive into JS / HTML and create ghost blank lines
+
+**Symptom:** Content rendered inside a `<pre>` tag (or any whitespace-sensitive element) shows an extra blank line after every real line, or a `\r` character appears at the end of processed text values. The bug is Windows-only; CI (Linux) passes cleanly.
+
+**Cause:** C# raw string literals (`""" ... """`) and strings returned from .NET SDK methods preserve whatever line endings are in the source or data. On Windows these are `\r\n`. When the string is passed to JavaScript via JSInterop and split with `str.split('\n')`, each element retains a trailing `\r`. In HTML, a bare `\r` is treated as a line break by the browser's HTML parser, so each processed "line" gets an invisible extra line break appended to it.
+
+**Fix:** Normalize line endings in C# before passing the string to JS (or before rendering it as HTML):
+
+```csharp
+// Normalize \r\n → \n and strip blank/whitespace-only lines
+var clean = string.Join('\n', text.ReplaceLineEndings("\n")
+    .Split('\n')
+    .Where(static l => !string.IsNullOrWhiteSpace(l)));
+```
+
+Do this in the C# layer rather than in JS so the fix is guaranteed regardless of WebView JS caching.
+
+**Rule:** whenever a multi-line string from a C# raw literal or an external API is passed to JSInterop or rendered as a `MarkupString`, call `ReplaceLineEndings("\n")` first.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

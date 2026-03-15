@@ -1,5 +1,6 @@
 @page "/aks"
 @inject AppStateService AppState
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="aks-page" @oncontextmenu:preventDefault>
@@ -372,12 +373,16 @@
                         }
                         else if (YamlEditMode)
                         {
-                            <textarea class="aks-yaml-edit" spellcheck="false"
-                                      @bind="YamlEditText" @bind:event="oninput"></textarea>
+                            <div class="aks-yaml-edit-wrap" @key="_editKey">
+                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre">@_yamlEditHighlighted</pre>
+                                <textarea class="aks-yaml-edit" spellcheck="false"
+                                          @ref="_editTextarea"
+                                          @oninput="OnYamlEditInput">@YamlEditText</textarea>
+                            </div>
                         }
                         else
                         {
-                            <pre class="aks-yaml-pre">@YamlText</pre>
+                            <pre class="aks-yaml-pre">@_yamlHighlighted</pre>
                         }
                     </div>
                 </ResizablePanel>
@@ -455,7 +460,7 @@
                         }
                         else
                         {
-                            <pre class="aks-yaml-pre">@HelmValuesText</pre>
+                            <pre class="aks-yaml-pre">@_helmValuesHighlighted</pre>
                         }
                     </div>
                 </ResizablePanel>
@@ -557,6 +562,17 @@
     private bool YamlEditMode;
     private string YamlEditText = string.Empty;
     private bool YamlApplying;
+
+    // Highlighted markup for YAML panels
+    private MarkupString _yamlHighlighted;
+    private MarkupString _yamlEditHighlighted;
+    private MarkupString _helmValuesHighlighted;
+
+    // Edit overlay refs & lifecycle flags
+    private ElementReference _editTextarea;
+    private ElementReference _editPre;
+    private bool _initEditOverlay;
+    private int _editKey;
 
     // Only Deployments and Ingresses are editable (not Pods or Helm manifests)
     private bool YamlIsEditable => YamlTarget?.Kind is "Deployment" or "Ingress";
@@ -1070,6 +1086,7 @@
         try
         {
             HelmValuesText = await Client.GetHelmReleaseValuesAsync(CurrentNamespace, helm.Name);
+            _helmValuesHighlighted = await HighlightAsync(HelmValuesText);
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
         finally { HelmValuesLoading = false; StateHasChanged(); }
@@ -1131,6 +1148,26 @@
         catch (Exception ex) { ErrorMessage = ex.Message; }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_initEditOverlay)
+        {
+            _initEditOverlay = false;
+            await JS.InvokeVoidAsync("yamlHighlight.initEditOverlay", _editTextarea, _editPre);
+        }
+    }
+
+    private async Task<MarkupString> HighlightAsync(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return default;
+        // Normalize line endings and strip blank lines before passing to the highlighter
+        var clean = string.Join('\n', text.ReplaceLineEndings("\n")
+            .Split('\n')
+            .Where(static l => !string.IsNullOrWhiteSpace(l)));
+        var html = await JS.InvokeAsync<string>("yamlHighlight.highlight", clean);
+        return (MarkupString)html;
+    }
+
     private void CloseAllMenus()
     {
         DeploymentMenu.Close();
@@ -1159,10 +1196,14 @@
         try
         {
             YamlText = await Client!.GetResourceYamlAsync(CurrentNamespace, kind, name);
+            _yamlHighlighted = await HighlightAsync(YamlText);
             if (startInEditMode && YamlIsEditable)
             {
                 YamlEditMode = true;
                 YamlEditText = YamlText ?? string.Empty;
+                _yamlEditHighlighted = _yamlHighlighted;
+                _editKey++;
+                _initEditOverlay = true;
             }
         }
         catch (Exception ex)
@@ -1188,17 +1229,28 @@
         StateHasChanged();
     }
 
-    private void OnEditYamlToggle()
+    private async Task OnEditYamlToggle()
     {
         YamlEditMode = true;
         YamlEditText = YamlText ?? string.Empty;
+        _yamlEditHighlighted = _yamlHighlighted;
+        _editKey++;
+        _initEditOverlay = true;
         StateHasChanged();
+        await Task.CompletedTask;
     }
 
     private void OnCancelYamlEdit()
     {
         YamlEditMode = false;
         YamlEditText = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task OnYamlEditInput(ChangeEventArgs e)
+    {
+        YamlEditText = e.Value?.ToString() ?? string.Empty;
+        _yamlEditHighlighted = await HighlightAsync(YamlEditText);
         StateHasChanged();
     }
 
@@ -1221,6 +1273,7 @@
 
             await Client.ApplyResourceYamlAsync(CurrentNamespace, YamlTarget.Value.Kind, YamlTarget.Value.Name, YamlEditText);
             YamlText = YamlEditText;
+            _yamlHighlighted = await HighlightAsync(YamlText);
             YamlEditMode = false;
             YamlEditText = string.Empty;
             StateHasChanged();

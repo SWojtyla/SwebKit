@@ -4,6 +4,6 @@ Quick-reference files for recurring bugs in this codebase. Add an entry to the r
 
 | File | Covers |
 |------|--------|
-| [blazor-maui.md](blazor-maui.md) | Blazor component lifecycle, rendering, JS interop, MAUI Hybrid threading |
+| [blazor-maui.md](blazor-maui.md) | Blazor component lifecycle, rendering, JS interop, MAUI Hybrid threading, CSS isolation, line endings |
 | [azure-sdk.md](azure-sdk.md) | Azure SDK auth, connection strings, `AsyncPageable` resource management |
 | [dotnet-csharp.md](dotnet-csharp.md) | General .NET / C# traps (`required`, cancellation, nullability) |

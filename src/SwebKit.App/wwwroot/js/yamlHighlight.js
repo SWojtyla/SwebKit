@@ -11,6 +11,20 @@ window.yamlHighlight = {
      */
     highlight: function (yaml) {
         return yamlToHtml(yaml || '');
+    },
+
+    /**
+     * Wires up scroll sync so the highlight-pre tracks the textarea.
+     * Called once after the edit overlay is mounted.
+     * @param {HTMLTextAreaElement} textareaEl
+     * @param {HTMLElement} preEl
+     */
+    initEditOverlay: function (textareaEl, preEl) {
+        if (!textareaEl || !preEl) return;
+        textareaEl.addEventListener('scroll', function () {
+            preEl.scrollTop = textareaEl.scrollTop;
+            preEl.scrollLeft = textareaEl.scrollLeft;
+        });
     }
 };
 
@@ -86,8 +100,8 @@ function findInlineCommentIdx(s) {
 function yamlToHtml(text) {
     var lines = text.split('\n');
     return lines.map(function (line) {
-        // Blank line
-        if (!line.trim()) return '';
+        // Blank line — skip entirely (suppressed in viewer)
+        if (!line.trim()) return null;
 
         // Full-line comment
         if (/^\s*#/.test(line)) return span('comment', line);
@@ -141,5 +155,5 @@ function yamlToHtml(text) {
 
         // Fallback
         return escHtml(line);
-    }).join('\n');
+    }).filter(function (l) { return l !== null; }).join('\n');
 }

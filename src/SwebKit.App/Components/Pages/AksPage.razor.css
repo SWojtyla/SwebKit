@@ -427,6 +427,8 @@
 
 .aks-yaml-content {
     flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: auto;
     padding: 0;
 }
@@ -536,13 +538,34 @@
 }
 
 /* ── YAML editor (textarea) ── */
-.aks-yaml-edit {
+/* ── YAML edit overlay (textarea + highlighted pre stacked) ── */
+.aks-yaml-edit-wrap {
+    position: relative;
     flex: 1;
-    width: 100%;
-    height: 100%;
+    min-height: 200px;
+    overflow: hidden;
+}
+
+/* Highlighted pre sits behind the textarea */
+.aks-yaml-edit-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+    /* scrolling is driven by the textarea above */
+}
+
+/* Transparent textarea sits on top — captures input, caret is visible */
+.aks-yaml-edit {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
     padding: 12px;
-    background: var(--color-bg);
-    color: var(--color-text);
+    background: transparent;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    caret-color: rgba(255, 255, 255, 0.75);
     border: none;
     outline: none;
     resize: none;
@@ -552,12 +575,14 @@
     tab-size: 2;
     white-space: pre;
     overflow-wrap: normal;
-    overflow-x: auto;
+    overflow: auto;
     box-sizing: border-box;
 }
 
-.aks-yaml-edit:focus {
-    background: rgba(255, 255, 255, 0.02);
+.aks-yaml-edit::selection {
+    background: rgba(100, 149, 237, 0.35);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
 }
 
 /* ── Scale panel ── */
@@ -646,17 +671,19 @@
     justify-content: center;
 }
 
-/* ── YAML syntax highlight tokens ── */
-.aks-yaml-pre .yml-key        { color: #9cdcfe; }
-.aks-yaml-pre .yml-colon      { color: var(--color-text-muted); }
-.aks-yaml-pre .yml-string     { color: #ce9178; }
-.aks-yaml-pre .yml-bool       { color: #569cd6; }
-.aks-yaml-pre .yml-null       { color: #569cd6; }
-.aks-yaml-pre .yml-number     { color: #b5cea8; }
-.aks-yaml-pre .yml-comment    { color: #6a9955; font-style: italic; }
-.aks-yaml-pre .yml-doc-marker { color: #808080; }
-.aks-yaml-pre .yml-directive  { color: #808080; }
-.aks-yaml-pre .yml-dash       { color: #c586c0; font-weight: 600; }
-.aks-yaml-pre .yml-value      { color: var(--color-text); }
-.aks-yaml-pre .yml-anchor     { color: #dcdcaa; }
-.aks-yaml-pre .yml-scalar     { color: #dcdcaa; }
+/* ── YAML syntax highlight tokens ──
+   ::deep is required because the <span> elements are injected at runtime via
+   MarkupString and do not receive Blazor's CSS isolation scope attribute. */
+.aks-yaml-pre ::deep .yml-key        { color: #9cdcfe; }
+.aks-yaml-pre ::deep .yml-colon      { color: var(--color-text-muted); }
+.aks-yaml-pre ::deep .yml-string     { color: #ce9178; }
+.aks-yaml-pre ::deep .yml-bool       { color: #569cd6; }
+.aks-yaml-pre ::deep .yml-null       { color: #569cd6; }
+.aks-yaml-pre ::deep .yml-number     { color: #b5cea8; }
+.aks-yaml-pre ::deep .yml-comment    { color: #6a9955; font-style: italic; }
+.aks-yaml-pre ::deep .yml-doc-marker { color: #808080; }
+.aks-yaml-pre ::deep .yml-directive  { color: #808080; }
+.aks-yaml-pre ::deep .yml-dash       { color: #c586c0; font-weight: 600; }
+.aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
+.aks-yaml-pre ::deep .yml-anchor     { color: #dcdcaa; }
+.aks-yaml-pre ::deep .yml-scalar     { color: #dcdcaa; }
