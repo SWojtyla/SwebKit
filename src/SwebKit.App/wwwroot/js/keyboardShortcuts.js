@@ -15,6 +15,7 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         if (ctrl && key === '2') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavServiceBus'); return; }
         if (ctrl && key === '3') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavObservability'); return; }
         if (ctrl && key === '4') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavAks'); return; }
+        if (ctrl && key === '5') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavReleases'); return; }
         if (ctrl && key === ',') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavSettings'); return; }
         if (ctrl && key === 'Tab' && !shift) { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'TabNext'); return; }
         if (ctrl && key === 'Tab' && shift) { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'TabPrev'); return; }

@@ -1,0 +1,249 @@
+@inject ReleaseRepository ReleaseRepo
+
+<div>
+    @if (Release is null)
+    {
+        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+            Select a release to manage tags.
+        </div>
+    }
+    else if (ScopedComponents.Count == 0)
+    {
+        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+            No components in scope for this release.
+        </div>
+    }
+    else
+    {
+        <div style="display:grid; gap:16px;">
+            @foreach (var comp in ScopedComponents)
+            {
+                var tags = ExistingTags.GetValueOrDefault(comp.RepositoryId) ?? [];
+                var commits = RecentCommits.GetValueOrDefault(comp.RepositoryId) ?? [];
+                var latestTag = tags.FirstOrDefault();
+                var isTagging = TaggingComponent == comp.ComponentName;
+
+                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:14px; font-weight:600; font-family:Consolas,monospace;">@comp.ComponentName</div>
+                            <div style="font-size:11px; color:var(--color-text-muted);">@comp.ProjectName</div>
+                        </div>
+                        <div style="text-align:right;">
+                            @if (comp.TagConfirmed)
+                            {
+                                <span style="font-size:12px; color:var(--color-success); font-weight:600;">@comp.TargetTag ✓</span>
+                            }
+                            else if (latestTag is not null)
+                            {
+                                <span style="font-size:12px; color:var(--color-text-muted);">Latest: @latestTag.Name</span>
+                            }
+                        </div>
+                    </div>
+
+                    @if (!comp.TagConfirmed)
+                    {
+                        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-top:8px;">
+                            <div style="display:grid; gap:2px; min-width:100px;">
+                                <label style="font-size:11px; color:var(--color-text-muted);">Tag Name</label>
+                                <input type="text" value="@GetTagName(comp.ComponentName, latestTag)"
+                                       @onchange="@(e => SetTagName(comp.ComponentName, e.Value?.ToString() ?? ""))"
+                                       style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                            </div>
+                            <div style="display:grid; gap:2px; flex:1; min-width:200px;">
+                                <label style="font-size:11px; color:var(--color-text-muted);">Commit</label>
+                                <select value="@GetCommitSha(comp.ComponentName, commits)"
+                                        @onchange="@(e => SetCommitSha(comp.ComponentName, e.Value?.ToString() ?? ""))"
+                                        style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;">
+                                    @foreach (var commit in commits)
+                                    {
+                                        <option value="@commit.CommitId">@commit.ShortId — @Truncate(commit.Comment, 50) (@commit.AuthorName)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div style="display:grid; gap:2px; min-width:160px;">
+                                <label style="font-size:11px; color:var(--color-text-muted);">Tag Message</label>
+                                <input type="text" value="@GetTagMessage(comp.ComponentName)"
+                                       @onchange="@(e => SetTagMessage(comp.ComponentName, e.Value?.ToString() ?? ""))"
+                                       placeholder="Release message"
+                                       style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                            </div>
+                            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => ConfirmCreateTag(comp))"
+                                          Disabled="@isTagging">
+                                @(isTagging ? "Creating..." : "Create Tag")
+                            </FluentButton>
+                        </div>
+
+                        @* Existing tags *@
+                        @if (tags.Count > 0)
+                        {
+                            <div style="margin-top:8px; font-size:11px; color:var(--color-text-muted);">
+                                Recent tags: @string.Join(", ", tags.Take(5).Select(t => t.Name))
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* ── Two-step confirmation modal ── *@
+@if (TagConfirmTarget is not null)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:480px; width:90%;">
+            <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
+                ⚠ This action cannot be undone
+            </div>
+            <h3 style="margin:0 0 8px; font-size:15px;">Create Tag</h3>
+            <p style="margin:0 0 16px; font-size:13px; color:var(--color-text-muted);">
+                You are about to create tag <strong>@TagConfirmTagName</strong>
+                on commit <strong>@TagConfirmCommitShort</strong>
+                for component <strong>@TagConfirmTarget.ComponentName</strong>.
+            </p>
+
+            <div style="margin-bottom:12px;">
+                <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
+                <input type="text" @bind="TagTypingConfirm" @bind:event="oninput"
+                       style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+            </div>
+
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button @onclick="CancelTagConfirm" style="padding:6px 16px; cursor:pointer;">Cancel</button>
+                <button @onclick="ExecuteCreateTag" disabled="@(TagTypingConfirm != "CONFIRM")"
+                        style="padding:6px 16px; background:var(--color-accent); color:white; border:none; border-radius:4px; cursor:pointer; @(TagTypingConfirm != "CONFIRM" ? "opacity:0.5;" : "")">
+                    Create Tag
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public ReleaseRecord? Release { get; set; }
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+
+    private List<ComponentScope> ScopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
+    private Dictionary<string, List<AdoTag>> ExistingTags = new();
+    private Dictionary<string, List<AdoCommit>> RecentCommits = new();
+    private Dictionary<string, string> TagNames = new();
+    private Dictionary<string, string> CommitShas = new();
+    private Dictionary<string, string> TagMessages = new();
+    private string? TaggingComponent;
+
+    // Confirm state
+    private ComponentScope? TagConfirmTarget;
+    private string TagConfirmTagName = "";
+    private string TagConfirmCommitShort = "";
+    private string TagTypingConfirm = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Release is not null && ScopedComponents.Count > 0)
+            await LoadTagDataAsync();
+    }
+
+    private async Task LoadTagDataAsync()
+    {
+        foreach (var comp in ScopedComponents)
+        {
+            try
+            {
+                var tags = await DevOpsClient.GetTagsAsync(comp.ProjectName, comp.RepositoryId);
+                ExistingTags[comp.RepositoryId] = tags;
+
+                var commits = await DevOpsClient.GetCommitsAsync(comp.ProjectName, comp.RepositoryId, "main");
+                RecentCommits[comp.RepositoryId] = commits;
+            }
+            catch { /* best effort */ }
+        }
+    }
+
+    private string GetTagName(string compName, AdoTag? latest)
+    {
+        if (TagNames.TryGetValue(compName, out var val)) return val;
+        // Suggest next semver patch
+        if (latest?.Name is not null && latest.Name.StartsWith("v"))
+        {
+            var parts = latest.Name[1..].Split('.');
+            if (parts.Length == 3 && int.TryParse(parts[2], out var patch))
+                return $"v{parts[0]}.{parts[1]}.{patch + 1}";
+        }
+        return "v1.0.0";
+    }
+
+    private void SetTagName(string compName, string val) => TagNames[compName] = val;
+
+    private string GetCommitSha(string compName, List<AdoCommit> commits)
+    {
+        if (CommitShas.TryGetValue(compName, out var val)) return val;
+        return commits.FirstOrDefault()?.CommitId ?? "";
+    }
+
+    private void SetCommitSha(string compName, string val) => CommitShas[compName] = val;
+
+    private string GetTagMessage(string compName)
+    {
+        if (TagMessages.TryGetValue(compName, out var val)) return val;
+        return $"Release {GetTagName(compName, ExistingTags.GetValueOrDefault(
+            ScopedComponents.FirstOrDefault(c => c.ComponentName == compName)?.RepositoryId ?? "")?.FirstOrDefault())}";
+    }
+
+    private void SetTagMessage(string compName, string val) => TagMessages[compName] = val;
+
+    private void ConfirmCreateTag(ComponentScope comp)
+    {
+        var commits = RecentCommits.GetValueOrDefault(comp.RepositoryId) ?? [];
+        var latestTag = ExistingTags.GetValueOrDefault(comp.RepositoryId)?.FirstOrDefault();
+        TagConfirmTarget = comp;
+        TagConfirmTagName = GetTagName(comp.ComponentName, latestTag);
+        var sha = GetCommitSha(comp.ComponentName, commits);
+        TagConfirmCommitShort = sha.Length >= 7 ? sha[..7] : sha;
+        TagTypingConfirm = "";
+    }
+
+    private void CancelTagConfirm()
+    {
+        TagConfirmTarget = null;
+        TagTypingConfirm = "";
+    }
+
+    private async Task ExecuteCreateTag()
+    {
+        if (TagConfirmTarget is null) return;
+        var comp = TagConfirmTarget;
+        CancelTagConfirm();
+        TaggingComponent = comp.ComponentName;
+
+        try
+        {
+            var latestTag = ExistingTags.GetValueOrDefault(comp.RepositoryId)?.FirstOrDefault();
+            var tagName = GetTagName(comp.ComponentName, latestTag);
+            var commits = RecentCommits.GetValueOrDefault(comp.RepositoryId) ?? [];
+            var commitSha = GetCommitSha(comp.ComponentName, commits);
+            var message = GetTagMessage(comp.ComponentName);
+
+            await DevOpsClient.CreateAnnotatedTagAsync(comp.ProjectName, comp.RepositoryId, tagName, commitSha, message);
+
+            // Mark as confirmed
+            comp.TargetTag = tagName;
+            comp.TagConfirmed = true;
+            if (Release is not null)
+                await ReleaseRepo.UpdateReleaseAsync(Release);
+
+            // Refresh tags
+            var tags = await DevOpsClient.GetTagsAsync(comp.ProjectName, comp.RepositoryId);
+            ExistingTags[comp.RepositoryId] = tags;
+        }
+        catch { /* Error handling could be improved */ }
+        finally
+        {
+            TaggingComponent = null;
+            StateHasChanged();
+        }
+    }
+
+    private static string Truncate(string text, int maxLen)
+        => text.Length <= maxLen ? text : text[..(maxLen - 3)] + "...";
+}

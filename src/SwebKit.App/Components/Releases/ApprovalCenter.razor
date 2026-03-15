@@ -1,0 +1,180 @@
+@implements IDisposable
+
+<div>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">Refresh</FluentButton>
+        <AutoRefreshToggle OnRefresh="LoadAsync" />
+    </div>
+
+    @if (Release is null)
+    {
+        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+            Select a release to see pending approvals.
+        </div>
+    }
+    else if (IsLoading)
+    {
+        <LoadingSpinner Message="Checking pipelines for pending approvals..." />
+    }
+    else if (ErrorMessage is not null)
+    {
+        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+    }
+    else if (PendingItems.Count == 0)
+    {
+        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+            No pending approvals for the components in this release.
+        </div>
+    }
+    else
+    {
+        <div style="display:grid; gap:12px;">
+            @foreach (var item in PendingItems)
+            {
+                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:14px; font-weight:600;">@item.ComponentName</div>
+                            <div style="font-size:12px; color:var(--color-text-muted);">
+                                @item.ProjectName — waiting at <strong>@item.StageName</strong>
+                                @if (item.TriggeredBy is not null)
+                                {
+                                    <text> — triggered by @item.TriggeredBy</text>
+                                }
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            @if (item.IsLastStage)
+                            {
+                                <span style="font-size:10px; padding:2px 6px; background:rgba(200,0,42,0.2); color:var(--color-error); border-radius:4px; font-weight:600;">PROD</span>
+                            }
+                            @if (item.WebUrl is not null)
+                            {
+                                <a href="@item.WebUrl" target="_blank"
+                                   style="padding:6px 12px; font-size:12px; color:var(--color-accent); text-decoration:none; border:1px solid var(--color-border); border-radius:4px;">
+                                    Review in ADO
+                                </a>
+                            }
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:var(--color-text-muted);">
+                        Run started @item.CreatedDate.LocalDateTime.ToString("g")
+                        — Branch: @item.SourceBranch
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ReleaseRecord? Release { get; set; }
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+
+    private bool IsLoading;
+    private string? ErrorMessage;
+    private List<PendingApprovalItem> PendingItems = [];
+
+    private List<ComponentScope> ScopedComponents =>
+        Release?.Components.Where(c => c.InScope && c.PipelineId > 0).ToList() ?? [];
+
+    private record PendingApprovalItem(
+        string ComponentName,
+        string ProjectName,
+        string StageName,
+        string SourceBranch,
+        string? TriggeredBy,
+        string? WebUrl,
+        DateTimeOffset CreatedDate,
+        bool IsLastStage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Release is not null)
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Release is null || ScopedComponents.Count == 0)
+        {
+            PendingItems = [];
+            return;
+        }
+
+        IsLoading = true;
+        ErrorMessage = null;
+        try
+        {
+            // Get environments per project to determine "last stage" (production)
+            var lastEnvByProject = new Dictionary<string, string?>();
+            foreach (var proj in ScopedComponents.Select(c => c.ProjectName).Distinct())
+            {
+                try
+                {
+                    var envs = await DevOpsClient.GetEnvironmentsAsync(proj);
+                    lastEnvByProject[proj] = envs.LastOrDefault()?.Name;
+                }
+                catch
+                {
+                    lastEnvByProject[proj] = null;
+                }
+            }
+
+            var items = new List<PendingApprovalItem>();
+
+            foreach (var comp in ScopedComponents)
+            {
+                try
+                {
+                    // Get the latest run for this component's pipeline
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(comp.ProjectName, comp.PipelineId, top: 1);
+                    var latestRun = runs.FirstOrDefault();
+                    if (latestRun is null) continue;
+
+                    // Skip completed runs — no approvals possible
+                    if (latestRun.State == "completed") continue;
+
+                    // Check the build timeline for stages waiting on approvals/checks
+                    var waitingStages = await DevOpsClient.GetWaitingStagesAsync(
+                        comp.ProjectName, latestRun.Id);
+
+                    if (waitingStages.Count == 0) continue;
+
+                    var lastEnv = lastEnvByProject.GetValueOrDefault(comp.ProjectName);
+
+                    foreach (var stageName in waitingStages)
+                    {
+                        // Determine if this is the last stage (production)
+                        var isLast = lastEnv is not null &&
+                            stageName.Contains(lastEnv, StringComparison.OrdinalIgnoreCase);
+
+                        items.Add(new PendingApprovalItem(
+                            comp.ComponentName,
+                            comp.ProjectName,
+                            stageName,
+                            latestRun.SourceBranch,
+                            latestRun.TriggeredBy,
+                            latestRun.WebUrl,
+                            latestRun.CreatedDate,
+                            isLast));
+                    }
+                }
+                catch { /* Skip components that fail */ }
+            }
+
+            PendingItems = items.OrderBy(i => i.CreatedDate).ToList();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose() { }
+}

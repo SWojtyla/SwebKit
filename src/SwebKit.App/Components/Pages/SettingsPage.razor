@@ -40,6 +40,9 @@
                 <FluentAccordionItem Heading="Redis">
                     <RedisConfigForm Environment="env" OnSaved="SaveAsync" />
                 </FluentAccordionItem>
+                <FluentAccordionItem Heading="Azure DevOps (Releases)">
+                    <DevOpsConfigForm OnSaved="SaveAsync" />
+                </FluentAccordionItem>
             </FluentAccordion>
         }
     }
