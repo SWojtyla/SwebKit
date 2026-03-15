@@ -186,15 +186,14 @@ public class DemoDevOpsClient : IDevOpsClient
         return _pendingApprovals.Where(a => pipelineIds.Contains(a.PipelineId)).ToList();
     }
 
-    public Task<List<string>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
+    public Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
     {
-        // In demo mode, simulate that one run has a waiting stage
-        var waitingStages = new List<string>();
+        var waitingStages = new List<WaitingStage>();
         // The first pipeline run for pipeline 101 (order-api) simulates a waiting approval on STG
         if (runId == 1010)
-            waitingStages.Add("Deploy to STG");
+            waitingStages.Add(new WaitingStage("Deploy to STG", "appr-1"));
         if (runId == 1030)
-            waitingStages.Add("Deploy to PRD");
+            waitingStages.Add(new WaitingStage("Deploy to PRD", "appr-2"));
         return Task.FromResult(waitingStages);
     }
 

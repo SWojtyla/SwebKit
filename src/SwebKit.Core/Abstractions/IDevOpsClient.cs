@@ -33,9 +33,9 @@ public interface IDevOpsClient
 
     /// <summary>
     /// Gets stages from a pipeline run's build timeline that are waiting for approval/checks.
-    /// This detects environment-level approvals that don't appear in the pipelines/approvals API.
+    /// Returns stage name + approval ID (if resolvable) for in-app approve/reject.
     /// </summary>
-    Task<List<string>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default);
+    Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default);
 
     Task ApproveAsync(string project, string approvalId, string? comment = null, CancellationToken ct = default);
 

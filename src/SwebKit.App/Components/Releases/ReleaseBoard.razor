@@ -69,7 +69,16 @@
                         {
                             var compData = BoardData.GetValueOrDefault(comp.ComponentName);
                             <tr style="border-bottom:1px solid var(--color-border);">
-                                <td style="padding:8px; font-family:Consolas,monospace;">@comp.ComponentName</td>
+                                <td style="padding:8px;">
+                                    <div style="font-family:Consolas,monospace;">@comp.ComponentName</div>
+                                    @{
+                                        var runName = RunNames.GetValueOrDefault(comp.ComponentName);
+                                    }
+                                    @if (runName is not null)
+                                    {
+                                        <div style="font-size:10px; color:var(--color-accent); font-family:Consolas,monospace;">#@runName</div>
+                                    }
+                                </td>
                                 <td style="padding:8px; text-align:center;">
                                     @if (comp.TagConfirmed)
                                     {
@@ -140,6 +149,7 @@
     .pipeline-status.failed { background: rgba(200,0,42,0.2); color: var(--color-error); }
     .pipeline-status.running { background: rgba(0,120,212,0.2); color: var(--color-accent); }
     .pipeline-status.notdeployed { color: var(--color-text-muted); }
+    .pipeline-status.waiting { background: rgba(255,152,0,0.2); color: #FF9800; }
 </style>
 
 @code {
@@ -153,6 +163,8 @@
 
     // ComponentName -> EnvironmentName -> CellData
     public Dictionary<string, Dictionary<string, CellData>> BoardData = new();
+    // ComponentName -> build number / run name (e.g. "1.2.1_1")
+    private Dictionary<string, string> RunNames = new();
 
     public record CellData(string State, string Result, string DisplayText, string CssClass, string? WebUrl);
 
@@ -167,6 +179,7 @@
         IsLoading = true;
         ErrorMessage = null;
         BoardData.Clear();
+        RunNames.Clear();
         DiscoveredEnvironments = [];
 
         try
@@ -191,34 +204,59 @@
             {
                 if (comp.PipelineId == 0) continue;
 
-                var runs = await DevOpsClient.GetPipelineRunsAsync(comp.ProjectName, comp.PipelineId, top: 5);
-                var latestRun = runs.FirstOrDefault();
-                if (latestRun is null) continue;
-
-                // Get stage details if not already populated
-                if (latestRun.Stages.Count == 0)
+                try
                 {
-                    try
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(comp.ProjectName, comp.PipelineId, top: 5);
+                    var latestRun = runs.FirstOrDefault();
+                    if (latestRun is null) continue;
+
+                    // Get stage details if not already populated
+                    if (latestRun.Stages.Count == 0)
                     {
-                        latestRun = await DevOpsClient.GetPipelineRunAsync(comp.ProjectName, comp.PipelineId, latestRun.Id);
+                        try
+                        {
+                            latestRun = await DevOpsClient.GetPipelineRunAsync(comp.ProjectName, comp.PipelineId, latestRun.Id);
+                        }
+                        catch { /* Use run without stages */ }
                     }
-                    catch { /* Use run without stages */ }
-                }
 
-                var envMap = new Dictionary<string, CellData>();
-                foreach (var stage in latestRun.Stages)
-                {
-                    var envName = stage.EnvironmentName ?? stage.Name.Replace("Deploy to ", "");
-                    var (display, css) = stage.State switch
+                    // Detect stages waiting for approval
+                    var waitingStageNames = new HashSet<string>();
+                    if (latestRun.State != "completed")
                     {
-                        "completed" when stage.Result == "succeeded" => ("Deployed", "succeeded"),
-                        "completed" when stage.Result == "failed" => ("Failed", "failed"),
-                        "inProgress" => ("Running", "running"),
-                        _ => ("Pending", "notdeployed")
-                    };
-                    envMap[envName] = new CellData(stage.State, stage.Result, display, css, latestRun.WebUrl);
+                        try
+                        {
+                            var waiting = await DevOpsClient.GetWaitingStagesAsync(comp.ProjectName, latestRun.Id);
+                            foreach (var w in waiting)
+                                waitingStageNames.Add(w.StageName);
+                        }
+                        catch { }
+                    }
+
+                    // Store the build number / run name
+                    if (!string.IsNullOrEmpty(latestRun.Name))
+                        RunNames[comp.ComponentName] = latestRun.Name;
+
+                    var envMap = new Dictionary<string, CellData>();
+                    foreach (var stage in latestRun.Stages)
+                    {
+                        var envName = ResolveEnvironmentName(stage, DiscoveredEnvironments);
+                        if (envName is null) continue; // Skip non-deployment stages (e.g. "Setup")
+                        var isWaiting = waitingStageNames.Contains(stage.Name);
+
+                        var (display, css) = (stage.State, isWaiting) switch
+                        {
+                            (_, true) => ("Awaiting Approval", "waiting"),
+                            ("completed", _) when stage.Result == "succeeded" => ("Deployed", "succeeded"),
+                            ("completed", _) when stage.Result == "failed" => ("Failed", "failed"),
+                            ("inProgress", _) => ("Running", "running"),
+                            _ => ("Pending", "notdeployed")
+                        };
+                        envMap[envName] = new CellData(stage.State, stage.Result, display, css, latestRun.WebUrl);
+                    }
+                    BoardData[comp.ComponentName] = envMap;
                 }
-                BoardData[comp.ComponentName] = envMap;
+                catch { /* Skip failed components */ }
             }
         }
         catch (Exception ex)
@@ -231,6 +269,42 @@
         }
     }
 
+    /// <summary>
+    /// Matches a pipeline stage to a discovered environment name.
+    /// Handles common naming patterns: "Deploy: dev-weu", "Deploy to DEV", "deploy_dev_weu", etc.
+    /// Returns null for non-deployment stages (e.g. "Setup", "Build").
+    /// </summary>
+    private static string? ResolveEnvironmentName(AdoPipelineStage stage, List<string> environments)
+    {
+        // 1. Direct match on EnvironmentName (identifier from timeline)
+        if (stage.EnvironmentName is not null)
+        {
+            var direct = environments.FirstOrDefault(e =>
+                string.Equals(e, stage.EnvironmentName, StringComparison.OrdinalIgnoreCase));
+            if (direct is not null) return direct;
+        }
+
+        // 2. Check if any environment name is contained in the stage name
+        //    e.g. stage "Deploy: dev-weu" contains environment "dev-weu"
+        var byContains = environments.FirstOrDefault(e =>
+            stage.Name.Contains(e, StringComparison.OrdinalIgnoreCase));
+        if (byContains is not null) return byContains;
+
+        // 3. Check with underscores replaced (timeline identifiers use underscores)
+        //    e.g. identifier "Deploy_dev_weu" should match "dev-weu"
+        if (stage.EnvironmentName is not null)
+        {
+            var normalized = stage.EnvironmentName.Replace('_', '-');
+            var byNormalized = environments.FirstOrDefault(e =>
+                string.Equals(e, normalized, StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains(e, StringComparison.OrdinalIgnoreCase));
+            if (byNormalized is not null) return byNormalized;
+        }
+
+        // No match — likely a non-deployment stage (Setup, Build, Test, etc.)
+        return null;
+    }
+
     private (string Icon, string Tooltip) ComputeReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
     {
         if (envData is null)
@@ -239,6 +313,10 @@
         var hasFailed = envData.Values.Any(c => c.CssClass == "failed");
         if (hasFailed)
             return ("❌", "Pipeline has failed stages");
+
+        var hasWaiting = envData.Values.Any(c => c.CssClass == "waiting");
+        if (hasWaiting)
+            return ("🔒", "Waiting for approval");
 
         var hasRunning = envData.Values.Any(c => c.CssClass == "running");
         if (hasRunning)

@@ -51,19 +51,12 @@ public record AdoApproval(
     DateTimeOffset CreatedOn);
 
 /// <summary>
-/// A stage in a pipeline run that is waiting for approval/check.
-/// Detected from the build timeline rather than the approvals API,
-/// which only covers a subset of approval types.
+/// A stage in a pipeline run that is waiting for an approval/check.
+/// Detected from the build timeline.
 /// </summary>
-public record AdoPendingCheck(
-    string ComponentName,
-    string ProjectName,
-    int PipelineId,
-    string PipelineName,
-    int RunId,
+public record WaitingStage(
     string StageName,
-    string? WebUrl,
-    DateTimeOffset CreatedDate);
+    string? ApprovalId);
 
 // ── Git models ──
 

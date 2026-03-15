@@ -183,8 +183,8 @@
                     var latest = runs.FirstOrDefault();
                     if (latest is null || latest.State == "completed") continue;
 
-                    var waiting = await ActiveClient.GetWaitingStagesAsync(comp.ProjectName, latest.Id);
-                    totalApprovals += waiting.Count;
+                    var waitingStages = await ActiveClient.GetWaitingStagesAsync(comp.ProjectName, latest.Id);
+                    totalApprovals += waitingStages.Count;
                 }
                 catch { }
             }

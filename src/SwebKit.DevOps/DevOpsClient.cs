@@ -150,7 +150,7 @@ public class DevOpsClient : IDevOpsClient
         )).ToList() ?? [];
     }
 
-    public async Task<List<string>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
+    public async Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
     {
         try
         {
@@ -160,7 +160,6 @@ public class DevOpsClient : IDevOpsClient
             if (timeline?.Records is null) return [];
 
             // Find stages that have a Checkpoint child record in "inProgress" state
-            // This indicates the stage is waiting for an approval/check
             var stageRecords = timeline.Records
                 .Where(r => r.Type == "Stage")
                 .ToDictionary(r => r.Id ?? "", r => r);
@@ -170,9 +169,43 @@ public class DevOpsClient : IDevOpsClient
                 .Select(r => r.ParentId!)
                 .ToHashSet();
 
-            return stageRecords
+            var waitingStageNames = stageRecords
                 .Where(kv => checkpointParents.Contains(kv.Key))
                 .Select(kv => kv.Value.Name ?? "Unknown stage")
+                .ToList();
+
+            if (waitingStageNames.Count == 0) return [];
+
+            // Try to get approval IDs from the approvals API to enable in-app approve
+            Dictionary<string, string> approvalIdByStage = new();
+            try
+            {
+                var approvals = await GetPendingApprovalsAsync(project, ct);
+                // Match approvals to stages — approvals don't always have stage names,
+                // so we try matching by pipeline ID
+                foreach (var a in approvals)
+                {
+                    // If the approval has a stage name, map it directly
+                    if (!string.IsNullOrEmpty(a.StageName))
+                        approvalIdByStage[a.StageName] = a.Id;
+                    else
+                    {
+                        // Fall back: assign to first unmatched waiting stage
+                        foreach (var stage in waitingStageNames)
+                        {
+                            if (!approvalIdByStage.ContainsKey(stage))
+                            {
+                                approvalIdByStage[stage] = a.Id;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { /* Approvals API may not be available */ }
+
+            return waitingStageNames
+                .Select(name => new WaitingStage(name, approvalIdByStage.GetValueOrDefault(name)))
                 .ToList();
         }
         catch
