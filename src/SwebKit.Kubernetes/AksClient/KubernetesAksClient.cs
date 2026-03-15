@@ -518,6 +518,38 @@ public class KubernetesAksClient : IAksClient
         }
     }
 
+    public async Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default)
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"swebkit-apply-{Guid.NewGuid():N}.yaml");
+        await File.WriteAllTextAsync(tempFile, yaml, ct);
+        try
+        {
+            var psi = new ProcessStartInfo("kubectl")
+            {
+                Arguments = $"apply -f \"{tempFile}\" --namespace {ns}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            var process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+            await process.WaitForExitAsync(ct);
+
+            if (process.ExitCode != 0)
+            {
+                var stderr = await process.StandardError.ReadToEndAsync(ct);
+                throw new InvalidOperationException($"kubectl apply failed (exit {process.ExitCode}): {stderr}");
+            }
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     public async Task<IReadOnlyList<Core.Models.PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
     {
         try

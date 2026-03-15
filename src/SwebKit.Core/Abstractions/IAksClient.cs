@@ -24,6 +24,7 @@ public interface IAksClient
     Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);
     Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default);
     Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default);
+    Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default);
 
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)

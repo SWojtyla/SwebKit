@@ -292,8 +292,14 @@ public class DemoAksClient : IAksClient
         };
     }
 
+    private readonly Dictionary<string, string> _yamlOverrides = [];
+
     public Task<string> GetResourceYamlAsync(string ns, string kind, string name, CancellationToken ct = default)
     {
+        var key = $"{kind}/{ns}/{name}";
+        if (_yamlOverrides.TryGetValue(key, out var overridden))
+            return Task.FromResult(overridden);
+
         if (kind.Equals("Helm", StringComparison.OrdinalIgnoreCase))
         {
             var helmYaml = $"""
@@ -556,5 +562,12 @@ public class DemoAksClient : IAksClient
             }
         }
         return metrics;
+    }
+
+    public async Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default)
+    {
+        await Task.Delay(400, ct); // simulate apply latency
+        // Demo mode: store override so the next GetResourceYamlAsync call returns the edited YAML
+        _yamlOverrides[$"{kind}/{ns}/{name}"] = yaml;
     }
 }

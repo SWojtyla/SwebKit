@@ -24,15 +24,32 @@
 
         <span class="aks-toolbar-divider"></span>
 
-        @* ── Namespace dropdown ── *@
+        @* ── Namespace searchable picker ── *@
+        @if (NsDropOpen)
+        {
+            <div class="aks-ns-backdrop" @onclick="CloseNsDrop"></div>
+        }
         <label class="aks-ns-label">Namespace</label>
-        <select class="aks-ns-select" value="@CurrentNamespace" @onchange="OnNamespaceChanged">
-            <option value="*" selected="@(CurrentNamespace == "*")">All namespaces</option>
-            @foreach (var ns in Namespaces)
+        <div class="aks-ns-picker">
+            <input class="aks-ns-select aks-ns-search" value="@(NsDropOpen ? NsSearchText : CurrentNamespace)"
+                   placeholder="@(NsDropOpen ? "Filter…" : CurrentNamespace)"
+                   @onfocus="OpenNsDrop"
+                   @oninput="OnNsSearchInput"
+                   readonly="@(!NsDropOpen)" />
+            @if (NsDropOpen)
             {
-                <option value="@ns" selected="@(ns == CurrentNamespace)">@ns</option>
+                <div class="aks-ns-dropdown">
+                    @foreach (var ns in NsFiltered)
+                    {
+                        var nsLocal = ns;
+                        <div class="aks-ns-option @(nsLocal == CurrentNamespace ? "current" : "")"
+                             @onclick="() => SelectNs(nsLocal)">
+                            @nsLocal
+                        </div>
+                    }
+                </div>
             }
-        </select>
+        </div>
 
         <span class="aks-toolbar-divider"></span>
 
@@ -48,7 +65,7 @@
         <span class="aks-toolbar-spacer"></span>
 
         <AutoRefreshToggle OnRefresh="LoadAsync"
-                          Paused="@(YamlTarget is not null || LogPodName is not null || HelmHistoryTarget is not null || HelmValuesTarget is not null || ScaleTarget is not null)" />
+                          Paused="@(YamlTarget is not null || LogPodName is not null || HelmHistoryTarget is not null || HelmValuesTarget is not null || ScaleTarget is not null || YamlEditMode)" />
 
         <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="LoadAsync"
                       Title="Refresh (F5)">
@@ -82,7 +99,7 @@
     }
     else
     {
-        <div class="aks-content @(YamlTarget is not null || LogPodName is not null || HelmHistoryTarget is not null || HelmValuesTarget is not null ? "side-open" : "") @(ShowEvents ? "" : "events-collapsed")">
+        <div class="aks-content @(YamlTarget is not null || LogPodName is not null || HelmHistoryTarget is not null || HelmValuesTarget is not null || ScaleTarget is not null ? "side-open" : "") @(ShowEvents ? "" : "events-collapsed")">
             @* ── Main resource panel ── *@
             <div class="aks-resource-panel">
                 <div class="aks-section-header">
@@ -323,14 +340,25 @@
                 </button>
             }
 
-            @* ── YAML viewer slide-out ── *@
+            @* ── YAML viewer / editor slide-out ── *@
             @if (YamlTarget is not null)
             {
-                <ResizablePanel DefaultWidth="380" MinWidth="250" MaxWidth="700">
+                <ResizablePanel DefaultWidth="420" MinWidth="280" MaxWidth="800">
                     <div class="aks-section-header">
                         <span class="aks-section-title" title="@YamlTarget.Value.Kind/@YamlTarget.Value.Name">
-                            @YamlTarget.Value.Kind: @YamlTarget.Value.Name
+                            @(YamlEditMode ? "Edit" : "") @YamlTarget.Value.Kind: @YamlTarget.Value.Name
                         </span>
+                        @if (!YamlLoading && YamlError is null && YamlIsEditable && !YamlEditMode)
+                        {
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="OnEditYamlToggle" Title="Edit YAML">✎</FluentButton>
+                        }
+                        @if (YamlEditMode)
+                        {
+                            <FluentButton Appearance="Appearance.Accent" Disabled="@YamlApplying" @onclick="OnSaveYaml" Title="Apply YAML">
+                                @(YamlApplying ? "Saving…" : "Save")
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth" Disabled="@YamlApplying" @onclick="OnCancelYamlEdit" Title="Cancel edit">Cancel</FluentButton>
+                        }
                         <FluentButton Appearance="Appearance.Stealth" @onclick="CloseYaml" Title="Close YAML">✕</FluentButton>
                     </div>
                     <div class="aks-yaml-content">
@@ -341,6 +369,11 @@
                         else if (YamlError is not null)
                         {
                             <div class="aks-yaml-error">@YamlError</div>
+                        }
+                        else if (YamlEditMode)
+                        {
+                            <textarea class="aks-yaml-edit" spellcheck="false"
+                                      @bind="YamlEditText" @bind:event="oninput"></textarea>
                         }
                         else
                         {
@@ -377,7 +410,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (var rev in HelmHistory)
+                                    @foreach (var rev in HelmHistory.OrderBy(r => r.Revision))
                                     {
                                         <tr class="@(rev.Status == "deployed" ? "aks-rev-current" : "")">
                                             <td>@rev.Revision</td>
@@ -428,17 +461,29 @@
                 </ResizablePanel>
             }
 
-            @* ── Scale input bar ── *@
-            @if (ScaleTarget is not null)
+            @* ── Scale deployment panel ── *@
+            @if (ScaleTarget is not null && YamlTarget is null && LogPodName is null)
             {
-                <div class="confirm-bar">
-                    <span class="confirm-message">Scale "@ScaleTarget" to</span>
-                    <input type="number" class="confirm-input" min="0" max="100"
-                           style="width:70px" @bind="ScaleReplicas" @bind:event="oninput" />
-                    <span class="confirm-message">replicas</span>
-                    <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
-                    <button class="confirm-btn confirm-no" @onclick="OnScaleCancel">Cancel</button>
-                </div>
+                <ResizablePanel DefaultWidth="260" MinWidth="200" MaxWidth="400">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title" title="@ScaleTarget">Scale: @ScaleTarget</span>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="OnScaleCancel" Title="Cancel">✕</FluentButton>
+                    </div>
+                    <div class="aks-scale-panel">
+                        <div class="aks-scale-label">Desired replicas</div>
+                        <div class="aks-scale-stepper">
+                            <button class="aks-scale-step-btn" @onclick="() => ScaleReplicas = Math.Max(0, ScaleReplicas - 1)">−</button>
+                            <input type="number" class="aks-scale-input" min="0" max="100"
+                                   @bind="ScaleReplicas" @bind:event="oninput" />
+                            <button class="aks-scale-step-btn" @onclick="() => ScaleReplicas = Math.Min(100, ScaleReplicas + 1)">+</button>
+                        </div>
+                        <div class="aks-scale-current">Currently: @(Deployments.FirstOrDefault(d => d.Name == ScaleTarget)?.Replicas ?? 0) replicas</div>
+                        <div class="aks-scale-actions">
+                            <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
+                            <button class="confirm-btn confirm-no" @onclick="OnScaleCancel">Cancel</button>
+                        </div>
+                    </div>
+                </ResizablePanel>
             }
 
             @* ── Log slide-out ── *@
@@ -460,6 +505,7 @@
 @* ── Context menus ── *@
 <ContextMenu @ref="DeploymentMenu">
     <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View YAML</button>
+    <button class="ctx-item" @onclick="() => OnCtxEditYaml('D')"><span class="ctx-item-icon">✎</span> Edit YAML</button>
     <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View Logs</button>
     <div class="ctx-separator"></div>
     <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart Deployment</button>
@@ -475,6 +521,7 @@
 
 <ContextMenu @ref="IngressMenu">
     <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View YAML</button>
+    <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit YAML</button>
     <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128279;</span> Copy Host URL</button>
 </ContextMenu>
 
@@ -502,11 +549,17 @@
     private string? ErrorMessage;
     private string? LogPodName;
 
-    // YAML viewer state
+    // YAML viewer/editor state
     private (string Kind, string Name)? YamlTarget;
     private string? YamlText;
     private string? YamlError;
     private bool YamlLoading;
+    private bool YamlEditMode;
+    private string YamlEditText = string.Empty;
+    private bool YamlApplying;
+
+    // Only Deployments and Ingresses are editable (not Pods or Helm manifests)
+    private bool YamlIsEditable => YamlTarget?.Kind is "Deployment" or "Ingress";
 
     // Scale state
     private string? ScaleTarget;
@@ -582,6 +635,49 @@
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
     private bool ShowEvents = true;
+
+    // Namespace picker state
+    private bool NsDropOpen;
+    private string NsSearchText = string.Empty;
+
+    private IEnumerable<string> NsFiltered
+    {
+        get
+        {
+            var all = Enumerable.Repeat("*", 1).Concat(Namespaces);
+            return string.IsNullOrWhiteSpace(NsSearchText)
+                ? all
+                : all.Where(n => n.Contains(NsSearchText, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void OpenNsDrop()
+    {
+        NsSearchText = string.Empty;
+        NsDropOpen = true;
+        StateHasChanged();
+    }
+
+    private void CloseNsDrop()
+    {
+        NsDropOpen = false;
+        NsSearchText = string.Empty;
+        StateHasChanged();
+    }
+
+    private void OnNsSearchInput(ChangeEventArgs e)
+    {
+        NsSearchText = e.Value?.ToString() ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task SelectNs(string ns)
+    {
+        NsDropOpen = false;
+        NsSearchText = string.Empty;
+        CurrentNamespace = ns;
+        await LoadAsync();
+    }
 
     // Context menu refs and targets
     private ContextMenu DeploymentMenu = default!;
@@ -893,6 +989,8 @@
         var deployment = CtxDeployment;
         CloseAllMenus();
         if (deployment is null) return;
+        CloseYaml();
+        CloseLogs();
         ScaleTarget = deployment.Name;
         ScaleReplicas = deployment.Replicas;
         StateHasChanged();
@@ -926,6 +1024,7 @@
     private void OnScaleCancel()
     {
         ScaleTarget = null;
+        ScaleReplicas = 0;
         StateHasChanged();
     }
 
@@ -1044,18 +1143,27 @@
 
     private void CloseLogs() { LogPodName = null; StateHasChanged(); }
 
-    private async Task OpenYaml(string kind, string name)
+    private async Task OpenYaml(string kind, string name, bool startInEditMode = false)
     {
         LogPodName = null;
+        ScaleTarget = null;
         YamlTarget = (kind, name);
         YamlText = null;
         YamlError = null;
         YamlLoading = true;
+        YamlEditMode = false;
+        YamlEditText = string.Empty;
+        YamlApplying = false;
         StateHasChanged();
 
         try
         {
             YamlText = await Client!.GetResourceYamlAsync(CurrentNamespace, kind, name);
+            if (startInEditMode && YamlIsEditable)
+            {
+                YamlEditMode = true;
+                YamlEditText = YamlText ?? string.Empty;
+            }
         }
         catch (Exception ex)
         {
@@ -1066,9 +1174,73 @@
             YamlLoading = false;
             StateHasChanged();
         }
+
     }
 
-    private void CloseYaml() { YamlTarget = null; YamlText = null; YamlError = null; StateHasChanged(); }
+    private void CloseYaml()
+    {
+        YamlTarget = null;
+        YamlText = null;
+        YamlError = null;
+        YamlEditMode = false;
+        YamlEditText = string.Empty;
+        YamlApplying = false;
+        StateHasChanged();
+    }
+
+    private void OnEditYamlToggle()
+    {
+        YamlEditMode = true;
+        YamlEditText = YamlText ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private void OnCancelYamlEdit()
+    {
+        YamlEditMode = false;
+        YamlEditText = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task OnSaveYaml()
+    {
+        if (YamlTarget is null || Client is null) return;
+        YamlApplying = true;
+        StateHasChanged();
+
+        try
+        {
+            if (IsProduction)
+            {
+                var confirmed = await Confirm.ShowAsync(
+                    $"Apply YAML changes to {YamlTarget.Value.Kind} \"{YamlTarget.Value.Name}\" in production?",
+                    YamlTarget.Value.Name,
+                    requireTypedName: true);
+                if (!confirmed) { YamlApplying = false; StateHasChanged(); return; }
+            }
+
+            await Client.ApplyResourceYamlAsync(CurrentNamespace, YamlTarget.Value.Kind, YamlTarget.Value.Name, YamlEditText);
+            YamlText = YamlEditText;
+            YamlEditMode = false;
+            YamlEditText = string.Empty;
+            StateHasChanged();
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { YamlApplying = false; StateHasChanged(); }
+    }
+
+    private async Task OnCtxEditYaml(char source)
+    {
+        var (kind, name) = source switch
+        {
+            'D' => ("Deployment", CtxDeployment?.Name),
+            'I' => ("Ingress", CtxIngress?.Name),
+            _ => ((string?)null, (string?)null)
+        };
+        CloseAllMenus();
+        if (kind is not null && name is not null)
+            await OpenYaml(kind, name, startInEditMode: true);
+    }
 
     private static string TruncatePodName(string name)
         => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
