@@ -14,6 +14,7 @@ public static class AppDataPaths
     public static string LegacyUiStateJson => Path.Combine(LegacyRoot, "ui-state.json");
     public static string UserSettingsJson => Path.Combine(Root, "user-settings.json");
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
+    public static string ReleasesJson => Path.Combine(Root, "releases.json");
 
     public static void EnsureDirectoryExists()
     {

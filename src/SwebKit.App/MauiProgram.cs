@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Platforms.Windows;
@@ -5,6 +6,7 @@ using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
+using SwebKit.DevOps;
 
 namespace SwebKit.App;
 
@@ -40,6 +42,19 @@ public static class MauiProgram
         // App UI services
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
+
+        // DevOps / Releases
+        builder.Services.AddSingleton<DevOpsAuthHandler>();
+        builder.Services.AddHttpClient("AzureDevOps")
+            .AddHttpMessageHandler<DevOpsAuthHandler>()
+            .AddStandardResilienceHandler(options =>
+            {
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.Delay = TimeSpan.FromSeconds(1);
+            });
+        builder.Services.AddSingleton<DevOpsClient>();
+        builder.Services.AddSingleton<DemoDevOpsClient>();
+        builder.Services.AddSingleton<ReleaseRepository>();
 
         return builder.Build();
     }

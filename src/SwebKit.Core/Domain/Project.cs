@@ -8,4 +8,5 @@ public class Project
     public string IconColor { get; set; } = "#0078D4";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public List<ProjectEnvironment> Environments { get; set; } = [];
+    public DevOpsConfig? DevOpsConfig { get; set; }
 }

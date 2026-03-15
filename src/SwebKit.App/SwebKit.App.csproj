@@ -81,6 +81,7 @@
         <ProjectReference Include="..\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
         <ProjectReference Include="..\SwebKit.OpenTelemetry\SwebKit.OpenTelemetry.csproj" />
         <ProjectReference Include="..\SwebKit.Redis\SwebKit.Redis.csproj" />
+        <ProjectReference Include="..\SwebKit.DevOps\SwebKit.DevOps.csproj" />
     </ItemGroup>
 
 </Project>

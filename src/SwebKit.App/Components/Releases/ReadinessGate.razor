@@ -1,0 +1,60 @@
+@using static ReleaseBoard
+
+<div style="display:flex; align-items:center; gap:8px;">
+    @{
+        var (icon, label, color) = ComputeGlobalReadiness();
+    }
+    <span style="font-size:16px;">@icon</span>
+    <span style="font-size:12px; font-weight:600; color:@color;">@label</span>
+</div>
+
+@code {
+    [Parameter] public List<ComponentScope> Components { get; set; } = [];
+    [Parameter] public Dictionary<string, Dictionary<string, CellData>> BoardData { get; set; } = new();
+
+    private (string Icon, string Label, string Color) ComputeGlobalReadiness()
+    {
+        if (Components.Count == 0)
+            return ("⬜", "No components", "var(--color-text-muted)");
+
+        var hasFailure = false;
+        var hasPending = false;
+        var allReady = true;
+
+        foreach (var comp in Components)
+        {
+            var envData = BoardData.GetValueOrDefault(comp.ComponentName);
+            if (envData is null)
+            {
+                allReady = false;
+                continue;
+            }
+
+            if (envData.Values.Any(c => c.CssClass == "failed"))
+            {
+                hasFailure = true;
+                allReady = false;
+            }
+
+            if (envData.Values.Any(c => c.CssClass == "running"))
+            {
+                hasPending = true;
+                allReady = false;
+            }
+
+            if (!comp.TagConfirmed)
+                allReady = false;
+        }
+
+        if (hasFailure)
+            return ("❌", "Not Ready", "var(--color-error)");
+
+        if (hasPending)
+            return ("⏳", "In Progress", "var(--color-accent)");
+
+        if (allReady)
+            return ("✅", "Release Ready", "var(--color-success)");
+
+        return ("⚠️", "Partially Ready", "var(--color-text-muted)");
+    }
+}
