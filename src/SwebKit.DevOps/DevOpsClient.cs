@@ -133,21 +133,29 @@ public class DevOpsClient : IDevOpsClient
 
     public async Task<List<AdoApproval>> GetPendingApprovalsAsync(string project, CancellationToken ct = default)
     {
-        var response = await _http.GetFromJsonAsync<AdoListResponse<AdoApprovalDto>>(
-            $"{ProjectApi(project)}/pipelines/approvals?status=pending&api-version=7.1-preview.1", JsonOptions, ct);
+        // Try without status filter first — environment check approvals may use different status values
+        var response = await _http.GetAsync(
+            $"{ProjectApi(project)}/pipelines/approvals?api-version=7.1-preview.1", ct);
 
-        return response?.Value.Select(a => new AdoApproval(
-            Id: a.Id ?? string.Empty,
-            Status: a.Status ?? "unknown",
-            PipelineId: a.Pipeline?.Id ?? 0,
-            PipelineName: a.Pipeline?.Name ?? "Unknown",
-            RunId: 0,
-            StageName: string.Empty,
-            EnvironmentName: null,
-            TriggeredBy: a.Steps?.FirstOrDefault()?.AssignedApprover?.DisplayName,
-            WebUrl: a.Links?.Web?.Href,
-            CreatedOn: a.CreatedOn
-        )).ToList() ?? [];
+        if (!response.IsSuccessStatusCode)
+            return [];
+
+        var dto = await response.Content.ReadFromJsonAsync<AdoListResponse<AdoApprovalDto>>(JsonOptions, ct);
+
+        return dto?.Value?
+            .Where(a => a.Status is "pending" or "waiting" or "assigned" or "undefined")
+            .Select(a => new AdoApproval(
+                Id: a.Id ?? string.Empty,
+                Status: a.Status ?? "unknown",
+                PipelineId: a.Pipeline?.Id ?? 0,
+                PipelineName: a.Pipeline?.Name ?? "Unknown",
+                RunId: 0,
+                StageName: string.Empty,
+                EnvironmentName: null,
+                TriggeredBy: a.Steps?.FirstOrDefault()?.AssignedApprover?.DisplayName,
+                WebUrl: a.Links?.Web?.Href,
+                CreatedOn: a.CreatedOn
+            )).ToList() ?? [];
     }
 
     public async Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
@@ -159,54 +167,74 @@ public class DevOpsClient : IDevOpsClient
 
             if (timeline?.Records is null) return [];
 
-            // Find stages that have a Checkpoint child record in "inProgress" state
-            var stageRecords = timeline.Records
+            var allRecords = timeline.Records;
+
+            // Build parent lookup
+            var stageRecords = allRecords
                 .Where(r => r.Type == "Stage")
                 .ToDictionary(r => r.Id ?? "", r => r);
 
-            var checkpointParents = timeline.Records
+            // Checkpoints that are in-progress (waiting for approval/check)
+            var inProgressCheckpoints = allRecords
                 .Where(r => r.Type == "Checkpoint" && r.State == "inProgress" && r.ParentId is not null)
+                .ToList();
+
+            var checkpointIds = inProgressCheckpoints.Select(r => r.Id).ToHashSet();
+            var checkpointParentStageIds = inProgressCheckpoints
                 .Select(r => r.ParentId!)
                 .ToHashSet();
 
-            var waitingStageNames = stageRecords
-                .Where(kv => checkpointParents.Contains(kv.Key))
-                .Select(kv => kv.Value.Name ?? "Unknown stage")
+            // Find Checkpoint.Approval sub-records under in-progress checkpoints
+            // These contain the actual approval ID we need
+            var approvalRecords = allRecords
+                .Where(r => r.Type == "Checkpoint.Approval"
+                    && r.ParentId is not null
+                    && checkpointIds.Contains(r.ParentId))
                 .ToList();
 
-            if (waitingStageNames.Count == 0) return [];
-
-            // Try to get approval IDs from the approvals API to enable in-app approve
-            Dictionary<string, string> approvalIdByStage = new();
-            try
+            // Map: checkpoint parent (stage ID) -> approval record ID
+            var approvalIdByStageId = new Dictionary<string, string>();
+            foreach (var approvalRec in approvalRecords)
             {
-                var approvals = await GetPendingApprovalsAsync(project, ct);
-                // Match approvals to stages — approvals don't always have stage names,
-                // so we try matching by pipeline ID
-                foreach (var a in approvals)
+                // Find which checkpoint this belongs to
+                var checkpoint = inProgressCheckpoints.FirstOrDefault(c => c.Id == approvalRec.ParentId);
+                if (checkpoint?.ParentId is not null && approvalRec.Id is not null)
                 {
-                    // If the approval has a stage name, map it directly
-                    if (!string.IsNullOrEmpty(a.StageName))
-                        approvalIdByStage[a.StageName] = a.Id;
-                    else
-                    {
-                        // Fall back: assign to first unmatched waiting stage
-                        foreach (var stage in waitingStageNames)
-                        {
-                            if (!approvalIdByStage.ContainsKey(stage))
-                            {
-                                approvalIdByStage[stage] = a.Id;
-                                break;
-                            }
-                        }
-                    }
+                    approvalIdByStageId[checkpoint.ParentId] = approvalRec.Id;
                 }
             }
-            catch { /* Approvals API may not be available */ }
 
-            return waitingStageNames
-                .Select(name => new WaitingStage(name, approvalIdByStage.GetValueOrDefault(name)))
+            var waitingStages = stageRecords
+                .Where(kv => checkpointParentStageIds.Contains(kv.Key))
+                .Select(kv => new WaitingStage(
+                    kv.Value.Name ?? "Unknown stage",
+                    approvalIdByStageId.GetValueOrDefault(kv.Key)))
                 .ToList();
+
+            if (waitingStages.Count == 0) return [];
+
+            // If we didn't get approval IDs from timeline, try the approvals API as fallback
+            if (waitingStages.Any(w => w.ApprovalId is null))
+            {
+                try
+                {
+                    var approvals = await GetPendingApprovalsAsync(project, ct);
+                    if (approvals.Count > 0)
+                    {
+                        var approvalQueue = new Queue<AdoApproval>(approvals);
+                        waitingStages = waitingStages.Select(w =>
+                        {
+                            if (w.ApprovalId is not null) return w;
+                            return approvalQueue.Count > 0
+                                ? w with { ApprovalId = approvalQueue.Dequeue().Id }
+                                : w;
+                        }).ToList();
+                    }
+                }
+                catch { /* Approvals API may not be available */ }
+            }
+
+            return waitingStages;
         }
         catch
         {
