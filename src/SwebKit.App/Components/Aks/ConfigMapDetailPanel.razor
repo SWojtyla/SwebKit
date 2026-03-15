@@ -1,0 +1,63 @@
+<div class="cm-panel">
+    @if (ConfigMap is null)
+    {
+        <div class="cm-empty">No ConfigMap selected.</div>
+    }
+    else
+    {
+        <div class="cm-filter-row">
+            <ResourceFilter Placeholder="Filter keys…" Value="@_filter"
+                            ValueChanged="v => { _filter = v; StateHasChanged(); }" />
+            <span class="cm-count">@FilteredData.Count keys</span>
+        </div>
+        @if (FilteredData.Count == 0)
+        {
+            <div class="cm-empty">No keys match the filter.</div>
+        }
+        else
+        {
+            <table class="cm-table">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var kv in FilteredData)
+                    {
+                        <tr>
+                            <td class="cm-key">@kv.Key</td>
+                            <td class="cm-value">@kv.Value</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public ConfigMapInfo? ConfigMap { get; set; }
+
+    private string _filter = string.Empty;
+
+    private IReadOnlyList<KeyValuePair<string, string>> FilteredData
+    {
+        get
+        {
+            if (ConfigMap is null) return [];
+            if (string.IsNullOrWhiteSpace(_filter))
+                return ConfigMap.Data.ToList();
+            return ConfigMap.Data
+            .Where(kv => kv.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+            || kv.Value.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _filter = string.Empty;
+    }
+}

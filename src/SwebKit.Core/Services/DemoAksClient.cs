@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 
@@ -358,6 +359,94 @@ public class DemoAksClient : IAksClient
             return Task.FromResult(helmYaml);
         }
 
+        if (kind.Equals("StatefulSet", StringComparison.OrdinalIgnoreCase))
+        {
+            var ssYaml = $"""
+                apiVersion: apps/v1
+                kind: StatefulSet
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                  labels:
+                    app: {name}
+                spec:
+                  replicas: 3
+                  serviceName: {name}
+                  selector:
+                    matchLabels:
+                      app: {name}
+                  template:
+                    metadata:
+                      labels:
+                        app: {name}
+                    spec:
+                      containers:
+                      - name: {name}
+                        image: acr.azurecr.io/{name}:1.8.3
+                        ports:
+                        - containerPort: 8080
+                """;
+            return Task.FromResult(ssYaml);
+        }
+
+        if (kind.Equals("ConfigMap", StringComparison.OrdinalIgnoreCase))
+        {
+            var cmYaml = $"""
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                data:
+                  ConnectionStrings__Redis: redis://redis-service:6379
+                  Feature__SearchEnabled: "true"
+                """;
+            return Task.FromResult(cmYaml);
+        }
+
+        if (kind.Equals("Secret", StringComparison.OrdinalIgnoreCase))
+        {
+            var secretYaml = $"""
+                apiVersion: v1
+                kind: Secret
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                type: Opaque
+                data:
+                  api-key: c2stZGVtby1hYmMxMjM=
+                  webhook-secret: d2hzZWMtZGVtby14eXo3ODk=
+                """;
+            return Task.FromResult(secretYaml);
+        }
+
+        if (kind.Equals("HorizontalPodAutoscaler", StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals("HPA", StringComparison.OrdinalIgnoreCase))
+        {
+            var hpaYaml = $"""
+                apiVersion: autoscaling/v2
+                kind: HorizontalPodAutoscaler
+                metadata:
+                  name: {name}
+                  namespace: {ns}
+                spec:
+                  scaleTargetRef:
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    name: {name}
+                  minReplicas: 2
+                  maxReplicas: 5
+                  metrics:
+                  - type: Resource
+                    resource:
+                      name: cpu
+                      target:
+                        type: Utilization
+                        averageUtilization: 70
+                """;
+            return Task.FromResult(hpaYaml);
+        }
+
         var yaml = $"""
             apiVersion: {(kind == "Deployment" ? "apps/v1" : kind == "Ingress" ? "networking.k8s.io/v1" : "v1")}
             kind: {kind}
@@ -569,5 +658,326 @@ public class DemoAksClient : IAksClient
         await Task.Delay(400, ct); // simulate apply latency
         // Demo mode: store override so the next GetResourceYamlAsync call returns the edited YAML
         _yamlOverrides[$"{kind}/{ns}/{name}"] = yaml;
+    }
+
+    // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
+
+    public async IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
+        string ns, string deploymentName, LogStreamOptions opts,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var pods = (await GetPodsAsync(ns, $"app={deploymentName}", ct))
+            .Take(3)
+            .ToList();
+
+        if (pods.Count == 0) yield break;
+
+        var channel = Channel.CreateUnbounded<AggregatedLogLine>();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var fanOutTasks = pods.Select((pod, idx) => Task.Run(async () =>
+        {
+            var offset = idx * 7; // stagger starting lines per pod
+            var lineIdx = offset;
+            // Emit initial batch
+            var start = Math.Max(0, LogLines.Length - (opts.TailLines ?? 20));
+            for (var i = start; i < LogLines.Length; i++)
+            {
+                if (linkedCts.Token.IsCancellationRequested) break;
+                var ts = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                var line = $"{ts}  {LogLines[(i + offset) % LogLines.Length]}";
+                if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+            }
+
+            if (!opts.Follow) return;
+
+            while (!linkedCts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(800 + Rng.Next(1500), linkedCts.Token);
+                var ts = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                var line = $"{ts}  {LogLines[lineIdx % LogLines.Length]}";
+                lineIdx++;
+                if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
+                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+            }
+        }, linkedCts.Token)).ToList();
+
+        _ = Task.WhenAll(fanOutTasks).ContinueWith(_ => channel.Writer.TryComplete(), CancellationToken.None);
+
+        await foreach (var item in channel.Reader.ReadAllAsync(ct))
+            yield return item;
+    }
+
+    // ── Feature 2: StatefulSets ───────────────────────────────────────────────
+
+    private static readonly (string Name, int Replicas, int Ready, string CurrentRevision, string UpdateRevision)[] DemoStatefulSets =
+    [
+        ("order-queue", 3, 3, "order-queue-abc123", "order-queue-abc123"),
+        ("session-store", 2, 1, "session-store-old78", "session-store-new91")
+    ];
+
+    public async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(250, ct);
+        return DemoStatefulSets.Select(s => new StatefulSetInfo
+        {
+            Name = s.Name,
+            Namespace = ns,
+            Replicas = s.Replicas,
+            ReadyReplicas = s.Ready,
+            CurrentRevision = s.CurrentRevision,
+            UpdateRevision = s.UpdateRevision,
+            Labels = new Dictionary<string, string> { ["app"] = s.Name, ["team"] = "platform" }
+        }).ToList();
+    }
+
+    public async Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default)
+    {
+        await Task.Delay(500, ct);
+    }
+
+    public async Task ScaleStatefulSetAsync(string ns, string name, int replicas, CancellationToken ct = default)
+    {
+        await Task.Delay(400, ct);
+    }
+
+    // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────
+
+    public async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        return new List<ConfigMapInfo>
+        {
+            new()
+            {
+                Name = "app-settings", Namespace = ns,
+                Data = new Dictionary<string, string>
+                {
+                    ["ConnectionStrings__Redis"] = "redis://redis-service:6379",
+                    ["Feature__SearchEnabled"] = "true",
+                    ["Feature__PaymentProvider"] = "stripe",
+                    ["Logging__Level"] = "Information"
+                },
+                Labels = new Dictionary<string, string> { ["app"] = "order-api", ["team"] = "commerce" }
+            },
+            new()
+            {
+                Name = "tracing-config", Namespace = ns,
+                Data = new Dictionary<string, string>
+                {
+                    ["Otel__Endpoint"] = "http://otel-collector:4317",
+                    ["Otel__ServiceName"] = "ecommerce",
+                    ["Otel__SampleRate"] = "0.1"
+                },
+                Labels = new Dictionary<string, string> { ["team"] = "platform" }
+            },
+            new()
+            {
+                Name = "ingress-config", Namespace = ns,
+                Data = new Dictionary<string, string>
+                {
+                    ["proxy-connect-timeout"] = "60",
+                    ["proxy-read-timeout"] = "60"
+                },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        return new List<SecretInfo>
+        {
+            new()
+            {
+                Name = "order-api-secret", Namespace = ns, Type = "Opaque",
+                Keys = ["api-key", "webhook-secret"],
+                Labels = new Dictionary<string, string> { ["app"] = "order-api" }
+            },
+            new()
+            {
+                Name = "db-credentials", Namespace = ns, Type = "Opaque",
+                Keys = ["connection-string", "username", "password"],
+                Labels = new Dictionary<string, string> { ["team"] = "platform" }
+            },
+            new()
+            {
+                Name = "acr-pull-secret", Namespace = ns, Type = "kubernetes.io/dockerconfigjson",
+                Keys = [".dockerconfigjson"],
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            }
+        };
+    }
+
+    public Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default)
+    {
+        var values = name switch
+        {
+            "order-api-secret" => new Dictionary<string, string>
+            {
+                ["api-key"] = "sk-demo-abc123",
+                ["webhook-secret"] = "whsec-demo-xyz789"
+            },
+            "db-credentials" => new Dictionary<string, string>
+            {
+                ["connection-string"] = "Server=demo-sql.database.windows.net;Database=ecommerce;",
+                ["username"] = "app-user",
+                ["password"] = "P@ssw0rd-Demo!"
+            },
+            "acr-pull-secret" => new Dictionary<string, string>
+            {
+                [".dockerconfigjson"] = "{\"auths\":{\"acr.azurecr.io\":{\"auth\":\"ZGVtbzpkZW1v\"}}}"
+            },
+            _ => new Dictionary<string, string>()
+        };
+        return Task.FromResult(values);
+    }
+
+    // ── Feature 4: Container details ─────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(
+        string ns, string podName, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+
+        // Derive the deployment name from the pod name (first segment)
+        var deploymentName = podName.Split('-').FirstOrDefault() ?? podName;
+        if (podName.Count(c => c == '-') >= 2)
+        {
+            var parts = podName.Split('-');
+            deploymentName = string.Join('-', parts.Take(parts.Length - 2));
+        }
+
+        var tag = "1.8.3";
+        return new List<ContainerDetail>
+        {
+            new()
+            {
+                Name = deploymentName,
+                Image = $"acr.azurecr.io/{deploymentName}:{tag}",
+                ImageTag = tag,
+                Resources = new ResourceRequirements
+                {
+                    CpuRequest = "100m", MemoryRequest = "128Mi",
+                    CpuLimit = "500m", MemoryLimit = "512Mi"
+                },
+                EnvVars =
+                [
+                    new EnvVarDetail { Name = "ASPNETCORE_ENVIRONMENT", Value = "Production", Source = EnvVarSourceKind.Plain, IsResolved = true },
+                    new EnvVarDetail { Name = "PORT", Value = "8080", Source = EnvVarSourceKind.Plain, IsResolved = true },
+                    new EnvVarDetail
+                    {
+                        Name = "ConnectionStrings__Redis",
+                        Value = "redis://redis-service:6379",
+                        Source = EnvVarSourceKind.ConfigMapRef,
+                        SourceName = "app-settings",
+                        SourceKey = "ConnectionStrings__Redis",
+                        IsResolved = true
+                    },
+                    new EnvVarDetail
+                    {
+                        Name = "API_KEY",
+                        Value = null,
+                        Source = EnvVarSourceKind.SecretRef,
+                        SourceName = "order-api-secret",
+                        SourceKey = "api-key",
+                        IsResolved = false
+                    }
+                ]
+            },
+            new()
+            {
+                Name = "istio-proxy",
+                Image = "docker.io/istio/proxyv2:1.20.3",
+                ImageTag = "1.20.3",
+                Resources = new ResourceRequirements
+                {
+                    CpuRequest = "10m", MemoryRequest = "40Mi",
+                    CpuLimit = "200m", MemoryLimit = "256Mi"
+                },
+                EnvVars =
+                [
+                    new EnvVarDetail { Name = "ISTIO_META_MESH_ID", Value = "cluster.local", Source = EnvVarSourceKind.Plain, IsResolved = true },
+                    new EnvVarDetail { Name = "POD_NAME", Source = EnvVarSourceKind.FieldRef, Value = "metadata.name", IsResolved = true }
+                ]
+            }
+        };
+    }
+
+    // ── Feature 5: HPA ───────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        return new List<HpaInfo>
+        {
+            new()
+            {
+                Name = "payment-gateway-hpa", Namespace = ns,
+                TargetKind = "Deployment", TargetName = "payment-gateway",
+                MinReplicas = 2, MaxReplicas = 5, CurrentReplicas = 3, DesiredReplicas = 3,
+                CurrentCpuUtilizationPercent = 68, TargetCpuUtilizationPercent = 70,
+                Metrics =
+                [
+                    new HpaMetricStatus { Name = "cpu", Type = "Resource", CurrentValue = 68, TargetValue = 70 }
+                ],
+                Conditions =
+                [
+                    new HpaCondition { Type = "ScalingActive", Status = "True", Reason = "ValidMetricFound" },
+                    new HpaCondition { Type = "AbleToScale", Status = "True", Reason = "ReadyForNewScale" }
+                ]
+            },
+            new()
+            {
+                Name = "order-api-hpa", Namespace = ns,
+                TargetKind = "Deployment", TargetName = "order-api",
+                MinReplicas = 2, MaxReplicas = 8, CurrentReplicas = 3, DesiredReplicas = 3,
+                CurrentCpuUtilizationPercent = 42, TargetCpuUtilizationPercent = 75,
+                Metrics =
+                [
+                    new HpaMetricStatus { Name = "cpu", Type = "Resource", CurrentValue = 42, TargetValue = 75 }
+                ],
+                Conditions =
+                [
+                    new HpaCondition { Type = "ScalingActive", Status = "True", Reason = "ValidMetricFound" },
+                    new HpaCondition { Type = "AbleToScale", Status = "True", Reason = "ReadyForNewScale" }
+                ]
+            },
+            new()
+            {
+                Name = "user-service-hpa", Namespace = ns,
+                TargetKind = "Deployment", TargetName = "user-service",
+                MinReplicas = 1, MaxReplicas = 4, CurrentReplicas = 2, DesiredReplicas = 2,
+                CurrentCpuUtilizationPercent = 28, TargetCpuUtilizationPercent = 70,
+                Metrics =
+                [
+                    new HpaMetricStatus { Name = "cpu", Type = "Resource", CurrentValue = 28, TargetValue = 70 }
+                ],
+                Conditions =
+                [
+                    new HpaCondition { Type = "ScalingActive", Status = "True", Reason = "ValidMetricFound" },
+                    new HpaCondition { Type = "AbleToScale", Status = "True", Reason = "ReadyForNewScale" },
+                    new HpaCondition { Type = "LimitedByMaxReplicas", Status = "False", Reason = "DesiredWithinRange" }
+                ]
+            },
+            new()
+            {
+                Name = "order-queue-hpa", Namespace = ns,
+                TargetKind = "StatefulSet", TargetName = "order-queue",
+                MinReplicas = 2, MaxReplicas = 6, CurrentReplicas = 3, DesiredReplicas = 3,
+                CurrentCpuUtilizationPercent = 55, TargetCpuUtilizationPercent = 70,
+                Metrics =
+                [
+                    new HpaMetricStatus { Name = "cpu", Type = "Resource", CurrentValue = 55, TargetValue = 70 }
+                ],
+                Conditions =
+                [
+                    new HpaCondition { Type = "ScalingActive", Status = "True", Reason = "ValidMetricFound" },
+                    new HpaCondition { Type = "AbleToScale", Status = "True", Reason = "ReadyForNewScale" }
+                ]
+            }
+        };
     }
 }

@@ -6,10 +6,12 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
 using System.Diagnostics;
 using System.Globalization;
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
-using System.Text.RegularExpressions;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Channels;
 
 namespace SwebKit.Kubernetes.AksClient;
 
@@ -258,6 +260,10 @@ public class KubernetesAksClient : IAksClient
             "pod" => await _client.CoreV1.ReadNamespacedPodAsync(name, ns, cancellationToken: ct),
             "ingress" => await _client.NetworkingV1.ReadNamespacedIngressAsync(name, ns, cancellationToken: ct),
             "service" => await _client.CoreV1.ReadNamespacedServiceAsync(name, ns, cancellationToken: ct),
+            "statefulset" => await _client.AppsV1.ReadNamespacedStatefulSetAsync(name, ns, cancellationToken: ct),
+            "configmap" => await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct),
+            "secret" => await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct),
+            "horizontalpodautoscaler" or "hpa" => await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct),
             _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
         };
 
@@ -602,6 +608,337 @@ public class KubernetesAksClient : IAksClient
             // Metrics API not installed or unavailable — return empty list
             return [];
         }
+    }
+
+    // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
+
+    public async IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
+        string ns, string deploymentName, LogStreamOptions opts,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        // Resolve pods via selector from deployment spec — authoritative, not name-based
+        var deployment = await _client.AppsV1.ReadNamespacedDeploymentAsync(deploymentName, ns, cancellationToken: ct);
+        var matchLabels = deployment.Spec?.Selector?.MatchLabels;
+        var labelSelector = matchLabels is not null
+            ? string.Join(",", matchLabels.Select(kv => $"{kv.Key}={kv.Value}"))
+            : $"app={deploymentName}";
+
+        var pods = await GetPodsAsync(ns, labelSelector, ct);
+        if (pods.Count == 0) yield break;
+
+        var channel = Channel.CreateUnbounded<AggregatedLogLine>();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var fanOutTasks = pods.Select(pod => Task.Run(async () =>
+        {
+            try
+            {
+                var container = pod.Containers.FirstOrDefault() ?? string.Empty;
+                await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
+                {
+                    await channel.Writer.WriteAsync(
+                        new AggregatedLogLine { PodName = pod.Name, Line = line },
+                        linkedCts.Token);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch { /* per-pod error — don't break other streams */ }
+        }, linkedCts.Token)).ToList();
+
+        _ = Task.WhenAll(fanOutTasks).ContinueWith(_ => channel.Writer.TryComplete(), CancellationToken.None);
+
+        await foreach (var item in channel.Reader.ReadAllAsync(ct))
+            yield return item;
+    }
+
+    // ── Feature 2: StatefulSets ───────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
+    {
+        var result = await _client.AppsV1.ListNamespacedStatefulSetAsync(ns, cancellationToken: ct);
+        return result.Items.Select(s => new StatefulSetInfo
+        {
+            Name = s.Metadata.Name,
+            Namespace = s.Metadata.NamespaceProperty ?? ns,
+            Replicas = s.Spec?.Replicas ?? 0,
+            ReadyReplicas = s.Status?.ReadyReplicas ?? 0,
+            CurrentRevision = s.Status?.CurrentRevision,
+            UpdateRevision = s.Status?.UpdateRevision,
+            Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+        }).ToList();
+    }
+
+    public async Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default)
+    {
+        var patch = new V1StatefulSet
+        {
+            Spec = new V1StatefulSetSpec
+            {
+                Template = new V1PodTemplateSpec
+                {
+                    Metadata = new V1ObjectMeta
+                    {
+                        Annotations = new Dictionary<string, string>
+                        {
+                            ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                        }
+                    }
+                }
+            }
+        };
+        await _client.AppsV1.PatchNamespacedStatefulSetAsync(
+            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            name, ns, cancellationToken: ct);
+    }
+
+    public async Task ScaleStatefulSetAsync(string ns, string name, int replicas, CancellationToken ct = default)
+    {
+        var patch = new V1StatefulSet
+        {
+            Spec = new V1StatefulSetSpec { Replicas = replicas }
+        };
+        await _client.AppsV1.PatchNamespacedStatefulSetAsync(
+            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            name, ns, cancellationToken: ct);
+    }
+
+    // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────
+
+    public async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default)
+    {
+        var result = await _client.CoreV1.ListNamespacedConfigMapAsync(ns, cancellationToken: ct);
+        return result.Items.Select(cm => new ConfigMapInfo
+        {
+            Name = cm.Metadata.Name,
+            Namespace = cm.Metadata.NamespaceProperty ?? ns,
+            Data = cm.Data is not null ? new Dictionary<string, string>(cm.Data) : [],
+            Labels = cm.Metadata.Labels is not null ? new Dictionary<string, string>(cm.Metadata.Labels) : []
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default)
+    {
+        var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct);
+        return result.Items
+            // Exclude Helm release secrets and service-account token secrets
+            .Where(s =>
+                s.Type != "kubernetes.io/service-account-token" &&
+                !(s.Metadata.Labels?.TryGetValue("owner", out var owner) == true && owner == "helm"))
+            .Select(s => new SecretInfo
+            {
+                Name = s.Metadata.Name,
+                Namespace = s.Metadata.NamespaceProperty ?? ns,
+                Type = s.Type ?? "Opaque",
+                Keys = s.Data?.Keys.ToList() ?? [],
+                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+            }).ToList();
+    }
+
+    public async Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default)
+    {
+        var secret = await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct);
+        if (secret.Data is null) return [];
+        return secret.Data.ToDictionary(
+            kv => kv.Key,
+            kv => Encoding.UTF8.GetString(kv.Value));
+    }
+
+    // ── Feature 4: Container details ─────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(
+        string ns, string podName, CancellationToken ct = default)
+    {
+        var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct);
+        var containers = pod.Spec?.Containers ?? [];
+
+        // Batch ConfigMap fetches — one API call per unique ConfigMap name
+        var configMapNames = containers
+            .SelectMany(c => c.Env ?? [])
+            .Where(e => e.ValueFrom?.ConfigMapKeyRef is not null)
+            .Select(e => e.ValueFrom!.ConfigMapKeyRef!.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var configMapCache = new Dictionary<string, V1ConfigMap>(StringComparer.Ordinal);
+        foreach (var cmName in configMapNames)
+        {
+            try
+            {
+                var cm = await _client.CoreV1.ReadNamespacedConfigMapAsync(cmName, ns, cancellationToken: ct);
+                configMapCache[cmName] = cm;
+            }
+            catch { /* ConfigMap might not exist — skip resolution */ }
+        }
+
+        return containers.Select(c =>
+        {
+            var imageParts = (c.Image ?? string.Empty).Split(':', 2);
+            var envVars = (c.Env ?? []).Select(e => MapEnvVar(e, configMapCache)).ToList();
+
+            // Synthetic flag rows for envFrom sources
+            foreach (var envFrom in c.EnvFrom ?? [])
+            {
+                if (envFrom.ConfigMapRef is not null)
+                    envVars.Add(new EnvVarDetail
+                    {
+                        Name = $"<all keys from configmap: {envFrom.ConfigMapRef.Name}>",
+                        Source = EnvVarSourceKind.ConfigMapRef,
+                        SourceName = envFrom.ConfigMapRef.Name,
+                        IsResolved = false
+                    });
+                else if (envFrom.SecretRef is not null)
+                    envVars.Add(new EnvVarDetail
+                    {
+                        Name = $"<all keys from secret: {envFrom.SecretRef.Name}>",
+                        Source = EnvVarSourceKind.SecretRef,
+                        SourceName = envFrom.SecretRef.Name,
+                        IsResolved = false
+                    });
+            }
+
+            return new ContainerDetail
+            {
+                Name = c.Name,
+                Image = c.Image ?? string.Empty,
+                ImageTag = imageParts.Length == 2 ? imageParts[1] : null,
+                Resources = new ResourceRequirements
+                {
+                    CpuRequest = GetResourceValue(c.Resources?.Requests, "cpu"),
+                    MemoryRequest = GetResourceValue(c.Resources?.Requests, "memory"),
+                    CpuLimit = GetResourceValue(c.Resources?.Limits, "cpu"),
+                    MemoryLimit = GetResourceValue(c.Resources?.Limits, "memory")
+                },
+                EnvVars = envVars
+            };
+        }).ToList();
+    }
+
+    private static string? GetResourceValue(IDictionary<string, ResourceQuantity>? dict, string key)
+    {
+        if (dict is null) return null;
+        return dict.TryGetValue(key, out var val) ? val?.ToString() : null;
+    }
+
+    private static EnvVarDetail MapEnvVar(V1EnvVar envVar, Dictionary<string, V1ConfigMap> configMapCache)
+    {
+        if (envVar.Value is not null)
+            return new EnvVarDetail { Name = envVar.Name, Value = envVar.Value, Source = EnvVarSourceKind.Plain, IsResolved = true };
+
+        if (envVar.ValueFrom?.ConfigMapKeyRef is not null)
+        {
+            var cmRef = envVar.ValueFrom.ConfigMapKeyRef;
+            string? resolved = null;
+            var isResolved = false;
+            if (configMapCache.TryGetValue(cmRef.Name, out var cm) && cm.Data?.TryGetValue(cmRef.Key, out var val) == true)
+            {
+                resolved = val;
+                isResolved = true;
+            }
+            return new EnvVarDetail
+            {
+                Name = envVar.Name,
+                Value = resolved,
+                Source = EnvVarSourceKind.ConfigMapRef,
+                SourceName = cmRef.Name,
+                SourceKey = cmRef.Key,
+                IsResolved = isResolved
+            };
+        }
+
+        if (envVar.ValueFrom?.SecretKeyRef is not null)
+        {
+            var sRef = envVar.ValueFrom.SecretKeyRef;
+            return new EnvVarDetail
+            {
+                Name = envVar.Name,
+                Value = null,
+                Source = EnvVarSourceKind.SecretRef,
+                SourceName = sRef.Name,
+                SourceKey = sRef.Key,
+                IsResolved = false
+            };
+        }
+
+        if (envVar.ValueFrom?.FieldRef is not null)
+            return new EnvVarDetail
+            {
+                Name = envVar.Name,
+                Value = envVar.ValueFrom.FieldRef.FieldPath,
+                Source = EnvVarSourceKind.FieldRef,
+                IsResolved = true
+            };
+
+        return new EnvVarDetail { Name = envVar.Name, Source = EnvVarSourceKind.Plain, IsResolved = false };
+    }
+
+    // ── Feature 5: HPA ───────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _client.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
+            return result.Items.Select(MapHpaV2).ToList();
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Fall back to autoscaling/v1 on older clusters
+            var result = await _client.AutoscalingV1.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
+            return result.Items.Select(hpa => new HpaInfo
+            {
+                Name = hpa.Metadata.Name,
+                Namespace = hpa.Metadata.NamespaceProperty ?? ns,
+                TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
+                TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
+                MinReplicas = hpa.Spec?.MinReplicas ?? 1,
+                MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
+                CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
+                DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
+                CurrentCpuUtilizationPercent = hpa.Status?.CurrentCPUUtilizationPercentage,
+                TargetCpuUtilizationPercent = hpa.Spec?.TargetCPUUtilizationPercentage
+            }).ToList();
+        }
+    }
+
+    private HpaInfo MapHpaV2(V2HorizontalPodAutoscaler hpa)
+    {
+        var ns = hpa.Metadata.NamespaceProperty ?? string.Empty;
+        var cpuMetric = hpa.Status?.CurrentMetrics
+            ?.FirstOrDefault(m => m.Type == "Resource" && m.Resource?.Name == "cpu");
+        var cpuTarget = hpa.Spec?.Metrics
+            ?.FirstOrDefault(m => m.Type == "Resource" && m.Resource?.Name == "cpu");
+
+        return new HpaInfo
+        {
+            Name = hpa.Metadata.Name,
+            Namespace = ns,
+            TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
+            TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
+            MinReplicas = hpa.Spec?.MinReplicas ?? 1,
+            MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
+            CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
+            DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
+            CurrentCpuUtilizationPercent = cpuMetric?.Resource?.Current?.AverageUtilization,
+            TargetCpuUtilizationPercent = cpuTarget?.Resource?.Target?.AverageUtilization,
+            Metrics = hpa.Status?.CurrentMetrics?.Select(m => new HpaMetricStatus
+            {
+                Name = m.Resource?.Name ?? m.Pods?.Metric?.Name ?? m.External?.Metric?.Name ?? "unknown",
+                Type = m.Type,
+                CurrentValue = m.Resource?.Current?.AverageUtilization.HasValue == true
+                    ? (double?)m.Resource!.Current!.AverageUtilization!.Value
+                    : null,
+                TargetValue = cpuTarget?.Resource?.Target?.AverageUtilization.HasValue == true
+                    ? (double?)cpuTarget!.Resource!.Target!.AverageUtilization!.Value
+                    : null
+            }).ToList() ?? [],
+            Conditions = hpa.Status?.Conditions?.Select(c => new HpaCondition
+            {
+                Type = c.Type,
+                Status = c.Status,
+                Reason = c.Reason,
+                Message = c.Message
+            }).ToList() ?? []
+        };
     }
 
     internal static double ParseCpuToMillicores(string cpu)

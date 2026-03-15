@@ -1,0 +1,200 @@
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="cdp-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading container details…" />
+    }
+    else if (_error is not null)
+    {
+        <div class="cdp-error">@_error</div>
+    }
+    else if (_containers.Count == 0)
+    {
+        <div class="cdp-empty">No containers found.</div>
+    }
+    else
+    {
+        @* Container selector *@
+        @if (_containers.Count > 1)
+        {
+            <div class="cdp-selector">
+                <select class="cdp-select" @bind="_selectedIdx">
+                    @for (var i = 0; i < _containers.Count; i++)
+                    {
+                        var idx = i;
+                        <option value="@idx">@_containers[i].Name</option>
+                    }
+                </select>
+            </div>
+        }
+
+        @* Image badge *@
+        <div class="cdp-section">
+            <div class="cdp-label">Image</div>
+            <div class="cdp-image-row">
+                <code class="cdp-image-badge">@_containers[_selectedIdx].Image</code>
+                <button class="cdp-copy-btn" title="Copy image" @onclick="() => CopyToClipboard(_containers[_selectedIdx].Image)">⎘</button>
+            </div>
+        </div>
+
+        @* Resources *@
+        <div class="cdp-section">
+            <div class="cdp-label">Resources</div>
+            <table class="cdp-table">
+                <tbody>
+                    <tr>
+                        <td class="cdp-res-label">CPU request</td>
+                        <td class="cdp-res-val">@(_containers[_selectedIdx].Resources.CpuRequest ?? "—")</td>
+                        <td class="cdp-res-label">CPU limit</td>
+                        <td class="cdp-res-val">@(_containers[_selectedIdx].Resources.CpuLimit ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <td class="cdp-res-label">Memory request</td>
+                        <td class="cdp-res-val">@(_containers[_selectedIdx].Resources.MemoryRequest ?? "—")</td>
+                        <td class="cdp-res-label">Memory limit</td>
+                        <td class="cdp-res-val">@(_containers[_selectedIdx].Resources.MemoryLimit ?? "—")</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        @* Env vars *@
+        <div class="cdp-section cdp-envvars">
+            <div class="cdp-label">Environment Variables (@_containers[_selectedIdx].EnvVars.Count)</div>
+            <table class="cdp-env-table">
+                <thead>
+                    <tr><th>Name</th><th>Source</th><th>Value</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var ev in _containers[_selectedIdx].EnvVars)
+                    {
+                        var envKey = ev;
+                        <tr>
+                            <td class="cdp-env-name">@ev.Name</td>
+                            <td class="cdp-env-source">
+                                @switch (ev.Source)
+                                {
+                                    case EnvVarSourceKind.ConfigMapRef:
+                                        <span class="cdp-source-tag cdp-source-cm">cm:@ev.SourceName/@ev.SourceKey</span>
+                                        break;
+                                    case EnvVarSourceKind.SecretRef:
+                                        <span class="cdp-source-tag cdp-source-secret">secret:@ev.SourceName/@ev.SourceKey</span>
+                                        break;
+                                    case EnvVarSourceKind.FieldRef:
+                                        <span class="cdp-source-tag cdp-source-field">fieldRef</span>
+                                        break;
+                                    default:
+                                        <span class="cdp-source-plain">—</span>
+                                        break;
+                                }
+                            </td>
+                            <td class="cdp-env-value">
+                                @if (ev.Source == EnvVarSourceKind.SecretRef && !ev.IsResolved)
+                                {
+                                    @if (_revealedSecretValues.TryGetValue($"{ev.SourceName}/{ev.SourceKey}", out var revealed))
+                                    {
+                                        <code class="cdp-revealed">@revealed</code>
+                                    }
+                                    else
+                                    {
+                                        <span class="cdp-masked">•••••••</span>
+                                        <button class="cdp-reveal-btn" @onclick="() => RevealSecretEnvVar(envKey)">reveal</button>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="@(ev.Source == EnvVarSourceKind.FieldRef || ev.Source == EnvVarSourceKind.ConfigMapRef && ev.Value is null ? "cdp-muted" : "")">
+                                        @(ev.Value ?? "—")
+                                    </span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string? Namespace { get; set; }
+    [Parameter] public string? PodName { get; set; }
+
+    private List<ContainerDetail> _containers = [];
+    private int _selectedIdx;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private readonly Dictionary<string, string> _secretCache = [];
+    private readonly Dictionary<string, string> _revealedSecretValues = [];
+    private bool _isRendered;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Client is null || PodName is null || Namespace is null) return;
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _containers = [];
+        _selectedIdx = 0;
+        _secretCache.Clear();
+        _revealedSecretValues.Clear();
+        StateHasChanged();
+
+        try
+        {
+            _containers = (await Client.GetContainerDetailsAsync(Namespace, PodName, _cts.Token)).ToList();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _isLoading = false; StateHasChanged(); }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) _isRendered = true;
+    }
+
+    private async Task RevealSecretEnvVar(EnvVarDetail ev)
+    {
+        if (ev.SourceName is null || ev.SourceKey is null || Client is null || Namespace is null) return;
+
+        var cacheKey = $"{ev.SourceName}/{ev.SourceKey}";
+        if (_revealedSecretValues.ContainsKey(cacheKey)) return;
+
+        // Fetch all values for this secret name (cached)
+        if (!_secretCache.ContainsKey(ev.SourceName))
+        {
+            try
+            {
+                var vals = await Client.GetSecretValuesAsync(Namespace, ev.SourceName);
+                foreach (var kv in vals)
+                    _secretCache[$"{ev.SourceName}/{kv.Key}"] = kv.Value;
+            }
+            catch { return; }
+        }
+
+        if (_secretCache.TryGetValue(cacheKey, out var val))
+            _revealedSecretValues[cacheKey] = val;
+
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        if (!_isRendered) return;
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch { /* best-effort */ }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

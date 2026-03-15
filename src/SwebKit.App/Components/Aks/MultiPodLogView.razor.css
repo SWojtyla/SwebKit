@@ -1,0 +1,48 @@
+/* ── Pod color classes (0-7) ── */
+.mplog-pod-0 { color: var(--color-text); }
+.mplog-pod-1 { color: #58a6ff; }
+.mplog-pod-2 { color: #56d364; }
+.mplog-pod-3 { color: #e3b341; }
+.mplog-pod-4 { color: #f78166; }
+.mplog-pod-5 { color: #bc8cff; }
+.mplog-pod-6 { color: #39c5cf; }
+.mplog-pod-7 { color: #ff9966; }
+
+/* ── Legend bar ── */
+.mplog-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 4px 10px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.mplog-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.mplog-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* ── Per-line pod tag ── */
+.mplog-pod-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-right: 6px;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+}

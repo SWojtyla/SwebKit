@@ -1,0 +1,135 @@
+@inject IAppEventBus Events
+@implements IAsyncDisposable
+
+<div class="log-viewer">
+    <div class="log-toolbar">
+        <label class="log-live-toggle">
+            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" />
+            <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
+            Live
+        </label>
+        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…" class="log-filter-input" />
+        <span class="log-line-count">@FilteredLines.Count lines</span>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
+    </div>
+
+    @* Pod legend *@
+    @if (_podColorIndex.Count > 0)
+    {
+        <div class="mplog-legend">
+            @foreach (var kv in _podColorIndex)
+            {
+                <span class="mplog-legend-item">
+                    <span class="mplog-dot mplog-pod-@kv.Value"></span>
+                    <span class="mplog-legend-name">@TruncatePodSuffix(kv.Key)</span>
+                </span>
+            }
+        </div>
+    }
+
+    <div class="log-output" @ref="_logContainer">
+        @if (FilteredLines.Count == 0 && !IsLoading)
+        {
+            <div class="log-empty">No log lines yet</div>
+        }
+        else
+        {
+            @foreach (var item in FilteredLines)
+            {
+                var colorIdx = _podColorIndex.TryGetValue(item.PodName, out var c) ? c : 0;
+                <div class="log-line mplog-pod-@colorIdx">
+                    <span class="mplog-pod-tag">@TruncatePodSuffix(item.PodName)</span>
+                    @item.Line
+                </div>
+            }
+            @if (IsLive && IsLoading)
+            {
+                <div class="log-tailing">
+                    <FluentProgressRing Width="12px" /> Tailing…
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string? Namespace { get; set; }
+    [Parameter] public string? DeploymentName { get; set; }
+
+    private List<AggregatedLogLine> Lines = [];
+    private bool IsLive = true;
+    private bool IsLoading;
+    private string TextFilter = "";
+    private CancellationTokenSource? _cts;
+    private ElementReference _logContainer;
+    private readonly Dictionary<string, int> _podColorIndex = [];
+    private int _nextColorIdx;
+
+    private IReadOnlyList<AggregatedLogLine> FilteredLines => string.IsNullOrEmpty(TextFilter)
+    ? Lines.TakeLast(500).ToList()
+    : Lines.Where(l => l.Line.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
+    || l.PodName.Contains(TextFilter, StringComparison.OrdinalIgnoreCase))
+    .TakeLast(500).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Client is not null && DeploymentName is not null && Namespace is not null && IsLive)
+            await StartTailingAsync();
+    }
+
+    private async Task OnLiveToggle()
+    {
+        if (IsLive) await StartTailingAsync();
+        else { _cts?.Cancel(); IsLoading = false; }
+    }
+
+    private async Task StartTailingAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        IsLoading = true;
+        Lines.Clear();
+        _podColorIndex.Clear();
+        _nextColorIdx = 0;
+        StateHasChanged();
+
+        try
+        {
+            var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
+            _ = Task.Run(async () =>
+            {
+                await foreach (var line in Client!.StreamDeploymentLogsAsync(Namespace!, DeploymentName!, opts, _cts.Token))
+                {
+                    if (!_podColorIndex.ContainsKey(line.PodName))
+                        _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
+
+                    Lines.Add(line);
+                    if (Lines.Count > 10000) Lines.RemoveAt(0);
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(50);
+                }
+                await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
+            });
+        }
+        catch (Exception) { IsLoading = false; StateHasChanged(); }
+    }
+
+    private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
+
+    // Extract the last two hash segments from a standard pod name, e.g. order-api-7d9f-xk2jp → 7d9f-xk2jp
+    private static string TruncatePodSuffix(string name)
+    {
+        var parts = name.Split('-');
+        return parts.Length >= 2
+        ? string.Join('-', parts.TakeLast(2))
+        : name;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

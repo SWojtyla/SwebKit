@@ -187,4 +187,166 @@ public class DemoAksClientTests
         Assert.Contains(result, p => p.Namespace == "a");
         Assert.Contains(result, p => p.Namespace == "b");
     }
+
+    // ── New feature tests ──
+
+    [Fact]
+    public async Task GetStatefulSetsAsync_ReturnsExpectedRecords()
+    {
+        var result = await _client.GetStatefulSetsAsync("default");
+
+        Assert.NotEmpty(result);
+        Assert.All(result, s =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(s.Name));
+            Assert.True(s.Replicas >= 0);
+            Assert.True(s.ReadyReplicas >= 0);
+        });
+    }
+
+    [Fact]
+    public async Task GetStatefulSetsAsync_DegradedHasLessReadyThanReplicas()
+    {
+        var result = await _client.GetStatefulSetsAsync("default");
+
+        // Demo data always includes at least one degraded stateful set
+        Assert.Contains(result, s => s.ReadyReplicas < s.Replicas);
+    }
+
+    [Fact]
+    public async Task GetConfigMapsAsync_ReturnsNonEmptyList()
+    {
+        var result = await _client.GetConfigMapsAsync("default");
+
+        Assert.NotEmpty(result);
+        Assert.All(result, cm =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(cm.Name));
+            Assert.NotNull(cm.Data);
+        });
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_ReturnsNonEmptyListWithKeys()
+    {
+        var result = await _client.GetSecretsAsync("default");
+
+        Assert.NotEmpty(result);
+        Assert.All(result, s =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(s.Name));
+            Assert.NotEmpty(s.Keys);
+        });
+    }
+
+    [Fact]
+    public async Task GetSecretValuesAsync_ReturnsDecodedValues()
+    {
+        var secrets = await _client.GetSecretsAsync("default");
+        var first = secrets.First();
+
+        var values = await _client.GetSecretValuesAsync("default", first.Name);
+
+        Assert.NotNull(values);
+        Assert.NotEmpty(values);
+        Assert.All(values, kv =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(kv.Key));
+            Assert.NotNull(kv.Value);
+        });
+    }
+
+    [Fact]
+    public async Task GetContainerDetailsAsync_IncludesConfigMapRefAndSecretRef()
+    {
+        var pods = await _client.GetPodsAsync("default");
+        var pod = pods.First();
+
+        var containers = await _client.GetContainerDetailsAsync("default", pod.Name);
+
+        Assert.NotEmpty(containers);
+
+        var allEnv = containers.SelectMany(c => c.EnvVars).ToList();
+        Assert.Contains(allEnv, e => e.Source == Models.EnvVarSourceKind.ConfigMapRef);
+        Assert.Contains(allEnv, e => e.Source == Models.EnvVarSourceKind.SecretRef);
+    }
+
+    [Fact]
+    public async Task GetContainerDetailsAsync_AllContainersHaveImageAndName()
+    {
+        var pods = await _client.GetPodsAsync("default");
+        var pod = pods.First();
+
+        var containers = await _client.GetContainerDetailsAsync("default", pod.Name);
+
+        Assert.All(containers, c =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(c.Name));
+            Assert.False(string.IsNullOrWhiteSpace(c.Image));
+        });
+    }
+
+    [Fact]
+    public async Task GetHpasAsync_ReturnsNonEmptyList()
+    {
+        var result = await _client.GetHpasAsync("default");
+
+        Assert.NotEmpty(result);
+        Assert.All(result, h =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(h.Name));
+            Assert.False(string.IsNullOrWhiteSpace(h.TargetName));
+            Assert.True(h.MinReplicas >= 0);
+            Assert.True(h.MaxReplicas >= h.MinReplicas);
+        });
+    }
+
+    [Fact]
+    public async Task GetHpasAsync_AllTargetNamesMatchKnownWorkloads()
+    {
+        var deployments = (await _client.GetDeploymentsAsync("default")).Select(d => d.Name).ToHashSet();
+        var statefulSets = (await _client.GetStatefulSetsAsync("default")).Select(s => s.Name).ToHashSet();
+        var knownWorkloads = deployments.Concat(statefulSets).ToHashSet();
+
+        var hpas = await _client.GetHpasAsync("default");
+
+        Assert.All(hpas, h => Assert.Contains(h.TargetName, knownWorkloads));
+    }
+
+    [Fact]
+    public async Task StreamDeploymentLogsAsync_EmitsLinesWithPodName()
+    {
+        var lines = new List<AggregatedLogLine>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var opts = new Models.LogStreamOptions { Follow = false, TailLines = 20 };
+
+        try
+        {
+            await foreach (var line in _client.StreamDeploymentLogsAsync("default", "order-api", opts, cts.Token))
+            {
+                lines.Add(line);
+                if (lines.Count >= 10) cts.Cancel();
+            }
+        }
+        catch (OperationCanceledException) { /* expected */ }
+
+        Assert.NotEmpty(lines);
+        Assert.All(lines, l =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(l.PodName));
+            Assert.False(string.IsNullOrWhiteSpace(l.Line));
+        });
+    }
+
+    [Fact]
+    public async Task RestartStatefulSetAsync_CompletesWithoutError()
+    {
+        await _client.RestartStatefulSetAsync("default", "order-queue");
+    }
+
+    [Fact]
+    public async Task ScaleStatefulSetAsync_CompletesWithoutError()
+    {
+        await _client.ScaleStatefulSetAsync("default", "order-queue", 3);
+    }
 }

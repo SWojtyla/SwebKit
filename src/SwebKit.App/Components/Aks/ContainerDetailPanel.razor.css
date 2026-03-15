@@ -1,0 +1,209 @@
+.cdp-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 6px 0;
+    overflow-y: auto;
+    height: 100%;
+}
+
+.cdp-error,
+.cdp-empty {
+    padding: 12px 10px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.cdp-error {
+    color: var(--color-danger, #f78166);
+}
+
+/* ── Container selector ── */
+.cdp-selector {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.cdp-select {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* ── Sections ── */
+.cdp-section {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.cdp-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+}
+
+/* ── Image row ── */
+.cdp-image-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cdp-image-badge {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    word-break: break-all;
+    flex: 1;
+}
+
+.cdp-copy-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.cdp-copy-btn:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+/* ── Resources table ── */
+.cdp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.cdp-res-label {
+    color: var(--color-text-muted);
+    padding: 3px 8px 3px 0;
+    width: 30%;
+    white-space: nowrap;
+}
+
+.cdp-res-val {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    padding: 3px 16px 3px 0;
+}
+
+/* ── Env vars ── */
+.cdp-envvars {
+    flex: 1;
+    overflow: hidden;
+}
+
+.cdp-env-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.cdp-env-table thead th {
+    text-align: left;
+    padding: 4px 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.cdp-env-table tbody tr:hover {
+    background: var(--color-surface);
+}
+
+.cdp-env-name {
+    padding: 4px 6px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: var(--color-accent);
+    width: 34%;
+    word-break: break-all;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
+}
+
+.cdp-env-source {
+    padding: 4px 6px;
+    width: 28%;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
+}
+
+.cdp-env-value {
+    padding: 4px 6px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    word-break: break-all;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
+}
+
+.cdp-source-tag {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    word-break: break-all;
+}
+
+.cdp-source-cm {
+    background: rgba(86, 211, 100, 0.12);
+    color: #56d364;
+}
+
+.cdp-source-secret {
+    background: rgba(247, 129, 102, 0.12);
+    color: #f78166;
+}
+
+.cdp-source-field {
+    background: rgba(88, 166, 255, 0.12);
+    color: #58a6ff;
+}
+
+.cdp-source-plain {
+    color: var(--color-text-muted);
+    font-size: 10px;
+}
+
+.cdp-muted {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.cdp-masked {
+    color: var(--color-text-muted);
+    letter-spacing: 2px;
+}
+
+.cdp-revealed {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 10px;
+}
+
+.cdp-reveal-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 9px;
+    cursor: pointer;
+    color: var(--color-accent);
+    margin-left: 4px;
+}
+
+.cdp-reveal-btn:hover {
+    background: var(--color-surface);
+}

@@ -123,3 +123,109 @@ public class ContainerMetrics
     public double CpuCores { get; set; }
     public long MemoryBytes { get; set; }
 }
+
+// ── Feature 1: Multi-pod log aggregation ──────────────────────────────────────
+
+public class AggregatedLogLine
+{
+    public required string PodName { get; set; }
+    public required string Line { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+// ── Feature 2: StatefulSets ───────────────────────────────────────────────────
+
+public class StatefulSetInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public int Replicas { get; set; }
+    public int ReadyReplicas { get; set; }
+    public string? CurrentRevision { get; set; }
+    public string? UpdateRevision { get; set; }
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+// ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────────
+
+public class ConfigMapInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public Dictionary<string, string> Data { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+public class SecretInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string Type { get; set; } = "Opaque";
+    public List<string> Keys { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+// ── Feature 4: Container details ─────────────────────────────────────────────
+
+public class ContainerDetail
+{
+    public required string Name { get; set; }
+    public required string Image { get; set; }
+    public string? ImageTag { get; set; }
+    public ResourceRequirements Resources { get; set; } = new();
+    public List<EnvVarDetail> EnvVars { get; set; } = [];
+}
+
+public class ResourceRequirements
+{
+    public string? CpuRequest { get; set; }
+    public string? MemoryRequest { get; set; }
+    public string? CpuLimit { get; set; }
+    public string? MemoryLimit { get; set; }
+}
+
+public enum EnvVarSourceKind { Plain, ConfigMapRef, SecretRef, FieldRef }
+
+public class EnvVarDetail
+{
+    public required string Name { get; set; }
+    public string? Value { get; set; }
+    public EnvVarSourceKind Source { get; set; }
+    public string? SourceName { get; set; }
+    public string? SourceKey { get; set; }
+    public bool IsResolved { get; set; }
+}
+
+// ── Feature 5: HPA ───────────────────────────────────────────────────────────
+
+public class HpaInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public required string TargetKind { get; set; }
+    public required string TargetName { get; set; }
+    public int MinReplicas { get; set; }
+    public int MaxReplicas { get; set; }
+    public int CurrentReplicas { get; set; }
+    public int DesiredReplicas { get; set; }
+    public double? CurrentCpuUtilizationPercent { get; set; }
+    public int? TargetCpuUtilizationPercent { get; set; }
+    public List<HpaMetricStatus> Metrics { get; set; } = [];
+    public List<HpaCondition> Conditions { get; set; } = [];
+}
+
+public class HpaMetricStatus
+{
+    public required string Name { get; set; }
+    public string? Type { get; set; }
+    public double? CurrentValue { get; set; }
+    public double? TargetValue { get; set; }
+}
+
+public class HpaCondition
+{
+    public required string Type { get; set; }
+    public required string Status { get; set; }
+    public string? Reason { get; set; }
+    public string? Message { get; set; }
+}

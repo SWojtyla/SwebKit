@@ -26,6 +26,27 @@ public interface IAksClient
     Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default);
     Task ApplyResourceYamlAsync(string ns, string kind, string name, string yaml, CancellationToken ct = default);
 
+    // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
+    IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(
+        string ns, string deploymentName, LogStreamOptions opts, CancellationToken ct = default);
+
+    // ── Feature 2: StatefulSets ───────────────────────────────────────────────
+    Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default);
+    Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default);
+    Task ScaleStatefulSetAsync(string ns, string name, int replicas, CancellationToken ct = default);
+
+    // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────
+    Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default);
+    Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default);
+
+    // ── Feature 4: Container details ─────────────────────────────────────────
+    Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(
+        string ns, string podName, CancellationToken ct = default);
+
+    // ── Feature 5: HPA ───────────────────────────────────────────────────────
+    Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default);
+
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
@@ -37,6 +58,13 @@ public interface IAksClient
     async Task<IReadOnlyList<PodInfo>> GetPodsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
         var tasks = namespaces.Select(ns => GetPodsAsync(ns, null, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetStatefulSetsAsync(ns, ct));
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(r => r).ToList();
     }

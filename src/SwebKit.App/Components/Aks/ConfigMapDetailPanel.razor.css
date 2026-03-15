@@ -1,0 +1,66 @@
+.cm-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+    overflow: hidden;
+}
+
+.cm-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+}
+
+.cm-count {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.cm-empty {
+    padding: 12px 10px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.cm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.cm-table thead th {
+    text-align: left;
+    padding: 5px 10px;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.cm-table tbody tr:hover {
+    background: var(--color-surface);
+}
+
+.cm-key {
+    padding: 5px 10px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: var(--color-accent);
+    width: 40%;
+    word-break: break-all;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
+}
+
+.cm-value {
+    padding: 5px 10px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    word-break: break-all;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
+}
