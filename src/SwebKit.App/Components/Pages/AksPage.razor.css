@@ -687,3 +687,315 @@
 .aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
 .aks-yaml-pre ::deep .yml-anchor     { color: #dcdcaa; }
 .aks-yaml-pre ::deep .yml-scalar     { color: #dcdcaa; }
+
+/* ── HPA badge (table column) ── */
+.aks-hpa-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 6px;
+    background: rgba(0, 120, 212, 0.08);
+    color: var(--color-accent);
+    border: 1px solid rgba(0, 120, 212, 0.22);
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.4;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.aks-hpa-badge:hover {
+    background: rgba(0, 120, 212, 0.16);
+    border-color: var(--color-accent);
+}
+
+.aks-hpa-badge.hpa-scaling {
+    background: rgba(251, 140, 0, 0.10);
+    color: var(--color-warning);
+    border-color: rgba(251, 140, 0, 0.28);
+}
+
+.aks-hpa-badge.hpa-scaling:hover {
+    background: rgba(251, 140, 0, 0.18);
+}
+
+.aks-hpa-badge .hpa-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.75;
+}
+
+.aks-hpa-badge .hpa-replicas {
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-hpa-badge .hpa-cpu {
+    font-weight: 400;
+    font-size: 10px;
+    opacity: 0.75;
+    border-left: 1px solid currentColor;
+    padding-left: 5px;
+    margin-left: 1px;
+}
+
+/* ── HPA detail panel ── */
+.aks-hpa-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 12px;
+}
+
+.aks-hpa-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+}
+
+.aks-hpa-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    min-width: 52px;
+}
+
+.aks-hpa-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aks-hpa-kind-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+/* ── Replica overview card ── */
+.aks-hpa-replica-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    margin: 10px 0;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.aks-hpa-replica-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+
+.aks-hpa-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.aks-hpa-stat-num {
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.aks-hpa-stat-num.current {
+    color: var(--color-text);
+}
+
+.aks-hpa-stat-num.desired-stable {
+    color: var(--color-success);
+}
+
+.aks-hpa-stat-num.desired-scaling {
+    color: var(--color-warning);
+}
+
+.aks-hpa-stat-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-stat-arrow {
+    font-size: 18px;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+}
+
+.aks-hpa-replica-bounds {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-replica-bounds strong {
+    color: var(--color-text);
+}
+
+.aks-hpa-replica-track {
+    flex: 1;
+    height: 4px;
+    background: var(--color-border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.aks-hpa-replica-fill {
+    height: 100%;
+    background: var(--color-accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+
+/* ── Section label ── */
+.aks-hpa-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    padding: 14px 0 6px;
+}
+
+/* ── Metrics table ── */
+.aks-hpa-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.aks-hpa-table th {
+    text-align: left;
+    padding: 5px 8px;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.aks-hpa-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    vertical-align: middle;
+}
+
+.aks-hpa-table tr:last-child td {
+    border-bottom: none;
+}
+
+.aks-hpa-table tr:hover td {
+    background: var(--color-surface-2);
+}
+
+.aks-hpa-metric-name {
+    font-weight: 500;
+}
+
+.aks-hpa-type-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.aks-hpa-target-val {
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-table td.metric-ok   { color: var(--color-success); font-weight: 600; }
+.aks-hpa-table td.metric-med  { color: var(--color-warning); font-weight: 600; }
+.aks-hpa-table td.metric-high { color: var(--color-error);   font-weight: 600; }
+
+/* ── Conditions ── */
+.aks-hpa-conditions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.aks-hpa-condition {
+    padding: 8px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.aks-hpa-condition.cond-ok {
+    border-left: 3px solid var(--color-success);
+}
+
+.aks-hpa-condition.cond-warn {
+    border-left: 3px solid var(--color-warning);
+}
+
+.aks-hpa-condition-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.aks-hpa-cond-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.cond-ok .aks-hpa-cond-dot {
+    background: var(--color-success);
+}
+
+.cond-warn .aks-hpa-cond-dot {
+    background: var(--color-warning);
+}
+
+.aks-hpa-cond-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    flex: 1;
+}
+
+.aks-hpa-cond-reason {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    padding-left: 13px;
+    line-height: 1.4;
+}

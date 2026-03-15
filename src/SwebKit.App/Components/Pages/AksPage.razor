@@ -152,10 +152,13 @@
                                         }
                                         @if (depHpa is not null)
                                         {
-                                            <button class="aks-hpa-badge" @onclick="() => OpenHpaDetail(depHpa)">
-HPA
-@depHpa.CurrentReplicas/@depHpa.MaxReplicas@(depHpa.CurrentCpuUtilizationPercent.HasValue
-                                ? $" @ {depHpa.CurrentCpuUtilizationPercent:F0}%" : "")
+                                            <button class="aks-hpa-badge @(depHpa.CurrentReplicas == depHpa.DesiredReplicas ? "" : "hpa-scaling")" @onclick="() => OpenHpaDetail(depHpa)">
+                                                <span class="hpa-icon">⇅</span>
+                                                <span class="hpa-replicas">@depHpa.CurrentReplicas / @depHpa.MaxReplicas</span>
+                                                @if (depHpa.CurrentCpuUtilizationPercent.HasValue)
+                                                {
+                                                    <span class="hpa-cpu">@($"{depHpa.CurrentCpuUtilizationPercent:F0}%")</span>
+                                                }
                                             </button>
                                         }
                                     </div>
@@ -203,10 +206,13 @@ HPA
                                         }
                                         @if (ssHpa is not null)
                                         {
-                                            <button class="aks-hpa-badge" @onclick="() => OpenHpaDetail(ssHpa)">
-                                                HPA
-                                                @ssHpa.CurrentReplicas/@ssHpa.MaxReplicas@(ssHpa.CurrentCpuUtilizationPercent.HasValue ?
-                                                $" @ {ssHpa.CurrentCpuUtilizationPercent:F0}%" : "")
+                                            <button class="aks-hpa-badge @(ssHpa.CurrentReplicas == ssHpa.DesiredReplicas ? "" : "hpa-scaling")" @onclick="() => OpenHpaDetail(ssHpa)">
+                                                <span class="hpa-icon">⇅</span>
+                                                <span class="hpa-replicas">@ssHpa.CurrentReplicas / @ssHpa.MaxReplicas</span>
+                                                @if (ssHpa.CurrentCpuUtilizationPercent.HasValue)
+                                                {
+                                                    <span class="hpa-cpu">@($"{ssHpa.CurrentCpuUtilizationPercent:F0}%")</span>
+                                                }
                                             </button>
                                         }
                                     </div>
@@ -738,67 +744,94 @@ HPA
                         </div>
                         <div class="aks-yaml-content">
                             <div class="aks-hpa-detail">
+
+                                @* ── Target ── *@
                                 <div class="aks-hpa-row">
                                     <span class="aks-hpa-label">Target</span>
-                                    <span>@HpaDetailTarget.TargetKind: @HpaDetailTarget.TargetName</span>
+                                    <span class="aks-hpa-value">
+                                        <span class="aks-hpa-kind-badge">@HpaDetailTarget.TargetKind</span>
+                                        @HpaDetailTarget.TargetName
+                                    </span>
                                 </div>
-                                <div class="aks-hpa-row">
-                                    <span class="aks-hpa-label">Replicas</span>
-                                    <span>@HpaDetailTarget.CurrentReplicas current / @HpaDetailTarget.DesiredReplicas desired (min
-                                        @HpaDetailTarget.MinReplicas, max @HpaDetailTarget.MaxReplicas)</span>
+
+                                @* ── Replica overview card ── *@
+                                <div class="aks-hpa-replica-card">
+                                    <div class="aks-hpa-replica-stats">
+                                        <div class="aks-hpa-stat">
+                                            <span class="aks-hpa-stat-num current">@HpaDetailTarget.CurrentReplicas</span>
+                                            <span class="aks-hpa-stat-lbl">Current</span>
+                                        </div>
+                                        <div class="aks-hpa-stat-arrow">→</div>
+                                        <div class="aks-hpa-stat">
+                                            <span class="aks-hpa-stat-num @(HpaDetailTarget.DesiredReplicas == HpaDetailTarget.CurrentReplicas ? "desired-stable" : "desired-scaling")">@HpaDetailTarget.DesiredReplicas</span>
+                                            <span class="aks-hpa-stat-lbl">Desired</span>
+                                        </div>
                                     </div>
-                                    @if (HpaDetailTarget.Metrics.Count > 0)
-                                    {
-                                        <div class="aks-hpa-section-label">Metrics</div>
-                                        <table class="aks-hpa-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Type</th>
-                                                    <th>Current</th>
-                                                    <th>Target</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var m in HpaDetailTarget.Metrics)
-                                                {
-                                                    <tr>
-                                                        <td>@m.Name</td>
-                                                        <td><span class="aks-text-muted">@m.Type</span></td>
-                                                        <td>@(m.CurrentValue.HasValue ? $"{m.CurrentValue:F0}%" : "—")</td>
-                                                        <td>@(m.TargetValue.HasValue ? $"{m.TargetValue:F0}%" : "—")</td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    }
-                                    @if (HpaDetailTarget.Conditions.Count > 0)
-                                    {
-                                        <div class="aks-hpa-section-label">Conditions</div>
-                                        <table class="aks-hpa-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Type</th>
-                                                    <th>Status</th>
-                                                    <th>Reason</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var cond in HpaDetailTarget.Conditions)
-                                                {
-                                                    <tr>
-                                                        <td>@cond.Type</td>
-                                                        <td><span
-                                                            class="aks-ready-badge @(cond.Status == "True" ? "healthy" : "degraded")">@cond.Status</span>
-                                                        </td>
-                                                        <td class="aks-text-muted">@cond.Reason</td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    }
+                                    <div class="aks-hpa-replica-bounds">
+                                        <span>min <strong>@HpaDetailTarget.MinReplicas</strong></span>
+                                        <div class="aks-hpa-replica-track">
+                                            <div class="aks-hpa-replica-fill" style="width: @(Math.Round(100.0 * HpaDetailTarget.CurrentReplicas / Math.Max(HpaDetailTarget.MaxReplicas, 1)))%"></div>
+                                        </div>
+                                        <span>max <strong>@HpaDetailTarget.MaxReplicas</strong></span>
+                                    </div>
                                 </div>
+
+                                @* ── Metrics ── *@
+                                @if (HpaDetailTarget.Metrics.Count > 0)
+                                {
+                                    <div class="aks-hpa-section-label">Metrics</div>
+                                    <table class="aks-hpa-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Type</th>
+                                                <th>Current</th>
+                                                <th>Target</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var m in HpaDetailTarget.Metrics)
+                                            {
+                                                var pct = m.CurrentValue.HasValue && m.TargetValue.HasValue
+                                                    ? (double)m.CurrentValue.Value / m.TargetValue.Value
+                                                    : (double?)null;
+                                                <tr>
+                                                    <td class="aks-hpa-metric-name">@m.Name</td>
+                                                    <td><span class="aks-hpa-type-badge">@m.Type</span></td>
+                                                    <td class="@(pct > 0.9 ? "metric-high" : pct > 0.7 ? "metric-med" : "metric-ok")">
+                                                        @(m.CurrentValue.HasValue ? $"{m.CurrentValue:F0}%" : "—")
+                                                    </td>
+                                                    <td class="aks-hpa-target-val">@(m.TargetValue.HasValue ? $"{m.TargetValue:F0}%" : "—")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+
+                                @* ── Conditions ── *@
+                                @if (HpaDetailTarget.Conditions.Count > 0)
+                                {
+                                    <div class="aks-hpa-section-label">Conditions</div>
+                                    <div class="aks-hpa-conditions">
+                                        @foreach (var cond in HpaDetailTarget.Conditions)
+                                        {
+                                            <div class="aks-hpa-condition @(cond.Status == "True" ? "cond-ok" : "cond-warn")">
+                                                <div class="aks-hpa-condition-header">
+                                                    <span class="aks-hpa-cond-dot"></span>
+                                                    <span class="aks-hpa-cond-type">@cond.Type</span>
+                                                    <span class="aks-ready-badge @(cond.Status == "True" ? "healthy" : "degraded")">@cond.Status</span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(cond.Reason))
+                                                {
+                                                    <div class="aks-hpa-cond-reason">@cond.Reason</div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
                             </div>
+                        </div>
                         </ResizablePanel>
                     }
                 </div>
