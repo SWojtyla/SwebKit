@@ -233,4 +233,4 @@ When a feature is complete:
 - keep reusable decisions and lessons
 - create an archive summary
 - move the feature under `docs/features/archive/<feature-name>/`
-- stop treating it as
+- stop treating it as active work

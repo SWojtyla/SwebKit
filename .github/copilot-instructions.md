@@ -137,3 +137,4 @@ Do not:
 - invent requirements not grounded in the task or docs
 - silently ignore architecture, test expectations, or known pitfalls
 - leave the repo in a partially updated state without saying so
+- write plans, feature docs, or decisions outside the repository — everything belongs under `docs/features/active/<feature-name>/`

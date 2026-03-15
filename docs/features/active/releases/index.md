@@ -51,10 +51,18 @@ without leaving the app.
 ## Source traceability
 
 - Canonical feature scope: `docs/features/active/releases/index.md`
-- Supporting context: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`
+- Supporting context: `docs/architecture/architecture.md`, `docs/architecture/design.md`
 
 ## Deliverables
 
-- `docs/features/active/releases/technical-plan-backend.md`
-- `docs/features/active/releases/technical-plan-ui.md`
+- `docs/features/active/releases/backend.md`
+- `docs/features/active/releases/frontend.md`
 - `docs/features/active/releases/test-plan.md`
+
+## Quick links
+
+- Status: `status.md`
+- Backend plan: `backend.md`
+- Frontend plan: `frontend.md`
+- Tests: `test-plan.md`
+- Decisions: `decisions.md`

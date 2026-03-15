@@ -30,22 +30,30 @@ Enable quick triage and deep trace analysis across services with provider-agnost
 
 A provider-agnostic observability workspace supporting triage and deep analysis.
 
--## Dependencies
+## Dependencies
 
-- Depends on `docs/features/active/foundation-mvp/`
-- Integrates with `docs/features/service-bus/` and `docs/features/aks/`
+- Depends on `docs/features/archive/foundation-mvp/`
+- Integrates with `docs/features/archive/service-bus/` and `docs/features/archive/aks/`
 
 ## Source traceability
 
 - Canonical feature scope: `docs/features/active/observability/index.md`
-- Supporting context: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`
+- Supporting context: `docs/architecture/architecture.md`, `docs/architecture/design.md`
 
 ## Deliverables
 
-- `docs/features/active/observability/technical-plan-backend.md`
-- `docs/features/active/observability/technical-plan-ui.md`
+- `docs/features/active/observability/backend.md`
+- `docs/features/active/observability/frontend.md`
 - `docs/features/active/observability/test-plan.md`
 
 ## Migration notes
 
 Cross-link behaviors should be specified here as shared contracts with Service Bus and AKS features.
+
+## Quick links
+
+- Status: `status.md`
+- Backend plan: `backend.md`
+- Frontend plan: `frontend.md`
+- Tests: `test-plan.md`
+- Decisions: `decisions.md`
