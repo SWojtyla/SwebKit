@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <!-- Deep purple to teal gradient background -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a0533"/>
+      <stop offset="100%" stop-color="#0d2137"/>
+    </linearGradient>
+    <!-- Bright accent gradient for the S shape -->
+    <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="48" height="48" rx="11" fill="url(#bg)"/>
+
+  <!-- Subtle inner glow ring -->
+  <rect x="1.5" y="1.5" width="45" height="45" rx="10" fill="none" stroke="#a855f7" stroke-width="0.6" opacity="0.4"/>
+
+  <!-- Geometric S made from two arcs / rectangles with rounded ends -->
+  <!-- Top arc of S -->
+  <path d="M 28 12 
+             A 8 8 0 0 0 16 18
+             A 6 5 0 0 0 24 24"
+        fill="none" stroke="url(#sg)" stroke-width="4.5" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- Bottom arc of S -->
+  <path d="M 20 24 
+             A 6 5 0 0 0 28 30
+             A 8 8 0 0 1 16 36"
+        fill="none" stroke="url(#sg)" stroke-width="4.5" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Top terminal dot -->
+  <circle cx="28" cy="12" r="2.5" fill="#a855f7" filter="url(#glow)"/>
+  <!-- Bottom terminal dot -->
+  <circle cx="16" cy="36" r="2.5" fill="#06b6d4" filter="url(#glow)"/>
+</svg>
