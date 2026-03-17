@@ -9,12 +9,27 @@
 /* ── Toolbar ── */
 .aks-toolbar {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
+    flex-direction: column;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+}
+
+/* Row 1: connection status, context, namespace, actions */
+.aks-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+}
+
+/* Row 2: resource type tabs */
+.aks-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px 5px;
+    overflow-x: auto;
 }
 
 .aks-context-label {
@@ -179,21 +194,32 @@
 .aks-content {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: 1fr;
     overflow: hidden;
     min-height: 0;
 }
 
-.aks-content.events-collapsed {
+.aks-content.side-open {
     grid-template-columns: 1fr auto;
 }
 
-.aks-content.side-open {
-    grid-template-columns: 1fr 280px auto;
+/* ── Unified right-side panel column ── */
+.aks-panels-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background: var(--color-surface);
 }
 
-.aks-content.side-open.events-collapsed {
-    grid-template-columns: 1fr auto auto;
+/* Individual panel pane inside the column */
+.aks-panel-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
 }
 
 /* ── Section header (shared) ── */
@@ -293,12 +319,14 @@
     color: var(--color-accent);
 }
 
-/* ── Events panel ── */
-.aks-events-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-left: 1px solid var(--color-border);
+/* ── Events panel (peer pane) ── */
+.aks-event-warn-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-warning);
+    background: rgba(251, 140, 0, 0.12);
+    padding: 1px 6px;
+    border-radius: 8px;
 }
 
 .aks-events-list {
@@ -307,46 +335,167 @@
 }
 
 .aks-events-empty {
-    padding: 32px 16px;
+    padding: 24px 16px;
     text-align: center;
     font-size: 12px;
     color: var(--color-text-muted);
 }
 
-.aks-collapse-btn {
-    margin-left: auto;
+/* ── Events toggle button (in toolbar row) ── */
+.aks-events-toggle {
+    padding: 3px 10px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.1s;
+}
+
+.aks-events-toggle:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-events-toggle.active {
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+    background: rgba(255, 165, 0, 0.08);
+}
+
+/* ── YAML search bar ── */
+.aks-yaml-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+}
+
+.aks-yaml-search-input {
+    flex: 1;
+    padding: 3px 8px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+}
+
+.aks-yaml-search-input:focus {
+    border-color: var(--color-accent);
+}
+
+.aks-yaml-search-count {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.aks-yaml-search-clear {
     background: transparent;
     border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.aks-yaml-search-clear:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-search-toggle-btn {
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--color-text-muted);
     cursor: pointer;
     font-size: 12px;
     padding: 2px 6px;
     border-radius: 3px;
+    line-height: 1;
 }
 
-.aks-collapse-btn:hover {
+.aks-search-toggle-btn:hover {
     color: var(--color-text);
     background: var(--color-surface-2);
 }
 
-/* ── Events collapsed tab (vertical strip) ── */
-.aks-events-collapsed-tab {
-    writing-mode: vertical-lr;
-    text-orientation: mixed;
-    padding: 12px 6px;
-    background: var(--color-surface);
+.aks-search-toggle-btn.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(var(--color-accent-rgb, 64, 156, 255), 0.08);
+}
+
+/* ── YAML search highlights ── */
+::deep .yml-search-match {
+    background: rgba(255, 214, 0, 0.35);
+    border-radius: 2px;
+    outline: 1px solid rgba(255, 180, 0, 0.5);
+}
+
+/* ── Ingress URL buttons ── */
+.aks-ingress-hosts-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-ingress-url-btn {
+    background: transparent;
     border: none;
-    border-left: 1px solid var(--color-border);
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    line-height: 1.4;
+}
+
+.aks-ingress-url-btn:hover {
+    opacity: 0.75;
+}
+
+/* ── CronJob styles ── */
+.aks-cron-schedule {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.aks-suspended {
+    opacity: 0.55;
+    font-style: italic;
+}
+
+.aks-suspended-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    padding: 0px 5px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+/* ── Metric N/A placeholder ── */
+.aks-metric-na {
     color: var(--color-text-muted);
     font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-    letter-spacing: 0.5px;
-}
-
-.aks-events-collapsed-tab:hover {
-    color: var(--color-text);
-    background: var(--color-surface-2);
 }
 
 .aks-event-item {
@@ -509,6 +658,38 @@
 }
 
 /* ── Pod metrics ── */
+.aks-metric-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-metric-bar-track {
+    height: 3px;
+    background: var(--color-surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.aks-metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.aks-metric-bar-fill.metric-low {
+    background: var(--color-success);
+}
+
+.aks-metric-bar-fill.metric-med {
+    background: var(--color-warning);
+}
+
+.aks-metric-bar-fill.metric-high {
+    background: var(--color-error);
+}
+
 .aks-metric {
     font-size: 11px;
     font-variant-numeric: tabular-nums;

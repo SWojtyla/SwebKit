@@ -229,3 +229,17 @@ public class HpaCondition
     public string? Reason { get; set; }
     public string? Message { get; set; }
 }
+
+// ── CronJobs ─────────────────────────────────────────────────────────────────
+
+public class CronJobInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? Schedule { get; set; }
+    public bool Suspend { get; set; }
+    public int ActiveCount { get; set; }
+    public DateTimeOffset? LastScheduleTime { get; set; }
+    public DateTimeOffset? LastSuccessfulTime { get; set; }
+    public Dictionary<string, string> Labels { get; set; } = [];
+}

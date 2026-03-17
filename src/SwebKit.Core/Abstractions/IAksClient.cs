@@ -46,7 +46,8 @@ public interface IAksClient
 
     // ── Feature 5: HPA ───────────────────────────────────────────────────────
     Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default);
-
+    // ── CronJobs ─────────────────────────────────────────────────────────────────
+    Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default);
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {

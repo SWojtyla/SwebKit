@@ -4,15 +4,24 @@
 
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Context switching and namespace filtering (single and all namespaces).
-- Browse deployments, pods, ingresses, and Helm releases.
+- Browse deployments, pods, ingresses, Helm releases, and CronJobs.
 - View Kubernetes events with warning highlighting.
 - Stream pod logs with filtering.
+- Multi-pod log aggregation — stream logs from all pods of a deployment simultaneously; lines are prefixed with pod name and color-coded per pod.
 - View resource YAML.
 - Port-forward sessions.
-- Pod shell launch.
+- Pod shell launch (externally via `wt.exe` or `cmd.exe` with `kubectl exec`).
 - Deployment restart, scale operations, and pod delete.
+- StatefulSet visibility — browse, restart, and scale StatefulSets; degraded sets are highlighted.
+- ConfigMap viewer — filterable key/value table; YAML view and edit.
+- Secret viewer — key-names-only list by default; individual values revealed on demand (never bulk-loaded).
+- Container image and environment details — image tag with copy, resource requests/limits, env vars with ConfigMapRef resolution and SecretRef reveal.
+- HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel with all metrics and conditions.
 - Helm history, values, and rollback.
-- Pod metrics retrieval where available.
+- Pod metrics retrieval where available — CPU and Memory columns always visible in the Pods grid; show "—" when metrics are unavailable.
+- YAML viewer includes inline search (highlight + scroll to match).
+- Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
+- CronJob visibility — schedule, active count, last schedule/success times, suspended state badge.
 
 ## Core Runtime Flow
 
@@ -20,21 +29,33 @@
 2. UI loads context list, namespaces, and selected resource collection.
 3. Table actions call `IAksClient` operations for mutations and diagnostics.
 4. Long-running and side-panel operations keep the main grid responsive.
+5. Auto-refresh pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
+
+## Key Design Notes
+
+- **Unified side-panel column.** All side panels (YAML, Helm history/values, scale, logs, container details, ConfigMap/Secret detail, HPA) are rendered inside a single `aks-panels-col` flex container. Events sit at the bottom of this column as a collapsible inset (`aks-events-inset`), so multiple open panels never overflow the grid. When nothing is open the column is hidden and a thin vertical `aks-events-collapsed-tab` appears instead.
+- **YAML search** is implemented entirely in `yamlHighlight.js` (`searchInPre`, `clearSearch`). Blazor calls JSInterop on each input change; match count is displayed in the search bar.
+- **Multi-pod log fan-out** uses `System.Threading.Channels.Channel<AggregatedLogLine>` (unbounded). Each per-pod task writes into the channel; a linked `CancellationTokenSource` ensures the outer consumer cancellation propagates to all per-pod readers. No ordering guarantees — lines arrive as produced.
+- **Secret values are never eagerly loaded.** `SecretInfo` holds only key names. Values are fetched on demand via `GetSecretValuesAsync` and cached for the panel lifetime.
+- **HPA API versioning.** `GetHpasAsync` targets `autoscaling/v2` (K8s 1.23+) and falls back to `v1` silently on 404.
+- **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
+- `KubernetesAksClient` includes Azure token fallback logic when kubeconfig exec auth is not enough.
+- Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
+- Port-forward lifecycle is tracked with process registry helpers and must be cleaned up on stop.
 
 ## Main Code Locations
 
 - `src/SwebKit.App/Components/Pages/AksPage.razor`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
 - `src/SwebKit.App/Components/Aks/PodLogView.razor`
+- `src/SwebKit.App/Components/Aks/MultiPodLogView.razor`
+- `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor`
+- `src/SwebKit.App/Components/Aks/SecretDetailPanel.razor`
+- `src/SwebKit.App/Components/Aks/ContainerDetailPanel.razor`
 - `src/SwebKit.Core/Abstractions/IAksClient.cs`
+- `src/SwebKit.Core/Models/AksModels.cs`
 - `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`
 - `src/SwebKit.Core/Services/DemoAksClient.cs`
-
-## Important Notes
-
-- `KubernetesAksClient` includes Azure token fallback logic when kubeconfig exec auth is not enough.
-- Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
-- Port-forward lifecycle is tracked with process registry helpers and must be cleaned up on stop.
 
 ## Validation Pointers
 

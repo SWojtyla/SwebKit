@@ -264,6 +264,7 @@ public class KubernetesAksClient : IAksClient
             "configmap" => await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct),
             "secret" => await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct),
             "horizontalpodautoscaler" or "hpa" => await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct),
+            "cronjob" => await _client.BatchV1.ReadNamespacedCronJobAsync(name, ns, cancellationToken: ct),
             _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
         };
 
@@ -961,6 +962,28 @@ public class KubernetesAksClient : IAksClient
         if (mem.EndsWith("Gi"))
             return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var gi) ? gi * 1024 * 1024 * 1024 : 0;
         return long.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
+    }
+
+    // ── CronJobs ─────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
+    {
+        var result = await _client.BatchV1.ListNamespacedCronJobAsync(ns, cancellationToken: ct);
+        return result.Items.Select(cj => new CronJobInfo
+        {
+            Name = cj.Metadata.Name,
+            Namespace = cj.Metadata.NamespaceProperty ?? ns,
+            Schedule = cj.Spec?.Schedule,
+            Suspend = cj.Spec?.Suspend ?? false,
+            ActiveCount = cj.Status?.Active?.Count ?? 0,
+            LastScheduleTime = cj.Status?.LastScheduleTime.HasValue == true
+                ? new DateTimeOffset(cj.Status.LastScheduleTime.Value)
+                : null,
+            LastSuccessfulTime = cj.Status?.LastSuccessfulTime.HasValue == true
+                ? new DateTimeOffset(cj.Status.LastSuccessfulTime.Value)
+                : null,
+            Labels = cj.Metadata.Labels is not null ? new Dictionary<string, string>(cj.Metadata.Labels) : []
+        }).ToList();
     }
 }
 

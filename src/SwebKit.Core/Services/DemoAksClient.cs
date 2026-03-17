@@ -980,4 +980,53 @@ public class DemoAksClient : IAksClient
             }
         };
     }
+
+    public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(150, ct);
+        var now = DateTimeOffset.UtcNow;
+        return new List<CronJobInfo>
+        {
+            new()
+            {
+                Name = "inventory-sync", Namespace = ns,
+                Schedule = "*/15 * * * *", Suspend = false, ActiveCount = 0,
+                LastScheduleTime = now.AddMinutes(-3),
+                LastSuccessfulTime = now.AddMinutes(-3),
+                Labels = new Dictionary<string, string> { ["app"] = "inventory-sync", ["tier"] = "batch" }
+            },
+            new()
+            {
+                Name = "report-generator", Namespace = ns,
+                Schedule = "0 2 * * *", Suspend = false, ActiveCount = 0,
+                LastScheduleTime = now.AddHours(-10),
+                LastSuccessfulTime = now.AddHours(-10),
+                Labels = new Dictionary<string, string> { ["app"] = "report-generator", ["tier"] = "batch" }
+            },
+            new()
+            {
+                Name = "cache-warmer", Namespace = ns,
+                Schedule = "0 */6 * * *", Suspend = false, ActiveCount = 1,
+                LastScheduleTime = now.AddMinutes(-20),
+                LastSuccessfulTime = now.AddHours(-6),
+                Labels = new Dictionary<string, string> { ["app"] = "cache-warmer", ["tier"] = "batch" }
+            },
+            new()
+            {
+                Name = "audit-log-archiver", Namespace = ns,
+                Schedule = "0 0 * * 0", Suspend = true, ActiveCount = 0,
+                LastScheduleTime = now.AddDays(-7),
+                LastSuccessfulTime = now.AddDays(-7),
+                Labels = new Dictionary<string, string> { ["app"] = "audit-log-archiver", ["tier"] = "batch" }
+            },
+            new()
+            {
+                Name = "order-cleanup", Namespace = ns,
+                Schedule = "30 3 * * *", Suspend = false, ActiveCount = 0,
+                LastScheduleTime = now.AddHours(-21),
+                LastSuccessfulTime = now.AddHours(-21),
+                Labels = new Dictionary<string, string> { ["app"] = "order-cleanup", ["tier"] = "batch" }
+            }
+        };
+    }
 }

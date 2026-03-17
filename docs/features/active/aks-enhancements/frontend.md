@@ -1,219 +1,120 @@
-# Frontend Plan — AKS New Capabilities
+# Frontend Plan — AKS Enhancements (Batch 2)
 
 ---
 
-title: "Frontend Plan - AKS New Capabilities"
+title: "Frontend Plan — AKS Enhancements Batch 2"
 owner: ""
-status: "Planned"
+status: "Done"
 
 ---
 
 ## Goal
 
-Extend the AKS page with six new user-facing capabilities while preserving the existing tab, panel, and context-menu patterns. Add four new Razor components for the more complex views; inline simpler panels directly in `AksPage.razor`.
+Deliver the seven UX improvements to `AksPage.razor` and `AksPage.razor.css` without
+introducing regressions in the existing panels, grids, or context menus.
 
 ## Impacted areas
 
-- `src/SwebKit.App/Components/Pages/AksPage.razor` + `.razor.css`
-- `src/SwebKit.App/Components/Aks/MultiPodLogView.razor` + `.razor.css` (new)
-- `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor` + `.razor.css` (new)
-- `src/SwebKit.App/Components/Aks/SecretDetailPanel.razor` + `.razor.css` (new)
-- `src/SwebKit.App/Components/Aks/ContainerDetailPanel.razor` + `.razor.css` (new)
+- `src/SwebKit.App/Components/Pages/AksPage.razor` — primary target
+- `src/SwebKit.App/Components/Pages/AksPage.razor.css` — layout and new classes
+- `src/SwebKit.App/wwwroot/js/yamlHighlight.js` — YAML search interop (see backend.md)
 
-## UX notes
+## UX and accessibility notes
 
-- All new panels open in the existing `ResizablePanel` slide-out column — mutually exclusive with each other and with existing YAML/log panels.
-- `AutoRefreshToggle` must pause when any panel is open. Extract a `HasOpenPanel` computed bool rather than extending the inline condition further.
-- New resource tabs (StatefulSets, ConfigMaps, Secrets) follow the existing tab button + `FluentDataGrid` pattern exactly.
-- Secret values are never rendered until the user explicitly reveals them — mask with `•••••••` and an eye-toggle button.
-- Container details and HPA panels do not need separate component files — they are simple enough to inline in `AksPage.razor` as `ResizablePanel` content blocks.
+### Side-panel column
 
-## `ResourceTypes` array after all changes
+All side panels are mutually exclusive (only one content panel shows at a time, plus
+events may be open simultaneously). All panels live inside `aks-panels-col`, which is
+wrapped by a single `<ResizablePanel>` for drag-resize. The `ResizablePanel` is the grid
+`auto` column child. Width defaults to 420px.
 
-```csharp
-private static readonly string[] ResourceTypes =
-    ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets", "Ingresses", "Helm"];
-```
+### Events integration
 
-## New components
+Events is a full peer `aks-panel-pane` inside the column, toggled by `ShowEvents`.
+It fills the remaining column height with `flex: 1` and `overflow-y: auto` on the list.
+When nothing is open (no content panel and `ShowEvents = false`), a thin vertical
+`aks-events-collapsed-tab` strip appears. See Decision 002.
 
-### `MultiPodLogView.razor`
+### YAML search
 
-Parameters: `IAksClient? Client`, `string? Namespace`, `string? DeploymentName`
+Search runs on the already-rendered `<pre>` content via JS; no Blazor re-render per
+keystroke. The search toggle button sits in the panel header row. The search bar appears
+below the header, above the YAML content, only when toggled on.
 
-- Mirrors `PodLogView` streaming loop: calls `Client.StreamDeploymentLogsAsync(...)` inside `Task.Run`.
-- Maintains `Dictionary<string, int> _podColorIndex` mapping pod name → colour index (0–7) on first sight.
-- Legend bar at the top: one colored dot + truncated pod name per unique pod seen.
-- Each line: `<div class="log-line log-pod-@(_podColorIndex[line.PodName])"><span class="log-pod-tag">@TruncatePodName(line.PodName)</span> @line.Line</div>`
-- CSS: add `.log-pod-0` through `.log-pod-7` with distinct muted foreground colors (not background — must stay readable).
-- Same 10 000-line cap, clear button, line count, and filter input as `PodLogView`.
-- `TruncatePodName`: extract the last two hash segments from a standard pod name, e.g. `order-api-7d9f-xk2jp` → `7d9f-xk2jp`.
+### Ingress URL
 
-### `ConfigMapDetailPanel.razor`
+Each host rule renders as a `<button>` styled as a link. Single click opens the browser.
+The context menu retains clipboard copy as a secondary action. `BuildIngressUrl` infers
+`https://` for named hosts and `http://` for bare IP addresses.
 
-Parameters: `ConfigMapInfo? ConfigMap`
+### Pod metrics
 
-- Two-column table: Key / Value.
-- `ResourceFilter` input for live key filtering.
-- Values shown as plain text (no masking — ConfigMap data is not secret by Kubernetes convention).
-- No async calls needed — data is already in the model.
-
-### `SecretDetailPanel.razor`
-
-Parameters: `IAksClient? Client`, `string? Namespace`, `SecretInfo? Secret`
-
-- Table of key names from `Secret.Keys`.
-- Each row has an eye-toggle (`FluentIcon` or a `<button>` with aria-label).
-- `Dictionary<string, string?> _revealedValues` holds decoded values after reveal.
-- On first reveal: call `Client.GetSecretValuesAsync(Namespace, Secret.Name)` once, cache the full map. Subsequent reveals use the cache without another API call.
-- On hide: remove from dictionary (value cleared from DOM).
-- Loading spinner while fetching on first reveal.
-- Add a "Reveal all / Hide all" toggle in the panel header for convenience.
-
-### `ContainerDetailPanel.razor`
-
-Parameters: `IAksClient? Client`, `string? Namespace`, `string? PodName`, `string? SourceLabel`
-
-- On `OnParametersSetAsync`: call `Client.GetContainerDetailsAsync(Namespace, PodName)`.
-- Container selector: `<select>` if multiple containers; plain header if only one.
-- Per container:
-  - Image badge: `acr.io/name:tag` with a copy-to-clipboard button.
-  - Resource table: four rows (CPU request/limit, memory request/limit); show `—` for unset values.
-  - Env vars table: Name | Source | Value.
-    - `Plain`: show value directly.
-    - `ConfigMapRef`: show `cm:{SourceName}/{SourceKey}` in muted text; show resolved value if `IsResolved`.
-    - `SecretRef`: show `secret:{SourceName}/{SourceKey}`; value is `•••••••  [reveal]`. Reveal calls `GetSecretValuesAsync`.
-    - `FieldRef`: show field path in muted text.
-    - Synthetic `envFrom` row: show as `<all keys from configmap: {name}>` in italic muted text.
-- Loading spinner and error state.
-- `SourceLabel` shown in the panel header: e.g. "Deployment: order-api" or "Pod: order-api-7d9f-xk2jp".
-
-## `AksPage.razor` changes
-
-### Feature 1 — Multi-pod log aggregation
-
-- Add `private string? LogDeploymentName;`.
-- Deployment context menu: add "Logs for all pods" item. Handler sets `LogDeploymentName = CtxDeployment?.Name`, clears `LogPodName`.
-- New `ResizablePanel` slide-out: condition `LogDeploymentName is not null && LogPodName is null && YamlTarget is null`. Content: `<MultiPodLogView>`.
-- `CloseAllMenus` (or equivalent): add `LogDeploymentName = null`.
-- Opening single-pod logs must clear `LogDeploymentName`; opening all-pods logs must clear `LogPodName`.
-
-### Feature 2 — StatefulSets tab
-
-- Add `"StatefulSets"` to `ResourceTypes` (after `"Deployments"`).
-- State: `List<StatefulSetInfo> StatefulSets = []`, `string StatefulSetFilter = string.Empty`, `StatefulSetInfo? CtxStatefulSet`, `ContextMenu StatefulSetMenu = default!`.
-- `IQueryable<StatefulSetInfo> FilteredStatefulSets` computed property.
-- `LoadAsync` (single-namespace branch): add `GetStatefulSetsAsync` call in the parallel task set.
-- Grid columns: Name, Ready (`ReadyReplicas/Replicas` pill badge — green if equal, orange if less), CurrentRevision, Labels count.
-- Context menu: View YAML, Edit YAML, View Pods, Logs for all pods, Restart, Scale.
-- `OnCtxViewStatefulSetPods`: set `ActiveResourceType = "Pods"` and apply label filter.
-- `OnCtxScaleStatefulSet`: set `_scaleIsStatefulSet = true`; `OnScaleConfirm` routes to `ScaleStatefulSetAsync` vs `ScaleDeploymentAsync` based on this flag.
-- `YamlIsEditable`: add `"StatefulSet"`.
-- `CloseAllMenus`: close `StatefulSetMenu`.
-
-### Feature 3 — ConfigMap and Secret viewer
-
-- Add `"ConfigMaps"` and `"Secrets"` to `ResourceTypes`.
-- State: `List<ConfigMapInfo> ConfigMaps = []`, `List<SecretInfo> Secrets = []`, filters, `ContextMenu ConfigMapMenu`, `ContextMenu SecretMenu`, `ConfigMapInfo? ConfigMapDetailTarget`, `SecretInfo? SecretDetailTarget`.
-- `LoadAsync` (single-namespace branch): add `GetConfigMapsAsync` and `GetSecretsAsync` in the parallel task set.
-- ConfigMaps grid: Name, Keys count, Labels count. Context menu: View YAML, Edit YAML, View Keys (opens `ConfigMapDetailPanel`).
-- Secrets grid: Name, Type, Keys count. Context menu: View YAML, Edit YAML, View Keys (opens `SecretDetailPanel`).
-- `ResizablePanel` slide-out for `ConfigMapDetailTarget is not null`: `<ConfigMapDetailPanel ConfigMap="ConfigMapDetailTarget" />`.
-- `ResizablePanel` slide-out for `SecretDetailTarget is not null`: `<SecretDetailPanel Client="Client" Namespace="Namespace" Secret="SecretDetailTarget" />`.
-- `YamlIsEditable`: add `"ConfigMap"` and `"Secret"`.
-- `HasAnyData`: include `ConfigMaps.Count > 0 || Secrets.Count > 0`.
-
-### Feature 4 — Container image and env vars quick-view
-
-- Add `private string? ContainerDetailPodName;`, `private string? ContainerDetailLabel;`.
-- Pod context menu: add "Container Details". Handler: `ContainerDetailPodName = CtxPod?.Name`, `ContainerDetailLabel = $"Pod: {CtxPod?.Name}"`.
-- Deployment context menu: add "Container Details". Handler: resolve first ready pod for the deployment (`Pods.FirstOrDefault(p => p.Name.StartsWith(CtxDeployment!.Name) && p.Ready)`), set `ContainerDetailPodName` and label.
-- `ResizablePanel` slide-out for `ContainerDetailPodName is not null`: `<ContainerDetailPanel>` with all parameters.
-- `CloseAllMenus`: clear `ContainerDetailPodName`.
-
-### Feature 5 — HPA inline status
-
-- `LoadAsync`: add `GetHpasAsync` to the parallel task set; store in `private List<HpaInfo> Hpas = []`.
-- Deployments grid: add `TemplateColumn Title="HPA"`. Cell: look up `Hpas.FirstOrDefault(h => h.TargetName == context.Name && h.TargetKind == "Deployment")`. Render `<button class="aks-hpa-badge" @onclick="() => OpenHpaDetail(hpa)">HPA @current/@max @ @cpu%</button>` if found, else nothing.
-- Same column on StatefulSets grid (TargetKind == "StatefulSet").
-- Add `private HpaInfo? HpaDetailTarget;`.
-- `ResizablePanel` inline panel for `HpaDetailTarget is not null`: shows target, min/max/current/desired replicas, metrics table (`HpaMetricStatus` list), conditions list (`HpaCondition` list with colored status dots).
-- `OpenHpaDetail`: set `HpaDetailTarget = hpa`, close other panels.
-- `AutoRefreshToggle` Paused: factor into `HasOpenPanel` computed bool (see below).
-
-### Feature 6 — Open shell in pod
-
-- Pod context menu: add "Open shell in pod" below a `<div class="ctx-separator">`.
-- Handler `OnCtxOpenPodShell`:
-  ```csharp
-  var container = pod.Containers
-      .FirstOrDefault(c => c != "istio-proxy" && c != "linkerd-proxy")
-      ?? pod.Containers.FirstOrDefault()
-      ?? string.Empty;
-  await Client.OpenShellAsync(pod.Namespace, pod.Name, container);
-  ```
-- No new state, panels, or interface methods required.
-
-### `HasOpenPanel` refactor
-
-Extract the `AutoRefreshToggle` Paused condition to a computed property:
-
-```csharp
-private bool HasOpenPanel =>
-    LogPodName is not null ||
-    LogDeploymentName is not null ||
-    YamlTarget is not null ||
-    ScaleTarget is not null ||
-    HelmHistoryTarget is not null ||
-    HelmValuesTarget is not null ||
-    ConfigMapDetailTarget is not null ||
-    SecretDetailTarget is not null ||
-    ContainerDetailPodName is not null ||
-    HpaDetailTarget is not null;
-```
-
-Pass `Paused="HasOpenPanel"` to `AutoRefreshToggle`.
+CPU and Memory columns are always rendered. When a value is available a mini horizontal
+bar (`aks-metric-bar`) is rendered below the numeric label, scaled 0–500m (CPU) and
+0–512Mi (memory). The bar fills to a percentage capped at 100%. When data is absent a
+`—` placeholder is shown. See Decision 005.
+are always present. When a value is absent a `<span class="aks-metric-na">—</span>` is
+shown, preserving column alignment.
 
 ## Tasks
 
-- [ ] Add `"StatefulSets"`, `"ConfigMaps"`, `"Secrets"` to `ResourceTypes`
-- [ ] Feature 6: Add "Open shell in pod" to Pod context menu (no new component)
-- [ ] Feature 2: StatefulSets grid, context menu, scale flag routing
-- [ ] Feature 3: ConfigMaps and Secrets grids, context menus, `YamlIsEditable` update
-- [ ] Feature 5: HPA badge column on Deployments and StatefulSets, inline detail panel
-- [ ] Feature 1: "Logs for all pods" in Deployment menu, `MultiPodLogView` component
-- [ ] Feature 4: "Container Details" in Pod + Deployment menus, `ContainerDetailPanel` component
-- [ ] New components: `MultiPodLogView`, `ConfigMapDetailPanel`, `SecretDetailPanel`, `ContainerDetailPanel`
-- [ ] `HasOpenPanel` refactor in `AksPage.razor`
-- [ ] Scoped CSS for all new components
+### AksPage.razor (@code section)
 
-## Blazor patterns and pitfalls
+- [x] Add `CronJobs` list and `CronJobFilter` string fields
+- [x] Add `CronJobMenu` ContextMenu ref and `CtxCronJob` context field
+- [x] Extend `HasAnyData`, `ActiveResourceCount`, `ActiveFilter`, `FilteredCronJobs`
+- [x] Change `ShowEvents` default to `false`
+- [x] Add `HasAnyPanel` property (`HasOpenPanel || ShowEvents`)
+- [x] Add `_yamlViewPre` ElementReference, `_yamlSearch`, `_yamlSearchCount`, `_showYamlSearch`
+- [x] Extend `LoadAsync` to call and await `GetCronJobsAsync`
+- [x] Reset `CronJobs = []` in multi-namespace reset block
+- [x] Extend `CloseAllMenus` to close `CronJobMenu`
+- [x] Extend `OnCtxViewYaml` with `'J'` case for CronJob
+- [x] Add `OnCtxOpenIngressUrl`, `BuildIngressUrl` (static), `OpenUrlAsync`
+- [x] Fix `OnCtxCopyHostUrl` to use `navigator.clipboard.writeText`
+- [x] Add `ShowCronJobMenu`, `OnCtxViewYamlCronJob`
+- [x] Extend `CloseYaml` to reset yaml search state
+- [x] Add `OnYamlSearchInput`, `ClearYamlSearch`
 
-See [`docs/pitfalls/blazor-maui.md`](../../../pitfalls/blazor-maui.md) for the full reference. Most relevant here:
+### AksPage.razor (template section)
 
-- **BL-2** (`InvokeAsync`): all log stream callbacks must call `InvokeAsync(StateHasChanged)` — they run on a background thread.
-- **BL-4** (`@if` destroy/recreate): `MultiPodLogView` and `ContainerDetailPanel` will be destroyed and re-created each time their panel opens/closes. The streaming loop must cancel cleanly in `DisposeAsync`. Initialize fresh on `OnParametersSetAsync`.
-- **BL-6** (JS interop timing): not directly applicable here, but note that any copy-to-clipboard call in `ContainerDetailPanel` must be guarded by `_isRendered`.
+- [x] Change `AutoRefreshToggle` from `Paused="@HasOpenPanel"` to `Paused="@HasAnyPanel"`
+- [x] Change `aks-content` class condition from `HasOpenPanel` to `HasAnyPanel`
+- [x] Replace all `ResizablePanel` slide-outs and old events panel with `aks-panels-col` structure
+- [x] Add `@ref="_yamlViewPre"` to the read-only YAML `<pre>` element
+- [x] Add search toggle button in YAML panel header
+- [x] Add `aks-yaml-search-bar` block below YAML panel header
+- [x] Change Helm history loop from `OrderBy` to `OrderByDescending`
+- [x] Wrap events in `aks-events-inset` at bottom of column
+- [x] Replace flat pod CPU/Mem `@if` guard with always-on columns + "—" fallback
+- [x] Replace static ingress host text with `aks-ingress-url-btn` buttons
+- [x] Add CronJobs grid case to the `@switch` block
+- [x] Update IngressMenu to add "Open URL in browser" button
+- [x] Add `CronJobMenu` context menu declaration
 
-## Implementation sequence
+### AksPage.razor.css
 
-1. `HasOpenPanel` refactor (low risk, unblocks cleaner integration of all new panels).
-2. Feature 6 — Pod shell (trivial, one menu item, no component).
-3. Feature 2 — StatefulSets tab (directly mirrors Deployments; lowest UI risk).
-4. Feature 3 — ConfigMaps and Secrets tabs + panel components.
-5. Feature 5 — HPA badge column and inline panel.
-6. Feature 4 — Container detail panel (medium risk — async mount, multiple containers).
-7. Feature 1 — Multi-pod log component (highest risk — streaming + cancellation).
+- [x] Replace multi-variant grid rules (`events-collapsed`, `side-open.events-collapsed`) with simple `1fr` / `1fr auto` pair
+- [x] Add `.aks-panels-col`, `.aks-panel-pane` flex column structure
+- [x] Replace `.aks-events-panel` / `.aks-collapse-btn` with `.aks-events-inset`, `.aks-events-inset-header`, `.aks-events-chevron`
+- [x] Keep `.aks-events-collapsed-tab` for the no-panel-open state
+- [x] Add `.aks-yaml-search-bar`, `.aks-yaml-search-input`, `.aks-yaml-search-count`, `.aks-yaml-search-clear`
+- [x] Add `.aks-search-toggle-btn` and `.active` modifier
+- [x] Add `::deep .yml-search-match` highlight rule
+- [x] Add `.aks-ingress-url-btn`, `.aks-ingress-hosts-cell`
+- [x] Add `.aks-cron-schedule`, `.aks-suspended`, `.aks-suspended-badge`
+- [x] Add `.aks-metric-na`
+- [x] Add `.aks-event-warn-badge`
 
-## Acceptance checks
+## Validation
 
-- [ ] "Logs for all pods" streams from all replica pods simultaneously with colored pod-name prefixes.
-- [ ] StatefulSets tab lists resources, Ready badge reflects degraded state visually, Restart and Scale work.
-- [ ] ConfigMaps tab shows key/value pairs; filtering works.
-- [ ] Secrets tab shows only key names; reveal toggle decodes and displays the value; second reveal uses cache.
-- [ ] Container details panel shows image, requests/limits, and env vars with source annotations.
-- [ ] SecretRef env vars are masked by default and reveal on demand.
-- [ ] HPA badge visible on deployment and StatefulSet rows when an HPA exists; detail panel shows all metrics.
-- [ ] "Open shell in pod" opens a terminal with `kubectl exec` against the correct pod and container.
-- [ ] `AutoRefreshToggle` pauses correctly when any new panel is open.
-- [ ] All panels are mutually exclusive and close cleanly when another panel opens.
+- Component tests: Existing `AksPage` tests still pass (not broken by layout changes)
+- Manual UX checks: see `test-plan.md`
+
+## Notes
+
+- `ResizablePanel` is no longer used by `AksPage`. The component itself is not removed
+  (it may be used elsewhere) but none of its width-drag behaviour is needed now that the
+  column has a fixed width defined in CSS.
+- The `aks-sections-header` layout is reused across all panel panes without change —
+  the same header markup works in the new `aks-panel-pane` context.
