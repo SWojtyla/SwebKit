@@ -76,33 +76,7 @@
     border-top: 1px solid var(--color-border);
 }
 
-.context-menu {
-    position: fixed;
-    z-index: 100;
-    min-width: 140px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: var(--color-surface-2);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
-    padding: 6px;
-    display: grid;
-    gap: 4px;
-}
 
-.context-item {
-    width: 100%;
-    text-align: left;
-    border: 0;
-    background: transparent;
-    color: var(--color-text);
-    border-radius: 4px;
-    padding: 6px 8px;
-    cursor: pointer;
-}
-
-.context-item:hover {
-    background: rgba(64, 170, 255, 0.16);
-}
 
 .empty {
     padding: 12px;

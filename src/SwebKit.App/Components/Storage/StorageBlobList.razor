@@ -45,6 +45,13 @@
             else
             {
                 <div style="font-size:11px; color:var(--color-text-muted); padding:4px 12px;">Showing @_items.Count item(s)</div>
+                <ContextMenu @ref="_ctxMenu">
+                    <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy URL</button>
+                    <button class="ctx-item" @onclick="() => CopySasAsync(_ctxItem!)"><span class="ctx-item-icon">🔑</span> Copy SAS URL (24 h)</button>
+                    <div class="ctx-separator"></div>
+                    <button class="ctx-item" @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span> Download</button>
+                </ContextMenu>
+
                 <table style="width:100%; border-collapse:collapse; font-size:12px;">
                     <thead>
                         <tr style="border-bottom:1px solid var(--color-border);">
@@ -53,7 +60,6 @@
                             <th style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Size</th>
                             <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Content-Type</th>
                             <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Last Modified</th>
-                            <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -62,25 +68,14 @@
                             var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
                             var displayName = GetDisplayName(item.Name);
                             <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
-                                @onclick="() => OnRowClickAsync(item)">
+                                @onclick="() => OnRowClickAsync(item)"
+                                @oncontextmenu="e => OnRowContextMenu(e, item)"
+                                @oncontextmenu:preventDefault="true">
                                 <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
                                 <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
                                 <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
                                 <td style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
                                 <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
-                                <td style="padding:4px 8px;">
-                                    @if (!item.IsPrefix)
-                                    {
-                                        <span style="display:flex; gap:2px; flex-wrap:nowrap;" @onclick:stopPropagation="true">
-                                            <FluentButton Appearance="Appearance.Lightweight"
-                                                          @onclick="() => CopyUrlAsync(item)">Copy URL</FluentButton>
-                                            <FluentButton Appearance="Appearance.Lightweight"
-                                                          @onclick="() => CopySasAsync(item)">Copy SAS</FluentButton>
-                                            <FluentButton Appearance="Appearance.Lightweight"
-                                                          @onclick="() => DownloadAsync(item)" title="Download">⬇</FluentButton>
-                                        </span>
-                                    }
-                                </td>
                             </tr>
                         }
                     </tbody>
@@ -123,6 +118,8 @@
     private string? _actionMessage;
     private bool _actionOk;
     private string? _loadedContainerName;
+    private ContextMenu _ctxMenu = default!;
+    private StorageBlobItem? _ctxItem;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -217,6 +214,13 @@
         if (bytes < 1_048_576) return $"{bytes / 1024.0:F1} KB";
         if (bytes < 1_073_741_824) return $"{bytes / 1_048_576.0:F1} MB";
         return $"{bytes / 1_073_741_824.0:F2} GB";
+    }
+
+    private void OnRowContextMenu(MouseEventArgs e, StorageBlobItem item)
+    {
+        if (item.IsPrefix) return;
+        _ctxItem = item;
+        _ctxMenu.Show(e.ClientX, e.ClientY);
     }
 
     private async Task OnRowClickAsync(StorageBlobItem item)

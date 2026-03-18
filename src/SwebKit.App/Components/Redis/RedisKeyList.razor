@@ -19,7 +19,7 @@
             <span class="count">@SelectedKeys.Count selected</span>
         </div>
 
-        <div class="rows" @onclick="HideContextMenu">
+        <div class="rows">
         @foreach (var key in Keys)
         {
             var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
@@ -33,14 +33,12 @@
         }
         </div>
 
-        @if (ContextMenuVisible && ContextMenuKey is not null)
-        {
-            <div class="context-menu" style="left:@($"{ContextMenuX}px"); top:@($"{ContextMenuY}px");" @onclick:stopPropagation="true">
-                <button class="context-item" @onclick='() => InvokeContextActionAsync("open")'>Open</button>
-                <button class="context-item" @onclick='() => InvokeContextActionAsync("edit")'>Edit</button>
-                <button class="context-item" @onclick='() => InvokeContextActionAsync("delete")'>Delete</button>
-            </div>
-        }
+        <ContextMenu @ref="_ctxMenu">
+            <button class="ctx-item" @onclick='() => InvokeContextActionAsync("open")'><span class="ctx-item-icon">&#9654;</span> Open</button>
+            <button class="ctx-item" @onclick='() => InvokeContextActionAsync("edit")'><span class="ctx-item-icon">&#9998;</span> Edit</button>
+            <div class="ctx-separator"></div>
+            <button class="ctx-item destructive" @onclick='() => InvokeContextActionAsync("delete")'><span class="ctx-item-icon">&#10005;</span> Delete</button>
+        </ContextMenu>
     }
 
     <div class="footer">
@@ -63,10 +61,8 @@ HashSet<string>(StringComparer.Ordinal);
     [Parameter] public EventCallback<bool> OnToggleAllVisibleSelection { get; set; }
     [Parameter] public EventCallback<(string Key, string Action)> OnContextMenuAction { get; set; }
 
-    private bool ContextMenuVisible;
+    private ContextMenu _ctxMenu = default!;
     private string? ContextMenuKey;
-    private double ContextMenuX;
-    private double ContextMenuY;
 
     private bool AllVisibleSelected => Keys.Count > 0 && Keys.All(k => SelectedKeys.Contains(k, StringComparer.Ordinal));
 
@@ -89,10 +85,8 @@ HashSet<string>(StringComparer.Ordinal);
 
     private void ShowContextMenu(MouseEventArgs e, string key)
     {
-        ContextMenuVisible = true;
         ContextMenuKey = key;
-        ContextMenuX = e.ClientX;
-        ContextMenuY = e.ClientY;
+        _ctxMenu.Show(e.ClientX, e.ClientY);
     }
 
     private async Task InvokeContextActionAsync(string action)
@@ -100,13 +94,8 @@ HashSet<string>(StringComparer.Ordinal);
         if (ContextMenuKey is null)
             return;
 
+        _ctxMenu.Close();
         await OnContextMenuAction.InvokeAsync((ContextMenuKey, action));
-        HideContextMenu();
-    }
-
-    private void HideContextMenu()
-    {
-        ContextMenuVisible = false;
         ContextMenuKey = null;
     }
 

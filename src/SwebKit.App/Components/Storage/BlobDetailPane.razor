@@ -24,7 +24,7 @@
                 <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
                 @if (_actionMessage is not null)
                 {
-                    <span style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)");">@_actionMessage</span>
+                    <span style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)")">@_actionMessage</span>
                 }
             </div>
 
