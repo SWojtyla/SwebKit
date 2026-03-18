@@ -1,10 +1,6 @@
 .cdp-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+    display: block;
     padding: 6px 0;
-    overflow-y: auto;
-    height: 100%;
 }
 
 .cdp-error,

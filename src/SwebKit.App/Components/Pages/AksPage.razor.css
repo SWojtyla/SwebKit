@@ -205,11 +205,11 @@
 
 /* ── Unified right-side panel column ── */
 .aks-panels-col {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    width: 100%;
-    height: 100%;
     background: var(--color-surface);
 }
 
@@ -576,6 +576,7 @@
 
 .aks-yaml-content {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: auto;
