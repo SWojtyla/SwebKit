@@ -149,7 +149,7 @@ public class AzureStorageClient : IStorageClient
         var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct);
         AzureBlobProperties props = propsResponse.Value;
 
-        if (!IsTextContentType(props.ContentType))
+        if (!IsTextContentType(props.ContentType, blobName))
         {
             return new StorageBlobContent(
                 ContainerName: containerName,
@@ -176,7 +176,7 @@ public class AzureStorageClient : IStorageClient
         else
         {
             var result = await blobClient.DownloadContentAsync(cancellationToken: ct);
-            text = result.Value.Content.ToString();
+            text = System.Text.Encoding.UTF8.GetString(result.Value.Content.ToArray());
         }
 
         return new StorageBlobContent(
@@ -210,11 +210,67 @@ public class AzureStorageClient : IStorageClient
         await blobClient.DownloadToAsync(destination, cancellationToken: ct);
     }
 
-    private static bool IsTextContentType(string? contentType)
+    /// <summary>
+    /// Returns false only for clearly binary content types.
+    /// Null/empty content type (common for blobs uploaded without explicit type) defaults to
+    /// attempting a text preview, matching the Azure Portal behaviour.
+    /// When content type is the generic "application/octet-stream", falls back to the file
+    /// extension of <paramref name="blobName"/> so that .txt/.log/.json/etc. files are still
+    /// shown as text even if the blob was uploaded without an explicit content type.
+    /// </summary>
+    private static bool IsTextContentType(string? contentType, string? blobName = null)
     {
-        if (contentType is null) return false;
+        if (string.IsNullOrWhiteSpace(contentType))
+            return true; // no content type set — attempt text preview
+
         var normalized = contentType.Split(';')[0].Trim().ToLowerInvariant();
-        return normalized.StartsWith("text/", StringComparison.Ordinal)
-            || normalized is "application/json" or "application/xml" or "application/x-www-form-urlencoded";
+
+        // Explicit text types
+        if (normalized.StartsWith("text/", StringComparison.Ordinal))
+            return true;
+        if (normalized is "application/json" or "application/xml" or "application/x-www-form-urlencoded"
+                       or "application/javascript" or "application/x-javascript"
+                       or "application/yaml" or "application/x-yaml")
+            return true;
+
+        // Clearly binary: images, video, audio
+        if (normalized.StartsWith("image/", StringComparison.Ordinal)
+            || normalized.StartsWith("video/", StringComparison.Ordinal)
+            || normalized.StartsWith("audio/", StringComparison.Ordinal))
+            return false;
+
+        // Clearly binary: common binary application types
+        if (normalized is "application/zip" or "application/gzip"
+                       or "application/x-zip-compressed" or "application/x-tar" or "application/x-gzip"
+                       or "application/pdf"
+                       or "application/vnd.ms-excel"
+                       or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                       or "application/msword"
+                       or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            return false;
+
+        // "application/octet-stream" is a generic default often set by uploaders that don't
+        // know the real type.  Fall back to the file extension before declaring it binary.
+        if (normalized is "application/octet-stream")
+            return HasTextExtension(blobName);
+
+        // Unknown type — attempt text preview (worst case shows garbled content)
+        return true;
+    }
+
+    /// <summary>
+    /// Returns true when the blob name's extension is a well-known plain-text format.
+    /// </summary>
+    private static bool HasTextExtension(string? blobName)
+    {
+        if (string.IsNullOrEmpty(blobName)) return false;
+        var ext = Path.GetExtension(blobName).ToLowerInvariant();
+        return ext is ".txt" or ".log" or ".json" or ".xml" or ".csv"
+                    or ".yaml" or ".yml" or ".md" or ".html" or ".htm"
+                    or ".js" or ".ts" or ".css" or ".sql" or ".cs"
+                    or ".py" or ".sh" or ".ps1" or ".ini" or ".cfg"
+                    or ".conf" or ".toml" or ".jsx" or ".tsx"
+                    or ".java" or ".go" or ".rs" or ".rb" or ".php"
+                    or ".vue" or ".svelte";
     }
 }

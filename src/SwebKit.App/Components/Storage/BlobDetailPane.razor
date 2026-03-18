@@ -226,7 +226,9 @@
     private static string BuildDisplayContent(StorageBlobContent content)
     {
         if (content.IsBinary) return string.Empty;
-        if (content.ContentType?.StartsWith("application/json") == true)
+        var isJson = content.ContentType?.StartsWith("application/json") == true
+            || content.BlobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        if (isJson)
         {
             try
             {
