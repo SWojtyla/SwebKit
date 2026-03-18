@@ -7,6 +7,7 @@
   - Observability provider settings
   - AKS kubeconfig/context defaults
   - Redis cache entries
+  - Storage (Azure Blob) account config
 - Save settings back to the current project profile.
 - Inline feedback after save.
 
@@ -23,6 +24,7 @@
 - `src/SwebKit.App/Components/Pages/ObservabilityConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/RedisConfigForm.razor`
+- `src/SwebKit.App/Components/Pages/StorageConfigForm.razor`
 - `src/SwebKit.Core/Configuration/ProfileRepository.cs`
 - `src/SwebKit.Core/Configuration/UiStateRepository.cs`
 

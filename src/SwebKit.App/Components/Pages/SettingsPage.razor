@@ -43,6 +43,9 @@
                 <FluentAccordionItem Heading="Azure DevOps (Releases)">
                     <DevOpsConfigForm OnSaved="SaveAsync" />
                 </FluentAccordionItem>
+                <FluentAccordionItem Heading="Storage (Azure Blob)">
+                    <StorageConfigForm Environment="env" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
+                </FluentAccordionItem>
             </FluentAccordion>
         }
     }

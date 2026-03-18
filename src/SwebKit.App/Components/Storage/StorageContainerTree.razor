@@ -1,0 +1,87 @@
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+
+    @* ── Header ── *@
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+        <span style="font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Containers</span>
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="RefreshAsync" Disabled="@_loading" title="Refresh">↻</FluentButton>
+    </div>
+
+    @* ── Body ── *@
+    @if (_loading)
+    {
+        <div style="display:flex; justify-content:center; padding:20px;">
+            <FluentProgressRing />
+        </div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div style="padding:10px; font-size:12px; color:var(--color-error);">@_errorMessage</div>
+    }
+    else if (_containers.Count == 0)
+    {
+        <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">No containers found.</div>
+    }
+    else
+    {
+        <div style="overflow-y:auto; flex:1;">
+            @foreach (var container in _containers)
+            {
+                var isSelected = container.Name == SelectedContainer;
+                <div style="display:flex; align-items:center; gap:8px; padding:7px 12px; cursor:pointer; background:@(isSelected ? "var(--color-accent)" : "transparent"); color:@(isSelected ? "white" : "var(--color-text)"); border-bottom:1px solid var(--color-border);"
+                     @onclick="() => SelectContainerAsync(container.Name)">
+                    <span style="font-size:14px;">📦</span>
+                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@container.Name">@container.Name</span>
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
+    [Parameter] public string? SelectedContainer { get; set; }
+    [Parameter] public EventCallback<string?> SelectedContainerChanged { get; set; }
+
+    private IReadOnlyList<StorageContainerItem> _containers = [];
+    private bool _loading;
+    private string? _errorMessage;
+    private IStorageClient? _loadedClient;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_loadedClient, Client))
+            return;
+
+        _loadedClient = Client;
+        await LoadContainersAsync();
+    }
+
+    private async Task LoadContainersAsync()
+    {
+        _loading = true;
+        _errorMessage = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _containers = await Client.ListContainersAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+            _containers = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshAsync() => await LoadContainersAsync();
+
+    private async Task SelectContainerAsync(string name)
+        => await SelectedContainerChanged.InvokeAsync(name);
+}
