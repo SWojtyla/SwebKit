@@ -1,0 +1,144 @@
+@page "/storage"
+@using SwebKit.Azure.Storage
+@inject AppStateService AppState
+@inject ICredentialStore CredentialStore
+@inject IAppEventBus Events
+@implements IDisposable
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+
+    @if (_storageAccounts.Count == 0)
+    {
+        <div style="padding:24px; font-size:13px; color:var(--color-text-muted);">
+            <p style="margin:0 0 8px;">Storage is not configured for this environment.</p>
+            <p style="margin:0;">Go to <strong>Settings</strong> and configure the <strong>Storage (Azure Blob)</strong> section.</p>
+        </div>
+    }
+    else
+    {
+        @* ── Account selector (only when >1 account) ── *@
+        @if (_storageAccounts.Count > 1)
+        {
+            <div style="padding:6px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:12px; color:var(--color-text-muted);">Account:</span>
+                <select value="@_selectedAccountId" @onchange="OnAccountChangedAsync"
+                        style="padding:4px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; font-size:12px;">
+                    @foreach (var acc in _storageAccounts)
+                    {
+                        <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
+                    }
+                </select>
+            </div>
+        }
+
+        @if (_storageClient is null)
+        {
+            <div style="padding:24px; font-size:13px; color:var(--color-text-muted);">
+                Selected storage account has invalid configuration.
+            </div>
+        }
+        else
+        {
+            <div style="display:flex; flex:1; overflow:hidden;">
+                @* ── Left pane: containers ── *@
+                <div style="width:260px; flex-shrink:0; border-right:1px solid var(--color-border); height:100%; overflow:hidden;">
+                    <StorageContainerTree Client="_storageClient"
+                                          SelectedContainer="_selectedContainer"
+                                          SelectedContainerChanged="OnContainerSelectedAsync" />
+                </div>
+
+                @* ── Right pane ── *@
+                <div style="flex:1; display:flex; height:100%; overflow:hidden;">
+                    @if (_selectedContainer is null)
+                    {
+                        <div style="padding:24px; font-size:13px; color:var(--color-text-muted);">Select a container.</div>
+                    }
+                    else
+                    {
+                        <div style="flex:1; display:flex; height:100%; overflow:hidden;">
+                            <div style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
+                                <StorageBlobList Client="_storageClient"
+                                                 ContainerName="@_selectedContainer"
+                                                 SelectedBlob="_selectedBlob"
+                                                 SelectedBlobChanged="OnBlobSelectedAsync" />
+                            </div>
+                            @if (_selectedBlob is not null)
+                            {
+                                <div style="width:480px; flex-shrink:0; height:100%; overflow:hidden;">
+                                    <BlobDetailPane Client="_storageClient"
+                                                    ContainerName="@_selectedContainer"
+                                                    Blob="_selectedBlob" />
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+</div>
+
+@code {
+    private IStorageClient? _storageClient;
+    private List<StorageConfig> _storageAccounts = [];
+    private string? _selectedAccountId;
+    private string? _selectedContainer;
+    private StorageBlobItem? _selectedBlob;
+
+    protected override void OnInitialized()
+    {
+        Events.Subscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
+        RebuildClient();
+    }
+
+    private void OnEnvironmentChanged(EnvironmentChangedEvent _)
+    {
+        _selectedContainer = null;
+        _selectedBlob = null;
+        _selectedAccountId = null;
+        RebuildClient();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RebuildClient()
+    {
+        _storageClient = null;
+        _storageAccounts = AppState.CurrentEnvironment?.StorageAccounts ?? [];
+        if (_storageAccounts.Count == 0) return;
+
+        var selected = _storageAccounts.FirstOrDefault(a => a.Id == _selectedAccountId)
+                       ?? _storageAccounts[0];
+        _selectedAccountId = selected.Id;
+
+        try { _storageClient = new AzureStorageClient(selected, CredentialStore); }
+        catch { /* invalid config */ }
+    }
+
+    private async Task OnAccountChangedAsync(ChangeEventArgs e)
+    {
+        _selectedAccountId = e.Value?.ToString();
+        _selectedContainer = null;
+        _selectedBlob = null;
+        RebuildClient();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnContainerSelectedAsync(string? container)
+    {
+        _selectedContainer = container;
+        _selectedBlob = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnBlobSelectedAsync(StorageBlobItem? blob)
+    {
+        _selectedBlob = blob;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<EnvironmentChangedEvent>(OnEnvironmentChanged);
+    }
+}

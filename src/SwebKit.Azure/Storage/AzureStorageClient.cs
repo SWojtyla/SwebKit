@@ -1,0 +1,276 @@
+using Azure;
+using Azure.Identity;
+using Azure.Storage.Blobs;
+using Azure.Storage.Sas;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Domain;
+using AzureBlobProperties = Azure.Storage.Blobs.Models.BlobProperties;
+using BlobDownloadOptions = Azure.Storage.Blobs.Models.BlobDownloadOptions;
+using BlobStates = Azure.Storage.Blobs.Models.BlobStates;
+using BlobTraits = Azure.Storage.Blobs.Models.BlobTraits;
+
+namespace SwebKit.Azure.Storage;
+
+public class AzureStorageClient : IStorageClient
+{
+    private readonly BlobServiceClient _blobService;
+
+    public StorageConfig Config { get; }
+
+    public AzureStorageClient(StorageConfig config, ICredentialStore credentialStore)
+    {
+        Config = config;
+
+        if (!config.UseAad && config.ConnectionStringRef is not null)
+        {
+            var connStr = credentialStore.Get(config.ConnectionStringRef)
+                ?? throw new InvalidOperationException($"Credential '{config.ConnectionStringRef}' not found.");
+            _blobService = new BlobServiceClient(connStr);
+        }
+        else if (config.UseAad && !string.IsNullOrEmpty(config.AccountName))
+        {
+            _blobService = new BlobServiceClient(
+                new Uri($"https://{config.AccountName}.blob.core.windows.net"),
+                new DefaultAzureCredential());
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Invalid StorageConfig: set UseAad=true with a non-empty AccountName, " +
+                "or set UseAad=false with a non-null ConnectionStringRef.");
+        }
+    }
+
+    public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    {
+        await foreach (var _ in _blobService.GetBlobContainersAsync(cancellationToken: ct))
+            break;
+        return true;
+    }
+
+    public async Task<IReadOnlyList<StorageContainerItem>> ListContainersAsync(CancellationToken ct = default)
+    {
+        var result = new List<StorageContainerItem>();
+        await foreach (var item in _blobService.GetBlobContainersAsync(cancellationToken: ct))
+        {
+            result.Add(new StorageContainerItem(
+                Name: item.Name,
+                LastModified: item.Properties.LastModified,
+                PublicAccess: item.Properties.PublicAccess?.ToString(),
+                LeaseStatus: item.Properties.LeaseStatus?.ToString()));
+        }
+        return result;
+    }
+
+    public async Task<StorageBlobPage> ListBlobsAsync(
+        string containerName,
+        string prefix,
+        string? continuationToken = null,
+        int pageSize = 100,
+        CancellationToken ct = default)
+    {
+        var container = _blobService.GetBlobContainerClient(containerName);
+        var items = new List<StorageBlobItem>();
+        string? nextToken = null;
+
+        await foreach (var page in container
+            .GetBlobsByHierarchyAsync(BlobTraits.None, BlobStates.None, "/", prefix, ct)
+            .AsPages(continuationToken, pageSize))
+        {
+            foreach (var item in page.Values)
+            {
+                if (item.IsPrefix)
+                {
+                    items.Add(new StorageBlobItem(item.Prefix, true, null, null, null, null));
+                }
+                else
+                {
+                    items.Add(new StorageBlobItem(
+                        Name: item.Blob.Name,
+                        IsPrefix: false,
+                        SizeBytes: item.Blob.Properties.ContentLength,
+                        ContentType: item.Blob.Properties.ContentType,
+                        LastModified: item.Blob.Properties.LastModified,
+                        ETag: item.Blob.Properties.ETag?.ToString()));
+                }
+            }
+            nextToken = page.ContinuationToken;
+            break; // only first page
+        }
+
+        return new StorageBlobPage(items, string.IsNullOrEmpty(nextToken) ? null : nextToken);
+    }
+
+    public async Task<BlobProperties> GetBlobPropertiesAsync(
+        string containerName,
+        string blobName,
+        CancellationToken ct = default)
+    {
+        var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+        AzureBlobProperties props = propsResponse.Value;
+
+        Dictionary<string, string> tags;
+        try
+        {
+            var tagsResponse = await blobClient.GetTagsAsync(cancellationToken: ct);
+            tags = new Dictionary<string, string>(tagsResponse.Value.Tags);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 403)
+        {
+            // Account may have disallowed blob index tags for this credential role.
+            tags = new Dictionary<string, string>();
+        }
+
+        return new BlobProperties(
+            Name: blobName,
+            SizeBytes: props.ContentLength,
+            ContentType: props.ContentType,
+            LastModified: props.LastModified,
+            ETag: props.ETag.ToString(),
+            LeaseStatus: props.LeaseStatus.ToString(),
+            LeaseState: props.LeaseState.ToString(),
+            AccessTier: props.AccessTier?.ToString(),
+            AccessTierInferred: props.AccessTierInferred,
+            ContentEncoding: props.ContentEncoding,
+            ContentLanguage: props.ContentLanguage,
+            CacheControl: props.CacheControl,
+            Metadata: new Dictionary<string, string>(props.Metadata),
+            Tags: new Dictionary<string, string>(tags));
+    }
+
+    public async Task<StorageBlobContent> GetBlobContentAsync(
+        string containerName,
+        string blobName,
+        int maxBytes = 524_288,
+        CancellationToken ct = default)
+    {
+        var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        var propsResponse = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+        AzureBlobProperties props = propsResponse.Value;
+
+        if (!IsTextContentType(props.ContentType, blobName))
+        {
+            return new StorageBlobContent(
+                ContainerName: containerName,
+                BlobName: blobName,
+                Content: string.Empty,
+                ContentType: props.ContentType,
+                TotalSizeBytes: props.ContentLength,
+                WasTruncated: false,
+                IsBinary: true);
+        }
+
+        bool wasTruncated = props.ContentLength > maxBytes;
+        string text;
+
+        if (wasTruncated)
+        {
+            var options = new BlobDownloadOptions { Range = new HttpRange(0, maxBytes) };
+            var streamResponse = await blobClient.DownloadStreamingAsync(options, ct);
+            using var streamResult = streamResponse.Value;
+            using var ms = new MemoryStream();
+            await streamResult.Content.CopyToAsync(ms, ct);
+            text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+        }
+        else
+        {
+            var result = await blobClient.DownloadContentAsync(cancellationToken: ct);
+            text = System.Text.Encoding.UTF8.GetString(result.Value.Content.ToArray());
+        }
+
+        return new StorageBlobContent(
+            ContainerName: containerName,
+            BlobName: blobName,
+            Content: text,
+            ContentType: props.ContentType,
+            TotalSizeBytes: props.ContentLength,
+            WasTruncated: wasTruncated,
+            IsBinary: false);
+    }
+
+    public Task<string> GetBlobSasUrlAsync(
+        string containerName,
+        string blobName,
+        TimeSpan expiry,
+        CancellationToken ct = default)
+    {
+        var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        var uri = blobClient.GenerateSasUri(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add(expiry));
+        return Task.FromResult(uri.ToString());
+    }
+
+    public async Task DownloadBlobAsync(
+        string containerName,
+        string blobName,
+        Stream destination,
+        CancellationToken ct = default)
+    {
+        var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        await blobClient.DownloadToAsync(destination, cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// Returns false only for clearly binary content types.
+    /// Null/empty content type (common for blobs uploaded without explicit type) defaults to
+    /// attempting a text preview, matching the Azure Portal behaviour.
+    /// When content type is the generic "application/octet-stream", falls back to the file
+    /// extension of <paramref name="blobName"/> so that .txt/.log/.json/etc. files are still
+    /// shown as text even if the blob was uploaded without an explicit content type.
+    /// </summary>
+    private static bool IsTextContentType(string? contentType, string? blobName = null)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+            return true; // no content type set — attempt text preview
+
+        var normalized = contentType.Split(';')[0].Trim().ToLowerInvariant();
+
+        // Explicit text types
+        if (normalized.StartsWith("text/", StringComparison.Ordinal))
+            return true;
+        if (normalized is "application/json" or "application/xml" or "application/x-www-form-urlencoded"
+                       or "application/javascript" or "application/x-javascript"
+                       or "application/yaml" or "application/x-yaml")
+            return true;
+
+        // Clearly binary: images, video, audio
+        if (normalized.StartsWith("image/", StringComparison.Ordinal)
+            || normalized.StartsWith("video/", StringComparison.Ordinal)
+            || normalized.StartsWith("audio/", StringComparison.Ordinal))
+            return false;
+
+        // Clearly binary: common binary application types
+        if (normalized is "application/zip" or "application/gzip"
+                       or "application/x-zip-compressed" or "application/x-tar" or "application/x-gzip"
+                       or "application/pdf"
+                       or "application/vnd.ms-excel"
+                       or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                       or "application/msword"
+                       or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            return false;
+
+        // "application/octet-stream" is a generic default often set by uploaders that don't
+        // know the real type.  Fall back to the file extension before declaring it binary.
+        if (normalized is "application/octet-stream")
+            return HasTextExtension(blobName);
+
+        // Unknown type — attempt text preview (worst case shows garbled content)
+        return true;
+    }
+
+    /// <summary>
+    /// Returns true when the blob name's extension is a well-known plain-text format.
+    /// </summary>
+    private static bool HasTextExtension(string? blobName)
+    {
+        if (string.IsNullOrEmpty(blobName)) return false;
+        var ext = Path.GetExtension(blobName).ToLowerInvariant();
+        return ext is ".txt" or ".log" or ".json" or ".xml" or ".csv"
+                    or ".yaml" or ".yml" or ".md" or ".html" or ".htm"
+                    or ".js" or ".ts" or ".css" or ".sql" or ".cs"
+                    or ".py" or ".sh" or ".ps1" or ".ini" or ".cfg"
+                    or ".conf" or ".toml" or ".jsx" or ".tsx"
+                    or ".java" or ".go" or ".rs" or ".rb" or ".php"
+                    or ".vue" or ".svelte";
+    }
+}

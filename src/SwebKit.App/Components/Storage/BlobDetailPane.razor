@@ -1,0 +1,339 @@
+@inject IJSRuntime JS
+@using System.Text.Json
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+
+    @if (_loadingProperties && _properties is null)
+    {
+        <div style="display:flex; justify-content:center; padding:20px;">
+            <FluentProgressRing />
+        </div>
+    }
+    else if (_propertiesError is not null)
+    {
+        <div style="padding:12px; font-size:12px; color:var(--color-error);">@_propertiesError</div>
+    }
+    else if (_properties is not null)
+    {
+        <div style="overflow-y:auto; flex:1; padding:16px;">
+
+            @* ── Action bar ── *@
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="DownloadAsync">Download</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
+                @if (_actionMessage is not null)
+                {
+                    <span style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)")">@_actionMessage</span>
+                }
+            </div>
+
+            @* ── Properties table ── *@
+            <div style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Properties</div>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+                @foreach (var row in GetPropertyRows(_properties))
+                {
+                    <tr style="border-bottom:1px solid var(--color-border);">
+                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">@row.Key</td>
+                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
+                    </tr>
+                }
+            </table>
+
+            @* ── Metadata ── *@
+            <div style="margin-bottom:12px;">
+                <button style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
+                        @onclick="() => _showMetadata = !_showMetadata">
+                    <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
+                </button>
+                @if (_showMetadata)
+                {
+                    <div style="margin-top:6px; padding-left:12px;">
+                        @if (_properties.Metadata.Count == 0)
+                        {
+                            <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
+                        }
+                        else
+                        {
+                            <table style="width:100%; border-collapse:collapse;">
+                                @foreach (var kv in _properties.Metadata)
+                                {
+                                    <tr style="border-bottom:1px solid var(--color-border);">
+                                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">@kv.Key</td>
+                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
+                                    </tr>
+                                }
+                            </table>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* ── Tags ── *@
+            <div style="margin-bottom:16px;">
+                <button style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
+                        @onclick="() => _showTags = !_showTags">
+                    <span>@(_showTags ? "▼" : "▶")</span> Tags
+                </button>
+                @if (_showTags)
+                {
+                    <div style="margin-top:6px; padding-left:12px;">
+                        @if (_properties.Tags.Count == 0)
+                        {
+                            <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
+                        }
+                        else
+                        {
+                            <table style="width:100%; border-collapse:collapse;">
+                                @foreach (var kv in _properties.Tags)
+                                {
+                                    <tr style="border-bottom:1px solid var(--color-border);">
+                                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">@kv.Key</td>
+                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
+                                    </tr>
+                                }
+                            </table>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* ── Content preview ── *@
+            <div style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Content Preview</div>
+
+            @if (_loadingContent)
+            {
+                <div style="display:flex; justify-content:center; padding:12px;"><FluentProgressRing /></div>
+            }
+            else if (_content is null)
+            {
+                <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
+            }
+            else if (_content.IsBinary)
+            {
+                <div style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
+                    Binary content — use Download to inspect this blob.
+                </div>
+            }
+            else
+            {
+                @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
+                {
+                    <div style="padding:8px 10px; background:rgba(0,120,212,0.1); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px;">
+                        Preview limited to 512 KB. Download for full content.
+                    </div>
+                }
+                else if (_content.WasTruncated)
+                {
+                    <div style="padding:8px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                        <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
+                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent" @onclick="LoadFullPreviewAsync">Load</FluentButton>
+                    </div>
+                }
+                <div style="display:flex; justify-content:flex-end; margin-bottom:4px;">
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                </div>
+                <pre style="overflow:auto; max-height:400px; font-size:11px; font-family:Consolas,monospace; white-space:pre-wrap; word-break:break-all; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; padding:10px; margin:0;">@_displayContent</pre>
+            }
+
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
+    [Parameter, EditorRequired] public string ContainerName { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public StorageBlobItem Blob { get; set; } = default!;
+
+    private BlobProperties? _properties;
+    private StorageBlobContent? _content;
+    private string? _displayContent;
+    private bool _loadingProperties;
+    private bool _loadingContent;
+    private string? _propertiesError;
+    private string? _actionMessage;
+    private bool _actionOk;
+    private bool _showMetadata;
+    private bool _showTags;
+    private string? _loadedBlobName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedBlobName == Blob.Name)
+            return;
+
+        _loadedBlobName = Blob.Name;
+        _properties = null;
+        _content = null;
+        _displayContent = null;
+        _propertiesError = null;
+        _actionMessage = null;
+        _showMetadata = false;
+        _showTags = false;
+        _loadingProperties = true;
+        _loadingContent = true;
+
+        await InvokeAsync(StateHasChanged);
+        await Task.WhenAll(LoadPropertiesAsync(), LoadContentAsync(524_288));
+    }
+
+    private async Task LoadPropertiesAsync()
+    {
+        try
+        {
+            _properties = await Client.GetBlobPropertiesAsync(ContainerName, Blob.Name);
+        }
+        catch (Exception ex)
+        {
+            _propertiesError = ex.Message;
+        }
+        finally
+        {
+            _loadingProperties = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadContentAsync(int maxBytes)
+    {
+        try
+        {
+            var raw = await Client.GetBlobContentAsync(ContainerName, Blob.Name, maxBytes);
+            _content = raw;
+            _displayContent = BuildDisplayContent(raw);
+        }
+        catch (Exception ex)
+        {
+            _content = new StorageBlobContent(ContainerName, Blob.Name, $"Error: {ex.Message}", null, 0, false, false);
+            _displayContent = _content.Content;
+        }
+        finally
+        {
+            _loadingContent = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadFullPreviewAsync()
+    {
+        _loadingContent = true;
+        _content = null;
+        await InvokeAsync(StateHasChanged);
+        await LoadContentAsync(2_097_152);
+    }
+
+    private static string BuildDisplayContent(StorageBlobContent content)
+    {
+        if (content.IsBinary) return string.Empty;
+        var isJson = content.ContentType?.StartsWith("application/json") == true
+            || content.BlobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        if (isJson)
+        {
+            try
+            {
+                var elem = JsonSerializer.Deserialize<JsonElement>(content.Content);
+                return JsonSerializer.Serialize(elem, new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch { }
+        }
+        return content.Content;
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> GetPropertyRows(BlobProperties p)
+    {
+        yield return new("Name", p.Name);
+        yield return new("Size", FormatSize(p.SizeBytes));
+        yield return new("Content-Type", p.ContentType);
+        yield return new("ETag", p.ETag);
+        yield return new("Last Modified", p.LastModified.ToString("yyyy-MM-dd HH:mm:ss zzz"));
+        if (p.AccessTier is not null) yield return new("Access Tier", p.AccessTier);
+        if (p.AccessTierInferred is not null) yield return new("Tier Inferred", p.AccessTierInferred.Value.ToString());
+        if (p.LeaseStatus is not null) yield return new("Lease Status", p.LeaseStatus);
+        if (p.LeaseState is not null) yield return new("Lease State", p.LeaseState);
+        if (p.ContentEncoding is not null) yield return new("Content-Encoding", p.ContentEncoding);
+        if (p.ContentLanguage is not null) yield return new("Content-Language", p.ContentLanguage);
+        if (p.CacheControl is not null) yield return new("Cache-Control", p.CacheControl);
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1_048_576) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1_073_741_824) return $"{bytes / 1_048_576.0:F1} MB";
+        return $"{bytes / 1_073_741_824.0:F2} GB";
+    }
+
+    private async Task CopyUrlAsync()
+    {
+        var url = $"https://{Client.Config.AccountName}.blob.core.windows.net/{ContainerName}/{Blob.Name}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            _actionOk = true;
+            _actionMessage = "URL copied.";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Copy failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopySasAsync()
+    {
+        try
+        {
+            var url = await Client.GetBlobSasUrlAsync(ContainerName, Blob.Name, TimeSpan.FromHours(24));
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            _actionOk = true;
+            _actionMessage = "SAS URL copied (expires 24 h).";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"SAS failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopyContentAsync()
+    {
+        if (_displayContent is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _displayContent);
+            _actionOk = true;
+            _actionMessage = "Content copied.";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Copy failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DownloadAsync()
+    {
+        try
+        {
+            var fileName = System.IO.Path.GetFileName(Blob.Name);
+            if (string.IsNullOrEmpty(fileName)) fileName = Blob.Name.Replace('/', '_');
+            var destPath = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                "Downloads", fileName);
+            await using var fs = System.IO.File.OpenWrite(destPath);
+            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs);
+            _actionOk = true;
+            _actionMessage = $"Downloaded to: {destPath}";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Download failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+}

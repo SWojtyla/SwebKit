@@ -1,0 +1,289 @@
+@inject IJSRuntime JS
+
+<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+
+    @* ── Breadcrumb ── *@
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:2px; padding:6px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0; font-size:12px; min-height:34px;">
+        @for (int i = 0; i < _breadcrumbs.Count; i++)
+        {
+            var crumb = _breadcrumbs[i];
+            var isLast = i == _breadcrumbs.Count - 1;
+            if (i > 0)
+            {
+                <span style="color:var(--color-text-muted); padding:0 2px;">/</span>
+            }
+            @if (isLast)
+            {
+                <span style="color:var(--color-text); font-weight:600;">@crumb.Label</span>
+            }
+            else
+            {
+                <button style="background:none; border:none; padding:2px 4px; cursor:pointer; font-size:12px; color:var(--color-accent); text-decoration:underline;"
+                        @onclick="() => NavigateToCrumbAsync(crumb.Prefix)">@crumb.Label</button>
+            }
+        }
+    </div>
+
+    @* ── Content ── *@
+    @if (_loading && _items.Count == 0)
+    {
+        <div style="display:flex; justify-content:center; padding:20px;">
+            <FluentProgressRing />
+        </div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div style="padding:10px; font-size:12px; color:var(--color-error);">@_errorMessage</div>
+    }
+    else
+    {
+        <div style="overflow-y:auto; flex:1;">
+            @if (_items.Count == 0 && !_loading)
+            {
+                <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">No items in this folder.</div>
+            }
+            else
+            {
+                <div style="font-size:11px; color:var(--color-text-muted); padding:4px 12px;">Showing @_items.Count item(s)</div>
+                <ContextMenu @ref="_ctxMenu">
+                    <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy URL</button>
+                    <button class="ctx-item" @onclick="() => CopySasAsync(_ctxItem!)"><span class="ctx-item-icon">🔑</span> Copy SAS URL (24 h)</button>
+                    <div class="ctx-separator"></div>
+                    <button class="ctx-item" @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span> Download</button>
+                </ContextMenu>
+
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--color-border);">
+                            <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted); width:24px;"></th>
+                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Name</th>
+                            <th style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Size</th>
+                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Content-Type</th>
+                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Last Modified</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _items)
+                        {
+                            var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
+                            var displayName = GetDisplayName(item.Name);
+                            <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
+                                @onclick="() => OnRowClickAsync(item)"
+                                @oncontextmenu="e => OnRowContextMenu(e, item)"
+                                @oncontextmenu:preventDefault="true">
+                                <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
+                                <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
+                                <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
+                                <td style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
+                                <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (_hasMore)
+                {
+                    <div style="padding:12px; text-align:center;">
+                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loading" @onclick="LoadMoreAsync">
+                            @(_loading ? "Loading..." : "Load more")
+                        </FluentButton>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @if (_actionMessage is not null)
+    {
+        <div style="padding:6px 12px; font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)"); border-top:1px solid var(--color-border); flex-shrink:0;">
+            @_actionMessage
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
+    [Parameter] public string ContainerName { get; set; } = string.Empty;
+    [Parameter] public StorageBlobItem? SelectedBlob { get; set; }
+    [Parameter] public EventCallback<StorageBlobItem?> SelectedBlobChanged { get; set; }
+
+    private string _prefix = string.Empty;
+    private List<(string Label, string Prefix)> _breadcrumbs = [];
+    private List<StorageBlobItem> _items = [];
+    private string? _continuationToken;
+    private bool _loading;
+    private bool _hasMore;
+    private string? _errorMessage;
+    private string? _actionMessage;
+    private bool _actionOk;
+    private string? _loadedContainerName;
+    private ContextMenu _ctxMenu = default!;
+    private StorageBlobItem? _ctxItem;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedContainerName == ContainerName)
+            return;
+
+        _loadedContainerName = ContainerName;
+        _prefix = string.Empty;
+        _items.Clear();
+        _continuationToken = null;
+        _breadcrumbs = BuildBreadcrumbs();
+        await LoadPageAsync(reset: true);
+    }
+
+    private async Task NavigateToCrumbAsync(string prefix)
+    {
+        _prefix = prefix;
+        _breadcrumbs = BuildBreadcrumbs();
+        _continuationToken = null;
+        _items.Clear();
+        await SelectedBlobChanged.InvokeAsync(null);
+        await LoadPageAsync(reset: true);
+    }
+
+    private async Task NavigateToFolderAsync(string folderPath)
+    {
+        _prefix = folderPath;
+        _breadcrumbs = BuildBreadcrumbs();
+        _continuationToken = null;
+        _items.Clear();
+        await SelectedBlobChanged.InvokeAsync(null);
+        await LoadPageAsync(reset: true);
+    }
+
+    private async Task LoadPageAsync(bool reset = false)
+    {
+        _loading = true;
+        _errorMessage = null;
+        if (reset) await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await Client.ListBlobsAsync(ContainerName, _prefix, reset ? null : _continuationToken);
+            if (reset)
+                _items = new List<StorageBlobItem>(page.Items);
+            else
+                _items.AddRange(page.Items);
+            _continuationToken = page.ContinuationToken;
+            _hasMore = page.ContinuationToken is not null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadMoreAsync() => await LoadPageAsync(reset: false);
+
+    private List<(string Label, string Prefix)> BuildBreadcrumbs()
+    {
+        var crumbs = new List<(string, string)> { (ContainerName, "") };
+        if (!string.IsNullOrEmpty(_prefix))
+        {
+            var accumulated = string.Empty;
+            foreach (var segment in _prefix.TrimEnd('/').Split('/'))
+            {
+                accumulated += segment + "/";
+                crumbs.Add((segment, accumulated));
+            }
+        }
+        return crumbs;
+    }
+
+    private string GetDisplayName(string fullName)
+    {
+        var rel = fullName.StartsWith(_prefix) ? fullName.Substring(_prefix.Length) : fullName;
+        rel = rel.TrimEnd('/');
+        var lastSlash = rel.LastIndexOf('/');
+        return lastSlash >= 0 ? rel.Substring(lastSlash + 1) : rel;
+    }
+
+    private static string FormatSize(long? bytes)
+    {
+        if (bytes is null) return string.Empty;
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1_048_576) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1_073_741_824) return $"{bytes / 1_048_576.0:F1} MB";
+        return $"{bytes / 1_073_741_824.0:F2} GB";
+    }
+
+    private void OnRowContextMenu(MouseEventArgs e, StorageBlobItem item)
+    {
+        if (item.IsPrefix) return;
+        _ctxItem = item;
+        _ctxMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private async Task OnRowClickAsync(StorageBlobItem item)
+    {
+        if (item.IsPrefix)
+            await NavigateToFolderAsync(item.Name);
+        else
+            await SelectedBlobChanged.InvokeAsync(item);
+    }
+
+    private async Task CopyUrlAsync(StorageBlobItem item)
+    {
+        var url = $"https://{Client.Config.AccountName}.blob.core.windows.net/{ContainerName}/{item.Name}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            _actionOk = true;
+            _actionMessage = "URL copied to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Copy failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopySasAsync(StorageBlobItem item)
+    {
+        try
+        {
+            var url = await Client.GetBlobSasUrlAsync(ContainerName, item.Name, TimeSpan.FromHours(24));
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            _actionOk = true;
+            _actionMessage = "SAS URL copied (expires 24 h).";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"SAS copy failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DownloadAsync(StorageBlobItem item)
+    {
+        try
+        {
+            var fileName = System.IO.Path.GetFileName(item.Name.TrimEnd('/'));
+            if (string.IsNullOrEmpty(fileName)) fileName = item.Name.Replace('/', '_');
+            var destPath = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                "Downloads", fileName);
+            await using var fs = System.IO.File.OpenWrite(destPath);
+            await Client.DownloadBlobAsync(ContainerName, item.Name, fs);
+            _actionOk = true;
+            _actionMessage = $"Downloaded to: {destPath}";
+        }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Download failed: {ex.Message}";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+}
