@@ -52,4 +52,14 @@
 
 ---
 
+## AW-6 — Active feature folder not fully deleted after archiving
+
+**Symptom:** `docs/features/active/<feature-name>/` still exists with one or more files after archiving. The feature appears active in directory listings even though it is archived.
+
+**Cause:** The archive procedure moves `summary.md` and then calls `Remove-Item` on the folder in the same chained command. If a file was edited between the move and the delete (e.g. `status.md` was updated to Done just before the move), it can be left behind. Using two separate commands (`Move-Item` then `Remove-Item`) is fragile if the shell reports success on the first even when the item was not fully flushed.
+
+**Fix:** After moving `summary.md`, verify the folder is empty before deleting it — or use a single `Remove-Item -Recurse -Force` on the folder _first_, accepting that `summary.md` was already moved out. Always confirm with `Test-Path` or `Get-ChildItem` that the active folder is gone before declaring the archive complete.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_
