@@ -149,7 +149,7 @@
     // Multi-cache
     private string SelectedCacheId = "";
 
-    private RedisConfig? CurrentRedisConfig => AppState.CurrentEnvironment?.RedisConfig;
+    private RedisConfig? CurrentRedisConfig => AppState.Config.RedisConfig;
 
     private List<RedisCacheEntry> CacheEntries
     {
@@ -166,7 +166,7 @@
                                                   ?? CacheEntries.FirstOrDefault();
 
     private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c => !string.IsNullOrWhiteSpace(c.ConnectionString));
-    private bool IsProduction => AppState.CurrentEnvironment?.IsProduction ?? false;
+    private bool IsProduction => false;
 
     private string ConnectionLabel
     {
@@ -501,7 +501,7 @@
         if (config is not null)
         {
             config.NamespaceSeparator = CurrentSeparator;
-            await AppState.SaveProfilesAsync();
+            await AppState.SaveConfigAsync();
         }
 
         RebuildNamespaceTree();

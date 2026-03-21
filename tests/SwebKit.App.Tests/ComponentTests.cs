@@ -62,28 +62,6 @@ public class ComponentTests : TestContext
     }
 
     [Fact]
-    public void LeftNav_ShowsProjectName_WhenExpanded()
-    {
-        var appState = CreateAppStateWithProject("Orders", "Dev");
-        Services.AddSingleton(appState);
-
-        var cut = RenderComponent<LeftNav>(ps => ps.Add(p => p.IsExpanded, true));
-
-        Assert.Contains("Orders", cut.Markup);
-    }
-
-    [Fact]
-    public void LeftNav_HidesProjectName_WhenCollapsed()
-    {
-        var appState = CreateAppStateWithProject("Orders", "Dev");
-        Services.AddSingleton(appState);
-
-        var cut = RenderComponent<LeftNav>(ps => ps.Add(p => p.IsExpanded, false));
-
-        Assert.DoesNotContain("Orders", cut.Markup);
-    }
-
-    [Fact]
     public void CommandPalette_EmptyRegistry_ShowsNoCommandsMessage()
     {
         Services.AddSingleton(new CommandRegistry());
@@ -280,7 +258,7 @@ public class ComponentTests : TestContext
     [Fact]
     public void TopBar_CommandPaletteButton_PublishesEvent()
     {
-        var appState = CreateAppStateWithProject("Orders", "Dev");
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus());
         var bus = new AppEventBus();
         var published = 0;
         bus.Subscribe<CommandPaletteRequestedEvent>(_ => published++);
@@ -296,127 +274,16 @@ public class ComponentTests : TestContext
     }
 
     [Fact]
-    public void TopBar_ProdBadge_ShownWhenProduction()
-    {
-        var appState = CreateAppStateWithProject("Orders", "Prod", isProduction: true);
-
-        Services.AddSingleton(appState);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
-        Services.AddSingleton(new CommandRegistry());
-
-        var cut = RenderComponent<TopBar>();
-
-        Assert.Contains("PROD", cut.Markup);
-    }
-
-    [Fact]
-    public void TopBar_ProdBadge_HiddenWhenNonProd()
-    {
-        var appState = CreateAppStateWithProject("Orders", "Dev", isProduction: false);
-
-        Services.AddSingleton(appState);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
-        Services.AddSingleton(new CommandRegistry());
-
-        var cut = RenderComponent<TopBar>();
-
-        Assert.DoesNotContain("PROD", cut.Markup);
-    }
-
-    [Fact]
-    public void TopBar_ProjectSelector_ShowsAllProjects()
-    {
-        var appState = CreateAppStateWithProjects(
-            CreateProject("Orders", "Dev"),
-            CreateProject("Billing", "Test"));
-
-        Services.AddSingleton(appState);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
-        Services.AddSingleton(new CommandRegistry());
-
-        var cut = RenderComponent<TopBar>();
-
-        Assert.Equal(2, cut.FindAll("select option").Count);
-    }
-
-    [Fact]
-    public void TopBar_EnvButtons_ShowsCurrentProjectEnvs()
-    {
-        var project = new Project
-        {
-            Name = "Orders",
-            Environments =
-            [
-                new ProjectEnvironment { Name = "Dev", Tier = EnvironmentTier.NonProd },
-                new ProjectEnvironment { Name = "Prod", Tier = EnvironmentTier.Production }
-            ]
-        };
-        project.Environments[0].ProjectId = project.Id;
-        project.Environments[1].ProjectId = project.Id;
-
-        var appState = CreateAppStateWithProjects(project);
-
-        Services.AddSingleton(appState);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
-        Services.AddSingleton(new CommandRegistry());
-
-        var cut = RenderComponent<TopBar>();
-
-        Assert.Equal(2, cut.FindAll("button.env-btn").Count);
-    }
-
-    [Fact]
     public void ServiceBusConfigForm_NoLinks_ShowsEmptyMessage()
     {
-        var env = new ProjectEnvironment
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Dev"
-        };
+        var env = new ProjectEnvironment();
 
-        Services.AddSingleton(CreateAppStateWithProject("Acme", "Dev"));
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus()));
 
         var cut = RenderComponent<ServiceBusConfigForm>(ps => ps
             .Add(p => p.Environment, env));
 
         Assert.Contains("No entities pinned yet", cut.Markup);
-    }
-
-    private static AppStateService CreateAppStateWithProject(string projectName, string environmentName, bool isProduction = false)
-    {
-        return CreateAppStateWithProjects(CreateProject(projectName, environmentName, isProduction));
-    }
-
-    private static AppStateService CreateAppStateWithProjects(params Project[] projects)
-    {
-        var profiles = new ProfileRepository();
-        foreach (var project in projects)
-        {
-            profiles.AddProject(project);
-        }
-
-        var state = new AppStateService(profiles, new UiStateRepository(), new AppEventBus());
-        state.SelectProjectAsync(projects[0].Id).GetAwaiter().GetResult();
-        return state;
-    }
-
-    private static Project CreateProject(string projectName, string environmentName, bool isProduction = false)
-    {
-        var project = new Project
-        {
-            Name = projectName,
-            Environments =
-            [
-                new ProjectEnvironment
-                {
-                    Name = environmentName,
-                    Tier = isProduction ? EnvironmentTier.Production : EnvironmentTier.NonProd
-                }
-            ]
-        };
-
-        project.Environments[0].ProjectId = project.Id;
-        return project;
     }
 
     private sealed class InMemoryCredentialStore : ICredentialStore

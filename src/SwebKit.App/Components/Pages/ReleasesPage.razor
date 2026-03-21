@@ -132,8 +132,8 @@
 
     private bool IsConfigured =>
         AppState.UseDemoData ||
-        (AppState.CurrentProject?.DevOpsConfig is not null
-        && !string.IsNullOrEmpty(AppState.CurrentProject.DevOpsConfig.Organization));
+        (AppState.Config.DevOpsConfig is not null
+        && !string.IsNullOrEmpty(AppState.Config.DevOpsConfig.Organization));
 
     protected override async Task OnInitializedAsync()
     {
@@ -142,7 +142,7 @@
 
         if (!AppState.UseDemoData && IsConfigured)
         {
-            var config = AppState.CurrentProject?.DevOpsConfig;
+            var config = AppState.Config.DevOpsConfig;
             if (config is not null)
                 RealDevOpsClient.Configure(config);
         }

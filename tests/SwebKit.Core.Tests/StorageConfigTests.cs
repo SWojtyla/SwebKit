@@ -45,7 +45,6 @@ public class StorageConfigTests
     {
         var env = new ProjectEnvironment
         {
-            Name = "dev",
             StorageAccounts = []
         };
 
@@ -53,7 +52,6 @@ public class StorageConfigTests
         var deserialized = JsonSerializer.Deserialize<ProjectEnvironment>(json);
 
         Assert.NotNull(deserialized);
-        Assert.Equal("dev", deserialized.Name);
-        Assert.Equal(0, deserialized.StorageAccounts.Count);
+        Assert.Empty(deserialized.StorageAccounts);
     }
 }

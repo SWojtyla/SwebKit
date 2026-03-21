@@ -193,7 +193,7 @@
         <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; width:min(760px,95vw); max-height:80vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
             <MessageComposer Client="_activeTab.Client"
                              EntityPath="@_activeTab.EntityPath"
-                             IsProduction="@AppState.IsProduction"
+                             IsProduction="false"
                              Mode="_composerMode"
                              PrefillMessage="_composerMessage"
                              AvailableNamespaces="@AvailableNamespaceOptions"
@@ -247,12 +247,10 @@
     }
 
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
-        AppState.CurrentEnvironment?.ServiceBusEntityLinks ?? [];
+        AppState.Config.ServiceBusEntityLinks;
 
     protected override async Task OnInitializedAsync()
     {
-        Events.Subscribe<ProjectChangedEvent>(OnContextChanged);
-        Events.Subscribe<EnvironmentChangedEvent>(OnContextChanged2);
         Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
@@ -474,18 +472,15 @@
 
     private async Task ToggleEntityLinkAsync(SbEntityLink link)
     {
-        var env = AppState.CurrentEnvironment;
-        if (env is null || AppState.CurrentProject is null) return;
-
-        var existing = env.ServiceBusEntityLinks
+        var existing = AppState.Config.ServiceBusEntityLinks
             .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
 
         if (existing is not null)
-            env.ServiceBusEntityLinks.Remove(existing);
+            AppState.Config.ServiceBusEntityLinks.Remove(existing);
         else
-            env.ServiceBusEntityLinks.Add(link);
+            AppState.Config.ServiceBusEntityLinks.Add(link);
 
-        await AppState.UpdateProjectAsync(AppState.CurrentProject);
+        await AppState.SaveConfigAsync();
         StateHasChanged();
     }
 
@@ -506,9 +501,6 @@
         if (_activeTab == tab) _activeTab = _openTabs.LastOrDefault();
         StateHasChanged();
     }
-
-    private void OnContextChanged(ProjectChangedEvent _) => InvokeAsync(StateHasChanged);
-    private void OnContextChanged2(EnvironmentChangedEvent _) => InvokeAsync(StateHasChanged);
 
     private void OnServiceBusShortcut(ServiceBusShortcutEvent e) => InvokeAsync(() =>
     {
@@ -534,8 +526,6 @@
 
     public void Dispose()
     {
-        Events.Unsubscribe<ProjectChangedEvent>(OnContextChanged);
-        Events.Unsubscribe<EnvironmentChangedEvent>(OnContextChanged2);
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         if (_splitterHandle is not null)
         {

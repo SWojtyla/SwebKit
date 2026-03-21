@@ -52,7 +52,7 @@
 </div>
 
 <ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
-               IsProduction="@AppState.IsProduction" ConfirmLabel="Proceed"
+               IsProduction="false" ConfirmLabel="Proceed"
                OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {

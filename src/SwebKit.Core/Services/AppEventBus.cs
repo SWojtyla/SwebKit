@@ -45,8 +45,6 @@ public class AppEventBus : IAppEventBus
 }
 
 // Event types
-public record EnvironmentChangedEvent(Guid ProjectId, Guid EnvironmentId);
-public record ProjectChangedEvent(Guid ProjectId);
 public record CommandPaletteRequestedEvent;
 public record NavigateToAreaEvent(string Area);
 public record OpenEntityTabEvent(string Area, string EntityPath, string Title);

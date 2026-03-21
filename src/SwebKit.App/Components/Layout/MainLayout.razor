@@ -14,10 +14,6 @@
         <TopBar OnNavToggle="ToggleNav" />
         <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
         <main class="main-content">
-            @if (AppState.IsProduction)
-            {
-                <div class="prod-banner">&#9888; PRODUCTION ENVIRONMENT — Changes are real and irreversible</div>
-            }
             @Body
         </main>
         <StatusBar />
@@ -32,7 +28,7 @@
 @code {
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
-    private string CurrentArea = "projects";
+    private string CurrentArea = "";
     private DotNetObjectReference<MainLayout>? _jsRef;
 
     protected override async Task OnInitializedAsync()
@@ -80,23 +76,10 @@
 
         Commands.Register(new AppCommand
         {
-            Id = "navigate-projects",
-            Label = "Navigate to Projects",
-            Category = "Navigation",
-            Shortcut = "Alt+1",
-            Execute = () =>
-            {
-                NavigateTo("projects");
-                return Task.CompletedTask;
-            }
-        });
-
-        Commands.Register(new AppCommand
-        {
             Id = "navigate-service-bus",
             Label = "Navigate to Service Bus",
             Category = "Navigation",
-            Shortcut = "Alt+2",
+            Shortcut = "Alt+1",
             Execute = () =>
             {
                 NavigateTo("service-bus");
@@ -106,23 +89,10 @@
 
         Commands.Register(new AppCommand
         {
-            Id = "navigate-observability",
-            Label = "Navigate to Observability",
-            Category = "Navigation",
-            Shortcut = "Alt+3",
-            Execute = () =>
-            {
-                NavigateTo("observability");
-                return Task.CompletedTask;
-            }
-        });
-
-        Commands.Register(new AppCommand
-        {
             Id = "navigate-aks",
             Label = "Navigate to AKS",
             Category = "Navigation",
-            Shortcut = "Alt+4",
+            Shortcut = "Alt+2",
             Execute = () =>
             {
                 NavigateTo("aks");
@@ -135,7 +105,7 @@
             Id = "navigate-redis",
             Label = "Navigate to Redis",
             Category = "Navigation",
-            Shortcut = "Alt+5",
+            Shortcut = "Alt+3",
             Execute = () =>
             {
                 NavigateTo("redis");
@@ -148,7 +118,7 @@
             Id = "navigate-releases",
             Label = "Navigate to Releases",
             Category = "Navigation",
-            Shortcut = "Alt+6",
+            Shortcut = "Alt+4",
             Execute = () =>
             {
                 NavigateTo("releases");
@@ -161,7 +131,7 @@
             Id = "navigate-settings",
             Label = "Navigate to Settings",
             Category = "Navigation",
-            Shortcut = "Alt+7",
+            Shortcut = "Alt+5",
             Execute = () =>
             {
                 NavigateTo("settings");
@@ -189,9 +159,7 @@
         switch (shortcut)
         {
             case "CommandPalette": IsCommandPaletteOpen = !IsCommandPaletteOpen; break;
-            case "NavProjects": NavigateTo("projects"); break;
             case "NavServiceBus": NavigateTo("service-bus"); break;
-            case "NavObservability": NavigateTo("observability"); break;
             case "NavAks": NavigateTo("aks"); break;
             case "NavReleases": NavigateTo("releases"); break;
             case "NavSettings": NavigateTo("settings"); break;
@@ -199,10 +167,6 @@
             case "TabPrev": Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
             case "TabClose": if (Tabs.ActiveTab is not null) Tabs.CloseTab(Tabs.ActiveTab.Id); break;
             case "Escape": IsCommandPaletteOpen = false; break;
-            case "EnvDev": await SwitchEnvByName("Dev"); break;
-            case "EnvTest": await SwitchEnvByName("Test"); break;
-            case "EnvAcc": await SwitchEnvByName("Acc"); break;
-            case "EnvProd": await SwitchEnvByName("Prod"); break;
             case "Refresh": Events.Publish(new RefreshRequestedEvent(CurrentArea)); break;
             case "SbEditResubmit": Events.Publish(new ServiceBusShortcutEvent("Edit")); break;
             case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
@@ -221,13 +185,6 @@
         var idx = tabs.ToList().IndexOf(current);
         var next = (idx + direction + tabs.Count) % tabs.Count;
         return tabs[next].Id;
-    }
-
-    private async Task SwitchEnvByName(string name)
-    {
-        var env = AppState.CurrentProject?.Environments
-            .FirstOrDefault(e => e.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase));
-        if (env is not null) await AppState.SelectEnvironmentAsync(env.Id);
     }
 
     public void Dispose()

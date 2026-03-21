@@ -68,8 +68,6 @@ public class UiStateRepository
 
 public class UiState
 {
-    public Guid? LastProjectId { get; set; }
-    public Guid? LastEnvironmentId { get; set; }
     public bool IsNavExpanded { get; set; } = true;
     public bool IsDetailsPaneOpen { get; set; } = true;
     public List<OpenTab> OpenTabs { get; set; } = [];

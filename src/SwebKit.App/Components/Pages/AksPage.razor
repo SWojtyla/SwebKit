@@ -94,7 +94,7 @@
     <AksConfirmBar @ref="Confirm" />
 
     @* ── Empty / Loading / Content ── *@
-    @if (Client is null && !AppState.UseDemoData && AppState.CurrentEnvironment?.AksConfig is null)
+    @if (Client is null && !AppState.UseDemoData && AppState.Config.AksConfig is null)
     {
         <div class="aks-empty-state">
             <div class="aks-empty-icon">☸</div>
@@ -1333,7 +1333,7 @@
 
     private bool HasAnyPanel => HasOpenPanel || ShowEvents;
 
-    private bool IsProduction => AppState.CurrentEnvironment?.IsProduction ?? false;
+    private bool IsProduction => false;
 
     protected override void OnParametersSet()
     {
@@ -1344,7 +1344,7 @@
 
     private void SyncFromEnvironment()
     {
-        var config = AppState.CurrentEnvironment?.AksConfig;
+        var config = AppState.Config.AksConfig;
         CurrentNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
         ActiveContext = config?.KubeconfigContext ?? string.Empty;
     }
@@ -1363,7 +1363,7 @@
             return;
         }
 
-        var config = AppState.CurrentEnvironment?.AksConfig;
+        var config = AppState.Config.AksConfig;
         if (config is null) return;
 
         try
@@ -1481,7 +1481,7 @@
 
         if (!AppState.UseDemoData)
         {
-            var config = AppState.CurrentEnvironment?.AksConfig;
+            var config = AppState.Config.AksConfig;
             try
             {
                 Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(

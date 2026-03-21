@@ -4,7 +4,6 @@
     <Project Path="src/SwebKit.Azure/SwebKit.Azure.csproj" />
     <Project Path="src/SwebKit.Core/SwebKit.Core.csproj" />
     <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />
-    <Project Path="src/SwebKit.OpenTelemetry/SwebKit.OpenTelemetry.csproj" />
     <Project Path="src/SwebKit.Redis/SwebKit.Redis.csproj" />
     <Project Path="src/SwebKit.DevOps/SwebKit.DevOps.csproj" />
   </Folder>

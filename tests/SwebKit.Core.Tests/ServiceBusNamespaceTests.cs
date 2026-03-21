@@ -33,7 +33,7 @@ public class ServiceBusNamespaceTests
     [Fact]
     public void ProjectEnvironment_ServiceBusEntityLinks_DefaultsToEmpty()
     {
-        var env = new ProjectEnvironment { ProjectId = Guid.NewGuid(), Name = "Dev" };
+        var env = new ProjectEnvironment();
         Assert.Empty(env.ServiceBusEntityLinks);
     }
 
@@ -41,7 +41,7 @@ public class ServiceBusNamespaceTests
     public void ProjectEnvironment_CanAddAndRemoveEntityLink()
     {
         var nsId = Guid.NewGuid();
-        var env = new ProjectEnvironment { ProjectId = Guid.NewGuid(), Name = "Dev" };
+        var env = new ProjectEnvironment();
         var link = new SbEntityLink { NamespaceId = nsId, EntityPath = "invoices-queue" };
 
         env.ServiceBusEntityLinks.Add(link);

@@ -14,7 +14,7 @@ public class ProfileRepository
 
     private ProfileData _data = new();
 
-    public IReadOnlyList<Project> Projects => _data.Projects;
+    public ProjectEnvironment Config => _data.Config;
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _data.MessageTemplates;
 
@@ -45,24 +45,6 @@ public class ProfileRepository
         await File.WriteAllTextAsync(AppDataPaths.ProfilesJson, json);
     }
 
-    public void AddProject(Project project)
-    {
-        _data.Projects.Add(project);
-    }
-
-    public void UpdateProject(Project project)
-    {
-        var idx = _data.Projects.FindIndex(p => p.Id == project.Id);
-        if (idx >= 0) _data.Projects[idx] = project;
-    }
-
-    public void DeleteProject(Guid projectId)
-    {
-        _data.Projects.RemoveAll(p => p.Id == projectId);
-    }
-
-    public Project? FindProject(Guid id) => _data.Projects.FirstOrDefault(p => p.Id == id);
-
     public void AddServiceBusNamespace(ServiceBusNamespace ns) => _data.ServiceBusNamespaces.Add(ns);
 
     public void RemoveServiceBusNamespace(Guid id) => _data.ServiceBusNamespaces.RemoveAll(n => n.Id == id);
@@ -86,7 +68,7 @@ public class ProfileRepository
 
 public class ProfileData
 {
-    public List<Project> Projects { get; set; } = [];
+    public ProjectEnvironment Config { get; set; } = new();
     public List<ServiceBusNamespace> ServiceBusNamespaces { get; set; } = [];
     public List<SbMessageTemplate> MessageTemplates { get; set; } = [];
     public int SchemaVersion { get; set; } = 1;

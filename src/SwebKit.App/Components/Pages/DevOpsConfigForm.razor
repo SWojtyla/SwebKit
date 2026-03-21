@@ -36,16 +36,12 @@
     private string Pat = string.Empty;
     private string? StatusMessage;
     private bool StatusOk;
-    private Guid? _loadedProjectId;
+
+    private const string CredentialKey = "swebkit:devops:global:pat";
 
     protected override void OnParametersSet()
     {
-        var project = AppState.CurrentProject;
-        if (project is null || _loadedProjectId == project.Id)
-            return;
-
-        _loadedProjectId = project.Id;
-        var config = project.DevOpsConfig;
+        var config = AppState.Config.DevOpsConfig;
         Organization = config?.Organization ?? string.Empty;
 
         if (!string.IsNullOrEmpty(config?.PatCredentialKey))
@@ -58,9 +54,6 @@
 
     private async Task SaveAsync()
     {
-        var project = AppState.CurrentProject;
-        if (project is null) return;
-
         if (string.IsNullOrWhiteSpace(Organization))
         {
             StatusOk = false;
@@ -68,19 +61,18 @@
             return;
         }
 
-        var credentialKey = $"swebkit:devops:{project.Id}:pat";
-
         if (!string.IsNullOrWhiteSpace(Pat))
         {
-            CredentialStore.Save(credentialKey, Pat);
+            CredentialStore.Save(CredentialKey, Pat);
         }
 
-        project.DevOpsConfig = new DevOpsConfig
+        AppState.Config.DevOpsConfig = new DevOpsConfig
         {
             Organization = Organization.Trim(),
-            PatCredentialKey = credentialKey
+            PatCredentialKey = CredentialKey
         };
 
+        await AppState.SaveConfigAsync();
         await OnSaved.InvokeAsync();
         StatusOk = true;
         StatusMessage = "Saved.";
@@ -100,13 +92,12 @@
 
         try
         {
-            var credentialKey = $"swebkit:devops:{AppState.CurrentProject?.Id}:pat";
-            CredentialStore.Save(credentialKey, Pat);
+            CredentialStore.Save(CredentialKey, Pat);
 
             var config = new DevOpsConfig
             {
                 Organization = Organization.Trim(),
-                PatCredentialKey = credentialKey
+                PatCredentialKey = CredentialKey
             };
 
             DevOpsClient.Configure(config);

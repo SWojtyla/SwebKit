@@ -53,9 +53,7 @@ public sealed class AppUiTests : IAsyncLifetime
         await Assertions.Expect(nav).ToBeVisibleAsync();
 
         // Verify core navigation items are present
-        await Assertions.Expect(_page.GetByText("Projects")).ToBeVisibleAsync();
         await Assertions.Expect(_page.GetByText("Service Bus")).ToBeVisibleAsync();
-        await Assertions.Expect(_page.GetByText("Observability")).ToBeVisibleAsync();
         await Assertions.Expect(_page.GetByText("AKS")).ToBeVisibleAsync();
         await Assertions.Expect(_page.GetByText("Settings")).ToBeVisibleAsync();
     }

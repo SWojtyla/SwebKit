@@ -42,7 +42,7 @@
                                 DLQ @FormatCount(q.Stats?.DeadLetterMessageCount)
                             </button>
                         </div>
-                        @if (AppState.CurrentEnvironment is not null)
+                        @if (true)
                         {
                             <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
                                   style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
@@ -80,7 +80,7 @@
                                             DLQ @FormatCount(s.Stats?.DeadLetterMessageCount)
                                         </button>
                                     </div>
-                                    @if (AppState.CurrentEnvironment is not null)
+                                    @if (true)
                                     {
                                         <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
                                               style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"

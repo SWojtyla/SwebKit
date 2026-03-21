@@ -9,11 +9,12 @@
 A .NET MAUI Blazor Hybrid desktop tool for .NET developers who work daily with:
 
 - **Azure Service Bus** — inspect queues, fix DLQs, replay messages
-- **Application Insights / OpenTelemetry** — query logs, explore traces, view metrics
 - **AKS (Kubernetes)** — workload overview, live log tail, port-forward, pod shell
+- **Redis** — inspect keys, view values, manage cache
+- **Azure Storage** — browse blobs, containers
+- **Azure DevOps** — view and trigger releases
 
-Everything is organized around a **Project + Environment** selector. Switching the environment
-(Dev / Test / Acc / Prod) instantly reconfigures all open tool panes.
+Each feature is standalone with its own configuration stored in a single global `AppConfig` (`profiles.json`).
 
 ## Functional Deep Dives
 
@@ -26,12 +27,11 @@ Per-functionality architecture notes live in `docs/architecture/functionalities/
 - Main code locations to inspect first.
 - Important implementation notes and known constraints.
 
-- [Projects and Environments](functionalities/projects-and-environments.md)
 - [Service Bus](functionalities/service-bus.md)
-- [Observability](functionalities/observability.md)
 - [AKS](functionalities/aks.md)
 - [Redis](functionalities/redis.md)
 - [Settings and Configuration](functionalities/settings-and-configuration.md)
+- [Storage](functionalities/storage.md)
 
 ### Update Rule
 
@@ -42,19 +42,17 @@ Whenever behavior changes in one of these areas, update the corresponding file u
 
 ## Tech Stack
 
-| Layer               | Choice                                                                  |
-| ------------------- | ----------------------------------------------------------------------- |
-| Platform            | .NET MAUI Blazor Hybrid (Windows primary)                               |
-| UI Components       | Microsoft Fluent UI Blazor (`Microsoft.FluentUI.AspNetCore.Components`) |
-| Charts              | Blazor-ApexCharts (metrics dashboard only)                              |
-| Code Editor         | BlazorMonaco (Monaco Editor via JSInterop — KQL, JSON body)             |
-| Terminal            | xterm.js via JSInterop (`TerminalView.razor`)                           |
-| Azure SB            | `Azure.Messaging.ServiceBus`                                            |
-| Azure Observability | `Azure.Monitor.Query` + `Azure.Identity`                                |
-| Kubernetes          | `KubernetesClient`                                                      |
-| OTLP                | `OpenTelemetry.Exporter.OpenTelemetryProtocol`                          |
-| Serialization       | `System.Text.Json` (source generators)                                  |
-| Secrets             | Windows Credential Manager (ICredentialStore abstraction)               |
+| Layer         | Choice                                                                  |
+| ------------- | ----------------------------------------------------------------------- |
+| Platform      | .NET MAUI Blazor Hybrid (Windows primary)                               |
+| UI Components | Microsoft Fluent UI Blazor (`Microsoft.FluentUI.AspNetCore.Components`) |
+| Charts        | Blazor-ApexCharts (metrics dashboard only)                              |
+| Code Editor   | BlazorMonaco (Monaco Editor via JSInterop — JSON body)                  |
+| Terminal      | xterm.js via JSInterop (`TerminalView.razor`)                           |
+| Azure SB      | `Azure.Messaging.ServiceBus`                                            |
+| Kubernetes    | `KubernetesClient`                                                      |
+| Serialization | `System.Text.Json` (source generators)                                  |
+| Secrets       | Windows Credential Manager (ICredentialStore abstraction)               |
 
 ---
 
@@ -83,12 +81,12 @@ All UI lives in Razor components inside a `BlazorWebView`. `MainPage.xaml` is a 
 containing only the `<BlazorWebView>`. This gives access to the full web component ecosystem
 (Fluent UI, Monaco Editor, xterm.js) and CSS-based layouts.
 
-### Project + Environment Model
+### Global Config Model
 
-- `Project` → `List<ProjectEnvironment>`
-- Each `ProjectEnvironment` carries independent `ServiceBusConfig`, `ObservabilityConfig`, `AksConfig`
-- `AppStateService` (DI Singleton) holds current project+env; broadcasts `EnvironmentChanged` event
-- `CascadingValue<AppContext>` propagates context to all Blazor components
+- A single `ProjectEnvironment` instance (stored as `profiles.json`) holds all feature configs
+- `AppStateService.Config` exposes the global config to all Blazor components
+- Feature pages (`ServiceBusPage`, `AksPage`, `RedisPage`, `StoragePage`) read their config directly from `AppState.Config`
+- `CascadingValue<AppStateService>` propagates context to all Blazor components
 
 ### Secrets
 
@@ -99,13 +97,12 @@ containing only the `<BlazorWebView>`. This gives access to the full web compone
 ### Core Abstractions (in `SwebKit.Core`)
 
 - `IServiceBusClient` — Peek, Send, Resubmit DLQ, Complete, List entities
-- `IObservabilityProvider` — QueryLogs, GetTrace, GetMetrics (AppInsights and OTLP use same interface)
 - `IAksClient` — GetDeployments, GetPods, StreamLogs, PortForward, OpenShell
 - `ICredentialStore` — Save, Get, Delete
 
 ### UI Consistency
 
-All three areas (Service Bus, Observability, AKS) share identical:
+All feature areas share identical:
 
 - `FilterBar.razor` — filter toolbar component
 - `DataTable.razor` — wraps `FluentDataGrid<TItem>` with consistent column/selection behavior
@@ -115,9 +112,9 @@ All three areas (Service Bus, Observability, AKS) share identical:
 ### Keyboard Shortcuts
 
 Global shortcuts registered via `keyboardShortcuts.js` (JSInterop). Key bindings:
-`Ctrl+P` (command palette), `Ctrl+1-4` (navigate sections), `Alt+1-4` (switch env),
+`Ctrl+P` (command palette), `Alt+1-5` (navigate sections),
 `Ctrl+Tab`/`Ctrl+Shift+Tab` (tab navigation), `Ctrl+W` (close tab), `F5` (refresh),
-`Ctrl+Enter` (execute query/send), `Ctrl+F` (focus filter), `Ctrl+\` (toggle details pane).
+`Ctrl+Enter` (execute/send), `Ctrl+F` (focus filter), `Ctrl+\` (toggle details pane).
 
 ### Production Safety
 
