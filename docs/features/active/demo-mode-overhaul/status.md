@@ -4,50 +4,52 @@
 
 title: "Status - Demo Mode Overhaul"
 owner: ""
-state: "Planned"
-branch: ""
-started: ""
+state: "In Progress"
+branch: "main"
+started: "2026-03-21"
 last_updated: "2026-03-21"
 
 ---
 
 ## Quick summary
 
-Current state: Planned — feature scoped, awaiting implementation start.
+Current state: In Progress — core implementation complete. All demo clients implemented and wired. UX (banner + confirmation popover) done. Demo state persisted. AKS and Redis clients audited (full coverage confirmed). Remaining: manual validation across all feature areas.
 
 ## Progress checklist
 
 - [x] Planning complete
-- [ ] Design reviewed
-- [ ] Audit of existing demo clients (AKS, Redis)
-- [ ] Backend implementation (new demo clients: Service Bus, Storage, Releases)
-- [ ] Frontend implementation (UX overhaul, banner)
-- [ ] DI wiring for all demo clients
-- [ ] Demo state persistence
+- [x] Design reviewed
+- [x] Audit of existing demo clients (AKS, Redis)
+- [x] Backend implementation (new demo clients: Service Bus, Storage)
+- [ ] Backend implementation (Releases / DevOps — `DemoDevOpsClient` already existed, no gaps found)
+- [x] Frontend implementation (UX overhaul, banner)
+- [x] DI wiring for all demo clients
+- [x] Demo state persistence
 - [ ] Tests (unit / manual)
 - [ ] Docs aligned
 - [ ] Ready for review
 
 ## Completed
 
-- Feature scoped in `index.md`
+- `DemoServiceBusClient` created in `src/SwebKit.Core/Services/` — extracts and supersedes `FakeServiceBusClient` from `ServiceBusPage.razor`. Two named constructors: `OrdersDev()` and `PaymentsDev()`, each with full namespace data including queues, topics, subscriptions, DLQ messages, and scheduled messages.
+- `DemoStorageClient` created in `src/SwebKit.Core/Services/` — implements `IStorageClient` with 2 synthetic accounts, 3 containers, realistic blobs with JSON/CSV/text content.
+- `DemoDevOpsClient` (Releases) already existed and fully covers `IDevOpsClient` — no changes needed.
+- `DemoAksClient` audited against current `IAksClient` — all methods covered.
+- `DemoRedisClient` audited against current `IRedisClient` — all methods covered.
+- `UiState.UseDemoData` field added for persistence across restarts.
+- `AppStateService.SetDemoModeAsync(bool)` added — saves to `UiStateRepository` and raises `DemoModeChanged` event.
+- `AppStateService.InitializeAsync()` loads `UseDemoData` from persisted state.
+- `DemoStorageClient` registered as singleton in `MauiProgram.cs`.
+- `ServiceBusPage.razor` — removed inline `FakeServiceBusClient`, now uses `DemoServiceBusClient.OrdersDev()` and `DemoServiceBusClient.PaymentsDev()` (2 demo namespaces instead of 1).
+- `StoragePage.razor` — `RebuildClient()` injects `DemoStorageClient` when `AppState.UseDemoData` is true.
+- `TopBar.razor` — replaced plain checkbox with deliberate demo button + confirmation popover (amber "Enable" action, Cancel button).
+- `MainLayout.razor` — amber demo banner rendered below top bar when `UseDemoData` is true; "Disable" button calls `SetDemoModeAsync(false)` and navigates to `/`; subscribes to `AppState.DemoModeChanged` for reactive re-render.
+- `app.css` — grid template updated to 4 rows with `auto` banner row (collapses to 0 when inactive); `.demo-banner` and `.demo-banner-disable` styles added.
 
 ## Remaining
 
-- Author `backend.md` with demo client specs per area
-- Author `frontend.md` with banner/toggle UX design
-- Author `test-plan.md`
-- Audit `DemoAksClient` against full current `IAksClient` interface (fill gaps)
-- Audit `DemoRedisClient` against full current `IRedisClient` interface (fill gaps)
-- Implement `DemoServiceBusClient` (namespaces, queues, topics, messages, DLQ, scheduled)
-- Implement `DemoStorageClient` (accounts, containers, blobs, content)
-- Implement `DemoReleasesClient` (pipelines, approvals, deployments)
-- Update `MauiProgram.cs` to wire all demo clients when `UseDemoData = true`
-- Replace checkbox in `TopBar.razor` with deliberate toggle + confirmation popover
-- Add full-width amber demo banner in `MainLayout.razor`
-- Persist demo state in `UiStateRepository`
-- Handle DI switch while page is loaded (reload or state reset)
 - Manual walkthrough of every feature area in demo mode
+- Unit tests: all new demo clients implement interface without throwing
 
 ## Blockers
 

@@ -46,6 +46,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
 
+        // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
+        builder.Services.AddSingleton<DemoStorageClient>();
+
         // DevOps / Releases
         builder.Services.AddSingleton<DevOpsAuthHandler>();
         builder.Services.AddHttpClient("AzureDevOps")

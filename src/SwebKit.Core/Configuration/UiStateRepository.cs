@@ -67,6 +67,7 @@ public class UiState
 {
     public bool IsNavExpanded { get; set; } = true;
     public bool IsDetailsPaneOpen { get; set; } = true;
+    public bool UseDemoData { get; set; }
     public List<OpenTab> OpenTabs { get; set; } = [];
     public Dictionary<string, object> ViewStates { get; set; } = [];
     /// <summary>Saved message list filters keyed by "{namespaceId}:{entityPath}".</summary>

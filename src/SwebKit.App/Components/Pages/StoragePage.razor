@@ -3,6 +3,7 @@
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
 @inject IConnectionStateService ConnectionState
+@inject SwebKit.Core.Services.DemoStorageClient DemoStorage
 
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
 
@@ -93,6 +94,16 @@
     private void RebuildClient()
     {
         _storageClient = null;
+
+        if (AppState.UseDemoData)
+        {
+            _storageAccounts = [DemoStorage.Config];
+            _selectedAccountId = DemoStorage.Config.Id;
+            _storageClient = DemoStorage;
+            ConnectionState.SetConnected("storage");
+            return;
+        }
+
         _storageAccounts = AppState.Config.StorageAccounts;
         if (_storageAccounts.Count == 0)
         {

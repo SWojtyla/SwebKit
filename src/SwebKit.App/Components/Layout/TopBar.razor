@@ -10,12 +10,25 @@
 
     <div style="display:flex; align-items:center; flex:1;"></div>
 
-    <label
-        style="display:flex; align-items:center; gap:4px; font-size:11px; color:rgba(255,255,255,0.7); cursor:pointer; margin-right:8px;"
-        title="Use demo data for AKS and Redis">
-        <input type="checkbox" checked="@AppState.UseDemoData" @onchange="ToggleDemo" />
-        Demo
-    </label>
+    @if (!AppState.UseDemoData)
+    {
+        <div style="position:relative; margin-right:8px;">
+            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode">Demo</button>
+            @if (_showDemoConfirm)
+            {
+                <div class="demo-confirm-popover">
+                    <div style="font-weight:600; margin-bottom:6px;">Enable demo mode?</div>
+                    <div style="font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:10px; line-height:1.4;">
+                        Live connections will be replaced with synthetic data.
+                    </div>
+                    <div style="display:flex; gap:6px; justify-content:flex-end;">
+                        <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
+                        <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 
     <div style="position:relative; margin-right:8px;">
         <button @onclick="ToggleHistory"
@@ -58,12 +71,64 @@
         border-radius: 2px;
         font-size: 10px;
     }
+
+    .demo-toggle-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 11px;
+        padding: 3px 10px;
+        cursor: pointer;
+    }
+
+    .demo-toggle-btn:hover {
+        background: rgba(255, 255, 255, 0.18);
+        color: white;
+    }
+
+    .demo-confirm-popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: #2a2a3e;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        padding: 12px 14px;
+        width: 230px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        z-index: 9000;
+        color: white;
+        font-size: 12px;
+    }
+
+    .demo-confirm-cancel {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 11px;
+        padding: 3px 10px;
+        cursor: pointer;
+    }
+
+    .demo-confirm-enable {
+        background: #d97706;
+        border: none;
+        border-radius: 3px;
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        cursor: pointer;
+    }
 </style>
 
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
 
     private bool _isHistoryOpen;
+    private bool _showDemoConfirm;
     private int _lastSeenCount;
     private int UnreadCount => Math.Max(0, Notifications.All.Count - _lastSeenCount);
 
@@ -81,10 +146,20 @@
             _lastSeenCount = Notifications.All.Count;
     }
 
-    private void ToggleDemo(ChangeEventArgs e)
+    private void ShowDemoConfirm()
     {
-        AppState.UseDemoData = e.Value is true;
-        StateHasChanged();
+        _showDemoConfirm = true;
+    }
+
+    private void HideDemoConfirm()
+    {
+        _showDemoConfirm = false;
+    }
+
+    private async Task EnableDemoAsync()
+    {
+        _showDemoConfirm = false;
+        await AppState.SetDemoModeAsync(true);
     }
 
     private void OpenCommandPalette() => Events.Publish(new CommandPaletteRequestedEvent());

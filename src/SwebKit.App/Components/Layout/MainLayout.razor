@@ -12,6 +12,13 @@
 <CascadingValue Value="AppState">
     <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")">
         <TopBar OnNavToggle="ToggleNav" />
+        @if (AppState.UseDemoData)
+        {
+            <div class="demo-banner">
+                <span>&#9888; DEMO MODE — data is synthetic. No live connections are used.</span>
+                <button class="demo-banner-disable" @onclick="DisableDemoAsync">Disable</button>
+            </div>
+        }
         <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
         <main class="main-content">
             @Body
@@ -38,6 +45,12 @@
         await AppState.InitializeAsync();
     }
 
+    private async Task DisableDemoAsync()
+    {
+        await AppState.SetDemoModeAsync(false);
+        Nav.NavigateTo("/");
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -59,7 +72,10 @@
         Events.Subscribe<NavigateToAreaEvent>(OnNavigateToArea);
         Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged += StateHasChanged;
+        AppState.DemoModeChanged += OnDemoModeChanged;
     }
+
+    private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
 
     private void ToggleNav() { IsNavExpanded = !IsNavExpanded; StateHasChanged(); }
 
@@ -201,6 +217,7 @@
         Events.Unsubscribe<NavigateToAreaEvent>(OnNavigateToArea);
         Events.Unsubscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged -= StateHasChanged;
+        AppState.DemoModeChanged -= OnDemoModeChanged;
         _jsRef?.Dispose();
     }
 }
