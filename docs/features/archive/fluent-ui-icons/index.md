@@ -4,7 +4,7 @@
 
 title: "Fluent UI Icons in Navigation"
 owner: ""
-status: "Planned"
+status: "In Progress"
 created: "2026-03-21"
 updated: "2026-03-21"
 
@@ -33,12 +33,19 @@ Emoji icons have inconsistent visual weight, vary in rendering across Windows ve
   - Settings → `Icons.Regular.Size24.Settings`
 - Ensure icons render correctly at both expanded (icon + label) and collapsed (icon only) nav states
 - Ensure icons in the dashboard cards have consistent size and alignment
+- Replace emoji and unicode symbol icons in feature-specific components:
+  - Status indicators in `ReadinessGate.razor` and `ReleaseBoard.razor` (❌ ✅ ⏳ ⚠️)
+  - Warning banners in `ConfirmDialog.razor`, `ApprovalCenter.razor`, `DlqView.razor`, `TagManager.razor`, `StorageConfigForm.razor`
+  - Warning and status icons in `ServiceBusPage.razor` (connection dots, DLQ tab, clock)
+  - Warning and status icons in `AksPage.razor` (events toggle, events list, empty state)
+  - Close/edit/search icon-like characters in panel header buttons (AksPage)
 
 ### Out of scope
 
-- Replacing icons in feature-specific components (grids, detail panels, buttons) — that is broader icon system work
 - Custom SVG icons
 - Animated icons
+- Context menu icon-text spans (`ctx-item-icon`) — consistent pattern; addressed separately
+- Inline text label decorators (`→` in "Replay →", `↻` in button text)
 
 ## Dependencies
 

@@ -10,81 +10,87 @@
         {
             <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
                 <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@acc.DisplayName</span>
-                <span style="font-size:11px; color:var(--color-text-muted);">@(acc.UseAad ? "AAD" : "ConnStr") · @acc.AccountName</span>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditAccount(acc)">Edit</FluentButton>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => RemoveAccountAsync(acc)">Remove</FluentButton>
-            </div>
+                <span style="font-size:11px; color:var(--color-text-muted);">@(acc.UseAad ? "AAD" : "ConnStr") ·
+                    @acc.AccountName</span>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditAccount(acc)">Edit</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => RemoveAccountAsync(acc)">Remove</FluentButton>
+                </div>
+            }
         }
-    }
 
-    @* ── Add / Edit form ── *@
-    <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">
-        @(_editingId is not null ? "Edit Account" : "Add Account")
-    </div>
+        @* ── Add / Edit form ── *@
+        <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">
+            @(_editingId is not null ? "Edit Account" : "Add Account")
+        </div>
 
-    <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Display Name</label>
-        <input type="text" @bind="_displayName" @bind:event="oninput"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="Production Storage" />
-    </div>
-
-    <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Account Name</label>
-        <input type="text" @bind="_accountName" @bind:event="oninput"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid @(_accountNameError is not null ? "var(--color-error)" : "var(--color-border)"); border-radius:4px;"
-               placeholder="mystorageaccount" />
-        @if (_accountNameError is not null)
-        {
-            <span style="font-size:11px; color:var(--color-error);">@_accountNameError</span>
-        }
-    </div>
-
-    <div style="display:flex; align-items:center; gap:8px;">
-        <input type="checkbox" id="storage-use-aad" @bind="_useAad" />
-        <label for="storage-use-aad" style="font-size:12px; color:var(--color-text); cursor:pointer;">
-            Use Azure AD (DefaultAzureCredential)
-        </label>
-    </div>
-
-    @if (!_useAad)
-    {
         <div style="display:grid; gap:4px;">
-            <label style="font-size:12px; color:var(--color-text-muted);">Credential ref key (Windows Credential Manager)</label>
-            <input type="text" @bind="_connectionStringRef" @bind:event="oninput"
-                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid @(_connRefError is not null ? "var(--color-error)" : "var(--color-border)"); border-radius:4px;"
-                   placeholder="storage-myaccount-connstr" />
-            @if (_connRefError is not null)
+            <label style="font-size:12px; color:var(--color-text-muted);">Display Name</label>
+            <input type="text" @bind="_displayName" @bind:event="oninput"
+                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
+                   placeholder="Production Storage" />
+        </div>
+
+        <div style="display:grid; gap:4px;">
+            <label style="font-size:12px; color:var(--color-text-muted);">Account Name</label>
+            <input type="text" @bind="_accountName" @bind:event="oninput"
+                   style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid @(_accountNameError is not null ? "var(--color-error)" : "var(--color-border)"); border-radius:4px;"
+                   placeholder="mystorageaccount" />
+            @if (_accountNameError is not null)
             {
-                <span style="font-size:11px; color:var(--color-error);">@_connRefError</span>
+                <span style="font-size:11px; color:var(--color-error);">@_accountNameError</span>
             }
         </div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_connectionStringRef))
-    {
-        <div style="padding:6px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
-            ⚠ Connection String Ref is ignored when AAD is enabled.
+
+        <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="storage-use-aad" @bind="_useAad" />
+            <label for="storage-use-aad" style="font-size:12px; color:var(--color-text); cursor:pointer;">
+                Use Azure AD (DefaultAzureCredential)
+            </label>
         </div>
-    }
 
-    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <FluentButton Appearance="Appearance.Accent" Disabled="@(!CanSave)" @onclick="SaveAsync">
-            @(_editingId is not null ? "Save Account" : "Add Account")
-        </FluentButton>
-        @if (_editingId is not null)
+        @if (!_useAad)
         {
-            <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
-        }
-        <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_testing || !CanTest)" @onclick="TestConnectionAsync">
-            @(_testing ? "Testing..." : "Test Connection")
-        </FluentButton>
-        @if (_connStatus is not null)
-        {
-            <span style="font-size:12px; color:@(_connOk ? "var(--color-success)" : "var(--color-error)");">@_connStatus</span>
-        }
-    </div>
+            <div style="display:grid; gap:4px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">Credential ref key (Windows Credential
+                    Manager)</label>
+                    <input type="text" @bind="_connectionStringRef" @bind:event="oninput"
+                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid @(_connRefError is not null ? "var(--color-error)" : "var(--color-border)"); border-radius:4px;"
+                           placeholder="storage-myaccount-connstr" />
+                    @if (_connRefError is not null)
+                    {
+                        <span style="font-size:11px; color:var(--color-error);">@_connRefError</span>
+                    }
+                </div>
+            }
+    else if (!string.IsNullOrWhiteSpace(_connectionStringRef))
+            {
+                <div
+                    style="padding:6px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px"
+                                style="flex-shrink:0; vertical-align:middle;" /> Connection String Ref is ignored when AAD is enabled.
+                </div>
+            }
 
-</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(!CanSave)" @onclick="SaveAsync">
+                    @(_editingId is not null ? "Save Account" : "Add Account")
+                </FluentButton>
+                @if (_editingId is not null)
+                {
+                    <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_testing || !CanTest)"
+                              @onclick="TestConnectionAsync">
+                    @(_testing ? "Testing..." : "Test Connection")
+                </FluentButton>
+                @if (_connStatus is not null)
+                {
+                    <span
+                    style="font-size:12px; color:@(_connOk ? "var(--color-success)" : "var(--color-error)");">@_connStatus</span>
+                }
+            </div>
+
+        </div>
 
 @code {
     [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;

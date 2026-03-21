@@ -32,7 +32,7 @@
                         <div style="text-align:right;">
                             @if (comp.TagConfirmed)
                             {
-                                <span style="font-size:12px; color:var(--color-success); font-weight:600;">@comp.TargetTag ✓</span>
+                                <span style="font-size:12px; color:var(--color-success); font-weight:600; display:inline-flex; align-items:center; gap:4px;">@comp.TargetTag <FluentIcon Value="@(new Icons.Regular.Size16.Checkmark())" Width="14px" /></span>
                             }
                             else if (latestTag is not null)
                             {
@@ -94,7 +94,7 @@
     <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
         <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:480px; width:90%;">
             <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                ⚠ This action cannot be undone
+                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0; vertical-align:middle;" /> This action cannot be undone
             </div>
             <h3 style="margin:0 0 8px; font-size:15px;">Create Tag</h3>
             <p style="margin:0 0 16px; font-size:13px; color:var(--color-text-muted);">

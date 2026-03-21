@@ -10,37 +10,49 @@
 
     <div class="dashboard-grid">
         <button class="dashboard-card" @onclick='() => Navigate("service-bus")'>
-            <div class="dashboard-card-icon">⚡</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.ArrowSwap())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">Service Bus</div>
             <div class="dashboard-card-desc">Manage queues, topics, and messages</div>
         </button>
 
         <button class="dashboard-card" @onclick='() => Navigate("aks")'>
-            <div class="dashboard-card-icon">☸</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.CloudCube())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">AKS</div>
             <div class="dashboard-card-desc">Browse clusters, nodes, and workloads</div>
         </button>
 
         <button class="dashboard-card" @onclick='() => Navigate("redis")'>
-            <div class="dashboard-card-icon">🗄</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Database())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">Redis</div>
             <div class="dashboard-card-desc">Explore keys and cache data</div>
         </button>
 
         <button class="dashboard-card" @onclick='() => Navigate("storage")'>
-            <div class="dashboard-card-icon">📦</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.FolderOpen())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">Storage</div>
             <div class="dashboard-card-desc">Browse blobs and containers</div>
         </button>
 
         <button class="dashboard-card" @onclick='() => Navigate("releases")'>
-            <div class="dashboard-card-icon">🚀</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Rocket())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">Releases</div>
             <div class="dashboard-card-desc">Track deployments and pipelines</div>
         </button>
 
         <button class="dashboard-card" @onclick='() => Navigate("settings")'>
-            <div class="dashboard-card-icon">⚙</div>
+            <div class="dashboard-card-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Settings())" Width="32px" />
+            </div>
             <div class="dashboard-card-name">Settings</div>
             <div class="dashboard-card-desc">Configure profiles and connections</div>
         </button>

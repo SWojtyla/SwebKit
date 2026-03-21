@@ -4,7 +4,9 @@
     @{
         var (icon, label, color) = ComputeGlobalReadiness();
     }
-    <span style="font-size:16px;">@icon</span>
+    <span style="color:@color; display:inline-flex; align-items:center;">
+        <FluentIcon Value="@icon" Width="16px" />
+    </span>
     <span style="font-size:12px; font-weight:600; color:@color;">@label</span>
 </div>
 
@@ -12,10 +14,10 @@
     [Parameter] public List<ComponentScope> Components { get; set; } = [];
     [Parameter] public Dictionary<string, Dictionary<string, CellData>> BoardData { get; set; } = new();
 
-    private (string Icon, string Label, string Color) ComputeGlobalReadiness()
+    private (Icon Icon, string Label, string Color) ComputeGlobalReadiness()
     {
         if (Components.Count == 0)
-            return ("⬜", "No components", "var(--color-text-muted)");
+            return (new Icons.Regular.Size16.CircleOff(), "No components", "var(--color-text-muted)");
 
         var hasFailure = false;
         var hasPending = false;
@@ -47,14 +49,14 @@
         }
 
         if (hasFailure)
-            return ("❌", "Not Ready", "var(--color-error)");
+            return (new Icons.Filled.Size16.DismissCircle(), "Not Ready", "var(--color-error)");
 
         if (hasPending)
-            return ("⏳", "In Progress", "var(--color-accent)");
+            return (new Icons.Regular.Size16.Clock(), "In Progress", "var(--color-accent)");
 
         if (allReady)
-            return ("✅", "Release Ready", "var(--color-success)");
+            return (new Icons.Filled.Size16.CheckmarkCircle(), "Release Ready", "var(--color-success)");
 
-        return ("⚠️", "Partially Ready", "var(--color-text-muted)");
+        return (new Icons.Regular.Size16.Warning(), "Partially Ready", "var(--color-text-muted)");
     }
 }

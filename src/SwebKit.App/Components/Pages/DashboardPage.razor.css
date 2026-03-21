@@ -52,8 +52,10 @@
 }
 
 .dashboard-card-icon {
-    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
     margin-bottom: 0.5rem;
+    color: var(--color-text-muted);
 }
 
 .dashboard-card-name {

@@ -3,21 +3,23 @@
 @inject IJSRuntime JS
 
 <div style="display:flex; flex-direction:column; height:100%;">
-    <div style="padding:6px 12px; background:rgba(229,57,53,0.1); border-bottom:1px solid var(--color-error); font-size:12px; color:#FF6B6B; font-weight:600;">
-        &#9888; Dead-Letter Queue — @EntityPath
+    <div
+        style="padding:6px 12px; background:rgba(229,57,53,0.1); border-bottom:1px solid var(--color-error); font-size:12px; color:#FF6B6B; font-weight:600;">
+        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
+        Dead-Letter Queue — @EntityPath
     </div>
 
     <div style="display:flex; flex:1; overflow:hidden;">
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
-                             MultiSelect="true"
-                             SelectedMessage="SelectedMessage"
+                             MultiSelect="true"                             SelectedMessage="SelectedMessage"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
             @if (_batchSelected.Count > 0)
             {
-                <div style="padding:6px 12px; background:rgba(0,112,204,0.1); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                <div
+                    style="padding:6px 12px; background:rgba(0,112,204,0.1); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:center; flex-shrink:0;">
                     <span style="font-size:12px; color:var(--color-text-muted);">@_batchSelected.Count selected</span>
                     <FluentButton Appearance="Appearance.Accent" Disabled="@IsWorking" @onclick="ResubmitBatch">
                         Resubmit @_batchSelected.Count
@@ -32,7 +34,8 @@
             }
             else
             {
-                <div style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
+                <div
+                    style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
                     <FluentButton Appearance="Appearance.Accent" Disabled="@(SelectedMessage is null || IsWorking)"
                                   @onclick="ResubmitOne">
                         Resubmit to @EntityPath
@@ -51,9 +54,8 @@
     </div>
 </div>
 
-<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
-               IsProduction="false" ConfirmLabel="Proceed"
-               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"               IsProduction="false"
+               ConfirmLabel="Proceed"               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }

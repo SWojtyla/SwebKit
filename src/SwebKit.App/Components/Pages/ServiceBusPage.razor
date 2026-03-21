@@ -17,8 +17,8 @@
             style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
             @if (_isNamespacePaneCollapsed)
             {
-                <button type="button"                        class="namespace-pane-toggle"                        title="Expand namespace panel"
-                        aria-label="Expand namespace panel"                        aria-expanded="false"                        @onclick="ToggleNamespacePane">
+                <button type="button" class="namespace-pane-toggle" title="Expand namespace panel"
+                        aria-label="Expand namespace panel" aria-expanded="false" @onclick="ToggleNamespacePane">
                     ▶
                 </button>
             }
@@ -87,20 +87,29 @@
                         }
                         else if (ns.Client is not null)
                         {
-                            <span style="font-size:10px; color:var(--color-success);">●</span>
+                            <span style="color:var(--color-success); display:inline-flex; align-items:center;">
+                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                            </span>
                         }
                         else
                         {
-                            <span style="font-size:10px; color:var(--color-error);" title="@ns.ConnectionError">●</span>
+                            <span style="color:var(--color-error); display:inline-flex; align-items:center;"
+                                  title="@ns.ConnectionError">
+                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                            </span>
                         }
                         <button
-                        style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:11px; padding:0 3px;"
-                        title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
-                        @onclick="() => OpenScheduledTab(ns)">🕐</button>
+                            style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 3px; display:inline-flex; align-items:center;"
+                            title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
+                            @onclick="() => OpenScheduledTab(ns)">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
+                        </button>
                         <button
-                        style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:12px; padding:0 2px;"
-                        title="Remove namespace" @onclick:stopPropagation="true"
-                        @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">✕</button>
+                            style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 2px; display:inline-flex; align-items:center;"
+                            title="Remove namespace" @onclick:stopPropagation="true"
+                            @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                        </button>
                     </div>
 
                     @if (ns.IsExpanded)
@@ -139,7 +148,9 @@
                     <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
                         @if (tab.IsDlq)
                         {
-                            <span style="color:var(--color-error);">&#9888;</span>
+                            <span style="color:var(--color-error); display:inline-flex; align-items:center;">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+                            </span>
                         }
                         <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
                             <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias / </span>@tab.Title
@@ -153,9 +164,7 @@
             {
                 @if (_activeTab.IsScheduled)
                 {
-                    <ScheduledMessages @key="_activeTab.Id"
-                                       Client="_activeTab.Client"
-                                       NamespaceId="_activeTab.NamespaceId"
+                    <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
                                        EntityPath="@_activeTab.EntityPath" />
                 }
                 else if (_activeTab.IsDlq)
@@ -167,9 +176,7 @@
                     <div @key="_activeTab.Id" class="service-bus-active-workspace" style="display:flex; flex:1; overflow:hidden;">
                         <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
-                                             NamespaceId="_activeTab.NamespaceId"
-                                             ShowCompose="true"
-                                             SelectedMessage="_activeTab.SelectedMessage"
+                                             NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
                                              OnMessageSelected="async msg => { _activeTab.SelectedMessage = msg; await InvokeAsync(StateHasChanged); }" />
                         </div>
                         <div @ref="_splitterRef" class="pane-splitter"></div>
@@ -190,15 +197,9 @@
 <Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
     @if (_composerMessage is not null && _activeTab is not null)
     {
-        <MessageComposer Client="_activeTab.Client"
-                         EntityPath="@_activeTab.EntityPath"
-                         IsProduction="false"
-                         Mode="_composerMode"
-                         PrefillMessage="_composerMessage"
-                         AvailableNamespaces="@AvailableNamespaceOptions"
-                         OwnerNamespaceId="_activeTab.NamespaceId"
-                         ScheduledRepo="ScheduledRepo"
-                         OnSent="OnComposerSent"
+        <MessageComposer Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" IsProduction="false"
+                         Mode="_composerMode" PrefillMessage="_composerMessage" AvailableNamespaces="@AvailableNamespaceOptions"
+                         OwnerNamespaceId="_activeTab.NamespaceId" ScheduledRepo="ScheduledRepo" OnSent="OnComposerSent"
                          OnClose="CloseComposer" />
     }
 </Modal>
@@ -220,10 +221,10 @@
     private MessageComposer.ComposerMode _composerMode;
 
     private IReadOnlyList<MessageComposer.NamespaceOption> AvailableNamespaceOptions =>
-        _namespaceStates
-            .Where(s => s.Client is not null)
-            .Select(s => new MessageComposer.NamespaceOption(s.Namespace.Id, s.Namespace.Alias, s.Client!))
-            .ToList();
+    _namespaceStates
+    .Where(s => s.Client is not null)
+    .Select(s => new MessageComposer.NamespaceOption(s.Namespace.Id, s.Namespace.Alias, s.Client!))
+    .ToList();
 
     private void OpenComposer(SbMessage msg, MessageComposer.ComposerMode mode)
     {
@@ -245,7 +246,7 @@
     }
 
     private IReadOnlyList<SbEntityLink> CurrentLinkedEntities =>
-        AppState.Config.ServiceBusEntityLinks;
+    AppState.Config.ServiceBusEntityLinks;
 
     protected override async Task OnInitializedAsync()
     {
@@ -261,8 +262,8 @@
             try
             {
                 _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                    "SwebKitSplitter.init", _splitterRef, _detailPaneRef,
-                    new { minWidth = 200, maxWidth = 700 });
+                "SwebKitSplitter.init", _splitterRef, _detailPaneRef,
+                new { minWidth = 200, maxWidth = 700 });
             }
             catch (Exception ex)
             {
@@ -474,7 +475,7 @@
     private async Task ToggleEntityLinkAsync(SbEntityLink link)
     {
         var existing = AppState.Config.ServiceBusEntityLinks
-            .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
+        .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
 
         if (existing is not null)
             AppState.Config.ServiceBusEntityLinks.Remove(existing);
@@ -587,65 +588,120 @@
         private readonly Dictionary<string, DemoEntityData> _entityData = new(StringComparer.OrdinalIgnoreCase)
         {
             ["orders"] = new(
-                [
-                    new SbMessage { MessageId = "orders-001", Body = """{"orderId":"ORD-12345","amount":99.99,"customer":"C-1042","items":[{"sku":"SKU-9912","qty":2},{"sku":"SKU-1100","qty":1}]}""", ContentType = "application/json", Subject = "OrderCreated", CorrelationId = "sess-8a3f", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-5), DeliveryCount = 1, SequenceNumber = 4501, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "web-checkout", ["priority"] = "normal" } },
-                    new SbMessage { MessageId = "orders-002", Body = """{"orderId":"ORD-12346","amount":149.99,"customer":"C-2087","items":[{"sku":"SKU-3300","qty":1}]}""", ContentType = "application/json", Subject = "OrderCreated", CorrelationId = "sess-1b7e", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-4), DeliveryCount = 1, SequenceNumber = 4502, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "mobile-app", ["priority"] = "normal" } },
-                    new SbMessage { MessageId = "orders-003", Body = """{"orderId":"ORD-12347","amount":34.50,"customer":"C-0519","items":[{"sku":"SKU-7721","qty":3}]}""", ContentType = "application/json", Subject = "OrderUpdated", CorrelationId = "sess-4d2c", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-3), DeliveryCount = 2, SequenceNumber = 4503, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "web-checkout", ["priority"] = "high" } },
-                    new SbMessage { MessageId = "orders-004", Body = """{"orderId":"ORD-12348","amount":220.00,"customer":"C-3391","items":[{"sku":"SKU-5500","qty":1},{"sku":"SKU-5501","qty":2}]}""", ContentType = "application/json", Subject = "OrderCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-2), DeliveryCount = 1, SequenceNumber = 4504, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "api", ["priority"] = "normal" } },
-                    new SbMessage { MessageId = "orders-005", Body = """{"orderId":"ORD-12349","amount":18.75,"customer":"C-0042","items":[{"sku":"SKU-1100","qty":1}]}""", ContentType = "application/json", Subject = "OrderCreated", CorrelationId = "sess-9f01", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-1), DeliveryCount = 1, SequenceNumber = 4505, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "mobile-app", ["priority"] = "normal" } }
-                ],
-                [
-                    new SbMessage { MessageId = "orders-dlq-001", Body = """{"orderId":"ORD-12200","error":"validation failed","detail":"missing shipping address"}""", Subject = "OrderFailed", DeadLetterReason = "MaxDeliveryCountExceeded", DeadLetterErrorDescription = "Message could not be consumed after 10 attempts", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-1), DeliveryCount = 10, SequenceNumber = 4410 },
-                    new SbMessage { MessageId = "orders-dlq-002", Body = """{"orderId":"ORD-12188","error":"missing customer id"}""", Subject = "OrderRejected", DeadLetterReason = "DeadLetteredByApplication", DeadLetterErrorDescription = "Customer C-0000 not found in database", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-2), DeliveryCount = 4, SequenceNumber = 4388 },
-                    new SbMessage { MessageId = "orders-dlq-003", Body = """{"orderId":"ORD-12150","error":"payment gateway timeout"}""", Subject = "OrderRetry", DeadLetterReason = "MaxDeliveryCountExceeded", DeadLetterErrorDescription = "Downstream service unavailable", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-3), DeliveryCount = 10, SequenceNumber = 4350 }
-                ]),
+        [
+        new SbMessage { MessageId = "orders-001", Body =
+"""{"orderId":"ORD-12345","amount":99.99,"customer":"C-1042","items":[{"sku":"SKU-9912","qty":2},{"sku":"SKU-1100","qty":1}]}""",
+ContentType = "application/json", Subject = "OrderCreated", CorrelationId = "sess-8a3f", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-5), DeliveryCount = 1, SequenceNumber = 4501, ApplicationProperties = new
+Dictionary<string, object>() { ["source"] = "web-checkout", ["priority"] = "normal" } },
+new SbMessage { MessageId = "orders-002", Body =
+"""{"orderId":"ORD-12346","amount":149.99,"customer":"C-2087","items":[{"sku":"SKU-3300","qty":1}]}""", ContentType =
+"application/json", Subject = "OrderCreated", CorrelationId = "sess-1b7e", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-4), DeliveryCount = 1, SequenceNumber = 4502, ApplicationProperties = new
+Dictionary<string, object>() { ["source"] = "mobile-app", ["priority"] = "normal" } },
+new SbMessage { MessageId = "orders-003", Body =
+"""{"orderId":"ORD-12347","amount":34.50,"customer":"C-0519","items":[{"sku":"SKU-7721","qty":3}]}""", ContentType =
+"application/json", Subject = "OrderUpdated", CorrelationId = "sess-4d2c", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-3), DeliveryCount = 2, SequenceNumber = 4503, ApplicationProperties = new
+Dictionary<string, object>() { ["source"] = "web-checkout", ["priority"] = "high" } },
+new SbMessage { MessageId = "orders-004", Body =
+"""{"orderId":"ORD-12348","amount":220.00,"customer":"C-3391","items":[{"sku":"SKU-5500","qty":1},{"sku":"SKU-5501","qty":2}]}""",
+ContentType = "application/json", Subject = "OrderCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+DeliveryCount = 1, SequenceNumber = 4504, ApplicationProperties = new Dictionary<string, object>() { ["source"] = "api",
+["priority"] = "normal" } },
+new SbMessage { MessageId = "orders-005", Body =
+"""{"orderId":"ORD-12349","amount":18.75,"customer":"C-0042","items":[{"sku":"SKU-1100","qty":1}]}""", ContentType =
+"application/json", Subject = "OrderCreated", CorrelationId = "sess-9f01", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-1), DeliveryCount = 1, SequenceNumber = 4505, ApplicationProperties = new
+Dictionary<string, object>() { ["source"] = "mobile-app", ["priority"] = "normal" } }
+        ],
+        [
+        new SbMessage { MessageId = "orders-dlq-001", Body = """{"orderId":"ORD-12200","error":"validation failed","detail":"missing shipping address"}""", Subject = "OrderFailed", DeadLetterReason = "MaxDeliveryCountExceeded",
+DeadLetterErrorDescription = "Message could not be consumed after 10 attempts", EnqueuedAt =
+DateTimeOffset.UtcNow.AddHours(-1), DeliveryCount = 10, SequenceNumber = 4410 },
+new SbMessage { MessageId = "orders-dlq-002", Body = """{"orderId":"ORD-12188","error":"missing customer id"}""",
+Subject = "OrderRejected", DeadLetterReason = "DeadLetteredByApplication", DeadLetterErrorDescription = "Customer C-0000 not found in database", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-2), DeliveryCount = 4, SequenceNumber = 4388 },
+new SbMessage { MessageId = "orders-dlq-003", Body = """{"orderId":"ORD-12150","error":"payment gateway timeout"}""",
+Subject = "OrderRetry", DeadLetterReason = "MaxDeliveryCountExceeded", DeadLetterErrorDescription = "Downstream service unavailable", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-3), DeliveryCount = 10, SequenceNumber = 4350 }
+        ]),
             ["payments"] = new(
-                [
-                    new SbMessage { MessageId = "pay-001", Body = """{"paymentId":"PAY-8801","status":"captured","amount":99.99,"orderId":"ORD-12345","method":"visa-4242"}""", ContentType = "application/json", Subject = "PaymentCaptured", CorrelationId = "sess-8a3f", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-7), DeliveryCount = 1, SequenceNumber = 2201, ApplicationProperties = new Dictionary<string, object>() { ["gateway"] = "stripe" } },
-                    new SbMessage { MessageId = "pay-002", Body = """{"paymentId":"PAY-8802","status":"authorized","amount":149.99,"orderId":"ORD-12346","method":"mastercard-5555"}""", ContentType = "application/json", Subject = "PaymentAuthorized", CorrelationId = "sess-1b7e", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-3), DeliveryCount = 1, SequenceNumber = 2202, ApplicationProperties = new Dictionary<string, object>() { ["gateway"] = "stripe" } },
-                    new SbMessage { MessageId = "pay-003", Body = """{"paymentId":"PAY-8803","status":"pending","amount":220.00,"orderId":"ORD-12348"}""", ContentType = "application/json", Subject = "PaymentPending", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-1), DeliveryCount = 3, SequenceNumber = 2203, ApplicationProperties = new Dictionary<string, object>() { ["gateway"] = "adyen", ["retryable"] = "true" } }
-                ],
-                [
-                    new SbMessage { MessageId = "pay-dlq-001", Body = """{"paymentId":"PAY-8750","error":"gateway unavailable","orderId":"ORD-12100"}""", Subject = "PaymentFailed", DeadLetterReason = "MaxDeliveryCountExceeded", DeadLetterErrorDescription = "Payment gateway returned 502 repeatedly", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-4), DeliveryCount = 10, SequenceNumber = 2150 }
-                ]),
+        [
+        new SbMessage { MessageId = "pay-001", Body =
+"""{"paymentId":"PAY-8801","status":"captured","amount":99.99,"orderId":"ORD-12345","method":"visa-4242"}""",
+ContentType = "application/json", Subject = "PaymentCaptured", CorrelationId = "sess-8a3f", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-7), DeliveryCount = 1, SequenceNumber = 2201, ApplicationProperties = new
+Dictionary<string, object>() { ["gateway"] = "stripe" } },
+new SbMessage { MessageId = "pay-002", Body =
+"""{"paymentId":"PAY-8802","status":"authorized","amount":149.99,"orderId":"ORD-12346","method":"mastercard-5555"}""",
+ContentType = "application/json", Subject = "PaymentAuthorized", CorrelationId = "sess-1b7e", EnqueuedAt =
+DateTimeOffset.UtcNow.AddMinutes(-3), DeliveryCount = 1, SequenceNumber = 2202, ApplicationProperties = new
+Dictionary<string, object>() { ["gateway"] = "stripe" } },
+new SbMessage { MessageId = "pay-003", Body =
+"""{"paymentId":"PAY-8803","status":"pending","amount":220.00,"orderId":"ORD-12348"}""", ContentType =
+"application/json", Subject = "PaymentPending", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-1), DeliveryCount = 3,
+SequenceNumber = 2203, ApplicationProperties = new Dictionary<string, object>() { ["gateway"] = "adyen", ["retryable"] =
+"true" } }
+        ],
+        [
+        new SbMessage { MessageId = "pay-dlq-001", Body = """{"paymentId":"PAY-8750","error":"gateway unavailable","orderId":"ORD-12100"}""", Subject = "PaymentFailed", DeadLetterReason = "MaxDeliveryCountExceeded",
+DeadLetterErrorDescription = "Payment gateway returned 502 repeatedly", EnqueuedAt = DateTimeOffset.UtcNow.AddHours(-4),
+DeliveryCount = 10, SequenceNumber = 2150 }
+        ]),
             ["notifications"] = new([], []),
             ["user-events/subscriptions/consumer-a"] = new(
-                [
-                    new SbMessage { MessageId = "ue-a-001", Body = """{"event":"user.created","userId":"U-5521","email":"alice@example.com","timestamp":"2026-03-08T10:15:00Z"}""", ContentType = "application/json", Subject = "UserCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-12), DeliveryCount = 1, SequenceNumber = 880 },
-                    new SbMessage { MessageId = "ue-a-002", Body = """{"event":"user.updated","userId":"U-3310","changes":["displayName","avatar"],"timestamp":"2026-03-08T10:20:00Z"}""", ContentType = "application/json", Subject = "UserUpdated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-10), DeliveryCount = 1, SequenceNumber = 881 },
-                    new SbMessage { MessageId = "ue-a-003", Body = """{"event":"user.login","userId":"U-5521","ip":"10.0.12.44","timestamp":"2026-03-08T10:25:00Z"}""", ContentType = "application/json", Subject = "UserLogin", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-8), DeliveryCount = 1, SequenceNumber = 882 }
-                ],
-                []),
+        [
+        new SbMessage { MessageId = "ue-a-001", Body =
+"""{"event":"user.created","userId":"U-5521","email":"alice@example.com","timestamp":"2026-03-08T10:15:00Z"}""",
+ContentType = "application/json", Subject = "UserCreated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-12),
+DeliveryCount = 1, SequenceNumber = 880 },
+new SbMessage { MessageId = "ue-a-002", Body =
+"""{"event":"user.updated","userId":"U-3310","changes":["displayName","avatar"],"timestamp":"2026-03-08T10:20:00Z"}""",
+ContentType = "application/json", Subject = "UserUpdated", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+DeliveryCount = 1, SequenceNumber = 881 },
+new SbMessage { MessageId = "ue-a-003", Body =
+"""{"event":"user.login","userId":"U-5521","ip":"10.0.12.44","timestamp":"2026-03-08T10:25:00Z"}""", ContentType =
+"application/json", Subject = "UserLogin", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-8), DeliveryCount = 1,
+SequenceNumber = 882 }
+        ],
+        []),
             ["user-events/subscriptions/consumer-b"] = new([], []),
             ["audit-log/subscriptions/consumer-a"] = new(
-                [
-                    new SbMessage { MessageId = "audit-a-001", Body = """{"action":"login","userId":"U-5521","ip":"10.0.12.44","userAgent":"Mozilla/5.0"}""", ContentType = "application/json", Subject = "AuditEvent", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-20), DeliveryCount = 1, SequenceNumber = 310 },
-                    new SbMessage { MessageId = "audit-a-002", Body = """{"action":"role.change","userId":"U-3310","oldRole":"viewer","newRole":"editor","changedBy":"U-0001"}""", ContentType = "application/json", Subject = "AuditEvent", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-15), DeliveryCount = 1, SequenceNumber = 311 }
-                ],
-                []),
+        [
+        new SbMessage { MessageId = "audit-a-001", Body =
+"""{"action":"login","userId":"U-5521","ip":"10.0.12.44","userAgent":"Mozilla/5.0"}""", ContentType =
+"application/json", Subject = "AuditEvent", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-20), DeliveryCount = 1,
+SequenceNumber = 310 },
+new SbMessage { MessageId = "audit-a-002", Body =
+"""{"action":"role.change","userId":"U-3310","oldRole":"viewer","newRole":"editor","changedBy":"U-0001"}""", ContentType
+= "application/json", Subject = "AuditEvent", EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-15), DeliveryCount = 1,
+SequenceNumber = 311 }
+        ],
+        []),
             ["audit-log/subscriptions/consumer-b"] = new([], [])
         };
 
         private long CountFor(string path, bool dlq) =>
-            _entityData.TryGetValue(path, out var d) ? (dlq ? d.DeadLetterMessages.Count : d.ActiveMessages.Count) : 0;
+        _entityData.TryGetValue(path, out var d) ? (dlq ? d.DeadLetterMessages.Count : d.ActiveMessages.Count) : 0;
 
         public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) =>
-            Task.FromResult(new SbNamespaceInfo { Name = "demo-namespace", Endpoint = "demo.servicebus.windows.net" });
+        Task.FromResult(new SbNamespaceInfo { Name = "demo-namespace", Endpoint = "demo.servicebus.windows.net" });
 
         public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SbEntityInfo>>(
-            [
-                new SbEntityInfo { Name = "orders", EntityPath = "orders", Stats = new() { ActiveMessageCount = CountFor("orders", false), DeadLetterMessageCount = CountFor("orders", true) } },
-                new SbEntityInfo { Name = "payments", EntityPath = "payments", Stats = new() { ActiveMessageCount = CountFor("payments", false), DeadLetterMessageCount = CountFor("payments", true) } },
-                new SbEntityInfo { Name = "notifications", EntityPath = "notifications", Stats = new() },
-            ]);
+        Task.FromResult<IReadOnlyList<SbEntityInfo>>(
+        [
+        new SbEntityInfo { Name = "orders", EntityPath = "orders", Stats = new() { ActiveMessageCount = CountFor("orders",
+false), DeadLetterMessageCount = CountFor("orders", true) } },
+new SbEntityInfo { Name = "payments", EntityPath = "payments", Stats = new() { ActiveMessageCount = CountFor("payments",
+false), DeadLetterMessageCount = CountFor("payments", true) } },
+new SbEntityInfo { Name = "notifications", EntityPath = "notifications", Stats = new() },
+        ]);
 
         public Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SbEntityInfo>>(
-            [
-                new SbEntityInfo { Name = "user-events", EntityPath = "user-events", IsTopic = true },
-                new SbEntityInfo { Name = "audit-log", EntityPath = "audit-log", IsTopic = true },
-            ]);
+        Task.FromResult<IReadOnlyList<SbEntityInfo>>(
+        [
+        new SbEntityInfo { Name = "user-events", EntityPath = "user-events", IsTopic = true },
+new SbEntityInfo { Name = "audit-log", EntityPath = "audit-log", IsTopic = true },
+        ]);
 
         public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
         {
@@ -653,33 +709,47 @@
             var bPath = $"{topicName}/subscriptions/consumer-b";
             return Task.FromResult<IReadOnlyList<SbEntityInfo>>(
             [
-                new SbEntityInfo { Name = "consumer-a", EntityPath = aPath, IsSubscription = true, TopicName = topicName, Stats = new() { ActiveMessageCount = CountFor(aPath, false), DeadLetterMessageCount = CountFor(aPath, true) } },
-                new SbEntityInfo { Name = "consumer-b", EntityPath = bPath, IsSubscription = true, TopicName = topicName, Stats = new() { ActiveMessageCount = CountFor(bPath, false), DeadLetterMessageCount = CountFor(bPath, true) } },
-            ]);
+            new SbEntityInfo { Name = "consumer-a", EntityPath = aPath, IsSubscription = true, TopicName = topicName, Stats = new()
+{ ActiveMessageCount = CountFor(aPath, false), DeadLetterMessageCount = CountFor(aPath, true) } },
+new SbEntityInfo { Name = "consumer-b", EntityPath = bPath, IsSubscription = true, TopicName = topicName, Stats = new()
+{ ActiveMessageCount = CountFor(bPath, false), DeadLetterMessageCount = CountFor(bPath, true) } },
+]);
         }
 
         public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
-            Task.FromResult(new SbEntityStats { ActiveMessageCount = CountFor(entityPath, false), DeadLetterMessageCount = CountFor(entityPath, true) });
+        Task.FromResult(new SbEntityStats
+        {
+            ActiveMessageCount = CountFor(entityPath, false),
+            DeadLetterMessageCount =
+        CountFor(entityPath, true)
+        });
 
         public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SbMessage>>(
-                _entityData.TryGetValue(entityPath, out var data) ? data.ActiveMessages.Take(count).ToList() : []);
+        Task.FromResult<IReadOnlyList<SbMessage>>(
+        _entityData.TryGetValue(entityPath, out var data) ? data.ActiveMessages.Take(count).ToList() : []);
 
-        public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SbMessage>>(
-                _entityData.TryGetValue(entityPath, out var data) ? data.DeadLetterMessages.Take(count).ToList() : []);
+        public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default)
+        =>
+        Task.FromResult<IReadOnlyList<SbMessage>>(
+        _entityData.TryGetValue(entityPath, out var data) ? data.DeadLetterMessages.Take(count).ToList() : []);
 
-        public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
-        public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) =>
-            Task.FromResult((long)Random.Shared.Next(100000, 999999));
-        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) => Task.CompletedTask;
-        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) =>
+        Task.CompletedTask;
+        public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) =>
+        Task.CompletedTask;
+        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime,
+        CancellationToken ct = default) =>
+        Task.FromResult((long)Random.Shared.Next(100000, 999999));
+        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
+        Task.CompletedTask;
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath,
+        CancellationToken ct = default) => Task.CompletedTask;
+        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct =
+        default) => Task.CompletedTask;
         public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
 
         private sealed record DemoEntityData(
-            IReadOnlyList<SbMessage> ActiveMessages,
-            IReadOnlyList<SbMessage> DeadLetterMessages);
+        IReadOnlyList<SbMessage> ActiveMessages,
+        IReadOnlyList<SbMessage> DeadLetterMessages);
     }
 }

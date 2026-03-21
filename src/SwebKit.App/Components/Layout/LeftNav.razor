@@ -1,20 +1,20 @@
 <nav class="left-nav">
     <div class="nav-section">
-        <NavItem Icon="⇔" Label="Service Bus" Area="service-bus" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-                 OnNavigate="OnNavigate" />
-        <NavItem Icon="☸" Label="AKS" Area="aks" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-                 OnNavigate="OnNavigate" />
-        <NavItem Icon="🧰" Label="Redis" Area="redis" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-             OnNavigate="OnNavigate" />
-        <NavItem Icon="☁" Label="Storage" Area="storage" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-             OnNavigate="OnNavigate" />
-        <NavItem Icon="🚀" Label="Releases" Area="releases" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-             OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.ArrowSwap())" Label="Service Bus" Area="service-bus"
+                 IsExpanded="IsExpanded" CurrentArea="CurrentArea"        OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.CloudCube())" Label="AKS" Area="aks" IsExpanded="IsExpanded"
+                 CurrentArea="CurrentArea"                OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.Database())" Label="Redis" Area="redis" IsExpanded="IsExpanded"
+                 CurrentArea="CurrentArea"        OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.FolderOpen())" Label="Storage" Area="storage"
+                 IsExpanded="IsExpanded" CurrentArea="CurrentArea"             OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.Rocket())" Label="Releases" Area="releases" IsExpanded="IsExpanded"
+                 CurrentArea="CurrentArea"    OnNavigate="OnNavigate" />
     </div>
 
     <div class="nav-section" style="margin-top: auto; border-top: 1px solid var(--color-border);">
-        <NavItem Icon="⚙" Label="Settings" Area="settings" IsExpanded="IsExpanded" CurrentArea="CurrentArea"
-                 OnNavigate="OnNavigate" />
+        <NavItem NavIcon="@(new Icons.Regular.Size24.Settings())" Label="Settings" Area="settings"
+                 IsExpanded="IsExpanded" CurrentArea="CurrentArea"            OnNavigate="OnNavigate" />
     </div>
 </nav>
 

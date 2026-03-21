@@ -91,7 +91,7 @@
             @if (ActionTarget.IsProd)
             {
                 <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                    &#9888; PRODUCTION — This approval will deploy to a production environment
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" /> PRODUCTION — This approval will deploy to a production environment
                 </div>
             }
             <h3 style="margin:0 0 8px; font-size:15px;">@(IsApproving ? "Approve" : "Reject") — @ActionTarget.ComponentName</h3>

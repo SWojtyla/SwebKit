@@ -132,7 +132,7 @@
                             OnRowClick="@(e => OnRowClickedAsync(e.Item))">
                 @if (MultiSelect)
                 {
-                    <TemplateColumn Title="✓" Width="40px">
+                    <TemplateColumn Title="" Width="40px">
                         <input type="checkbox"
                                checked="@_selection.IsSelected(context.MessageId)"
                                @onclick:stopPropagation="true"

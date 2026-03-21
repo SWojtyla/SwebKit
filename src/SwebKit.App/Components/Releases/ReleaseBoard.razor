@@ -37,7 +37,8 @@
 
         @if (!string.IsNullOrWhiteSpace(Release.Notes))
         {
-            <div style="font-size:12px; color:var(--color-text-muted); margin-bottom:12px; padding:8px; background:var(--color-surface); border-radius:4px;">
+            <div
+                style="font-size:12px; color:var(--color-text-muted); margin-bottom:12px; padding:8px; background:var(--color-surface); border-radius:4px;">
                 @Release.Notes
             </div>
         }
@@ -76,81 +77,115 @@
                                     }
                                     @if (runName is not null)
                                     {
-                                        <div style="font-size:10px; color:var(--color-accent); font-family:Consolas,monospace;">#@runName</div>
-                                    }
-                                </td>
-                                <td style="padding:8px; text-align:center;">
-                                    @if (comp.TagConfirmed)
-                                    {
-                                        <span style="color:var(--color-success);" title="Tag confirmed">@comp.TargetTag</span>
-                                    }
-                                    else if (!string.IsNullOrEmpty(comp.TargetTag))
-                                    {
-                                        <span style="color:var(--color-text-muted);">@comp.TargetTag</span>
-                                    }
-                                    else
-                                    {
-                                        <span style="color:var(--color-text-muted);">—</span>
-                                    }
-                                </td>
-                                @foreach (var env in DiscoveredEnvironments)
-                                {
-                                    var cell = compData?.GetValueOrDefault(env);
+                                        <div style="font-size:10px; color:var(--color-accent); font-family:Consolas,monospace;">
+                                            #@runName</div>
+                                        }
+                                    </td>
                                     <td style="padding:8px; text-align:center;">
-                                        @if (cell is not null)
+                                        @if (comp.TagConfirmed)
                                         {
-                                            <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result"
-                                               style="text-decoration:none;">
-                                                <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
-                                            </a>
+                                            <span style="color:var(--color-success);" title="Tag confirmed">@comp.TargetTag</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(comp.TargetTag))
+                                        {
+                                            <span style="color:var(--color-text-muted);">@comp.TargetTag</span>
                                         }
                                         else
                                         {
                                             <span style="color:var(--color-text-muted);">—</span>
                                         }
                                     </td>
-                                }
-                                <td style="padding:8px; text-align:center;">
-                                    @{
-                                        var readiness = ComputeReadiness(comp, compData);
+                                    @foreach (var env in DiscoveredEnvironments)
+                                    {
+                                        var cell = compData?.GetValueOrDefault(env);
+                                        <td style="padding:8px; text-align:center;">
+                                            @if (cell is not null)
+                                            {
+                                                <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result"
+                                                       style="text-decoration:none;">
+                                                    <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span style="color:var(--color-text-muted);">—</span>
+                                            }
+                                        </td>
                                     }
-                                    <span title="@readiness.Tooltip" style="font-size:14px;">@readiness.Icon</span>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                                    <td style="padding:8px; text-align:center;">
+                                        @{
+                                            var readiness = ComputeReadiness(comp, compData);
+                                        }
+                                        <span title="@readiness.Tooltip" style="display:inline-flex; align-items:center;">
+                                            <FluentIcon Value="@readiness.Icon" Width="14px" />
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         }
-    }
-</div>
+    </div>
 
-<style>
-    .status-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-    .status-badge.draft { background: rgba(128,128,128,0.2); color: var(--color-text-muted); }
-    .status-badge.inprogress { background: rgba(0,120,212,0.2); color: var(--color-accent); }
-    .status-badge.completed { background: rgba(67,160,71,0.2); color: var(--color-success); }
+    <style>
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
 
-    .pipeline-status {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 500;
-    }
-    .pipeline-status.succeeded { background: rgba(67,160,71,0.2); color: var(--color-success); }
-    .pipeline-status.failed { background: rgba(200,0,42,0.2); color: var(--color-error); }
-    .pipeline-status.running { background: rgba(0,120,212,0.2); color: var(--color-accent); }
-    .pipeline-status.notdeployed { color: var(--color-text-muted); }
-    .pipeline-status.waiting { background: rgba(255,152,0,0.2); color: #FF9800; }
-</style>
+        .status-badge.draft {
+            background: rgba(128, 128, 128, 0.2);
+            color: var(--color-text-muted);
+        }
+
+        .status-badge.inprogress {
+            background: rgba(0, 120, 212, 0.2);
+            color: var(--color-accent);
+        }
+
+        .status-badge.completed {
+            background: rgba(67, 160, 71, 0.2);
+            color: var(--color-success);
+        }
+
+        .pipeline-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .pipeline-status.succeeded {
+            background: rgba(67, 160, 71, 0.2);
+            color: var(--color-success);
+        }
+
+        .pipeline-status.failed {
+            background: rgba(200, 0, 42, 0.2);
+            color: var(--color-error);
+        }
+
+        .pipeline-status.running {
+            background: rgba(0, 120, 212, 0.2);
+            color: var(--color-accent);
+        }
+
+        .pipeline-status.notdeployed {
+            color: var(--color-text-muted);
+        }
+
+        .pipeline-status.waiting {
+            background: rgba(255, 152, 0, 0.2);
+            color: #FF9800;
+        }
+    </style>
 
 @code {
     [Parameter] public ReleaseRecord? Release { get; set; }
@@ -280,24 +315,24 @@
         if (stage.EnvironmentName is not null)
         {
             var direct = environments.FirstOrDefault(e =>
-                string.Equals(e, stage.EnvironmentName, StringComparison.OrdinalIgnoreCase));
+            string.Equals(e, stage.EnvironmentName, StringComparison.OrdinalIgnoreCase));
             if (direct is not null) return direct;
         }
 
         // 2. Check if any environment name is contained in the stage name
-        //    e.g. stage "Deploy: dev-weu" contains environment "dev-weu"
+        // e.g. stage "Deploy: dev-weu" contains environment "dev-weu"
         var byContains = environments.FirstOrDefault(e =>
-            stage.Name.Contains(e, StringComparison.OrdinalIgnoreCase));
+        stage.Name.Contains(e, StringComparison.OrdinalIgnoreCase));
         if (byContains is not null) return byContains;
 
         // 3. Check with underscores replaced (timeline identifiers use underscores)
-        //    e.g. identifier "Deploy_dev_weu" should match "dev-weu"
+        // e.g. identifier "Deploy_dev_weu" should match "dev-weu"
         if (stage.EnvironmentName is not null)
         {
             var normalized = stage.EnvironmentName.Replace('_', '-');
             var byNormalized = environments.FirstOrDefault(e =>
-                string.Equals(e, normalized, StringComparison.OrdinalIgnoreCase) ||
-                normalized.Contains(e, StringComparison.OrdinalIgnoreCase));
+            string.Equals(e, normalized, StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains(e, StringComparison.OrdinalIgnoreCase));
             if (byNormalized is not null) return byNormalized;
         }
 
@@ -305,30 +340,30 @@
         return null;
     }
 
-    private (string Icon, string Tooltip) ComputeReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
+    private (Icon Icon, string Tooltip) ComputeReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
     {
         if (envData is null)
-            return ("⬜", "No deployment data");
+            return (new Icons.Regular.Size16.CircleOff(), "No deployment data");
 
         var hasFailed = envData.Values.Any(c => c.CssClass == "failed");
         if (hasFailed)
-            return ("❌", "Pipeline has failed stages");
+            return (new Icons.Filled.Size16.DismissCircle(), "Pipeline has failed stages");
 
         var hasWaiting = envData.Values.Any(c => c.CssClass == "waiting");
         if (hasWaiting)
-            return ("🔒", "Waiting for approval");
+            return (new Icons.Regular.Size16.LockClosed(), "Waiting for approval");
 
         var hasRunning = envData.Values.Any(c => c.CssClass == "running");
         if (hasRunning)
-            return ("⏳", "Pipeline is running");
+            return (new Icons.Regular.Size16.Clock(), "Pipeline is running");
 
         if (!comp.TagConfirmed)
-            return ("⚠️", "Tag not yet confirmed");
+            return (new Icons.Regular.Size16.Warning(), "Tag not yet confirmed");
 
         var allSucceeded = envData.Values.All(c => c.CssClass is "succeeded" or "notdeployed");
         if (allSucceeded && comp.TagConfirmed)
-            return ("✅", "Ready for release");
+            return (new Icons.Filled.Size16.CheckmarkCircle(), "Ready for release");
 
-        return ("⬜", "Unknown state");
+        return (new Icons.Regular.Size16.CircleOff(), "Unknown state");
     }
 }

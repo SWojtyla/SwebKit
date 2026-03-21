@@ -1,5 +1,5 @@
 <div class="nav-item @(CurrentArea == Area ? "active" : "")" @onclick="Navigate" title="@(IsExpanded ? "" : Label)">
-    <span style="font-size: 16px; width: 20px; text-align: center;">@Icon</span>
+    <FluentIcon Value="@NavIcon" Width="20px" />
     @if (IsExpanded)
     {
         <span>@Label</span>
@@ -7,7 +7,7 @@
 </div>
 
 @code {
-    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public Icon NavIcon { get; set; } = new Icons.Regular.Size24.Settings();
     [Parameter] public string Label { get; set; } = "";
     [Parameter] public string Area { get; set; } = "";
     [Parameter] public bool IsExpanded { get; set; } = true;
