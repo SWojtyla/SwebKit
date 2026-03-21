@@ -5,12 +5,12 @@
 
 .meta {
     display: grid;
-    gap: 4px;
+    gap: var(--spacing-xs);
 }
 
 .key-name {
     font-family: Consolas, monospace;
-    font-size: 13px;
+    font-size: var(--font-size-md);
 }
 
 .kv {
@@ -21,18 +21,18 @@
 .actions,
 .ttl-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-sm);
     flex-wrap: wrap;
 }
 
 .edit-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-sm);
 }
 
 .ttl-input {
     width: 100px;
-    padding: 6px 8px;
+    padding: 6px var(--spacing-sm);
     background: var(--color-surface-2);
     color: var(--color-text);
     border: 1px solid var(--color-border);
@@ -52,7 +52,7 @@
 .editor,
 .hash-editor {
     width: 100%;
-    padding: 8px;
+    padding: var(--spacing-sm);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     background: var(--color-surface-2);
@@ -79,7 +79,7 @@
 .table th,
 .table td {
     text-align: left;
-    padding: 4px;
+    padding: var(--spacing-xs);
     border-bottom: 1px solid var(--color-border);
 }
 

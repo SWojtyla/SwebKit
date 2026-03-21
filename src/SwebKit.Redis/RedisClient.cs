@@ -1,4 +1,6 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
@@ -12,9 +14,14 @@ public sealed class RedisClient : IRedisClient
     private readonly ConnectionMultiplexer _mux;
     private readonly IDatabase _db;
     private readonly IServer _server;
+    private readonly ILogger<RedisClient> _logger;
 
     public RedisClient(RedisCacheEntry cacheEntry)
+        : this(cacheEntry, NullLogger<RedisClient>.Instance) { }
+
+    public RedisClient(RedisCacheEntry cacheEntry, ILogger<RedisClient> logger)
     {
+        _logger = logger;
         _cacheEntry = cacheEntry;
 
         var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
@@ -229,30 +236,38 @@ public sealed class RedisClient : IRedisClient
         _mux.Dispose();
     }
 
-    private async Task<long?> TryGetMemoryUsageAsync(string key)
-    {
-        try
+    private Task<long?> TryGetMemoryUsageAsync(string key) =>
+        TryValueAsync(async () =>
         {
             var result = await _db.ExecuteAsync("MEMORY", "USAGE", key);
             return ParseLong(result.ToString());
-        }
-        catch
-        {
-            return null;
-        }
-    }
+        }, nameof(TryGetMemoryUsageAsync), key);
 
-    private async Task<string?> TryGetEncodingAsync(string key)
-    {
-        try
+    private Task<string?> TryGetEncodingAsync(string key) =>
+        TryAsync(async () =>
         {
             var result = await _db.ExecuteAsync("OBJECT", "ENCODING", key);
             var value = result.ToString();
             return string.IsNullOrWhiteSpace(value) ? null : value;
-        }
-        catch
+        }, nameof(TryGetEncodingAsync), key);
+
+    private async Task<T?> TryAsync<T>(Func<Task<T?>> operation, string operationName, string key) where T : class
+    {
+        try { return await operation(); }
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
             return null;
+        }
+    }
+
+    private async Task<T?> TryValueAsync<T>(Func<Task<T>> operation, string operationName, string key) where T : struct
+    {
+        try { return await operation(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis {Operation} failed for key {Key}", operationName, key);
+            return (T?)null;
         }
     }
 

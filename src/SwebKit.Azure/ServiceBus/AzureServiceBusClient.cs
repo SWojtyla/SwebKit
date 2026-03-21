@@ -1,6 +1,8 @@
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
@@ -12,10 +14,16 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     private readonly ServiceBusClient _client;
     private readonly ServiceBusAdministrationClient _adminClient;
     private readonly string? _scopedEntityPath;
+    private readonly ILogger<AzureServiceBusClient> _logger;
 
     /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
     public AzureServiceBusClient(string connectionString)
+        : this(connectionString, NullLogger<AzureServiceBusClient>.Instance) { }
+
+    /// <summary>Primary constructor: creates a client from a raw connection string.</summary>
+    public AzureServiceBusClient(string connectionString, ILogger<AzureServiceBusClient> logger)
     {
+        _logger = logger;
         var props = ServiceBusConnectionStringProperties.Parse(connectionString);
         _scopedEntityPath = string.IsNullOrWhiteSpace(props.EntityPath) ? null : props.EntityPath;
         _client = new ServiceBusClient(connectionString);
@@ -23,8 +31,9 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     }
 
     /// <summary>Legacy constructor retained for backward-compatibility with config-based setup.</summary>
-    public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore)
+    public AzureServiceBusClient(ServiceBusConfig config, ICredentialStore credentialStore, ILogger<AzureServiceBusClient> logger)
     {
+        _logger = logger;
         var fqns = config.FullyQualifiedNamespace;
 
         if (config.AuthMode == SbAuthMode.ConnectionString && config.CredentialRef is not null)
@@ -167,9 +176,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     {
         if (entityPath.Contains('/'))
         {
-            var parts = entityPath.Split('/');
+            var parts = entityPath.Split('/', 2);
+            if (parts.Length != 2)
+                throw new ArgumentException($"Expected 'topic/subscription' format but got: '{entityPath}'", nameof(entityPath));
             var topicName = parts[0];
-            var subName = parts[^1];
+            var subName = parts[1];
             var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subName, ct);
             return new SbEntityStats
             {
@@ -272,7 +283,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
         try { await _adminClient.GetNamespacePropertiesAsync(ct); return true; }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Service Bus connection test failed for namespace {Namespace}", _client.FullyQualifiedNamespace);
+            return false;
+        }
     }
 
     private static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()

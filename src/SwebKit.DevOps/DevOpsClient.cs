@@ -1,8 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Serialization;
 
 namespace SwebKit.DevOps;
 
@@ -10,29 +12,32 @@ public class DevOpsClient : IDevOpsClient
 {
     private readonly HttpClient _http;
     private readonly DevOpsAuthHandler _authHandler;
+    private readonly ILogger<DevOpsClient> _logger;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
+    private static readonly JsonSerializerOptions JsonOptions = SwebKitJsonOptions.Default;
 
-    private string? _orgUrl;
+    private volatile string? _orgUrl;
+    private volatile bool _configured;
 
-    public DevOpsClient(IHttpClientFactory httpClientFactory, DevOpsAuthHandler authHandler)
+    public DevOpsClient(IHttpClientFactory httpClientFactory, DevOpsAuthHandler authHandler, ILogger<DevOpsClient> logger)
     {
         _http = httpClientFactory.CreateClient("AzureDevOps");
         _authHandler = authHandler;
+        _logger = logger;
     }
 
     /// <summary>
     /// Configures the client with org-level connection details.
     /// All project-scoped calls accept the project name as a parameter.
+    /// Must only be called once; throws <see cref="InvalidOperationException"/> on repeated calls.
     /// </summary>
     public void Configure(DevOpsConfig config)
     {
+        if (_configured)
+            throw new InvalidOperationException("DevOpsClient.Configure() must only be called once.");
         _orgUrl = $"https://dev.azure.com/{config.Organization}";
         _authHandler.SetCredentialKey(config.PatCredentialKey);
+        _configured = true;
     }
 
     private string OrgUrl => _orgUrl
@@ -167,78 +172,98 @@ public class DevOpsClient : IDevOpsClient
 
             if (timeline?.Records is null) return [];
 
-            var allRecords = timeline.Records;
-
-            // Build parent lookup
-            var stageRecords = allRecords
-                .Where(r => r.Type == "Stage")
-                .ToDictionary(r => r.Id ?? "", r => r);
-
-            // Checkpoints that are in-progress (waiting for approval/check)
-            var inProgressCheckpoints = allRecords
-                .Where(r => r.Type == "Checkpoint" && r.State == "inProgress" && r.ParentId is not null)
-                .ToList();
-
-            var checkpointIds = inProgressCheckpoints.Select(r => r.Id).ToHashSet();
-            var checkpointParentStageIds = inProgressCheckpoints
-                .Select(r => r.ParentId!)
-                .ToHashSet();
-
-            // Find Checkpoint.Approval sub-records under in-progress checkpoints
-            // These contain the actual approval ID we need
-            var approvalRecords = allRecords
-                .Where(r => r.Type == "Checkpoint.Approval"
-                    && r.ParentId is not null
-                    && checkpointIds.Contains(r.ParentId))
-                .ToList();
-
-            // Map: checkpoint parent (stage ID) -> approval record ID
-            var approvalIdByStageId = new Dictionary<string, string>();
-            foreach (var approvalRec in approvalRecords)
-            {
-                // Find which checkpoint this belongs to
-                var checkpoint = inProgressCheckpoints.FirstOrDefault(c => c.Id == approvalRec.ParentId);
-                if (checkpoint?.ParentId is not null && approvalRec.Id is not null)
-                {
-                    approvalIdByStageId[checkpoint.ParentId] = approvalRec.Id;
-                }
-            }
-
-            var waitingStages = stageRecords
-                .Where(kv => checkpointParentStageIds.Contains(kv.Key))
-                .Select(kv => new WaitingStage(
-                    kv.Value.Name ?? "Unknown stage",
-                    approvalIdByStageId.GetValueOrDefault(kv.Key)))
-                .ToList();
-
+            var waitingStages = ExtractWaitingStagesFromTimeline(timeline.Records);
             if (waitingStages.Count == 0) return [];
 
-            // If we didn't get approval IDs from timeline, try the approvals API as fallback
             if (waitingStages.Any(w => w.ApprovalId is null))
-            {
-                try
-                {
-                    var approvals = await GetPendingApprovalsAsync(project, ct);
-                    if (approvals.Count > 0)
-                    {
-                        var approvalQueue = new Queue<AdoApproval>(approvals);
-                        waitingStages = waitingStages.Select(w =>
-                        {
-                            if (w.ApprovalId is not null) return w;
-                            return approvalQueue.Count > 0
-                                ? w with { ApprovalId = approvalQueue.Dequeue().Id }
-                                : w;
-                        }).ToList();
-                    }
-                }
-                catch { /* Approvals API may not be available */ }
-            }
+                waitingStages = await EnrichWithApprovalsFallbackAsync(project, runId, waitingStages, ct);
 
             return waitingStages;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to fetch waiting stages for run {RunId} in project {Project}", runId, project);
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Identifies stages that are blocked at a checkpoint (waiting for approval) by inspecting
+    /// the timeline record tree: Stage → Checkpoint (inProgress) → Checkpoint.Approval.
+    /// </summary>
+    private static List<WaitingStage> ExtractWaitingStagesFromTimeline(IReadOnlyList<AdoTimelineRecordDto> records)
+    {
+        var stageRecords = records
+            .Where(r => r.Type == "Stage")
+            .ToDictionary(r => r.Id ?? "", r => r);
+
+        var inProgressCheckpoints = records
+            .Where(r => r.Type == "Checkpoint" && r.State == "inProgress" && r.ParentId is not null)
+            .ToList();
+
+        var checkpointIds = inProgressCheckpoints.Select(r => r.Id).ToHashSet();
+        var checkpointParentStageIds = inProgressCheckpoints.Select(r => r.ParentId!).ToHashSet();
+
+        var approvalIdByStageId = BuildApprovalIdMap(records, inProgressCheckpoints, checkpointIds);
+
+        return stageRecords
+            .Where(kv => checkpointParentStageIds.Contains(kv.Key))
+            .Select(kv => new WaitingStage(
+                kv.Value.Name ?? "Unknown stage",
+                approvalIdByStageId.GetValueOrDefault(kv.Key)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Builds a map from stage ID to approval record ID by walking
+    /// Checkpoint.Approval → Checkpoint → Stage parent relationships.
+    /// </summary>
+    private static Dictionary<string, string> BuildApprovalIdMap(
+        IReadOnlyList<AdoTimelineRecordDto> records,
+        List<AdoTimelineRecordDto> inProgressCheckpoints,
+        HashSet<string?> checkpointIds)
+    {
+        var approvalRecords = records
+            .Where(r => r.Type == "Checkpoint.Approval"
+                && r.ParentId is not null
+                && checkpointIds.Contains(r.ParentId))
+            .ToList();
+
+        var approvalIdByStageId = new Dictionary<string, string>();
+        foreach (var approvalRec in approvalRecords)
+        {
+            var checkpoint = inProgressCheckpoints.FirstOrDefault(c => c.Id == approvalRec.ParentId);
+            if (checkpoint?.ParentId is not null && approvalRec.Id is not null)
+                approvalIdByStageId[checkpoint.ParentId] = approvalRec.Id;
+        }
+
+        return approvalIdByStageId;
+    }
+
+    /// <summary>
+    /// Falls back to the approvals API to fill in missing approval IDs for waiting stages.
+    /// </summary>
+    private async Task<List<WaitingStage>> EnrichWithApprovalsFallbackAsync(
+        string project, int runId, List<WaitingStage> waitingStages, CancellationToken ct)
+    {
+        try
+        {
+            var approvals = await GetPendingApprovalsAsync(project, ct);
+            if (approvals.Count == 0) return waitingStages;
+
+            var approvalQueue = new Queue<AdoApproval>(approvals);
+            return waitingStages.Select(w =>
+            {
+                if (w.ApprovalId is not null) return w;
+                return approvalQueue.Count > 0
+                    ? w with { ApprovalId = approvalQueue.Dequeue().Id }
+                    : w;
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch approvals as fallback for run {RunId}", runId);
+            return waitingStages;
         }
     }
 
@@ -369,8 +394,9 @@ public class DevOpsClient : IDevOpsClient
                     r.Identifier))
                 .ToList() ?? [];
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to fetch pipeline stages for run {RunId} in project {Project}", runId, project);
             return [];
         }
     }

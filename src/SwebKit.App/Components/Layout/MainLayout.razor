@@ -41,7 +41,14 @@
         if (!firstRender) return;
         RegisterDefaultCommands();
         _jsRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[SwebKit] Keyboard shortcuts registration failed: {ex.Message}");
+        }
         StateHasChanged();
     }
 

@@ -15,12 +15,15 @@ using System.Threading.Channels;
 
 namespace SwebKit.Kubernetes.AksClient;
 
-public class KubernetesAksClient : IAksClient
+public class KubernetesAksClient : IAksClient, IAsyncDisposable
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
     private readonly k8s.Kubernetes _client;
     private readonly string? _kubeconfigPath;
     private readonly string? _kubeconfigContext;
+
+    private readonly Dictionary<Guid, Process> _portForwardProcesses = [];
+    private readonly Lock _portForwardLock = new();
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
@@ -348,15 +351,34 @@ public class KubernetesAksClient : IAksClient
         };
         process.BeginOutputReadLine();
 
-        PortForwardProcessRegistry.Register(session.SessionId, process);
+        lock (_portForwardLock) _portForwardProcesses[session.SessionId] = process;
         return Task.FromResult(session);
     }
 
     public Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default)
     {
-        PortForwardProcessRegistry.Stop(session.SessionId);
+        lock (_portForwardLock)
+        {
+            if (_portForwardProcesses.Remove(session.SessionId, out var p) && !p.HasExited)
+                p.Kill(entireProcessTree: true);
+        }
         session.IsActive = false;
         return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        lock (_portForwardLock)
+        {
+            foreach (var (_, process) in _portForwardProcesses)
+            {
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                catch { /* Process may already be gone */ }
+                process.Dispose();
+            }
+            _portForwardProcesses.Clear();
+        }
+        return ValueTask.CompletedTask;
     }
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
@@ -1083,17 +1105,3 @@ internal static class AksAzureAuthHelpers
     }
 }
 
-internal static class PortForwardProcessRegistry
-{
-    private static readonly Dictionary<Guid, Process> _processes = [];
-    private static readonly Lock _lock = new();
-
-    public static void Register(Guid id, Process process) { lock (_lock) _processes[id] = process; }
-    public static void Stop(Guid id)
-    {
-        lock (_lock)
-        {
-            if (_processes.Remove(id, out var p) && !p.HasExited) p.Kill(entireProcessTree: true);
-        }
-    }
-}

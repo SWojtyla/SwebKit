@@ -5,7 +5,7 @@
 
 .cdp-error,
 .cdp-empty {
-    padding: 12px 10px;
+    padding: var(--spacing-md) 10px;
     font-size: 12px;
     color: var(--color-text-muted);
 }
@@ -22,7 +22,7 @@
 
 .cdp-select {
     width: 100%;
-    padding: 4px 8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
     background: var(--color-surface);
     color: var(--color-text);
     border: 1px solid var(--color-border);
@@ -32,12 +32,12 @@
 
 /* ── Sections ── */
 .cdp-section {
-    padding: 8px 10px;
+    padding: var(--spacing-sm) 10px;
     border-bottom: 1px solid var(--color-border);
 }
 
 .cdp-label {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -54,7 +54,7 @@
 
 .cdp-image-badge {
     font-family: 'Cascadia Code', 'Consolas', monospace;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     word-break: break-all;
     flex: 1;
 }
@@ -79,7 +79,7 @@
 .cdp-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
 }
 
 .cdp-res-label {
@@ -103,12 +103,12 @@
 .cdp-env-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
 }
 
 .cdp-env-table thead th {
     text-align: left;
-    padding: 4px 6px;
+    padding: var(--spacing-xs) 6px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -122,7 +122,7 @@
 }
 
 .cdp-env-name {
-    padding: 4px 6px;
+    padding: var(--spacing-xs) 6px;
     font-family: 'Cascadia Code', 'Consolas', monospace;
     color: var(--color-accent);
     width: 34%;
@@ -132,14 +132,14 @@
 }
 
 .cdp-env-source {
-    padding: 4px 6px;
+    padding: var(--spacing-xs) 6px;
     width: 28%;
     vertical-align: top;
     border-bottom: 1px solid var(--color-border-subtle, var(--color-border));
 }
 
 .cdp-env-value {
-    padding: 4px 6px;
+    padding: var(--spacing-xs) 6px;
     font-family: 'Cascadia Code', 'Consolas', monospace;
     word-break: break-all;
     vertical-align: top;

@@ -1,7 +1,7 @@
 .auto-refresh-toggle {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--spacing-xs);
 }
 
 .auto-refresh-btn {
@@ -13,7 +13,7 @@
     color: var(--color-text-muted);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s;
@@ -44,12 +44,12 @@
 }
 
 .auto-refresh-select {
-    padding: 2px 4px;
+    padding: 2px var(--spacing-xs);
     background: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     outline: none;
     cursor: pointer;
 }

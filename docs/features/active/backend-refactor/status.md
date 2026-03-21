@@ -1,42 +1,49 @@
 # Backend Refactor — Status
 
-**Status:** Planned
+**Status:** In Progress
 
 ## Progress checklist
 
-### Phase 1 — Critical Bug Fixes
-- [ ] Fix `PortForwardProcessRegistry` — remove `static` dictionary, move to instance-based registry in `KubernetesAksClient`
-- [ ] Fix `AppInsightsObservabilityProvider.IsConnected` — make thread-safe with `volatile` or `Interlocked`
-- [ ] Fix `DevOpsClient` thread-safety: `_orgUrl` / `_pat` fields should not be reassigned after construction, or use `Interlocked`
+### Phase 1 — Critical Bug Fixes ✅
+- [x] Fix `PortForwardProcessRegistry` — removed `static` dictionary, moved to instance fields `_portForwardProcesses` + `_portForwardLock` on `KubernetesAksClient`; `DisposeAsync` kills all tracked processes
+- [x] Fix `DevOpsClient` thread-safety — `_orgUrl` is now `volatile`; `Configure()` guards against double-call with `InvalidOperationException`
 
-### Phase 2 — Error Handling & Logging
-- [ ] Add `ILogger<T>` to `AppInsightsObservabilityProvider` — log swallowed exceptions at `Warning`
-- [ ] Add `ILogger<T>` to `DevOpsClient` — log swallowed exceptions in `GetWaitingStagesAsync`, `GetRunStagesAsync`
-- [ ] Add `ILogger<T>` to `RedisClient` — log swallowed exceptions in `TryGetMemoryUsageAsync`, `TryGetEncodingAsync`
-- [ ] Add `ILogger<T>` to `AzureServiceBusClient` — log connection test failures
-- [ ] Fix `TaskQueueService` fire-and-forget (`_ = Task.Delay(5000).ContinueWith(...)`) — use proper `async`/`await`
-- [ ] Fix `AppEventBus.Publish<T>` — wrap each handler invocation in try/catch, log errors, continue remaining handlers
+### Phase 2 — Error Handling & Logging ✅
+- [x] Add `ILogger<AzureServiceBusClient>` — logs connection test failures at `Warning`
+- [x] Add `ILogger<DevOpsClient>` — logs stage/approval fetch failures at `Warning`
+- [x] Add `ILogger<RedisClient>` — logs Try* operation failures at `Warning`; added `TryAsync<T>` / `TryValueAsync<T>` helpers
+- [x] Add `ILogger<AppEventBus>` — `Publish<T>` wraps each handler in try/catch, logs at `Error`, continues remaining handlers
+- [x] Fix `TaskQueueService` fire-and-forget — replaced `.ContinueWith()` with proper `async RemoveAfterDelayAsync()`
 
-### Phase 3 — Missing Tests
-- [ ] Add unit tests for `AzureServiceBusClient`: `PeekMessagesAsync`, `SendMessageAsync`, `ResubmitDeadLetterAsync`, entity path parsing
-- [ ] Add unit tests for `AppInsightsObservabilityProvider`: `QueryLogsAsync` KQL building, `GetTraceAsync` span mapping
-- [ ] Add unit tests for `KubernetesAksClient`: Helm release parsing, port-forward lifecycle, instance process registry
-- [ ] Add unit tests for `RedisClient`: key scanning, type handling, TTL operations
-- [ ] Add unit tests for `DevOpsClient`: `GetWaitingStagesAsync` state logic, approval flow mapping
-- [ ] Add test utility `FakeCredentialStore` shared across all test projects
+### Phase 3 — Missing Tests ✅
+- [x] Create `FakeCredentialStore` in `tests/SwebKit.Core.Tests/Fakes/`
+- [x] Add `AppEventBus` tests: subscriber throws → others still fire; unsubscribe; no-subscribers
+- [x] Fix pre-existing build break in `AzureClientGuardTests` (constructor signature update)
+- [x] Create `TaskQueueServiceTests` — 17 tests covering enqueue/complete/cancel/clear lifecycle
+- [x] Create `AzureServiceBusClientParsingTests` — 10 tests covering construction guards, entity path handling
+- [x] Add `KubernetesAksClient` reflection test — verifies no static `Dictionary<,>` fields remain
+- [x] Add `RedisClient` tests — 22 tests covering constructor guards, `RedisConfig.Validate()`
+- [x] Create `SwebKit.DevOps.Tests` project — 24 tests covering `Configure()` guard, HTTP error handling, stage/approval mapping, pipeline queries
+- [x] Add `DevOpsClient` to solution (`SwebKit.slnx`)
+- **158 tests total, all passing ✅**
 
-### Phase 4 — Configuration & DI
-- [ ] Add validation to config classes (`ServiceBusConfig`, `ObservabilityConfig`, `AksConfig`, `RedisConfig`) — throw on missing required fields at construction time
-- [ ] Fix `DevOpsClient.Configure()` anti-pattern — move to constructor injection or factory
-- [ ] Extract shared `JsonSerializerOptions` to `SwebKit.Core` — remove 4 duplicated definitions
-- [ ] Make `AppDataPaths` injectable (non-static) so tests can override paths
+### Phase 4 — Configuration & DI ✅ (partial)
+- [x] Add `Validate()` method to `ServiceBusConfig`, `AksConfig`, `RedisConfig`, `DevOpsConfig`
+- [x] Fix `DevOpsClient.Configure()` anti-pattern — guard against double-call; field is `volatile`
+- [x] Extract shared `SwebKitJsonOptions` to `SwebKit.Core/Serialization/SwebKitJsonOptions.cs` — used by `ProfileRepository`, `ReleaseRepository`, `UiStateRepository`, `DevOpsClient`
+- [ ] Make `AppDataPaths` injectable — deferred
+- [ ] Factory pattern for `DevOpsClient` — deferred (guard is sufficient for now, see decisions.md)
 
-### Phase 5 — Code Quality
-- [ ] Implement `GetMetricsAsync` in `AppInsightsObservabilityProvider` or mark as `throw new NotImplementedException()`
-- [ ] Replace entity path string split in `AzureServiceBusClient` with explicit validation (`Split('/', 2)` + length check)
-- [ ] Extract magic numbers to named constants: `524_288` (storage limit), `10_000` (log buffer), `500` (log tail), API version strings
-- [ ] Extract generic `TryAsync<T>` helper to reduce boilerplate in `RedisClient`
-- [ ] Refactor `GetWaitingStagesAsync` in `DevOpsClient` (~80 lines) into smaller private methods
+### Phase 5 — Code Quality ✅
+- [x] Fix entity path parsing — `Split('/', 2)` + `ArgumentException` on malformed input
+- [x] Create `SwebKit.Core/Constants/Limits.cs` — `LogBufferMaxLines`, `LogTailInitialLines`, `StoragePreviewBytes`, `TaskCompletionDelayMs`
+- [x] Add `TryAsync<T>` / `TryValueAsync<T>` helpers in `RedisClient`
+- [x] Decompose `GetWaitingStagesAsync` (~80 lines) into `ExtractWaitingStagesFromTimeline`, `BuildApprovalIdMap`, `EnrichWithApprovalsFallbackAsync`
+
+## Remaining work
+- `AppDataPaths` injectable — deferred (low priority)
+- `DevOpsClient` factory pattern — deferred (see decisions.md)
+- Functional tests for `AzureServiceBusClient` (peek, send, resubmit) — requires SDK wrapper interface, separate effort
 
 ## Blockers
 

@@ -9,7 +9,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    padding: var(--spacing-sm) 10px;
     border-bottom: 1px solid var(--color-border);
     font-size: 12px;
 }
@@ -17,27 +17,27 @@
 .separator-control {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 11px;
+    gap: var(--spacing-xs);
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
 }
 
 .sep-input {
     width: 36px;
-    padding: 2px 4px;
+    padding: 2px var(--spacing-xs);
     background: var(--color-surface);
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 3px;
     text-align: center;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-family: Consolas, monospace;
 }
 
 .ns-loading {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-sm);
     padding: 16px;
     font-size: 12px;
     color: var(--color-text-muted);
@@ -50,7 +50,7 @@
 }
 
 .ns-nodes {
-    padding: 4px 0;
+    padding: var(--spacing-xs) 0;
     flex: 1;
     overflow: auto;
 }

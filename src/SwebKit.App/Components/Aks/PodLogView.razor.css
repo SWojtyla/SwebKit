@@ -10,7 +10,7 @@
 .log-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-sm);
     padding: 6px 10px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
@@ -21,7 +21,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
     cursor: pointer;
     white-space: nowrap;
@@ -49,12 +49,12 @@
 .log-filter-input {
     flex: 1;
     min-width: 80px;
-    padding: 3px 8px;
+    padding: 3px var(--spacing-sm);
     background: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     outline: none;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .log-line-count {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -74,7 +74,7 @@
     flex: 1;
     overflow-y: auto;
     font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.6;
     padding: 6px 10px;
     background: var(--color-bg);
@@ -89,7 +89,7 @@
 }
 
 .log-line {
-    padding: 0 4px;
+    padding: 0 var(--spacing-xs);
     border-radius: 2px;
     word-break: break-all;
 }
@@ -99,12 +99,12 @@
 }
 
 .log-line.error {
-    color: #FF6B6B;
+    color: var(--color-error);
     background: rgba(229, 57, 53, 0.06);
 }
 
 .log-line.warn {
-    color: #FFB86C;
+    color: var(--color-warning);
 }
 
 .log-line.debug {
@@ -116,6 +116,6 @@
     align-items: center;
     gap: 6px;
     color: var(--color-text-muted);
-    padding: 6px 4px;
-    font-size: 11px;
+    padding: 6px var(--spacing-xs);
+    font-size: var(--font-size-sm);
 }

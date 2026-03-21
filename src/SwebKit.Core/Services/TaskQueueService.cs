@@ -1,4 +1,5 @@
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Constants;
 
 namespace SwebKit.Core.Services;
 
@@ -41,11 +42,7 @@ public class TaskQueueService : ITaskQueue
         });
 
         // Auto-remove completed tasks after 5 seconds
-        _ = Task.Delay(5000).ContinueWith(_ =>
-        {
-            lock (_lock) _tasks.RemoveAll(t => t.Id == id && t.Status != BackgroundTaskStatus.Running);
-            TasksChanged?.Invoke();
-        });
+        _ = RemoveAfterDelayAsync(id);
     }
 
     public void Cancel(Guid id)
@@ -64,6 +61,14 @@ public class TaskQueueService : ITaskQueue
     public void Clear()
     {
         lock (_lock) _tasks.RemoveAll(t => t.Status != BackgroundTaskStatus.Running);
+        TasksChanged?.Invoke();
+    }
+
+    private async Task RemoveAfterDelayAsync(Guid id)
+    {
+        await Task.Delay(Limits.TaskCompletionDelayMs);
+        lock (_lock)
+            _tasks.RemoveAll(t => t.Id == id && t.Status != BackgroundTaskStatus.Running);
         TasksChanged?.Invoke();
     }
 }

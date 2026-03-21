@@ -1,193 +1,13 @@
+/* ════════════════════════════════════════════════
+   AKS PAGE — Layout & Shell
+   ════════════════════════════════════════════════ */
+
 /* ── Page shell ── */
 .aks-page {
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-}
-
-/* ── Toolbar ── */
-.aks-toolbar {
-    display: flex;
-    flex-direction: column;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
-
-/* Row 1: connection status, context, namespace, actions */
-.aks-toolbar-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-}
-
-/* Row 2: resource type tabs */
-.aks-tab-bar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 8px 5px;
-    overflow-x: auto;
-}
-
-.aks-context-label {
-    font-size: 12px;
-    color: var(--color-text);
-}
-
-.aks-toolbar-divider {
-    width: 1px;
-    height: 20px;
-    background: var(--color-border);
-    flex-shrink: 0;
-}
-
-.aks-toolbar-spacer {
-    flex: 1;
-}
-
-/* ── Namespace label ── */
-.aks-ns-label {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    white-space: nowrap;
-}
-
-/* ── Namespace dropdown select (existing context + namespace style) ── */
-.aks-ns-select {
-    padding: 3px 8px;
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 12px;
-    outline: none;
-    min-width: 120px;
-    cursor: pointer;
-}
-
-.aks-ns-select:focus {
-    border-color: var(--color-accent);
-}
-
-/* ── Namespace picker (searchable custom dropdown) ── */
-.aks-ns-picker {
-    position: relative;
-}
-
-.aks-ns-search {
-    cursor: default;
-    min-width: 150px;
-}
-
-.aks-ns-search:not([readonly]) {
-    cursor: text;
-}
-
-.aks-ns-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 199;
-}
-
-.aks-ns-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 200px;
-    max-height: 260px;
-    overflow-y: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-    z-index: 200;
-    padding: 4px 0;
-}
-
-.aks-ns-option {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--color-text);
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.aks-ns-option:hover {
-    background: var(--color-surface-2);
-}
-
-.aks-ns-option.current {
-    color: var(--color-accent);
-    font-weight: 600;
-}
-
-/* ── Resource type tabs ── */
-.aks-resource-tab {
-    padding: 4px 12px;
-    background: transparent;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.1s;
-}
-
-.aks-resource-tab:hover {
-    color: var(--color-text);
-    background: var(--color-surface-2);
-}
-
-.aks-resource-tab.active {
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: rgba(0, 120, 212, 0.08);
-}
-
-/* ── Empty state ── */
-.aks-empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--color-text-muted);
-    padding: 48px;
-}
-
-.aks-empty-icon {
-    font-size: 48px;
-    opacity: 0.3;
-    margin-bottom: 8px;
-}
-
-.aks-empty-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.aks-empty-subtitle {
-    font-size: 13px;
-    text-align: center;
-    line-height: 1.5;
-    max-width: 400px;
-}
-
-.aks-empty-subtitle a {
-    color: var(--color-accent);
-    text-decoration: none;
-}
-
-.aks-empty-subtitle a:hover {
-    text-decoration: underline;
 }
 
 /* ── Main content area ── */
@@ -222,123 +42,192 @@
     min-height: 0;
 }
 
-/* ── Section header (shared) ── */
-.aks-section-header {
+/* ── Empty state ── */
+.aks-empty-state {
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    color: var(--color-text-muted);
+    padding: 48px;
+}
+
+.aks-empty-icon {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: var(--spacing-sm);
+}
+
+.aks-empty-title {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.aks-empty-subtitle {
+    font-size: var(--font-size-md);
+    text-align: center;
+    line-height: 1.5;
+    max-width: 400px;
+}
+
+.aks-empty-subtitle a {
+    color: var(--color-accent);
+    text-decoration: none;
+}
+
+.aks-empty-subtitle a:hover {
+    text-decoration: underline;
+}
+
+/* ════════════════════════════════════════════════
+   AKS PAGE — Toolbar & Namespace Picker
+   ════════════════════════════════════════════════ */
+
+/* ── Toolbar ── */
+.aks-toolbar {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
-.aks-section-title {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+/* Row 1: connection status, context, namespace, actions */
+.aks-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 6px var(--spacing-md);
+}
+
+/* Row 2: resource type tabs */
+.aks-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 0 var(--spacing-sm) 5px;
+    overflow-x: auto;
+}
+
+.aks-context-label {
+    font-size: 12px;
+    color: var(--color-text);
+}
+
+.aks-toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-toolbar-spacer {
+    flex: 1;
+}
+
+/* ── Namespace label ── */
+.aks-ns-label {
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.aks-section-count {
-    font-size: 10px;
-    font-weight: 600;
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    padding: 1px 6px;
-    border-radius: 8px;
-    min-width: 18px;
-    text-align: center;
-}
-
-/* ── Resource panel (main table area) ── */
-.aks-resource-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-width: 0;
-}
-
-.aks-table-wrap {
-    flex: 1;
-    overflow: auto;
+/* ── Namespace dropdown select (existing context + namespace style) ── */
+.aks-ns-select {
+    padding: 3px var(--spacing-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
     font-size: 12px;
+    outline: none;
+    min-width: 120px;
+    cursor: pointer;
 }
 
-.aks-row-ctx {
-    margin: -4px -8px;
-    padding: 4px 8px;
+.aks-ns-select:focus {
+    border-color: var(--color-accent);
+}
+
+/* ── Namespace picker (searchable custom dropdown) ── */
+.aks-ns-picker {
+    position: relative;
+}
+
+.aks-ns-search {
     cursor: default;
+    min-width: 150px;
 }
 
-.aks-resource-name {
-    font-weight: 500;
+.aks-ns-search:not([readonly]) {
+    cursor: text;
 }
 
-.aks-ready-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+.aks-ns-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-dropdown) - 1);
 }
 
-.aks-ready-badge.healthy {
-    background: rgba(67, 160, 71, 0.12);
-    color: var(--color-success);
-}
-
-.aks-ready-badge.degraded {
-    background: rgba(251, 140, 0, 0.12);
-    color: var(--color-warning);
-}
-
-.aks-status {
-    font-size: 11px;
-}
-
-.aks-status.running {
-    color: var(--color-success);
-}
-
-.aks-status.error {
-    color: var(--color-error);
-}
-
-.aks-status.other {
-    color: var(--color-text-muted);
-}
-
-.aks-ingress-hosts {
-    font-size: 11px;
-    color: var(--color-accent);
-}
-
-/* ── Events panel (peer pane) ── */
-.aks-event-warn-badge {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--color-warning);
-    background: rgba(251, 140, 0, 0.12);
-    padding: 1px 6px;
-    border-radius: 8px;
-}
-
-.aks-events-list {
-    flex: 1;
+.aks-ns-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    max-height: 260px;
     overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    z-index: var(--z-dropdown);
+    padding: var(--spacing-xs) 0;
 }
 
-.aks-events-empty {
-    padding: 24px 16px;
-    text-align: center;
+.aks-ns-option {
+    padding: 6px var(--spacing-md);
     font-size: 12px;
+    color: var(--color-text);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aks-ns-option:hover {
+    background: var(--color-surface-2);
+}
+
+.aks-ns-option.current {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+/* ── Resource type tabs ── */
+.aks-resource-tab {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: transparent;
     color: var(--color-text-muted);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+}
+
+.aks-resource-tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-resource-tab.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(0, 120, 212, 0.08);
 }
 
 /* ── Events toggle button (in toolbar row) ── */
@@ -366,6 +255,388 @@
     background: rgba(255, 165, 0, 0.08);
 }
 
+/* ════════════════════════════════════════════════
+   AKS PAGE — Resource Tables
+   ════════════════════════════════════════════════ */
+
+/* ── Section header (shared) ── */
+.aks-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aks-section-count {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ── Resource panel (main table area) ── */
+.aks-resource-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.aks-table-wrap {
+    flex: 1;
+    overflow: auto;
+    font-size: 12px;
+}
+
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--spacing-sm);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-ready-badge.healthy {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.aks-ready-badge.degraded {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.aks-status {
+    font-size: var(--font-size-sm);
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.error {
+    color: var(--color-error);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+.aks-ingress-hosts {
+    font-size: var(--font-size-sm);
+    color: var(--color-accent);
+}
+
+/* ── CronJob styles ── */
+.aks-cron-schedule {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.aks-suspended {
+    opacity: 0.55;
+    font-style: italic;
+}
+
+.aks-suspended-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    padding: 0px 5px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: var(--spacing-xs);
+}
+
+/* ── Metric N/A placeholder ── */
+.aks-metric-na {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+/* ── Namespace cell (multi-namespace mode) ── */
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}
+
+/* ── Ingress URL buttons ── */
+.aks-ingress-hosts-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-ingress-url-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    line-height: 1.4;
+}
+
+.aks-ingress-url-btn:hover {
+    opacity: 0.75;
+}
+
+/* ── Pod metrics ── */
+.aks-metric-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-metric-bar-track {
+    height: 3px;
+    background: var(--color-surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.aks-metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.aks-metric-bar-fill.metric-low {
+    background: var(--color-success);
+}
+
+.aks-metric-bar-fill.metric-med {
+    background: var(--color-warning);
+}
+
+.aks-metric-bar-fill.metric-high {
+    background: var(--color-error);
+}
+
+.aks-metric {
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-metric.metric-low {
+    color: var(--color-success);
+}
+
+.aks-metric.metric-med {
+    color: var(--color-warning);
+}
+
+.aks-metric.metric-high {
+    color: var(--color-error);
+}
+
+/* ── Events panel (peer pane) ── */
+.aks-event-warn-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-warning);
+    background: rgba(251, 140, 0, 0.12);
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+
+.aks-events-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.aks-events-empty {
+    padding: 24px var(--spacing-lg);
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.aks-event-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-sm);
+    transition: background 0.1s;
+}
+
+.aks-event-item:hover {
+    background: var(--color-surface-2);
+}
+
+.aks-event-item.warning {
+    border-left: 2px solid var(--color-warning);
+}
+
+.aks-event-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.aks-event-icon {
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+}
+
+.aks-event-icon.warning {
+    color: var(--color-warning);
+}
+
+.aks-event-icon.normal {
+    color: var(--color-text-muted);
+    font-size: 6px;
+}
+
+.aks-event-reason {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.aks-event-item.warning .aks-event-reason {
+    color: var(--color-warning);
+}
+
+.aks-event-count {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    background: var(--color-surface-2);
+    padding: 0 5px;
+    border-radius: 6px;
+}
+
+.aks-event-time {
+    margin-left: auto;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.aks-event-detail {
+    color: var(--color-text-muted);
+    margin-top: 3px;
+    padding-left: var(--spacing-lg);
+    line-height: 1.4;
+}
+
+.aks-event-object {
+    color: var(--color-accent);
+    margin-right: var(--spacing-xs);
+}
+
+/* ── Selected row ── */
+::deep .selected-row {
+    background: rgba(0, 120, 212, 0.08);
+}
+
+/* ── Helm age suffix ── */
+.aks-age-suffix {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+/* ── Helm history table ── */
+.aks-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.aks-history-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.aks-history-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.aks-history-table tr:hover td {
+    background: var(--color-surface-2);
+}
+
+.aks-rev-current td {
+    background: rgba(67, 160, 71, 0.06);
+}
+
+.aks-rollback-hint {
+    padding: 6px var(--spacing-md);
+    font-size: 12px;
+    color: var(--color-text-secondary, #888);
+    border-bottom: 1px solid var(--color-border, #333);
+}
+
+.aks-rollback-btn {
+    padding: 2px var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* ════════════════════════════════════════════════
+   AKS PAGE — Detail Panel
+   ════════════════════════════════════════════════ */
+
+/* ── Side panel header (used inside ResizablePanel) ── */
+.aks-log-header {
+    background: var(--color-surface);
+}
+
+/* ════════════════════════════════════════════════
+   AKS PAGE — YAML Editor & Syntax Highlighting
+   ════════════════════════════════════════════════ */
+
 /* ── YAML search bar ── */
 .aks-yaml-search-bar {
     display: flex;
@@ -379,12 +650,12 @@
 
 .aks-yaml-search-input {
     flex: 1;
-    padding: 3px 8px;
+    padding: 3px var(--spacing-sm);
     background: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     outline: none;
 }
 
@@ -393,7 +664,7 @@
 }
 
 .aks-yaml-search-count {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     white-space: nowrap;
 }
@@ -403,8 +674,8 @@
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
-    font-size: 11px;
-    padding: 1px 4px;
+    font-size: var(--font-size-sm);
+    padding: 1px var(--spacing-xs);
     border-radius: 3px;
 }
 
@@ -442,138 +713,6 @@
     outline: 1px solid rgba(255, 180, 0, 0.5);
 }
 
-/* ── Ingress URL buttons ── */
-.aks-ingress-hosts-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.aks-ingress-url-btn {
-    background: transparent;
-    border: none;
-    color: var(--color-accent);
-    cursor: pointer;
-    font-size: 11px;
-    padding: 0;
-    text-align: left;
-    text-decoration: underline;
-    line-height: 1.4;
-}
-
-.aks-ingress-url-btn:hover {
-    opacity: 0.75;
-}
-
-/* ── CronJob styles ── */
-.aks-cron-schedule {
-    font-family: 'Cascadia Code', 'Consolas', monospace;
-    font-size: 11px;
-    color: var(--color-text-muted);
-}
-
-.aks-suspended {
-    opacity: 0.55;
-    font-style: italic;
-}
-
-.aks-suspended-badge {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-text-muted);
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    padding: 0px 5px;
-    border-radius: 4px;
-    vertical-align: middle;
-    margin-left: 4px;
-}
-
-/* ── Metric N/A placeholder ── */
-.aks-metric-na {
-    color: var(--color-text-muted);
-    font-size: 11px;
-}
-
-.aks-event-item {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--color-border);
-    font-size: 11px;
-    transition: background 0.1s;
-}
-
-.aks-event-item:hover {
-    background: var(--color-surface-2);
-}
-
-.aks-event-item.warning {
-    border-left: 2px solid var(--color-warning);
-}
-
-.aks-event-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.aks-event-icon {
-    font-size: 10px;
-    flex-shrink: 0;
-}
-
-.aks-event-icon.warning {
-    color: var(--color-warning);
-}
-
-.aks-event-icon.normal {
-    color: var(--color-text-muted);
-    font-size: 6px;
-}
-
-.aks-event-reason {
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.aks-event-item.warning .aks-event-reason {
-    color: var(--color-warning);
-}
-
-.aks-event-count {
-    font-size: 10px;
-    color: var(--color-text-muted);
-    background: var(--color-surface-2);
-    padding: 0 5px;
-    border-radius: 6px;
-}
-
-.aks-event-time {
-    margin-left: auto;
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
-}
-
-.aks-event-detail {
-    color: var(--color-text-muted);
-    margin-top: 3px;
-    padding-left: 16px;
-    line-height: 1.4;
-}
-
-.aks-event-object {
-    color: var(--color-accent);
-    margin-right: 4px;
-}
-
-/* ── Side panel header (used inside ResizablePanel) ── */
-.aks-log-header {
-    background: var(--color-surface);
-}
-
 .aks-yaml-content {
     flex: 1;
     min-height: 0;
@@ -585,9 +724,9 @@
 
 .aks-yaml-pre {
     margin: 0;
-    padding: 12px;
+    padding: var(--spacing-md);
     font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.6;
     color: var(--color-text);
     white-space: pre;
@@ -595,128 +734,9 @@
 }
 
 .aks-yaml-error {
-    padding: 16px;
+    padding: var(--spacing-lg);
     color: var(--color-error);
     font-size: 12px;
-}
-
-/* ── Helm age suffix ── */
-.aks-age-suffix {
-    color: var(--color-text-muted);
-    font-size: 10px;
-}
-
-/* ── Helm history table ── */
-.aks-history-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-}
-
-.aks-history-table th {
-    text-align: left;
-    padding: 6px 10px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    border-bottom: 1px solid var(--color-border);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.aks-history-table td {
-    padding: 5px 10px;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text);
-}
-
-.aks-history-table tr:hover td {
-    background: var(--color-surface-2);
-}
-
-.aks-rev-current td {
-    background: rgba(67, 160, 71, 0.06);
-}
-
-.aks-rollback-hint {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--color-text-secondary, #888);
-    border-bottom: 1px solid var(--color-border, #333);
-}
-
-.aks-rollback-btn {
-    padding: 2px 8px;
-    font-size: 11px;
-    border-radius: 3px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-/* ── Selected row ── */
-::deep .selected-row {
-    background: rgba(0, 120, 212, 0.08);
-}
-
-/* ── Pod metrics ── */
-.aks-metric-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.aks-metric-bar-track {
-    height: 3px;
-    background: var(--color-surface-2);
-    border-radius: 2px;
-    overflow: hidden;
-    width: 100%;
-}
-
-.aks-metric-bar-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.3s ease;
-}
-
-.aks-metric-bar-fill.metric-low {
-    background: var(--color-success);
-}
-
-.aks-metric-bar-fill.metric-med {
-    background: var(--color-warning);
-}
-
-.aks-metric-bar-fill.metric-high {
-    background: var(--color-error);
-}
-
-.aks-metric {
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-}
-
-.aks-metric.metric-low {
-    color: var(--color-success);
-}
-
-.aks-metric.metric-med {
-    color: var(--color-warning);
-}
-
-.aks-metric.metric-high {
-    color: var(--color-error);
-}
-
-/* ── Namespace cell (multi-namespace mode) ── */
-.aks-ns-cell {
-    color: var(--color-accent);
-    cursor: pointer;
-    font-size: 11px;
-}
-
-.aks-ns-cell:hover {
-    text-decoration: underline;
 }
 
 /* ── YAML editor (textarea) ── */
@@ -743,7 +763,7 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    padding: 12px;
+    padding: var(--spacing-md);
     background: transparent;
     color: transparent;
     -webkit-text-fill-color: transparent;
@@ -752,7 +772,7 @@
     outline: none;
     resize: none;
     font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.6;
     tab-size: 2;
     white-space: pre;
@@ -767,17 +787,354 @@
     -webkit-text-fill-color: transparent;
 }
 
+/* ── YAML syntax highlight tokens ──
+   ::deep is required because the <span> elements are injected at runtime via
+   MarkupString and do not receive Blazor's CSS isolation scope attribute. */
+.aks-yaml-pre ::deep .yml-key        { color: #9cdcfe; }
+.aks-yaml-pre ::deep .yml-colon      { color: var(--color-text-muted); }
+.aks-yaml-pre ::deep .yml-string     { color: #ce9178; }
+.aks-yaml-pre ::deep .yml-bool       { color: #569cd6; }
+.aks-yaml-pre ::deep .yml-null       { color: #569cd6; }
+.aks-yaml-pre ::deep .yml-number     { color: #b5cea8; }
+.aks-yaml-pre ::deep .yml-comment    { color: #6a9955; font-style: italic; }
+.aks-yaml-pre ::deep .yml-doc-marker { color: #808080; }
+.aks-yaml-pre ::deep .yml-directive  { color: #808080; }
+.aks-yaml-pre ::deep .yml-dash       { color: #c586c0; font-weight: 600; }
+.aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
+.aks-yaml-pre ::deep .yml-anchor     { color: #dcdcaa; }
+.aks-yaml-pre ::deep .yml-scalar     { color: #dcdcaa; }
+
+/* ════════════════════════════════════════════════
+   AKS PAGE — HPA Details
+   ════════════════════════════════════════════════ */
+
+/* ── HPA badge (table column) ── */
+.aks-hpa-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 2px var(--spacing-sm) 2px 6px;
+    background: rgba(0, 120, 212, 0.08);
+    color: var(--color-accent);
+    border: 1px solid rgba(0, 120, 212, 0.22);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.4;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.aks-hpa-badge:hover {
+    background: rgba(0, 120, 212, 0.16);
+    border-color: var(--color-accent);
+}
+
+.aks-hpa-badge.hpa-scaling {
+    background: rgba(251, 140, 0, 0.10);
+    color: var(--color-warning);
+    border-color: rgba(251, 140, 0, 0.28);
+}
+
+.aks-hpa-badge.hpa-scaling:hover {
+    background: rgba(251, 140, 0, 0.18);
+}
+
+.aks-hpa-badge .hpa-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.75;
+}
+
+.aks-hpa-badge .hpa-replicas {
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-hpa-badge .hpa-cpu {
+    font-weight: 400;
+    font-size: var(--font-size-xs);
+    opacity: 0.75;
+    border-left: 1px solid currentColor;
+    padding-left: 5px;
+    margin-left: 1px;
+}
+
+/* ── HPA detail panel ── */
+.aks-hpa-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: var(--spacing-md);
+}
+
+.aks-hpa-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-sm);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+}
+
+.aks-hpa-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    min-width: 52px;
+}
+
+.aks-hpa-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aks-hpa-kind-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+/* ── Replica overview card ── */
+.aks-hpa-replica-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: var(--spacing-md);
+    margin: 10px 0;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.aks-hpa-replica-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+
+.aks-hpa-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.aks-hpa-stat-num {
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.aks-hpa-stat-num.current {
+    color: var(--color-text);
+}
+
+.aks-hpa-stat-num.desired-stable {
+    color: var(--color-success);
+}
+
+.aks-hpa-stat-num.desired-scaling {
+    color: var(--color-warning);
+}
+
+.aks-hpa-stat-lbl {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-stat-arrow {
+    font-size: 18px;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+}
+
+.aks-hpa-replica-bounds {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-replica-bounds strong {
+    color: var(--color-text);
+}
+
+.aks-hpa-replica-track {
+    flex: 1;
+    height: 4px;
+    background: var(--color-border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.aks-hpa-replica-fill {
+    height: 100%;
+    background: var(--color-accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+
+/* ── Section label ── */
+.aks-hpa-section-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    padding: 14px 0 6px;
+}
+
+/* ── Metrics table ── */
+.aks-hpa-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-xs);
+}
+
+.aks-hpa-table th {
+    text-align: left;
+    padding: 5px var(--spacing-sm);
+    font-weight: 600;
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.aks-hpa-table td {
+    padding: 6px var(--spacing-sm);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    vertical-align: middle;
+}
+
+.aks-hpa-table tr:last-child td {
+    border-bottom: none;
+}
+
+.aks-hpa-table tr:hover td {
+    background: var(--color-surface-2);
+}
+
+.aks-hpa-metric-name {
+    font-weight: 500;
+}
+
+.aks-hpa-type-badge {
+    font-size: var(--font-size-xs);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.aks-hpa-target-val {
+    color: var(--color-text-muted);
+}
+
+.aks-hpa-table td.metric-ok   { color: var(--color-success); font-weight: 600; }
+.aks-hpa-table td.metric-med  { color: var(--color-warning); font-weight: 600; }
+.aks-hpa-table td.metric-high { color: var(--color-error);   font-weight: 600; }
+
+/* ── Conditions ── */
+.aks-hpa-conditions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: var(--spacing-xs);
+}
+
+.aks-hpa-condition {
+    padding: var(--spacing-sm) 10px;
+    border-radius: 5px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.aks-hpa-condition.cond-ok {
+    border-left: 3px solid var(--color-success);
+}
+
+.aks-hpa-condition.cond-warn {
+    border-left: 3px solid var(--color-warning);
+}
+
+.aks-hpa-condition-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.aks-hpa-cond-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.cond-ok .aks-hpa-cond-dot {
+    background: var(--color-success);
+}
+
+.cond-warn .aks-hpa-cond-dot {
+    background: var(--color-warning);
+}
+
+.aks-hpa-cond-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    flex: 1;
+}
+
+.aks-hpa-cond-reason {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-xs);
+    padding-left: 13px;
+    line-height: 1.4;
+}
+
+/* ════════════════════════════════════════════════
+   AKS PAGE — Scale Controls
+   ════════════════════════════════════════════════ */
+
 /* ── Scale panel ── */
 .aks-scale-panel {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 20px 16px;
+    gap: var(--spacing-lg);
+    padding: 20px var(--spacing-lg);
     align-items: center;
 }
 
 .aks-scale-label {
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -787,7 +1144,7 @@
 .aks-scale-stepper {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-sm);
 }
 
 .aks-scale-step-btn {
@@ -842,342 +1199,13 @@
 }
 
 .aks-scale-current {
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
 }
 
 .aks-scale-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-sm);
     width: 100%;
     justify-content: center;
-}
-
-/* ── YAML syntax highlight tokens ──
-   ::deep is required because the <span> elements are injected at runtime via
-   MarkupString and do not receive Blazor's CSS isolation scope attribute. */
-.aks-yaml-pre ::deep .yml-key        { color: #9cdcfe; }
-.aks-yaml-pre ::deep .yml-colon      { color: var(--color-text-muted); }
-.aks-yaml-pre ::deep .yml-string     { color: #ce9178; }
-.aks-yaml-pre ::deep .yml-bool       { color: #569cd6; }
-.aks-yaml-pre ::deep .yml-null       { color: #569cd6; }
-.aks-yaml-pre ::deep .yml-number     { color: #b5cea8; }
-.aks-yaml-pre ::deep .yml-comment    { color: #6a9955; font-style: italic; }
-.aks-yaml-pre ::deep .yml-doc-marker { color: #808080; }
-.aks-yaml-pre ::deep .yml-directive  { color: #808080; }
-.aks-yaml-pre ::deep .yml-dash       { color: #c586c0; font-weight: 600; }
-.aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
-.aks-yaml-pre ::deep .yml-anchor     { color: #dcdcaa; }
-.aks-yaml-pre ::deep .yml-scalar     { color: #dcdcaa; }
-
-/* ── HPA badge (table column) ── */
-.aks-hpa-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px 2px 6px;
-    background: rgba(0, 120, 212, 0.08);
-    color: var(--color-accent);
-    border: 1px solid rgba(0, 120, 212, 0.22);
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
-    white-space: nowrap;
-    line-height: 1.4;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.aks-hpa-badge:hover {
-    background: rgba(0, 120, 212, 0.16);
-    border-color: var(--color-accent);
-}
-
-.aks-hpa-badge.hpa-scaling {
-    background: rgba(251, 140, 0, 0.10);
-    color: var(--color-warning);
-    border-color: rgba(251, 140, 0, 0.28);
-}
-
-.aks-hpa-badge.hpa-scaling:hover {
-    background: rgba(251, 140, 0, 0.18);
-}
-
-.aks-hpa-badge .hpa-icon {
-    font-size: 12px;
-    line-height: 1;
-    opacity: 0.75;
-}
-
-.aks-hpa-badge .hpa-replicas {
-    font-variant-numeric: tabular-nums;
-}
-
-.aks-hpa-badge .hpa-cpu {
-    font-weight: 400;
-    font-size: 10px;
-    opacity: 0.75;
-    border-left: 1px solid currentColor;
-    padding-left: 5px;
-    margin-left: 1px;
-}
-
-/* ── HPA detail panel ── */
-.aks-hpa-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: 12px;
-}
-
-.aks-hpa-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--color-border);
-    font-size: 12px;
-}
-
-.aks-hpa-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--color-text-muted);
-    flex-shrink: 0;
-    min-width: 52px;
-}
-
-.aks-hpa-value {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--color-text);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.aks-hpa-kind-badge {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    flex-shrink: 0;
-}
-
-/* ── Replica overview card ── */
-.aks-hpa-replica-card {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    margin: 10px 0;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-}
-
-.aks-hpa-replica-stats {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-}
-
-.aks-hpa-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-}
-
-.aks-hpa-stat-num {
-    font-size: 26px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-}
-
-.aks-hpa-stat-num.current {
-    color: var(--color-text);
-}
-
-.aks-hpa-stat-num.desired-stable {
-    color: var(--color-success);
-}
-
-.aks-hpa-stat-num.desired-scaling {
-    color: var(--color-warning);
-}
-
-.aks-hpa-stat-lbl {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--color-text-muted);
-}
-
-.aks-hpa-stat-arrow {
-    font-size: 18px;
-    color: var(--color-text-muted);
-    margin-bottom: 14px;
-}
-
-.aks-hpa-replica-bounds {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    color: var(--color-text-muted);
-}
-
-.aks-hpa-replica-bounds strong {
-    color: var(--color-text);
-}
-
-.aks-hpa-replica-track {
-    flex: 1;
-    height: 4px;
-    background: var(--color-border);
-    border-radius: 2px;
-    overflow: hidden;
-}
-
-.aks-hpa-replica-fill {
-    height: 100%;
-    background: var(--color-accent);
-    border-radius: 2px;
-    transition: width 0.3s;
-}
-
-/* ── Section label ── */
-.aks-hpa-section-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--color-text-muted);
-    padding: 14px 0 6px;
-}
-
-/* ── Metrics table ── */
-.aks-hpa-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-    margin-bottom: 4px;
-}
-
-.aks-hpa-table th {
-    text-align: left;
-    padding: 5px 8px;
-    font-weight: 600;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    color: var(--color-text-muted);
-    border-bottom: 1px solid var(--color-border);
-}
-
-.aks-hpa-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text);
-    vertical-align: middle;
-}
-
-.aks-hpa-table tr:last-child td {
-    border-bottom: none;
-}
-
-.aks-hpa-table tr:hover td {
-    background: var(--color-surface-2);
-}
-
-.aks-hpa-metric-name {
-    font-weight: 500;
-}
-
-.aks-hpa-type-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    white-space: nowrap;
-}
-
-.aks-hpa-target-val {
-    color: var(--color-text-muted);
-}
-
-.aks-hpa-table td.metric-ok   { color: var(--color-success); font-weight: 600; }
-.aks-hpa-table td.metric-med  { color: var(--color-warning); font-weight: 600; }
-.aks-hpa-table td.metric-high { color: var(--color-error);   font-weight: 600; }
-
-/* ── Conditions ── */
-.aks-hpa-conditions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 4px;
-}
-
-.aks-hpa-condition {
-    padding: 8px 10px;
-    border-radius: 5px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-}
-
-.aks-hpa-condition.cond-ok {
-    border-left: 3px solid var(--color-success);
-}
-
-.aks-hpa-condition.cond-warn {
-    border-left: 3px solid var(--color-warning);
-}
-
-.aks-hpa-condition-header {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-}
-
-.aks-hpa-cond-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.cond-ok .aks-hpa-cond-dot {
-    background: var(--color-success);
-}
-
-.cond-warn .aks-hpa-cond-dot {
-    background: var(--color-warning);
-}
-
-.aks-hpa-cond-type {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-text);
-    flex: 1;
-}
-
-.aks-hpa-cond-reason {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    margin-top: 4px;
-    padding-left: 13px;
-    line-height: 1.4;
 }

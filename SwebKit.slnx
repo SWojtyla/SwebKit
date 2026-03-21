@@ -11,6 +11,7 @@
     <Project Path="tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj" />
     <Project Path="tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj" />
     <Project Path="tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj" />
+    <Project Path="tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj" />
     <Project Path="tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj" />
     <Project Path="tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj" />
   </Folder>

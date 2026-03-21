@@ -16,6 +16,26 @@
     --color-warning: #FB8C00;
     --color-success: #43A047;
     --color-prod: #C8002A;
+
+    /* Spacing scale */
+    --spacing-xs:  4px;
+    --spacing-sm:  8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+
+    /* Typography scale */
+    --font-size-xs: 10px;
+    --font-size-sm: 11px;
+    --font-size-md: 13px;
+    --font-size-lg: 14px;
+    --font-size-xl: 16px;
+
+    /* Z-index scale */
+    --z-dropdown: 200;
+    --z-modal:    500;
+    --z-toast:    900;
+    --z-overlay: 1000;
 }
 
 html, body {
@@ -193,7 +213,7 @@ html, body {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 1000;
+    z-index: var(--z-overlay);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -407,12 +427,12 @@ html, body {
 .ctx-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 999;
+    z-index: calc(var(--z-overlay) - 1);
 }
 
 .ctx-menu {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-overlay);
     min-width: 180px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -461,3 +481,39 @@ html, body {
     flex-shrink: 0;
     font-size: 13px;
 }
+
+/* ── Utility: form inputs ── */
+.form-input {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* ── Utility: surface card ── */
+.surface-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* ── Utility: text ── */
+.text-muted  { color: var(--color-text-muted); }
+.text-accent { color: var(--color-accent); }
+.text-error  { color: var(--color-error); }
+.text-xs     { font-size: var(--font-size-xs); }
+.text-sm     { font-size: var(--font-size-sm); }
+.text-md     { font-size: var(--font-size-md); }
+.text-lg     { font-size: var(--font-size-lg); }
+
+/* ── Utility: empty state ── */
+.empty-state          { padding: 40px; text-align: center; color: var(--color-text-muted); }
+.empty-state-icon     { font-size: 28px; margin-bottom: var(--spacing-md); opacity: 0.4; }
+.empty-state-title    { font-size: var(--font-size-lg); font-weight: 500; }
+.empty-state-subtitle { font-size: var(--font-size-sm); margin-top: var(--spacing-xs); }

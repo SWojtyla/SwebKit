@@ -30,22 +30,7 @@ Run full test suite (`dotnet test`) after every phase. No test may be removed or
 | Entity path `"topic/sub"` | One slash | `topicName="topic"`, `subName="sub"` |
 | Entity path `"a/b/c"` | Two slashes | Throws `ArgumentException` |
 
-### 2.2 `AppInsightsObservabilityProvider`
-
-**Project:** `SwebKit.Azure.Tests`
-
-| Method | Scenario | Assert |
-|--------|----------|--------|
-| `QueryLogsAsync` | Default (no custom KQL) | Query contains `union traces, exceptions` |
-| `QueryLogsAsync` | Custom KQL appended | User KQL appears in final query |
-| `QueryLogsAsync` | TimeRange last 1h | Start/end timestamps correct |
-| `GetTraceAsync` | Two spans, one root | Root identified by no parent span ID |
-| `GetTraceAsync` | Child span links parent | `ParentSpanId` set correctly |
-| `TestConnectionAsync` | API succeeds | Returns `true`, `IsConnected = true` |
-| `TestConnectionAsync` | API throws | Returns `false`, `IsConnected = false`, no throw |
-| Thread-safety | `IsConnected` read concurrently | No torn read |
-
-### 2.3 `KubernetesAksClient`
+### 2.2 `KubernetesAksClient`
 
 **Project:** `SwebKit.Kubernetes.Tests`
 
@@ -125,8 +110,6 @@ Used by `DevOpsClient` tests. Returns pre-canned JSON responses for specific req
 
 - [ ] Port-forward a pod in AKS — verify session starts and stops cleanly
 - [ ] Start two simultaneous port-forwards from two environments — verify separate process tracking
-- [ ] Test connection to App Insights from two threads (unlikely in practice, but no crash)
-
 ### Phase 2 — Error handling
 
 - [ ] Disconnect Redis mid-session — verify warning in Serilog log, no crash
@@ -136,10 +119,6 @@ Used by `DevOpsClient` tests. Returns pre-canned JSON responses for specific req
 ### Phase 3 — Tests
 
 - [ ] `dotnet test` passes all new tests
-
-### Phase 4 — Config validation
-
-- [ ] Save empty `WorkspaceId` in Observability config — verify immediate error message, not deferred crash
 
 ---
 

@@ -1,0 +1,16 @@
+@* Displays a centred empty/placeholder state with an icon, title, and optional subtitle. *@
+
+<div class="empty-state">
+    <div class="empty-state-icon">@Icon</div>
+    <div class="empty-state-title">@Title</div>
+    @if (!string.IsNullOrEmpty(Subtitle))
+    {
+        <div class="empty-state-subtitle">@Subtitle</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+}

@@ -3,26 +3,26 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px 0;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) 0;
     overflow-y: auto;
 }
 
 .cm-filter-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-sm);
     padding: 0 10px;
 }
 
 .cm-count {
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
     white-space: nowrap;
 }
 
 .cm-empty {
-    padding: 12px 10px;
+    padding: var(--spacing-md) 10px;
     color: var(--color-text-muted);
     font-size: 12px;
 }
@@ -30,14 +30,14 @@
 .cm-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
 }
 
 .cm-table thead th {
     text-align: left;
     padding: 5px 10px;
     font-weight: 600;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);

@@ -10,7 +10,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    padding: var(--spacing-sm) 10px;
     border-bottom: 1px solid var(--color-border);
     font-size: 12px;
 }
@@ -29,7 +29,7 @@
 }
 
 .pm-buckets {
-    padding: 4px 0;
+    padding: var(--spacing-xs) 0;
 }
 
 .pm-row {
@@ -37,8 +37,8 @@
     grid-template-columns: 100px 1fr 48px 70px 60px;
     gap: 6px;
     align-items: center;
-    padding: 4px 10px;
-    font-size: 11px;
+    padding: var(--spacing-xs) 10px;
+    font-size: var(--font-size-sm);
 }
 
 .pm-prefix {

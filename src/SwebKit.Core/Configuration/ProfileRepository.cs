@@ -1,14 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
 public class ProfileRepository
 {
-    private static readonly JsonSerializerOptions Options = new()
+    private static readonly JsonSerializerOptions Options = new(SwebKitJsonOptions.Indented)
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 

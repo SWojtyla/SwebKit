@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
@@ -16,7 +17,8 @@ public class AzureClientGuardTests
             CredentialRef = "sb:missing"
         };
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new AzureServiceBusClient(config, new FakeCredentialStore()));
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => new AzureServiceBusClient(config, new FakeCredentialStore(), NullLogger<AzureServiceBusClient>.Instance));
         Assert.Contains("Credential 'sb:missing' not found", ex.Message);
     }
 

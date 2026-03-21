@@ -1,3 +1,4 @@
+using System.Reflection;
 using SwebKit.Kubernetes.AksClient;
 
 namespace SwebKit.Kubernetes.Tests;
@@ -117,6 +118,22 @@ users:
         var actual = AksAzureAuthHelpers.ShouldUseAzureCredentialFallback(host, accessToken);
 
         Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void KubernetesAksClient_HasNoStaticGenericDictionaryFields()
+    {
+        // Process registries and other mutable shared state must be instance-level,
+        // not static. A static Dictionary<,> would allow state to leak between
+        // independent client instances and make tests non-deterministic.
+        var type = typeof(KubernetesAksClient);
+        var staticDictFields = type
+            .GetFields(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+            .Where(f => f.FieldType.IsGenericType &&
+                        f.FieldType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            .ToList();
+
+        Assert.Empty(staticDictFields);
     }
 
     [Theory]

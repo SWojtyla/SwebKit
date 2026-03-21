@@ -1,14 +1,11 @@
 using System.Text.Json;
+using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
 
 public class UiStateRepository
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private static readonly JsonSerializerOptions Options = SwebKitJsonOptions.Indented;
 
     private UiState _state = new();
 

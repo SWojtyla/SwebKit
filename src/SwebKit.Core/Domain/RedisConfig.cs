@@ -62,6 +62,17 @@ public class RedisConfig
     [JsonIgnore]
     public RedisCacheEntry? ActiveCache =>
         Caches.FirstOrDefault(c => c.Id == ActiveCacheId) ?? Caches.FirstOrDefault();
+
+    public void Validate()
+    {
+        if (Caches.Count == 0)
+            throw new InvalidOperationException($"{nameof(RedisConfig)} must have at least one cache entry.");
+        foreach (var entry in Caches)
+        {
+            if (string.IsNullOrWhiteSpace(entry.ConnectionString))
+                throw new InvalidOperationException($"{nameof(RedisCacheEntry)}.{nameof(RedisCacheEntry.ConnectionString)} is required for cache '{entry.DisplayName}'.");
+        }
+    }
 }
 
 /// <summary>

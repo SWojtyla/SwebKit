@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 
 namespace SwebKit.Core.Services;
@@ -6,6 +7,12 @@ public class AppEventBus : IAppEventBus
 {
     private readonly Dictionary<Type, List<Delegate>> _handlers = [];
     private readonly Lock _lock = new();
+    private readonly ILogger<AppEventBus> _logger;
+
+    public AppEventBus(ILogger<AppEventBus> logger)
+    {
+        _logger = logger;
+    }
 
     public void Subscribe<T>(Action<T> handler)
     {
@@ -40,7 +47,16 @@ public class AppEventBus : IAppEventBus
 
         if (handlers is null) return;
         foreach (var h in handlers)
-            ((Action<T>)h)(@event);
+        {
+            try
+            {
+                ((Action<T>)h)(@event);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Event handler threw for event type {EventType}", typeof(T).Name);
+            }
+        }
     }
 }
 

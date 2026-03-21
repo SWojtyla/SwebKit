@@ -10,4 +10,10 @@ public class ServiceBusConfig
 
     public string FullyQualifiedNamespace =>
         NamespaceHostname.Contains('.') ? NamespaceHostname : $"{NamespaceHostname}.servicebus.windows.net";
+
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(NamespaceHostname))
+            throw new InvalidOperationException($"{nameof(ServiceBusConfig)}.{nameof(NamespaceHostname)} is required.");
+    }
 }

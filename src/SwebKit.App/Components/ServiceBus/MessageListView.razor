@@ -1,4 +1,4 @@
-@implements IDisposable
+@implements IAsyncDisposable
 @inject AppStateService AppState
 @inject UiStateRepository UiState
 @inject IJSRuntime JS
@@ -38,7 +38,7 @@
             <FluentButton @onclick="ToggleSelectAll" Appearance="Appearance.Stealth"
                           style="font-size:11px; padding:2px 6px;"
                           title="Select / deselect all visible messages">
-                @(_selectedIds.Count == Messages.Count ? "Deselect all" : "Select all")
+                @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
             </FluentButton>
         }
         <!-- Filter input with save / saved-filters menu -->
@@ -110,22 +110,14 @@
     }
     else if (FilteredMessages.Count == 0)
     {
-        <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px;">
-            <div style="text-align:center; color:var(--color-text-muted);">
-                @if (Messages.Count == 0)
-                {
-                    <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">📭</div>
-                    <div style="font-size:14px; font-weight:500;">No messages</div>
-                    <div style="font-size:12px; margin-top:4px;">Click <strong>Peek</strong> to load messages from the queue.</div>
-                }
-                else
-                {
-                    <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">🔍</div>
-                    <div style="font-size:14px; font-weight:500;">No matches</div>
-                    <div style="font-size:12px; margin-top:4px;">No messages match "<strong>@TextFilter</strong>". Try a different filter.</div>
-                }
-            </div>
-        </div>
+        @if (Messages.Count == 0)
+        {
+            <EmptyState Icon="📭" Title="No messages" Subtitle="Click Peek to load messages from the queue." />
+        }
+        else
+        {
+            <EmptyState Icon="🔍" Title="No matches" Subtitle="@($"No messages match \"{TextFilter}\". Try a different filter.")" />
+        }
     }
     else
     {
@@ -142,9 +134,9 @@
                 {
                     <TemplateColumn Title="✓" Width="40px">
                         <input type="checkbox"
-                               checked="@_selectedIds.Contains(context.MessageId)"
+                               checked="@_selection.IsSelected(context.MessageId)"
                                @onclick:stopPropagation="true"
-                               @onchange="e => ToggleSelection(context, (bool)e.Value!)"
+                               @onchange="async e => await ToggleSelection(context, (bool)e.Value!)"
                                style="cursor:pointer;" />
                     </TemplateColumn>
                 }
@@ -173,23 +165,18 @@
     }
 </div>
 
-@if (_showSaveFilterDialog)
-{
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:320px; width:90%;">
-            <h3 style="margin:0 0 12px; font-size:14px;">Save Filter</h3>
-            <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Filter: "@TextFilter"</div>
-            <input type="text" @bind="_saveFilterName" placeholder="Filter name…"
-                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
-            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
-                <button @onclick="() => _showSaveFilterDialog = false"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-                <button @onclick="ConfirmSaveFilter" disabled="@string.IsNullOrWhiteSpace(_saveFilterName)"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
-            </div>
-        </div>
+<Modal IsOpen="@_showSaveFilterDialog" OnClose="@(() => _showSaveFilterDialog = false)">
+    <h3 style="margin:0 0 12px; font-size:14px;">Save Filter</h3>
+    <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Filter: "@TextFilter"</div>
+    <input type="text" @bind="_saveFilterName" placeholder="Filter name…"
+           style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+    <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+        <button @onclick="() => _showSaveFilterDialog = false"
+                style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+        <button @onclick="ConfirmSaveFilter" disabled="@string.IsNullOrWhiteSpace(_saveFilterName)"
+                style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
     </div>
-}
+</Modal>
 
 @code {
     private enum ExportFormat { Json, Ndjson, Csv }
@@ -216,8 +203,8 @@
     private bool _loadedIsDlqMode;
     private int _loadVersion;
 
-    private HashSet<string> _selectedIds = [];
-    private System.Timers.Timer? _refreshTimer;
+    private readonly SelectionService<string> _selection = new();
+    private readonly AutoRefreshController _autoRefresh = new();
     private int _autoRefreshSeconds;
     private bool _showComposer;
     private bool _preventKeyDefault;
@@ -243,45 +230,39 @@
 
     private string GetRowClass(SbMessage m)
     {
-        if (MultiSelect && _selectedIds.Count > 0 && _selectedIds.Contains(m.MessageId))
+        if (MultiSelect && _selection.Any && _selection.IsSelected(m.MessageId))
             return "selected-row";
         if (!MultiSelect && SelectedMessage?.MessageId == m.MessageId)
             return "selected-row";
         return "";
     }
 
-    private void ToggleSelection(SbMessage msg, bool selected)
+    private async Task ToggleSelection(SbMessage msg, bool selected)
     {
-        if (selected) _selectedIds.Add(msg.MessageId);
-        else _selectedIds.Remove(msg.MessageId);
-        var batch = Messages.Where(m => _selectedIds.Contains(m.MessageId)).ToList();
-        _ = OnMultiSelectionChanged.InvokeAsync(batch);
+        _selection.Toggle(msg.MessageId, selected);
+        var batch = Messages.Where(m => _selection.IsSelected(m.MessageId)).ToList();
+        await OnMultiSelectionChanged.InvokeAsync(batch);
         StateHasChanged();
     }
 
-    private void ToggleSelectAll()
+    private async Task ToggleSelectAll()
     {
-        if (_selectedIds.Count == Messages.Count && Messages.Count > 0)
-            _selectedIds.Clear();
+        if (_selection.Count == Messages.Count && Messages.Count > 0)
+            _selection.Clear();
         else
-            _selectedIds = Messages.Select(m => m.MessageId).ToHashSet();
+            _selection.SelectAll(Messages.Select(m => m.MessageId));
 
-        var batch = Messages.Where(m => _selectedIds.Contains(m.MessageId)).ToList();
-        _ = OnMultiSelectionChanged.InvokeAsync(batch);
+        var batch = Messages.Where(m => _selection.IsSelected(m.MessageId)).ToList();
+        await OnMultiSelectionChanged.InvokeAsync(batch);
         StateHasChanged();
     }
 
     private void ApplyAutoRefresh()
     {
-        _refreshTimer?.Stop();
-        _refreshTimer?.Dispose();
-        _refreshTimer = null;
-        if (_autoRefreshSeconds > 0)
+        _autoRefresh.SetInterval(_autoRefreshSeconds, async () =>
         {
-            _refreshTimer = new System.Timers.Timer(_autoRefreshSeconds * 1000) { AutoReset = true };
-            _refreshTimer.Elapsed += (_, _) => InvokeAsync(LoadAsync);
-            _refreshTimer.Start();
-        }
+            await InvokeAsync(LoadAsync);
+        });
     }
 
     private async Task OnComposerSent()
@@ -297,7 +278,7 @@
             var filteredCount = FilteredMessages.Count;
             var loadedCount = Messages.Count;
             var hasFilter = !string.IsNullOrWhiteSpace(TextFilter);
-            var selectedInfo = MultiSelect && _selectedIds.Count > 0 ? $" · {_selectedIds.Count} selected" : "";
+            var selectedInfo = MultiSelect && _selection.Any ? $" · {_selection.Count} selected" : "";
             var refreshInfo = _autoRefreshSeconds > 0 ? $" · auto-refresh {_autoRefreshSeconds}s" : "";
 
             if (TotalAvailableCount is long total)
@@ -338,7 +319,7 @@
         _loadedClient = Client;
         _loadedEntityPath = EntityPath;
         _loadedIsDlqMode = IsDlqMode;
-        _selectedIds.Clear();
+        _selection.Clear();
 
         await LoadAsync();
     }
@@ -373,7 +354,8 @@
             if (requestVersion == _loadVersion)
             {
                 var currentIds = loadedMessages.Select(m => m.MessageId).ToHashSet();
-                _selectedIds.IntersectWith(currentIds);
+                foreach (var id in _selection.Selected.ToList())
+                    if (!currentIds.Contains(id)) _selection.Toggle(id, false);
                 Messages = loadedMessages;
                 TotalAvailableCount = totalAvailableCount;
             }
@@ -505,7 +487,15 @@
                 return;
         }
 
-        await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, mimeType, content);
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, mimeType, content);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't crash — download is a non-critical operation
+            Console.Error.WriteLine($"Download failed: {ex.Message}");
+        }
     }
 
     private static string BuildCsv(IReadOnlyList<SbMessage> messages)
@@ -535,5 +525,8 @@
         return value;
     }
 
-    public void Dispose() => _refreshTimer?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        await _autoRefresh.DisposeAsync();
+    }
 }

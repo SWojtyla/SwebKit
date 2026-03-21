@@ -1,0 +1,19 @@
+@* Full-screen backdrop modal. Click backdrop to close; click content area does not close. *@
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop" @onclick="HandleBackdropClick">
+        <div class="modal-container" @onclick:stopPropagation="true">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Width { get; set; } = "520px";
+
+    private async Task HandleBackdropClick() => await OnClose.InvokeAsync();
+}

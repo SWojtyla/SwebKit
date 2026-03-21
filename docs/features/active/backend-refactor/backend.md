@@ -24,22 +24,7 @@ Remove the nested `PortForwardProcessRegistry` class. Update all callers.
 
 In `DisposeAsync`, iterate and kill all tracked processes before clearing the dictionary.
 
-### 1.2 `AppInsightsObservabilityProvider.IsConnected` — thread-safety
-
-**File:** `src/SwebKit.Azure/Observability/AppInsightsObservabilityProvider.cs`
-
-**Problem:** `IsConnected` is a plain `bool` set from `TestConnectionAsync` without synchronization.
-
-**Fix:**
-```csharp
-private volatile bool _isConnected;
-public bool IsConnected => _isConnected;
-
-// In TestConnectionAsync:
-_isConnected = result;
-```
-
-### 1.3 `DevOpsClient` — mutable configuration fields
+### 1.2 `DevOpsClient` — mutable configuration fields
 
 **File:** `src/SwebKit.DevOps/DevOpsClient.cs`
 
@@ -77,7 +62,6 @@ private async Task<long?> TryGetMemoryUsageAsync(string key, CancellationToken c
 Affected files:
 | File | Logger name |
 |------|------------|
-| `AppInsightsObservabilityProvider.cs` | `ILogger<AppInsightsObservabilityProvider>` |
 | `DevOpsClient.cs` | `ILogger<DevOpsClient>` |
 | `RedisClient.cs` | `ILogger<RedisClient>` |
 | `AzureServiceBusClient.cs` | `ILogger<AzureServiceBusClient>` |
@@ -144,23 +128,7 @@ Test cases needed:
 
 Strategy: Wrap `ServiceBusClient` behind `IServiceBusClientFactory` interface so it can be substituted in tests.
 
-### 3.3 `AppInsightsObservabilityProvider` tests
-
-**File:** `tests/SwebKit.Azure.Tests/Observability/AppInsightsObservabilityProviderTests.cs`
-
-Test cases needed:
-
-| Method | Scenario | Assert |
-|--------|----------|--------|
-| `QueryLogsAsync` | Default time range | KQL contains expected table unions |
-| `QueryLogsAsync` | Custom KQL | User KQL appended correctly |
-| `GetTraceAsync` | Response maps spans | Root span identified, child spans linked |
-| `TestConnectionAsync` | Success | `IsConnected = true` |
-| `TestConnectionAsync` | Exception | `IsConnected = false`, returns `false` |
-
-Strategy: Wrap `LogsQueryClient` behind an interface `ILogsQueryClient`.
-
-### 3.4 `KubernetesAksClient` tests
+### 3.3 `KubernetesAksClient` tests
 
 **File:** `tests/SwebKit.Kubernetes.Tests/KubernetesAksClientTests.cs`
 
