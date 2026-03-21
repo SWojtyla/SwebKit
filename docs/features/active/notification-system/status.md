@@ -21,7 +21,7 @@ Current state: In Progress — core service and UI components implemented. Integ
 - [x] Design reviewed
 - [x] Backend implementation (`INotificationService`)
 - [x] Frontend implementation (`NotificationToast.razor`, `NotificationHistory.razor`)
-- [ ] Integration across all feature pages
+- [x] Integration across all feature pages
 - [ ] Tests (unit / manual)
 - [ ] Docs aligned
 - [ ] Ready for review
@@ -41,11 +41,11 @@ Current state: In Progress — core service and UI components implemented. Integ
 
 ## Remaining
 
-- Integrate into Service Bus feature (message sent, resubmitted, scheduled cancelled)
-- Integrate into AKS feature (deployment restarted, pod deleted, port-forward started/stopped)
-- Integrate into Redis feature (key deleted, TTL updated, value saved, DB flushed)
-- Integrate into Storage feature (blob downloaded, SAS URL copied)
-- Integrate into Releases feature (approval submitted, deployment triggered)
+- Integrate into Service Bus feature (message sent, resubmitted, scheduled cancelled) ✅
+- Integrate into AKS feature (deployment restarted, pod deleted, scale, Helm rollback, YAML save, URL copy) ✅
+- Integrate into Redis feature (key deleted, TTL updated, value saved, DB flushed) ✅
+- Integrate into Storage feature (blob downloaded, SAS URL copied) ✅
+- Integrate into Releases feature (approval submitted/rejected, deployment triggered) ✅
 - Migrate / deprecate inline `ErrorCallout` usages incrementally
 - Unit tests for `NotificationService`
 - Manual E2E verification (toasts appear, auto-dismiss, bell badge clears)

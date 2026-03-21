@@ -1,5 +1,6 @@
 @inject AppStateService AppState
 @inject ITaskQueue TaskQueue
+@inject INotificationService Notifications
 
 <div style="padding:12px 16px; background:var(--color-surface); display:flex; flex-direction:column; gap:8px;">
     <!-- Header -->
@@ -11,201 +12,218 @@
         <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
             @if (Mode == ComposerMode.Compose)
             {
-                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load Template</FluentButton>
-                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as Template</FluentButton>
-            }
-            <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
-                    style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:14px; padding:2px 6px;">✕</button>
-        </div>
-    </div>
-
-    <!-- Target namespace / entity override (Replay mode) -->
-    @if (Mode == ComposerMode.Replay && AvailableNamespaces is { Count: > 0 })
-    {
-        <div style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
-            <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">Replay Target</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <div style="display:flex; flex-direction:column; gap:3px;">
-                    <label style="font-size:10px; color:var(--color-text-muted);">Namespace</label>
-                    <select @bind="_targetNamespaceId"
-                            style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;">
-                        <option value="">— same namespace —</option>
-                        @foreach (var ns in AvailableNamespaces)
-                        {
-                            <option value="@ns.Id">@ns.Alias</option>
-                        }
-                    </select>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:3px;">
-                    <label style="font-size:10px; color:var(--color-text-muted);">Entity</label>
-                    <input type="text" @bind="_effectiveEntityPath" placeholder="@(EntityPath ?? "entity path…")"
-                           style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load
+                    Template</FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as
+                        Template</FluentButton>
+                    }
+                    <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
+                            style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:14px; padding:2px 6px;">✕</button>
                 </div>
             </div>
-            <!-- Remap rules -->
-            <details style="margin-top:8px;">
-                <summary style="font-size:11px; color:var(--color-text-muted); cursor:pointer;">Remap rules (optional)</summary>
-                <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                        <div style="display:flex; flex-direction:column; gap:3px;">
-                            <label style="font-size:10px; color:var(--color-text-muted);">Override Subject</label>
-                            <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
-                                   style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+
+            <!-- Target namespace / entity override (Replay mode) -->
+            @if (Mode == ComposerMode.Replay && AvailableNamespaces is { Count: > 0 })
+            {
+                <div
+                    style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
+                    <div
+                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">
+                        Replay Target</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div style="display:flex; flex-direction:column; gap:3px;">
+                                <label style="font-size:10px; color:var(--color-text-muted);">Namespace</label>
+                                <select @bind="_targetNamespaceId"
+                                        style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;">
+                                    <option value="">— same namespace —</option>
+                                    @foreach (var ns in AvailableNamespaces)
+                                    {
+                                        <option value="@ns.Id">@ns.Alias</option>
+                                    }
+                                </select>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:3px;">
+                                <label style="font-size:10px; color:var(--color-text-muted);">Entity</label>
+                                <input type="text" @bind="_effectiveEntityPath" placeholder="@(EntityPath ?? "entity path…")"
+                                       style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                            </div>
                         </div>
-                        <div style="display:flex; flex-direction:column; gap:3px;">
-                            <label style="font-size:10px; color:var(--color-text-muted);">Override CorrelationId</label>
-                            <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
-                                   style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                        <!-- Remap rules -->
+                        <details style="margin-top:8px;">
+                            <summary style="font-size:11px; color:var(--color-text-muted); cursor:pointer;">Remap rules (optional)
+                            </summary>
+                            <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label style="font-size:10px; color:var(--color-text-muted);">Override Subject</label>
+                                        <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
+                                               style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    </div>
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label style="font-size:10px; color:var(--color-text-muted);">Override CorrelationId</label>
+                                        <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
+                                               style="padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="font-size:10px; color:var(--color-text-muted); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                        Property Renames
+                                        <button @onclick="AddPropertyRename"
+                                                style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+
+                                            Add</button>
+                                        </div>
+                                        @for (var i = 0; i < _propertyRenames.Count; i++)
+                                        {
+                                            var idx = i;
+                                            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                                                <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
+                                                       @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <span style="align-self:center; color:var(--color-text-muted); font-size:11px;">→</span>
+                                                <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
+                                                       @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <button @onclick="() => RemovePropertyRename(idx)" title="Remove"
+                                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </details>
                         </div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:var(--color-text-muted); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-                            Property Renames
-                            <button @onclick="AddPropertyRename"
-                                    style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+ Add</button>
-                        </div>
-                        @for (var i = 0; i < _propertyRenames.Count; i++)
-                        {
-                            var idx = i;
-                            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                                <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
-                                       @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                <span style="align-self:center; color:var(--color-text-muted); font-size:11px;">→</span>
-                                <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
-                                       @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                <button @onclick="() => RemovePropertyRename(idx)" title="Remove"
-                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
+                    }
+
+                    <!-- Schedule controls -->
+                    @if (Mode == ComposerMode.Schedule)
+                    {
+                        <div
+                            style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
+                            <div
+                                style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">
+                                Schedule</div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label style="font-size:11px; color:var(--color-text-muted);">Enqueue at (local time)</label>
+                                    <input type="datetime-local" @bind="_scheduleAt"
+                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    @if (_scheduleAt != default)
+                                    {
+                                        var minutesFromNow = (_scheduleAt - DateTime.Now).TotalMinutes;
+                                        <div style="font-size:11px; color:var(--color-text-muted);">
+                                            Sends at @_scheduleAt.ToString("yyyy-MM-dd HH:mm") (local) — @minutesFromNow.ToString("F0") min from now
+                                        </div>
+                                    }
+                                </div>
                             </div>
                         }
-                    </div>
-                </div>
-            </details>
-        </div>
-    }
 
-    <!-- Schedule controls -->
-    @if (Mode == ComposerMode.Schedule)
-    {
-        <div style="background:rgba(100,149,237,0.08); border:1px solid var(--color-accent); border-radius:4px; padding:8px 10px;">
-            <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">Schedule</div>
-            <div style="display:flex; flex-direction:column; gap:4px;">
-                <label style="font-size:11px; color:var(--color-text-muted);">Enqueue at (local time)</label>
-                <input type="datetime-local" @bind="_scheduleAt"
-                       style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                @if (_scheduleAt != default)
-                {
-                    var minutesFromNow = (_scheduleAt - DateTime.Now).TotalMinutes;
-                    <div style="font-size:11px; color:var(--color-text-muted);">
-                        Sends at @_scheduleAt.ToString("yyyy-MM-dd HH:mm") (local) — @minutesFromNow.ToString("F0") min from now
-                    </div>
-                }
-            </div>
-        </div>
-    }
+                        <!-- Message fields row -->
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div style="display:flex; flex-direction:column; gap:3px;">
+                                <label
+                                    style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Message
+                                    ID</label>
+                                    <div style="display:flex; gap:4px;">
+                                        <input type="text" @bind="_messageId"
+                                               style="flex:1; padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                                        <button @onclick="@(() => _messageId = Guid.NewGuid().ToString())" title="Generate new ID"
+                                                style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">⟳</button>
+                                    </div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:3px;">
+                                    <label
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Correlation
+                                        ID</label>
+                                        <input type="text" @bind="_correlationId"
+                                               style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    </div>
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Subject</label>
+                                        <input type="text" @bind="_subject"
+                                               style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    </div>
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Content-Type</label>
+                                        <input type="text" @bind="_contentType"
+                                               style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    </div>
+                                </div>
 
-    <!-- Message fields row -->
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div style="display:flex; flex-direction:column; gap:3px;">
-            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Message ID</label>
-            <div style="display:flex; gap:4px;">
-                <input type="text" @bind="_messageId"
-                       style="flex:1; padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
-                <button @onclick="@(() => _messageId = Guid.NewGuid().ToString())" title="Generate new ID"
-                        style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">⟳</button>
-            </div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:3px;">
-            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Correlation ID</label>
-            <input type="text" @bind="_correlationId"
-                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-        </div>
-        <div style="display:flex; flex-direction:column; gap:3px;">
-            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Subject</label>
-            <input type="text" @bind="_subject"
-                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-        </div>
-        <div style="display:flex; flex-direction:column; gap:3px;">
-            <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Content-Type</label>
-            <input type="text" @bind="_contentType"
-                   style="padding:4px 8px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-        </div>
-    </div>
+                                <!-- Application properties -->
+                                <div>
+                                    <div
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                        Application Properties
+                                        <button @onclick="AddProperty"
+                                                style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+
+                                            Add</button>
+                                        </div>
+                                        @for (var i = 0; i < _properties.Count; i++)
+                                        {
+                                            var idx = i;
+                                            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                                                <input type="text" value="@_properties[idx].Key" placeholder="Key"
+                                                       @onchange="e => SetPropertyKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <input type="text" value="@_properties[idx].Value" placeholder="Value"
+                                                       @onchange="e => SetPropertyValue(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <button @onclick="() => RemoveProperty(idx)" title="Remove property"
+                                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
+                                            </div>
+                                        }
+                                    </div>
 
-    <!-- Application properties -->
-    <div>
-        <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-            Application Properties
-            <button @onclick="AddProperty"
-                    style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+ Add</button>
-        </div>
-        @for (var i = 0; i < _properties.Count; i++)
-        {
-            var idx = i;
-            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                <input type="text" value="@_properties[idx].Key" placeholder="Key"
-                       @onchange="e => SetPropertyKey(idx, e.Value?.ToString() ?? string.Empty)"
-                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                <input type="text" value="@_properties[idx].Value" placeholder="Value"
-                       @onchange="e => SetPropertyValue(idx, e.Value?.ToString() ?? string.Empty)"
-                       style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                <button @onclick="() => RemoveProperty(idx)" title="Remove property"
-                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">✕</button>
-            </div>
-        }
-    </div>
+                                    <!-- Body -->
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Body</label>
+                                        <textarea @bind="_body" rows="5"
+                                                  style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:80px;" />
+                                    </div>
 
-    <!-- Body -->
-    <div style="display:flex; flex-direction:column; gap:3px;">
-        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Body</label>
-        <textarea @bind="_body" rows="5"
-                  style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:80px;" />
-    </div>
+                                    <!-- Actions -->
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        @if (_sendResult is not null)
+                                        {
+                                            <span
+                                            style="font-size:11px; color:@(_sendError ? "var(--color-error)" : "var(--color-success)");">@_sendResult</span>
+                                        }
+                                        <FluentButton Appearance="Appearance.Accent" style="margin-left:auto;" Disabled="@(!CanSend)"
+                                                      @onclick="SendMessage">
+                                            @SendLabel
+                                        </FluentButton>
+                                    </div>
+                                </div>
 
-    <!-- Actions -->
-    <div style="display:flex; align-items:center; gap:8px;">
-        @if (_sendResult is not null)
-        {
-            <span style="font-size:11px; color:@(_sendError ? "var(--color-error)" : "var(--color-success)");">@_sendResult</span>
-        }
-        <FluentButton Appearance="Appearance.Accent" style="margin-left:auto;"
-                      Disabled="@(!CanSend)"
-                      @onclick="SendMessage">
-            @SendLabel
-        </FluentButton>
-    </div>
-</div>
+                                @if (_showTemplatePicker)
+                                {
+                                    <TemplatePicker OnTemplateSelected="ApplyTemplate" OnClose="() => _showTemplatePicker = false" />
+                                }
 
-@if (_showTemplatePicker)
-{
-    <TemplatePicker OnTemplateSelected="ApplyTemplate" OnClose="() => _showTemplatePicker = false" />
-}
+                                @if (_showSaveTemplate)
+                                {
+                                    <div
+                                        style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
+                                        <div
+                                            style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
+                                            <h3 style="margin:0 0 12px; font-size:14px;">Save as Template</h3>
+                                            <input type="text" @bind="_saveTemplateName" placeholder="Template name…"
+                                                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+                                            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                                                <button @onclick="() => _showSaveTemplate = false"
+                                                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                                                <button @onclick="SaveTemplate" disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
+                                                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
 
-@if (_showSaveTemplate)
-{
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
-            <h3 style="margin:0 0 12px; font-size:14px;">Save as Template</h3>
-            <input type="text" @bind="_saveTemplateName" placeholder="Template name…"
-                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
-            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
-                <button @onclick="() => _showSaveTemplate = false"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-                <button @onclick="SaveTemplate" disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
-            </div>
-        </div>
-    </div>
-}
-
-<ConfirmDialog Visible="_showSendConfirm"
-               Title="@ConfirmTitle"
-               Message="@ConfirmMessage"
-               IsProduction="true"
-               ConfirmLabel="@SendLabel"
-               OnConfirm="DoSend"
-               OnCancel="() => _showSendConfirm = false" />
+<ConfirmDialog Visible="_showSendConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage" IsProduction="true"
+               ConfirmLabel="@SendLabel" OnConfirm="DoSend" OnCancel="() => _showSendConfirm = false" />
 
 @code {
     public enum ComposerMode { Compose, Edit, Replay, Schedule }
@@ -263,7 +281,7 @@
             _contentType = PrefillMessage.ContentType ?? "application/json";
             _body = PrefillMessage.Body;
             _properties = PrefillMessage.ApplicationProperties
-                .Select(kvp => (kvp.Key, kvp.Value?.ToString() ?? "")).ToList();
+            .Select(kvp => (kvp.Key, kvp.Value?.ToString() ?? "")).ToList();
         }
 
         if (_effectiveEntityPath is null)
@@ -271,36 +289,50 @@
     }
 
     private bool CanSend => !_isSending &&
-        (Client is not null || (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId))) &&
-        !string.IsNullOrWhiteSpace(_effectiveEntityPath ?? EntityPath) &&
-        (Mode != ComposerMode.Schedule || _scheduleAt > DateTime.Now);
+    (Client is not null || (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId))) &&
+    !string.IsNullOrWhiteSpace(_effectiveEntityPath ?? EntityPath) &&
+    (Mode != ComposerMode.Schedule || _scheduleAt > DateTime.Now);
 
     private string SendLabel => _isSending
-        ? (Mode == ComposerMode.Schedule ? "Scheduling…" : "Sending…")
-        : Mode switch
-        {
-            ComposerMode.Schedule => "Schedule",
-            ComposerMode.Replay => "Replay",
-            ComposerMode.Edit => "Resubmit",
-            _ => "Send"
-        };
+    ? (Mode == ComposerMode.Schedule ? "Scheduling…" : "Sending…")
+    : Mode switch
+    {
+        ComposerMode.Schedule => "Schedule",
+        ComposerMode.Replay => "Replay",
+        ComposerMode.Edit => "Resubmit",
+        _ => "Send"
+    };
 
     private string ConfirmTitle => Mode == ComposerMode.Schedule ? "Schedule Message" : "Send Message";
     private string ConfirmMessage => Mode == ComposerMode.Replay
-        ? $"Replay message to {_effectiveEntityPath} in production?"
-        : Mode == ComposerMode.Schedule
-            ? $"Schedule message on {_effectiveEntityPath ?? EntityPath} at {_scheduleAt:yyyy-MM-dd HH:mm} in production?"
-            : $"Send message to {_effectiveEntityPath ?? EntityPath} in production?";
+    ? $"Replay message to {_effectiveEntityPath} in production?"
+    : Mode == ComposerMode.Schedule
+    ? $"Schedule message on {_effectiveEntityPath ?? EntityPath} at {_scheduleAt:yyyy-MM-dd HH:mm} in production?"
+    : $"Send message to {_effectiveEntityPath ?? EntityPath} in production?";
 
     private void AddProperty() => _properties.Add(("", ""));
     private void RemoveProperty(int idx) { _properties.RemoveAt(idx); StateHasChanged(); }
-    private void SetPropertyKey(int idx, string key) { _properties[idx] = (key, _properties[idx].Value); StateHasChanged(); }
-    private void SetPropertyValue(int idx, string val) { _properties[idx] = (_properties[idx].Key, val); StateHasChanged(); }
+    private void SetPropertyKey(int idx, string key)
+    {
+        _properties[idx] = (key, _properties[idx].Value); StateHasChanged();
+    }
+    private void SetPropertyValue(int idx, string val)
+    {
+        _properties[idx] = (_properties[idx].Key, val); StateHasChanged();
+    }
 
     private void AddPropertyRename() => _propertyRenames.Add(("", ""));
     private void RemovePropertyRename(int idx) { _propertyRenames.RemoveAt(idx); StateHasChanged(); }
-    private void SetRenameOldKey(int idx, string v) { _propertyRenames[idx] = (v, _propertyRenames[idx].NewKey); StateHasChanged(); }
-    private void SetRenameNewKey(int idx, string v) { _propertyRenames[idx] = (_propertyRenames[idx].OldKey, v); StateHasChanged(); }
+    private void SetRenameOldKey(int idx, string v)
+    {
+        _propertyRenames[idx] = (v, _propertyRenames[idx].NewKey);
+        StateHasChanged();
+    }
+    private void SetRenameNewKey(int idx, string v)
+    {
+        _propertyRenames[idx] = (_propertyRenames[idx].OldKey, v);
+        StateHasChanged();
+    }
 
     private void OpenTemplatePicker() => _showTemplatePicker = true;
 
@@ -334,8 +366,8 @@
             Subject = string.IsNullOrWhiteSpace(_subject) ? null : _subject,
             CorrelationId = string.IsNullOrWhiteSpace(_correlationId) ? null : _correlationId,
             Properties = _properties
-                .Where(p => !string.IsNullOrWhiteSpace(p.Key))
-                .ToDictionary(p => p.Key, p => p.Value)
+        .Where(p => !string.IsNullOrWhiteSpace(p.Key))
+        .ToDictionary(p => p.Key, p => p.Value)
         };
 
         await AppState.SaveMessageTemplateAsync(template);
@@ -365,8 +397,8 @@
         try
         {
             var props = _properties
-                .Where(p => !string.IsNullOrWhiteSpace(p.Key))
-                .ToDictionary<(string Key, string Value), string, object>(p => p.Key, p => p.Value);
+            .Where(p => !string.IsNullOrWhiteSpace(p.Key))
+            .ToDictionary<(string Key, string Value), string, object>(p => p.Key, p => p.Value);
 
             var msg = new SbMessage
             {
@@ -380,7 +412,7 @@
 
             var targetClient = ResolveTargetClient();
             var targetEntity = _effectiveEntityPath ?? EntityPath
-                ?? throw new InvalidOperationException("No target entity.");
+            ?? throw new InvalidOperationException("No target entity.");
 
             if (Mode == ComposerMode.Replay)
                 ApplyRemapRules(msg);
@@ -417,12 +449,22 @@
 
             _sendError = false;
             _messageId = Guid.NewGuid().ToString();
+
+            var successLabel = Mode switch
+            {
+                ComposerMode.Schedule => "Message scheduled",
+                ComposerMode.Replay => "Message replayed",
+                _ => "Message sent"
+            };
+            Notifications.ShowSuccess(successLabel, targetEntity);
+
             await OnSent.InvokeAsync(scheduledEntry);
         }
         catch (Exception ex)
         {
             _sendResult = $"Failed: {ex.Message}";
             _sendError = true;
+            Notifications.ShowError("Failed to send message", ex: ex);
         }
         finally
         {
@@ -434,7 +476,7 @@
     private IServiceBusClient ResolveTargetClient()
     {
         if (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId) &&
-            Guid.TryParse(_targetNamespaceId, out var nsId) && AvailableNamespaces is not null)
+        Guid.TryParse(_targetNamespaceId, out var nsId) && AvailableNamespaces is not null)
         {
             var ns = AvailableNamespaces.FirstOrDefault(n => n.Id == nsId);
             if (ns?.Client is not null) return ns.Client;

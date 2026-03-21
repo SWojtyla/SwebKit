@@ -18,89 +18,108 @@
     else
     {
         <p style="font-size:12px; color:var(--color-text-muted); margin:0 0 12px;">
-            Trigger CI/CD pipeline runs for the components in this release. Each row is a pipeline associated with a component.
+            Trigger CI/CD pipeline runs for the components in this release. Each row is a pipeline associated with a
+            component.
         </p>
 
         <div style="display:grid; gap:12px;">
             @foreach (var comp in ScopedComponents)
             {
                 var lastRun = LastRuns.GetValueOrDefault(comp.ComponentName);
-                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
+                <div
+                    style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
                     @* ── Header row: component name + last run status ── *@
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                         <div>
-                            <div style="font-size:14px; font-weight:600; font-family:Consolas,monospace;">@comp.ComponentName</div>
-                            <div style="font-size:11px; color:var(--color-text-muted);">@comp.ProjectName — Pipeline #@comp.PipelineId</div>
-                        </div>
-                        @if (lastRun is not null)
-                        {
-                            <div style="font-size:11px; text-align:right;">
-                                <div>
-                                    <span class="deploy-status @StatusCss(lastRun)">@StatusLabel(lastRun)</span>
-                                </div>
-                                <div style="color:var(--color-text-muted); margin-top:2px;">
-                                    @lastRun.CreatedDate.LocalDateTime.ToString("g")
-                                    @if (lastRun.TriggeredBy is not null)
-                                    {
-                                        <text> by @lastRun.TriggeredBy</text>
-                                    }
-                                </div>
+                            <div style="font-size:14px; font-weight:600; font-family:Consolas,monospace;">@comp.ComponentName
                             </div>
-                        }
-                        else
-                        {
-                            <span style="font-size:11px; color:var(--color-text-muted);">No recent runs</span>
-                        }
-                    </div>
+                            <div style="font-size:11px; color:var(--color-text-muted);">@comp.ProjectName — Pipeline
+                                #@comp.PipelineId</div>
+                            </div>
+                            @if (lastRun is not null)
+                            {
+                                <div style="font-size:11px; text-align:right;">
+                                    <div>
+                                        <span class="deploy-status @StatusCss(lastRun)">@StatusLabel(lastRun)</span>
+                                    </div>
+                                    <div style="color:var(--color-text-muted); margin-top:2px;">
+                                        @lastRun.CreatedDate.LocalDateTime.ToString("g")
+                                        @if (lastRun.TriggeredBy is not null)
+                                        {
+                                            <text> by @lastRun.TriggeredBy</text>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <span style="font-size:11px; color:var(--color-text-muted);">No recent runs</span>
+                            }
+                        </div>
 
-                    @* ── Trigger controls ── *@
-                    <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
-                        <div style="display:grid; gap:2px; min-width:120px;">
-                            <label style="font-size:11px; color:var(--color-text-muted);">Branch</label>
-                            <input type="text" value="@GetBranch(comp.ComponentName)"
-                                   @onchange="@(e => SetBranch(comp.ComponentName, e.Value?.ToString() ?? "main"))"
-                                   style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                        @* ── Trigger controls ── *@
+                        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                            <div style="display:grid; gap:2px; min-width:120px;">
+                                <label style="font-size:11px; color:var(--color-text-muted);">Branch</label>
+                                <input type="text" value="@GetBranch(comp.ComponentName)"
+                                       @onchange="@(e => SetBranch(comp.ComponentName, e.Value?.ToString() ?? "main"))"
+                                       style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                            </div>
+                            <div style="display:grid; gap:2px; flex:1; min-width:160px;">
+                                <label style="font-size:11px; color:var(--color-text-muted);">Template Parameters <span
+                                    style="font-size:10px;">(key=val, key=val)</span></label>
+                                    <input type="text" value="@GetParams(comp.ComponentName)"
+                                           @onchange="@(e => SetParams(comp.ComponentName, e.Value?.ToString() ?? ""))"
+                                           placeholder="optional"
+                                           style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                </div>
+                                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => ConfirmTrigger(comp))"
+                                              Disabled="@(TriggeringComponent == comp.ComponentName)">
+                                    @(TriggeringComponent == comp.ComponentName ? "Running..." : "Run Pipeline")
+                                </FluentButton>
+                            </div>
                         </div>
-                        <div style="display:grid; gap:2px; flex:1; min-width:160px;">
-                            <label style="font-size:11px; color:var(--color-text-muted);">Template Parameters <span style="font-size:10px;">(key=val, key=val)</span></label>
-                            <input type="text" value="@GetParams(comp.ComponentName)"
-                                   @onchange="@(e => SetParams(comp.ComponentName, e.Value?.ToString() ?? ""))"
-                                   placeholder="optional"
-                                   style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                        </div>
-                        <FluentButton Appearance="Appearance.Accent"
-                                      @onclick="@(() => ConfirmTrigger(comp))"
-                                      Disabled="@(TriggeringComponent == comp.ComponentName)">
-                            @(TriggeringComponent == comp.ComponentName ? "Running..." : "Run Pipeline")
-                        </FluentButton>
-                    </div>
+                    }
                 </div>
             }
         </div>
-    }
-</div>
 
-@* Confirm trigger dialog *@
-<ConfirmDialog Visible="@(ConfirmTarget is not null)"
-               Title="Run Pipeline"
-               Message="@ConfirmMessage"
-               ConfirmLabel="Run"
-               OnConfirm="ExecuteTrigger"
-               OnCancel="@(() => { ConfirmTarget = null; })" />
+        @* Confirm trigger dialog *@
+        <ConfirmDialog Visible="@(ConfirmTarget is not null)" Title="Run Pipeline" Message="@ConfirmMessage" ConfirmLabel="Run"
+                       OnConfirm="ExecuteTrigger" OnCancel="@(() => { ConfirmTarget = null; })" />
 
-<style>
-    .deploy-status { display:inline-block; padding:2px 6px; border-radius:4px; font-size:11px; }
-    .deploy-status.succeeded { background:rgba(67,160,71,0.2); color:var(--color-success); }
-    .deploy-status.failed { background:rgba(200,0,42,0.2); color:var(--color-error); }
-    .deploy-status.running { background:rgba(0,120,212,0.2); color:var(--color-accent); }
-</style>
+        <style>
+            .deploy-status {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+
+            .deploy-status.succeeded {
+                background: rgba(67, 160, 71, 0.2);
+                color: var(--color-success);
+            }
+
+            .deploy-status.failed {
+                background: rgba(200, 0, 42, 0.2);
+                color: var(--color-error);
+            }
+
+            .deploy-status.running {
+                background: rgba(0, 120, 212, 0.2);
+                color: var(--color-accent);
+            }
+        </style>
 
 @code {
+    [Inject] public INotificationService Notifications { get; set; } = default!;
     [Parameter] public ReleaseRecord? Release { get; set; }
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
 
     private bool IsLoading;
-    private List<ComponentScope> ScopedComponents => Release?.Components.Where(c => c.InScope && c.PipelineId > 0).ToList() ?? [];
+    private List<ComponentScope> ScopedComponents => Release?.Components.Where(c => c.InScope && c.PipelineId > 0).ToList()
+    ?? [];
     private Dictionary<string, AdoPipelineRun> LastRuns = new();
     private Dictionary<string, string> Branches = new();
     private Dictionary<string, string> TemplateParams = new();
@@ -108,8 +127,8 @@
     private string? TriggeringComponent;
 
     private string ConfirmMessage => ConfirmTarget is not null
-        ? $"Run pipeline for {ConfirmTarget.ComponentName} on branch '{GetBranch(ConfirmTarget.ComponentName)}'?"
-        : "";
+    ? $"Run pipeline for {ConfirmTarget.ComponentName} on branch '{GetBranch(ConfirmTarget.ComponentName)}'?"
+    : "";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -159,15 +178,19 @@
             if (!string.IsNullOrWhiteSpace(paramsStr))
             {
                 templateParams = paramsStr.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(kv => kv.Split('=', 2))
-                    .Where(parts => parts.Length == 2)
-                    .ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim());
+                .Select(kv => kv.Split('=', 2))
+                .Where(parts => parts.Length == 2)
+                .ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim());
             }
 
             var run = await DevOpsClient.TriggerPipelineRunAsync(comp.ProjectName, comp.PipelineId, branch, templateParams);
             LastRuns[comp.ComponentName] = run;
+            Notifications.ShowSuccess("Pipeline triggered", comp.ComponentName);
         }
-        catch { /* Error handling could be improved */ }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to trigger pipeline", ex: ex);
+        }
         finally
         {
             TriggeringComponent = null;

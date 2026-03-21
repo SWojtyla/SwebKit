@@ -1,6 +1,7 @@
 @page "/aks"
 @inject AppStateService AppState
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 @implements IDisposable
 
 <div class="aks-page" @oncontextmenu:preventDefault>
@@ -1187,8 +1188,9 @@
         {
             await Client.RestartDeploymentAsync(CurrentNamespace, deployment.Name);
             await LoadAsync();
+            Notifications.ShowSuccess("Deployment restarted", deployment.Name);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to restart deployment", ex: ex); }
     }
 
     private async Task OnCtxKillPod()
@@ -1208,8 +1210,9 @@
             await Client.DeletePodAsync(CurrentNamespace, pod.Name);
             if (LogPodName == pod.Name) CloseLogs();
             await LoadAsync();
+            Notifications.ShowSuccess("Pod deleted", pod.Name);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to delete pod", ex: ex); }
     }
 
     private async Task OnCtxCopyHostUrl()
@@ -1220,7 +1223,11 @@
         var host = ingress.Rules.FirstOrDefault(r => r.Host is not null)?.Host;
         if (host is null) return;
         var url = BuildIngressUrl(host);
-        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", url); }
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Notifications.ShowSuccess("URL copied", url);
+        }
         catch { /* clipboard unavailable */ }
     }
 
@@ -1296,8 +1303,9 @@
             else
                 await Client.ScaleDeploymentAsync(CurrentNamespace, name, replicas);
             await LoadAsync();
+            Notifications.ShowSuccess("Scaled", $"{name} → {replicas} replica{(replicas == 1 ? "" : "s")}");
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to scale", ex: ex); }
     }
 
     private void OnScaleCancel()
@@ -1431,8 +1439,9 @@
         {
             await Client.RestartStatefulSetAsync(CurrentNamespace, ss.Name);
             await LoadAsync();
+            Notifications.ShowSuccess("Stateful set restarted", ss.Name);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to restart stateful set", ex: ex); }
     }
 
     private void OnCtxScaleStatefulSet()
@@ -1525,8 +1534,9 @@
             await Client.RollbackHelmReleaseAsync(CurrentNamespace, releaseName, rev.Revision);
             CloseHelmHistory();
             await LoadAsync();
+            Notifications.ShowSuccess("Helm rollback complete", $"{releaseName} → revision {rev.Revision}");
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Helm rollback failed", ex: ex); }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1685,8 +1695,9 @@
             YamlEditMode = false;
             YamlEditText = string.Empty;
             StateHasChanged();
+            Notifications.ShowSuccess("YAML applied", $"{YamlTarget.Value.Kind} {YamlTarget.Value.Name}");
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to apply YAML", ex: ex); }
         finally { YamlApplying = false; StateHasChanged(); }
     }
 

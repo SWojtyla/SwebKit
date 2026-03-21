@@ -1,6 +1,7 @@
 @page "/redis"
 @using SwebKit.Core.Services
 @inject AppStateService AppState
+@inject INotificationService Notifications
 @implements IDisposable
 
 <div class="redis-page">
@@ -8,9 +9,7 @@
         @if (ActiveCacheEntry is not null)
         {
             <h2 class="cache-title">
-                <input class="cache-name-input"
-                       type="text"
-                       value="@ActiveCacheEntry.DisplayName"
+                <input class="cache-name-input"                       type="text"                       value="@ActiveCacheEntry.DisplayName"
                        @onchange="OnCacheNameChanged" />
             </h2>
         }
@@ -66,52 +65,30 @@
         <div class="content-grid">
             <div class="left-column">
                 <div class="panel key-tree-panel">
-                    <RedisNamespaceTree Nodes="@NamespaceNodes"
-                                        Separator="@CurrentSeparator"
-                                        SelectedKey="@SelectedKey"
-                                        KeyTypes="@KeyTypes"
-                                        IsLoading="@IsLoading"
-                                        OnSeparatorChanged="OnSeparatorChangedAsync"
-                                        OnPrefixSelected="OnPrefixSelectedAsync"
-                                        OnKeySelected="SelectKeyAsync" />
+                    <RedisNamespaceTree Nodes="@NamespaceNodes"                                        Separator="@CurrentSeparator"                                        SelectedKey="@SelectedKey"
+                                        KeyTypes="@KeyTypes"                                        IsLoading="@IsLoading"                                        OnSeparatorChanged="OnSeparatorChangedAsync"
+                                        OnPrefixSelected="OnPrefixSelectedAsync"                                        OnKeySelected="SelectKeyAsync" />
                 </div>
             </div>
 
             <div class="right-column">
                 <div class="panel detail-panel">
-                    <RedisKeyDetail SelectedKey="@SelectedKey"
-                                    KeyInfo="@SelectedInfo"
-                                    StringValue="@SelectedStringValue"
-                                    HashFields="@SelectedHashFields"
-                                    Items="@SelectedItems"
-                                    SortedSetItems="@SelectedSortedSetItems"
-                                    OnRefresh="RefreshSelectedAsync"
-                                    OnDelete="DeleteSelectedKeyAsync"
-                                    OnSetTtl="SetTtlAsync"
-                                    OnRemoveTtl="RemoveTtlAsync"
-                                    OnSetStringValue="SetStringValueAsync"
-                                    OnSetHashField="SetHashFieldAsync"
-                                    StartEditRequestId="@StartEditRequestId" />
+                    <RedisKeyDetail SelectedKey="@SelectedKey"                                    KeyInfo="@SelectedInfo"                                    StringValue="@SelectedStringValue"
+                                    HashFields="@SelectedHashFields"                                    Items="@SelectedItems"                                    SortedSetItems="@SelectedSortedSetItems"
+                                    OnRefresh="RefreshSelectedAsync"                                    OnDelete="DeleteSelectedKeyAsync"                                    OnSetTtl="SetTtlAsync"
+                                    OnRemoveTtl="RemoveTtlAsync"                                    OnSetStringValue="SetStringValueAsync"
+                                    OnSetHashField="SetHashFieldAsync"                                    StartEditRequestId="@StartEditRequestId" />
                 </div>
 
-                <RedisPrefixMemory Buckets="@PrefixMemoryBuckets"
-                                   ScannedKeyCount="@ScannedKeyInfos.Count"
-                                   TotalKeyCount="@Keys.Count"
-                                   IsLoading="@IsAnalyzingMemory"
-                                   OnAnalyze="AnalyzePrefixMemoryAsync" />
+                <RedisPrefixMemory Buckets="@PrefixMemoryBuckets"                                   ScannedKeyCount="@ScannedKeyInfos.Count"
+                                   TotalKeyCount="@Keys.Count"                                   IsLoading="@IsAnalyzingMemory"                                   OnAnalyze="AnalyzePrefixMemoryAsync" />
             </div>
         </div>
     }
 </div>
 
-<ConfirmDialog Visible="@ConfirmVisible"
-               Title="@ConfirmTitle"
-               Message="@ConfirmMessage"
-               ConfirmLabel="@ConfirmLabel"
-               IsProduction="@IsProduction"
-               RequireTyping="true"
-               OnConfirm="OnConfirmAsync"
-               OnCancel="OnCancelConfirmAsync" />
+<ConfirmDialog Visible="@ConfirmVisible"               Title="@ConfirmTitle"               Message="@ConfirmMessage"               ConfirmLabel="@ConfirmLabel"
+               IsProduction="@IsProduction"               RequireTyping="true"               OnConfirm="OnConfirmAsync"               OnCancel="OnCancelConfirmAsync" />
 
 @code {
     private IRedisClient? Client;
@@ -165,7 +142,8 @@
     private RedisCacheEntry? ActiveCacheEntry => CacheEntries.FirstOrDefault(c => c.Id == SelectedCacheId)
                                                   ?? CacheEntries.FirstOrDefault();
 
-    private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c => !string.IsNullOrWhiteSpace(c.ConnectionString));
+    private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c =>
+!string.IsNullOrWhiteSpace(c.ConnectionString));
     private bool IsProduction => false;
 
     private string ConnectionLabel
@@ -358,6 +336,7 @@
                 if (Client is null || SelectedKey is null)
                     return;
 
+                var deletedKey = SelectedKey;
                 await Client.DeleteKeysAsync([SelectedKey]);
                 Keys.Remove(SelectedKey);
 
@@ -369,6 +348,7 @@
                 SelectedItems = [];
                 SelectedSortedSetItems = [];
                 RebuildNamespaceTree();
+                Notifications.ShowSuccess("Key deleted", deletedKey);
             });
     }
 
@@ -386,7 +366,7 @@
                 await Client.FlushDatabaseAsync();
                 Keys.Clear();
                 KeyTypes.Clear();
-        
+
                 SelectedKey = null;
                 SelectedInfo = null;
                 SelectedStringValue = null;
@@ -396,6 +376,7 @@
                 NamespaceNodes = [];
                 PrefixMemoryBuckets = [];
                 ScannedKeyInfos.Clear();
+                Notifications.ShowWarning("Database purged", "All keys have been removed.");
             });
     }
 
@@ -408,10 +389,11 @@
         {
             await Client.SetTtlAsync(SelectedKey, TimeSpan.FromSeconds(Math.Max(1, ttlSeconds)));
             await RefreshSelectedAsync();
+            Notifications.ShowSuccess("TTL updated", $"{ttlSeconds}s on '{SelectedKey}'");
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to update TTL", ex: ex);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -425,10 +407,11 @@
         {
             await Client.RemoveTtlAsync(SelectedKey);
             await RefreshSelectedAsync();
+            Notifications.ShowSuccess("TTL removed", $"Key '{SelectedKey}' will not expire.");
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to remove TTL", ex: ex);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -442,10 +425,11 @@
         {
             await Client.SetKeyValueAsync(SelectedKey, value);
             await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Value saved", SelectedKey);
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to save value", ex: ex);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -459,10 +443,11 @@
         {
             await Client.SetHashFieldAsync(SelectedKey, entry.Field, entry.Value);
             await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Field saved", $"{entry.Field} on '{SelectedKey}'");
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to save field", ex: ex);
             await InvokeAsync(StateHasChanged);
         }
     }

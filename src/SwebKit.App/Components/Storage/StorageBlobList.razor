@@ -1,9 +1,11 @@
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
 
     @* ── Breadcrumb ── *@
-    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:2px; padding:6px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0; font-size:12px; min-height:34px;">
+    <div
+        style="display:flex; align-items:center; flex-wrap:wrap; gap:2px; padding:6px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0; font-size:12px; min-height:34px;">
         @for (int i = 0; i < _breadcrumbs.Count; i++)
         {
             var crumb = _breadcrumbs[i];
@@ -18,8 +20,9 @@
             }
             else
             {
-                <button style="background:none; border:none; padding:2px 4px; cursor:pointer; font-size:12px; color:var(--color-accent); text-decoration:underline;"
-                        @onclick="() => NavigateToCrumbAsync(crumb.Prefix)">@crumb.Label</button>
+                <button
+                style="background:none; border:none; padding:2px 4px; cursor:pointer; font-size:12px; color:var(--color-accent); text-decoration:underline;"
+                @onclick="() => NavigateToCrumbAsync(crumb.Prefix)">@crumb.Label</button>
             }
         }
     </div>
@@ -44,63 +47,79 @@
             }
             else
             {
-                <div style="font-size:11px; color:var(--color-text-muted); padding:4px 12px;">Showing @_items.Count item(s)</div>
+                <div style="font-size:11px; color:var(--color-text-muted); padding:4px 12px;">Showing @_items.Count item(s)
+                </div>
                 <ContextMenu @ref="_ctxMenu">
-                    <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy URL</button>
-                    <button class="ctx-item" @onclick="() => CopySasAsync(_ctxItem!)"><span class="ctx-item-icon">🔑</span> Copy SAS URL (24 h)</button>
-                    <div class="ctx-separator"></div>
-                    <button class="ctx-item" @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span> Download</button>
-                </ContextMenu>
+                    <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy
+                        URL</button>
+                        <button class="ctx-item" @onclick="() => CopySasAsync(_ctxItem!)"><span class="ctx-item-icon">🔑</span> Copy
+                            SAS URL (24 h)</button>
+                            <div class="ctx-separator"></div>
+                            <button class="ctx-item" @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span>
+                                Download</button>
+                            </ContextMenu>
 
-                <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                    <thead>
-                        <tr style="border-bottom:1px solid var(--color-border);">
-                            <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted); width:24px;"></th>
-                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Name</th>
-                            <th style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Size</th>
-                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Content-Type</th>
-                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">Last Modified</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var item in _items)
-                        {
-                            var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
-                            var displayName = GetDisplayName(item.Name);
-                            <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
-                                @onclick="() => OnRowClickAsync(item)"
-                                @oncontextmenu="e => OnRowContextMenu(e, item)"
-                                @oncontextmenu:preventDefault="true">
-                                <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
-                                <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
-                                <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
-                                <td style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
-                                <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ? "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid var(--color-border);">
+                                        <th
+                                            style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted); width:24px;">
+                                        </th>
+                                        <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">Name
+                                        </th>
+                                        <th
+                                            style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">
+                                            Size</th>
+                                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">
+                                                Content-Type</th>
+                                                <th
+                                                    style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap;">
+                                                    Last Modified</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in _items)
+                                                {
+                                                    var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
+                                                    var displayName = GetDisplayName(item.Name);
+                                                    <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
+                                                        @onclick="() => OnRowClickAsync(item)" @oncontextmenu="e => OnRowContextMenu(e, item)"
+                                                        @oncontextmenu:preventDefault="true">
+                                                        <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
+                                                        <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
+                                                        <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">
+                                                            @(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
+                                                            <td
+                                                                style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                                                @(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
+                                                                <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ?
+                                                                                            "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
 
-                @if (_hasMore)
-                {
-                    <div style="padding:12px; text-align:center;">
-                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loading" @onclick="LoadMoreAsync">
-                            @(_loading ? "Loading..." : "Load more")
-                        </FluentButton>
-                    </div>
-                }
-            }
-        </div>
-    }
+                                                    @if (_hasMore)
+                                                    {
+                                                        <div style="padding:12px; text-align:center;">
+                                                            <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loading" @onclick="LoadMoreAsync">
+                                                                @(_loading ? "Loading..." : "Load more")
+                                                            </FluentButton>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        }
 
-    @if (_actionMessage is not null)
-    {
-        <div style="padding:6px 12px; font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)"); border-top:1px solid var(--color-border); flex-shrink:0;">
-            @_actionMessage
-        </div>
-    }
+                                        @if (_actionMessage is not null)
+                                        {
+                                            <div
+                                                style="padding:6px 12px; font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)"); border-top:1px solid var(--color-border); flex-shrink:0;">
+                                                @_actionMessage
+                                            </div>
+                                        }
 
-</div>
+                                    </div>
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -256,11 +275,13 @@
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
             _actionOk = true;
             _actionMessage = "SAS URL copied (expires 24 h).";
+            Notifications.ShowSuccess("SAS URL copied", "Expires in 24 hours");
         }
         catch (Exception ex)
         {
             _actionOk = false;
             _actionMessage = $"SAS copy failed: {ex.Message}";
+            Notifications.ShowError("Failed to copy SAS URL", ex: ex);
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -272,17 +293,19 @@
             var fileName = System.IO.Path.GetFileName(item.Name.TrimEnd('/'));
             if (string.IsNullOrEmpty(fileName)) fileName = item.Name.Replace('/', '_');
             var destPath = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                "Downloads", fileName);
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads", fileName);
             await using var fs = System.IO.File.OpenWrite(destPath);
             await Client.DownloadBlobAsync(ContainerName, item.Name, fs);
             _actionOk = true;
             _actionMessage = $"Downloaded to: {destPath}";
+            Notifications.ShowSuccess("Blob downloaded", fileName);
         }
         catch (Exception ex)
         {
             _actionOk = false;
             _actionMessage = $"Download failed: {ex.Message}";
+            Notifications.ShowError("Download failed", ex: ex);
         }
         await InvokeAsync(StateHasChanged);
     }

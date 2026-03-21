@@ -1,4 +1,5 @@
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 @using System.Text.Json
 
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
@@ -24,122 +25,142 @@
                 <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
                 @if (_actionMessage is not null)
                 {
-                    <span style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)")">@_actionMessage</span>
+                    <span
+                    style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)")">@_actionMessage</span>
                 }
             </div>
 
             @* ── Properties table ── *@
-            <div style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Properties</div>
-            <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
-                @foreach (var row in GetPropertyRows(_properties))
-                {
-                    <tr style="border-bottom:1px solid var(--color-border);">
-                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">@row.Key</td>
-                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
-                    </tr>
-                }
-            </table>
-
-            @* ── Metadata ── *@
-            <div style="margin-bottom:12px;">
-                <button style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                        @onclick="() => _showMetadata = !_showMetadata">
-                    <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
-                </button>
-                @if (_showMetadata)
-                {
-                    <div style="margin-top:6px; padding-left:12px;">
-                        @if (_properties.Metadata.Count == 0)
-                        {
-                            <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
+            <div
+                style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
+                Properties</div>
+                <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+                    @foreach (var row in GetPropertyRows(_properties))
+                    {
+                        <tr style="border-bottom:1px solid var(--color-border);">
+                            <td
+                                style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">
+                                @row.Key</td>
+                                <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
+                            </tr>
                         }
-                        else
+                    </table>
+
+                    @* ── Metadata ── *@
+                    <div style="margin-bottom:12px;">
+                        <button
+                            style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
+                            @onclick="() => _showMetadata = !_showMetadata">
+                            <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
+                        </button>
+                        @if (_showMetadata)
                         {
-                            <table style="width:100%; border-collapse:collapse;">
-                                @foreach (var kv in _properties.Metadata)
+                            <div style="margin-top:6px; padding-left:12px;">
+                                @if (_properties.Metadata.Count == 0)
                                 {
-                                    <tr style="border-bottom:1px solid var(--color-border);">
-                                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">@kv.Key</td>
-                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
-                                    </tr>
+                                    <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
                                 }
-                            </table>
-                        }
-                    </div>
-                }
-            </div>
-
-            @* ── Tags ── *@
-            <div style="margin-bottom:16px;">
-                <button style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                        @onclick="() => _showTags = !_showTags">
-                    <span>@(_showTags ? "▼" : "▶")</span> Tags
-                </button>
-                @if (_showTags)
-                {
-                    <div style="margin-top:6px; padding-left:12px;">
-                        @if (_properties.Tags.Count == 0)
-                        {
-                            <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
-                        }
-                        else
-                        {
-                            <table style="width:100%; border-collapse:collapse;">
-                                @foreach (var kv in _properties.Tags)
+                                else
                                 {
-                                    <tr style="border-bottom:1px solid var(--color-border);">
-                                        <td style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">@kv.Key</td>
-                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
-                                    </tr>
+                                    <table style="width:100%; border-collapse:collapse;">
+                                        @foreach (var kv in _properties.Metadata)
+                                        {
+                                            <tr style="border-bottom:1px solid var(--color-border);">
+                                                <td
+                                                    style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
+                                                    @kv.Key</td>
+                                                    <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
+                                                </tr>
+                                            }
+                                        </table>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @* ── Tags ── *@
+                        <div style="margin-bottom:16px;">
+                            <button
+                                style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
+                                @onclick="() => _showTags = !_showTags">
+                                <span>@(_showTags ? "▼" : "▶")</span> Tags
+                            </button>
+                            @if (_showTags)
+                            {
+                                <div style="margin-top:6px; padding-left:12px;">
+                                    @if (_properties.Tags.Count == 0)
+                                    {
+                                        <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
+                                    }
+                                    else
+                                    {
+                                        <table style="width:100%; border-collapse:collapse;">
+                                            @foreach (var kv in _properties.Tags)
+                                            {
+                                                <tr style="border-bottom:1px solid var(--color-border);">
+                                                    <td
+                                                        style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
+                                                        @kv.Key</td>
+                                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
+                                                    </tr>
+                                                }
+                                            </table>
+                                        }
+                                    </div>
                                 }
-                            </table>
+                            </div>
+
+                            @* ── Content preview ── *@
+                            <div
+                                style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                                Content Preview</div>
+
+                                @if (_loadingContent)
+                                {
+                                    <div style="display:flex; justify-content:center; padding:12px;">
+                                        <FluentProgressRing />
+                                    </div>
+                                }
+                                else if (_content is null)
+                                {
+                                    <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
+                                }
+                                else if (_content.IsBinary)
+                                {
+                                    <div
+                                        style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
+                                        Binary content — use Download to inspect this blob.
+                                    </div>
+                                }
+                                else
+                                {
+                                    @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
+                                    {
+                                        <div
+                                            style="padding:8px 10px; background:rgba(0,120,212,0.1); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px;">
+                                            Preview limited to 512 KB. Download for full content.
+                                        </div>
+                                    }
+                                    else if (_content.WasTruncated)
+                                    {
+                                        <div
+                                            style="padding:8px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                                            <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
+                                            <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
+                                                          @onclick="LoadFullPreviewAsync">Load</FluentButton>
+                                        </div>
+                                    }
+                                    <div style="display:flex; justify-content:flex-end; margin-bottom:4px;">
+                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                                    </div>
+                                    <pre
+                                    style="overflow:auto; max-height:400px; font-size:11px; font-family:Consolas,monospace; white-space:pre-wrap; word-break:break-all; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; padding:10px; margin:0;">@_displayContent</pre>
+                                }
+
+                            </div>
                         }
+
                     </div>
-                }
-            </div>
-
-            @* ── Content preview ── *@
-            <div style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Content Preview</div>
-
-            @if (_loadingContent)
-            {
-                <div style="display:flex; justify-content:center; padding:12px;"><FluentProgressRing /></div>
-            }
-            else if (_content is null)
-            {
-                <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
-            }
-            else if (_content.IsBinary)
-            {
-                <div style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
-                    Binary content — use Download to inspect this blob.
-                </div>
-            }
-            else
-            {
-                @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
-                {
-                    <div style="padding:8px 10px; background:rgba(0,120,212,0.1); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px;">
-                        Preview limited to 512 KB. Download for full content.
-                    </div>
-                }
-                else if (_content.WasTruncated)
-                {
-                    <div style="padding:8px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                        <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
-                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent" @onclick="LoadFullPreviewAsync">Load</FluentButton>
-                    </div>
-                }
-                <div style="display:flex; justify-content:flex-end; margin-bottom:4px;">
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
-                </div>
-                <pre style="overflow:auto; max-height:400px; font-size:11px; font-family:Consolas,monospace; white-space:pre-wrap; word-break:break-all; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; padding:10px; margin:0;">@_displayContent</pre>
-            }
-
-        </div>
-    }
-
-</div>
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -227,7 +248,7 @@
     {
         if (content.IsBinary) return string.Empty;
         var isJson = content.ContentType?.StartsWith("application/json") == true
-            || content.BlobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        || content.BlobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
         if (isJson)
         {
             try
@@ -289,11 +310,13 @@
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
             _actionOk = true;
             _actionMessage = "SAS URL copied (expires 24 h).";
+            Notifications.ShowSuccess("SAS URL copied", "Expires in 24 hours");
         }
         catch (Exception ex)
         {
             _actionOk = false;
             _actionMessage = $"SAS failed: {ex.Message}";
+            Notifications.ShowError("Failed to copy SAS URL", ex: ex);
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -322,17 +345,19 @@
             var fileName = System.IO.Path.GetFileName(Blob.Name);
             if (string.IsNullOrEmpty(fileName)) fileName = Blob.Name.Replace('/', '_');
             var destPath = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                "Downloads", fileName);
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads", fileName);
             await using var fs = System.IO.File.OpenWrite(destPath);
             await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs);
             _actionOk = true;
             _actionMessage = $"Downloaded to: {destPath}";
+            Notifications.ShowSuccess("Blob downloaded", fileName);
         }
         catch (Exception ex)
         {
             _actionOk = false;
             _actionMessage = $"Download failed: {ex.Message}";
+            Notifications.ShowError("Download failed", ex: ex);
         }
         await InvokeAsync(StateHasChanged);
     }
