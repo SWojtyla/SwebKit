@@ -1,4 +1,7 @@
 @using SwebKit.Redis
+@using System.Globalization
+@using SwebKit.Core.Services
+@implements IDisposable
 
 <div class="redis-key-detail">
     @if (SelectedKey is null)
@@ -14,7 +17,13 @@
         <div class="meta">
             <div class="key-name">@KeyInfo.Key</div>
             <div class="kv">Type: @KeyInfo.Type</div>
-            <div class="kv">TTL: @FormatTtl(KeyInfo.Ttl)</div>
+            <div class="kv @GetTtlClass()">TTL: @TtlFormatter.FormatHuman(_displayedTtl)</div>
+            @if (_displayedTtl.HasValue && _displayedTtl.Value > TimeSpan.Zero)
+            {
+                <div class="ttl-bar-wrapper">
+                    <div class="ttl-bar-fill" style="width: @(TtlFormatter.GetBarWidthPercent(_displayedTtl, _originalTtl).ToString("F1", CultureInfo.InvariantCulture))%; background-color: @TtlFormatter.GetColor(_displayedTtl, _originalTtl);"></div>
+                </div>
+            }
             @if (KeyInfo.MemoryBytes.HasValue)
             {
                 <div class="kv">Memory: @KeyInfo.MemoryBytes bytes</div>
@@ -139,6 +148,13 @@
     private int LastStartEditRequestId;
     private string DisplayStringValue => RedisValueHelpers.TruncateValue(RedisValueHelpers.FormatJsonIfValid(StringValue));
 
+    // TTL visualisation state
+    private string? _originalKey;
+    private TimeSpan? _originalTtl;
+    private TimeSpan? _displayedTtl;
+    private RedisKeyInfo? _lastKnownKeyInfo;
+    private CancellationTokenSource? _countdownCts;
+
     private bool CanEditCurrentType => KeyInfo?.Type is "string" or "hash";
 
     protected override void OnParametersSet()
@@ -154,6 +170,26 @@
 
         if (KeyInfo?.Type != "hash")
             ResetHashEditState();
+
+        // TTL visualisation: only act when KeyInfo reference actually changes (see BL-5)
+        if (!ReferenceEquals(_lastKnownKeyInfo, KeyInfo))
+        {
+            _lastKnownKeyInfo = KeyInfo;
+
+            if (SelectedKey != _originalKey)
+            {
+                // New key opened: capture original TTL and start countdown
+                _originalKey = SelectedKey;
+                _originalTtl = KeyInfo?.Ttl;
+                _displayedTtl = KeyInfo?.Ttl;
+                RestartCountdown();
+            }
+            else if (KeyInfo is not null)
+            {
+                // Same key refreshed: sync displayed TTL to fresh server value
+                _displayedTtl = KeyInfo.Ttl;
+            }
+        }
     }
 
     private Task RemoveTtl() => OnRemoveTtl.InvokeAsync();
@@ -214,14 +250,56 @@
         return OnSetTtl.InvokeAsync(value);
     }
 
-    private static string FormatTtl(TimeSpan? ttl)
+    private string GetTtlClass() =>
+        _displayedTtl is { } t && t > TimeSpan.Zero && t.TotalSeconds < 60
+            ? "ttl-critical"
+            : string.Empty;
+
+    private void RestartCountdown()
     {
-        if (!ttl.HasValue)
-            return "none";
+        _countdownCts?.Cancel();
+        _countdownCts?.Dispose();
+        _countdownCts = null;
 
-        if (ttl.Value <= TimeSpan.Zero)
-            return "expired";
+        if (SelectedKey is null || _displayedTtl is null)
+            return;
 
-        return $"{ttl.Value.TotalSeconds:0}s";
+        _countdownCts = new CancellationTokenSource();
+        _ = RunCountdownAsync(_countdownCts.Token);
+    }
+
+    private async Task RunCountdownAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        var ticksUntilRefresh = 30;
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_displayedTtl.HasValue && _displayedTtl.Value > TimeSpan.Zero)
+                    _displayedTtl = _displayedTtl.Value - TimeSpan.FromSeconds(1);
+
+                ticksUntilRefresh--;
+                if (ticksUntilRefresh <= 0)
+                {
+                    ticksUntilRefresh = 30;
+                    await InvokeAsync(async () => await OnRefresh.InvokeAsync());
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on disposal or key change
+        }
+    }
+
+    public void Dispose()
+    {
+        _countdownCts?.Cancel();
+        _countdownCts?.Dispose();
+        _countdownCts = null;
     }
 }

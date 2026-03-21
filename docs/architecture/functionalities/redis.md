@@ -9,6 +9,7 @@
 - Unified key tree view: keys organized hierarchically by configurable separator (default `-`, persisted across sessions).
 - Key detail inspection by type (string, hash, list, set, zset).
 - TTL read/set/remove operations.
+- **TTL visualisation**: human-readable label (e.g. "2h 22m remaining"), colour-coded expiry progress bar (green → amber → red), live client-side countdown (1 s tick), and 30-second server-side drift correction.
 - String/hash value updates.
 - Key deletion and full database purge.
 - Prefix memory analysis workflow.
@@ -28,9 +29,10 @@
 - `src/SwebKit.App/Components/Pages/RedisConfigForm.razor`
 - `src/SwebKit.App/Components/Redis/RedisNamespaceTree.razor`
 - `src/SwebKit.App/Components/Redis/RedisNamespaceTreeNode.razor`
-- `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor`
+- `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor` — key details + TTL visualisation
 - `src/SwebKit.App/Components/Redis/RedisPrefixMemory.razor`
 - `src/SwebKit.Core/Abstractions/IRedisClient.cs`
+- `src/SwebKit.Core/Services/TtlFormatter.cs` — human-readable TTL formatting and bar math
 - `src/SwebKit.Redis/RedisClient.cs`
 - `src/SwebKit.Core/Services/DemoRedisClient.cs`
 - `src/SwebKit.Core/Services/RedisKeyGrouper.cs`
@@ -46,6 +48,7 @@
 
 ## Validation Pointers
 
+- `tests/SwebKit.Core.Tests/TtlFormatterTests.cs` (22 tests)
 - `tests/SwebKit.Core.Tests/DemoRedisClientTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyGrouperTests.cs`
 - `tests/SwebKit.Core.Tests/RedisConfigMigrationTests.cs`
