@@ -1,6 +1,7 @@
 using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.Pages;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -14,7 +15,7 @@ public sealed class ServiceBusPageTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var events = new AppEventBus();
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         Services.AddSingleton<IAppEventBus>(events);
         Services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));

@@ -1,0 +1,72 @@
+/* ── Shared table cell styles (scoped to CronJobGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--spacing-sm);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-ready-badge.degraded {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.aks-text-muted {
+    color: var(--color-text-muted);
+}
+
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}
+
+/* ── Helm/CronJob age suffix ── */
+.aks-age-suffix {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+/* ── CronJob styles ── */
+.aks-cron-schedule {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.aks-suspended {
+    opacity: 0.55;
+    font-style: italic;
+}
+
+.aks-suspended-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    padding: 0px 5px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: var(--spacing-xs);
+}

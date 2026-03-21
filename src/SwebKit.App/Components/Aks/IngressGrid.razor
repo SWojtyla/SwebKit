@@ -1,0 +1,52 @@
+@* Renders the Ingresses FluentDataGrid. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="IngressInfo" Virtualize="true" ItemSize="36">
+    <TemplateColumn Title="Name">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Class" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.IngressClass
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Hosts">
+        <div class="aks-row-ctx aks-ingress-hosts-cell"
+             @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+            @foreach (var rule in context.Rules.Where(r => r.Host is not null))
+            {
+                var host = rule.Host!;
+                var url = BuildIngressUrl(host);
+                <button class="aks-ingress-url-btn" @onclick="() => OnOpenUrl.InvokeAsync(url)"
+                        title="Open @url">
+                    @host
+                </button>
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Address" Width="140px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @string.Join(", ", context.Addresses)
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<IngressInfo> FilteredItems { get; set; } = Enumerable.Empty<IngressInfo>().AsQueryable();
+    [Parameter] public EventCallback<(MouseEventArgs, IngressInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnOpenUrl { get; set; }
+
+    private static string BuildIngressUrl(string host)
+    {
+        if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return host;
+        if (System.Net.IPAddress.TryParse(host, out _))
+            return $"http://{host}";
+        return $"https://{host}";
+    }
+}

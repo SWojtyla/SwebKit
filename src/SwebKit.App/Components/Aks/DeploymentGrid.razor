@@ -1,0 +1,69 @@
+@* Renders the Deployments FluentDataGrid. All context-menu wiring and HPA interaction
+   is surfaced to the parent via EventCallbacks so AksPage keeps all state. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="DeploymentInfo" Virtualize="true" ItemSize="36"
+                RowClass="@(d => SelectedDeployment?.Name == d.Name ? "selected-row" : "")"
+                OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+    <TemplateColumn Title="Name">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    @if (IsMultiNamespace)
+    {
+        <TemplateColumn Title="Namespace" Width="130px">
+            <span class="aks-ns-cell" @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">
+                @context.Namespace
+            </span>
+        </TemplateColumn>
+    }
+    <TemplateColumn Title="Ready" Width="90px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
+                @context.ReadyReplicas / @context.Replicas
+            </span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Status" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-status @(context.Status is "Running" or "Available" ? "running" : "other")">
+                @context.Status
+            </span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="HPA" Width="110px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @{
+                var depHpa = Hpas.FirstOrDefault(h => h.TargetName == context.Name && h.TargetKind == "Deployment");
+            }
+            @if (depHpa is not null)
+            {
+                <button class="aks-hpa-badge @(depHpa.CurrentReplicas == depHpa.DesiredReplicas ? "" : "hpa-scaling")"
+                        @onclick="() => OnOpenHpa.InvokeAsync(depHpa)"
+                        @onclick:stopPropagation>
+                    <span class="hpa-icon">⇅</span>
+                    <span class="hpa-replicas">@depHpa.CurrentReplicas / @depHpa.MaxReplicas</span>
+                    @if (depHpa.CurrentCpuUtilizationPercent.HasValue)
+                    {
+                        <span class="hpa-cpu">@($"{depHpa.CurrentCpuUtilizationPercent:F0}%")</span>
+                    }
+                </button>
+            }
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<DeploymentInfo> FilteredItems { get; set; } = Enumerable.Empty<DeploymentInfo>().AsQueryable();
+    [Parameter] public List<HpaInfo> Hpas { get; set; } = [];
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public DeploymentInfo? SelectedDeployment { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, DeploymentInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<DeploymentInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+}

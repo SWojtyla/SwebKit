@@ -1,0 +1,112 @@
+/* ── Shared table cell styles (scoped to PodGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--spacing-sm);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-ready-badge.healthy {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.aks-ready-badge.degraded {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.aks-status {
+    font-size: var(--font-size-sm);
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.error {
+    color: var(--color-error);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}
+
+/* ── Pod metrics ── */
+.aks-metric-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-metric-bar-track {
+    height: 3px;
+    background: var(--color-surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.aks-metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.aks-metric-bar-fill.metric-low {
+    background: var(--color-success);
+}
+
+.aks-metric-bar-fill.metric-med {
+    background: var(--color-warning);
+}
+
+.aks-metric-bar-fill.metric-high {
+    background: var(--color-error);
+}
+
+.aks-metric {
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-metric.metric-low {
+    color: var(--color-success);
+}
+
+.aks-metric.metric-med {
+    color: var(--color-warning);
+}
+
+.aks-metric.metric-high {
+    color: var(--color-error);
+}
+
+/* ── Metric N/A placeholder ── */
+.aks-metric-na {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}

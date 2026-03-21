@@ -1,0 +1,83 @@
+@* Renders the CronJobs FluentDataGrid. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="CronJobInfo" Virtualize="true" ItemSize="36">
+    <TemplateColumn Title="Name">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name @(context.Suspend ? "aks-suspended" : "")">@context.Name</span>
+            @if (context.Suspend)
+            {
+                <span class="aks-suspended-badge">suspended</span>
+            }
+        </div>
+    </TemplateColumn>
+    @if (IsMultiNamespace)
+    {
+        <TemplateColumn Title="Namespace" Width="130px">
+            <span class="aks-ns-cell"
+                  @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+        </TemplateColumn>
+    }
+    <TemplateColumn Title="Schedule" Width="140px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-cron-schedule" title="@context.Schedule">@context.Schedule</span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Active" Width="70px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.ActiveCount > 0)
+            {
+                <span class="aks-ready-badge degraded">@context.ActiveCount running</span>
+            }
+            else
+            {
+                <span class="aks-text-muted">—</span>
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Last Schedule" Width="120px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.LastScheduleTime.HasValue)
+            {
+                @FormatAge(context.LastScheduleTime.Value)
+                <span class="aks-age-suffix"> ago</span>
+            }
+            else
+            {
+                <span class="aks-text-muted">Never</span>
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Last Success" Width="120px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.LastSuccessfulTime.HasValue)
+            {
+                @FormatAge(context.LastSuccessfulTime.Value)
+                <span class="aks-age-suffix"> ago</span>
+            }
+            else
+            {
+                <span class="aks-text-muted">Never</span>
+            }
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<CronJobInfo> FilteredItems { get; set; } = Enumerable.Empty<CronJobInfo>().AsQueryable();
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, CronJobInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string FormatAge(DateTimeOffset start)
+    {
+        var span = DateTimeOffset.UtcNow - start;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+        return $"{(int)span.TotalMinutes}m";
+    }
+}

@@ -1,0 +1,43 @@
+/* ── Shared table cell styles (scoped to HelmGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-section-count {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.aks-status {
+    font-size: var(--font-size-sm);
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.error {
+    color: var(--color-error);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+/* ── Helm age suffix ── */
+.aks-age-suffix {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}

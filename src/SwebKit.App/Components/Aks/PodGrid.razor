@@ -1,0 +1,132 @@
+@* Renders the Pods FluentDataGrid with CPU/Memory metrics. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="PodInfo" Virtualize="true" ItemSize="36">
+    <TemplateColumn Title="Name">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    @if (IsMultiNamespace)
+    {
+        <TemplateColumn Title="Namespace" Width="130px">
+            <span class="aks-ns-cell"
+                  @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+        </TemplateColumn>
+    }
+    <TemplateColumn Title="Phase" Width="110px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
+                @context.Phase
+            </span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Ready" Width="70px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-ready-badge @(context.Ready ? "healthy" : "degraded")">
+                @(context.Ready ? "Yes" : "No")
+            </span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Node" Width="180px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.NodeName
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Age" Width="80px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.StartTime.HasValue)
+            {
+                @FormatAge(context.StartTime.Value)
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="CPU" Width="90px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @{
+                var cpuMetric = GetPodCpu(context.Name);
+            }
+            @if (cpuMetric is not null)
+            {
+                var cpuPct = Math.Min(100.0, cpuMetric.Value * 1000.0 / 500.0 * 100.0);
+                <div class="aks-metric-cell">
+                    <span class="aks-metric @CpuClass(cpuMetric.Value)"
+                          title="@($"{cpuMetric.Value * 1000:F0}m / ~500m")">@($"{cpuMetric.Value * 1000:F0}m")</span>
+                    <div class="aks-metric-bar-track">
+                        <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)"
+                             style="width:@($"{cpuPct:F0}")%"></div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <span class="aks-metric-na">—</span>
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Memory" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @{
+                var memMetric = GetPodMemoryMi(context.Name);
+            }
+            @if (memMetric is not null)
+            {
+                var memPct = Math.Min(100.0, memMetric.Value / 512.0 * 100.0);
+                <div class="aks-metric-cell">
+                    <span class="aks-metric @MemoryClass(memMetric.Value)"
+                          title="@($"{memMetric.Value:F0}Mi / ~512Mi")">@($"{memMetric.Value:F0}Mi")</span>
+                    <div class="aks-metric-bar-track">
+                        <div class="aks-metric-bar-fill @MemoryClass(memMetric.Value)"
+                             style="width:@($"{memPct:F0}")%"></div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <span class="aks-metric-na">—</span>
+            }
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<PodInfo> FilteredItems { get; set; } = Enumerable.Empty<PodInfo>().AsQueryable();
+    [Parameter] public List<PodMetrics> PodMetricsList { get; set; } = [];
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, PodInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private double? GetPodCpu(string podName)
+    {
+        var m = PodMetricsList.FirstOrDefault(p => p.PodName == podName || podName.StartsWith(p.PodName));
+        if (m is null) return null;
+        return m.Containers.Sum(c => c.CpuCores);
+    }
+
+    private double? GetPodMemoryMi(string podName)
+    {
+        var m = PodMetricsList.FirstOrDefault(p => p.PodName == podName || podName.StartsWith(p.PodName));
+        if (m is null) return null;
+        return m.Containers.Sum(c => c.MemoryBytes) / (1024.0 * 1024.0);
+    }
+
+    private static string CpuClass(double cores) =>
+        cores > 0.4 ? "metric-high" : cores > 0.15 ? "metric-med" : "metric-low";
+
+    private static string MemoryClass(double mi) =>
+        mi > 400 ? "metric-high" : mi > 200 ? "metric-med" : "metric-low";
+
+    private static string FormatAge(DateTimeOffset start)
+    {
+        var span = DateTimeOffset.UtcNow - start;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+        return $"{(int)span.TotalMinutes}m";
+    }
+}

@@ -38,6 +38,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfirmDialog.razor" Link="Components\Shared\ConfirmDialog.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\EmptyState.razor" Link="Components\Shared\EmptyState.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Modal.razor" Link="Components\Shared\Modal.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Dropdown.razor" Link="Components\Shared\Dropdown.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Shared\AutoRefreshController.cs" Link="Components\Shared\AutoRefreshController.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageListView.razor" Link="Components\ServiceBus\MessageListView.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageDetailPane.razor" Link="Components\ServiceBus\MessageDetailPane.razor" />

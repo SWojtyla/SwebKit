@@ -1,6 +1,7 @@
 using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Components.ServiceBus;
 using SwebKit.Core.Abstractions;
@@ -22,7 +23,7 @@ public sealed class MessageComposerTests : TestContext
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
 
         Services.AddFluentUIComponents();
-        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus()));
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
         Services.AddSingleton<ITaskQueue>(new TaskQueueService());
     }
 

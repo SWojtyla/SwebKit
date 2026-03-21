@@ -1,0 +1,33 @@
+/* ── Shared table cell styles (scoped to IngressGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+/* ── Ingress URL buttons ── */
+.aks-ingress-hosts-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aks-ingress-url-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    line-height: 1.4;
+}
+
+.aks-ingress-url-btn:hover {
+    opacity: 0.75;
+}

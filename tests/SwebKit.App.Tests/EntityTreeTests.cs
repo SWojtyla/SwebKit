@@ -1,6 +1,7 @@
 using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -14,7 +15,7 @@ public sealed class EntityTreeTests : TestContext
     public EntityTreeTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus()));
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
     }
 
     [Fact]

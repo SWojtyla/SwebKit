@@ -1,0 +1,110 @@
+/* ── Shared table cell styles (scoped to DeploymentGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--spacing-sm);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-ready-badge.healthy {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.aks-ready-badge.degraded {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.aks-status {
+    font-size: var(--font-size-sm);
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}
+
+/* ── HPA badge (in deployments column) ── */
+.aks-hpa-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 2px var(--spacing-sm) 2px 6px;
+    background: rgba(0, 120, 212, 0.08);
+    color: var(--color-accent);
+    border: 1px solid rgba(0, 120, 212, 0.22);
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.4;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.aks-hpa-badge:hover {
+    background: rgba(0, 120, 212, 0.16);
+    border-color: var(--color-accent);
+}
+
+.aks-hpa-badge.hpa-scaling {
+    background: rgba(251, 140, 0, 0.10);
+    color: var(--color-warning);
+    border-color: rgba(251, 140, 0, 0.28);
+}
+
+.aks-hpa-badge.hpa-scaling:hover {
+    background: rgba(251, 140, 0, 0.18);
+}
+
+.aks-hpa-badge .hpa-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.75;
+}
+
+.aks-hpa-badge .hpa-replicas {
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-hpa-badge .hpa-cpu {
+    font-weight: 400;
+    font-size: var(--font-size-xs);
+    opacity: 0.75;
+    border-left: 1px solid currentColor;
+    padding-left: 5px;
+    margin-left: 1px;
+}
+
+/* ── Selected row ── */
+::deep .selected-row {
+    background: rgba(0, 120, 212, 0.08);
+}

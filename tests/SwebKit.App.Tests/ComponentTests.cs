@@ -2,6 +2,7 @@ using Bunit;
 using Bunit.JSInterop;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.Layout;
 using SwebKit.App.Components.Pages;
 using SwebKit.App.Components.Shared;
@@ -65,7 +66,7 @@ public class ComponentTests : TestContext
     public void CommandPalette_EmptyRegistry_ShowsNoCommandsMessage()
     {
         Services.AddSingleton(new CommandRegistry());
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
 
@@ -84,7 +85,7 @@ public class ComponentTests : TestContext
             Execute = () => Task.CompletedTask
         });
         Services.AddSingleton(registry);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
 
@@ -109,7 +110,7 @@ public class ComponentTests : TestContext
         });
 
         Services.AddSingleton(registry);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
         cut.Find("input").Input("AKS");
@@ -141,7 +142,7 @@ public class ComponentTests : TestContext
         });
 
         Services.AddSingleton(registry);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
         var input = cut.Find("input");
@@ -169,7 +170,7 @@ public class ComponentTests : TestContext
         });
 
         Services.AddSingleton(registry);
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
         cut.Find("input").KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
@@ -182,7 +183,7 @@ public class ComponentTests : TestContext
     {
         var closeCalls = 0;
         Services.AddSingleton(new CommandRegistry());
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>(ps => ps
             .Add(p => p.OnClose, () => closeCalls++));
@@ -197,7 +198,7 @@ public class ComponentTests : TestContext
     {
         var closeCalls = 0;
         Services.AddSingleton(new CommandRegistry());
-        Services.AddSingleton<IAppEventBus>(new AppEventBus());
+        Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>(ps => ps
             .Add(p => p.OnClose, () => closeCalls++));
@@ -258,8 +259,8 @@ public class ComponentTests : TestContext
     [Fact]
     public void TopBar_CommandPaletteButton_PublishesEvent()
     {
-        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus());
-        var bus = new AppEventBus();
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance));
+        var bus = new AppEventBus(NullLogger<AppEventBus>.Instance);
         var published = 0;
         bus.Subscribe<CommandPaletteRequestedEvent>(_ => published++);
 
@@ -278,7 +279,7 @@ public class ComponentTests : TestContext
     {
         var env = new ProjectEnvironment();
 
-        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus()));
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
 
         var cut = RenderComponent<ServiceBusConfigForm>(ps => ps
             .Add(p => p.Environment, env));

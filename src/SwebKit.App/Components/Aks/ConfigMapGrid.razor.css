@@ -1,0 +1,31 @@
+/* ── Shared table cell styles (scoped to ConfigMapGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-section-count {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}

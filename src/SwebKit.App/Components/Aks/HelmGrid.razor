@@ -1,0 +1,59 @@
+@* Renders the Helm Releases FluentDataGrid. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="HelmReleaseInfo" Virtualize="true" ItemSize="36">
+    <TemplateColumn Title="Release">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Chart">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.Chart
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="App Version" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.AppVersion
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Rev" Width="60px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-section-count">@context.Revision</span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Status" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
+                @context.Status
+            </span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Updated" Width="100px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.Updated.HasValue)
+            {
+                @FormatAge(context.Updated.Value)
+                <span class="aks-age-suffix"> ago</span>
+            }
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<HelmReleaseInfo> FilteredItems { get; set; } = Enumerable.Empty<HelmReleaseInfo>().AsQueryable();
+    [Parameter] public EventCallback<(MouseEventArgs, HelmReleaseInfo)> OnContextMenu { get; set; }
+
+    private static string FormatAge(DateTimeOffset start)
+    {
+        var span = DateTimeOffset.UtcNow - start;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+        return $"{(int)span.TotalMinutes}m";
+    }
+}
