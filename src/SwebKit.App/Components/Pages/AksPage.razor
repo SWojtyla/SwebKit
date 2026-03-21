@@ -2,6 +2,8 @@
 @inject AppStateService AppState
 @inject IJSRuntime JS
 @inject INotificationService Notifications
+@inject IPortForwardSessionService SessionService
+@inject IAppEventBus EventBus
 @implements IDisposable
 
 <div class="aks-page" @oncontextmenu:preventDefault>
@@ -63,6 +65,16 @@
                     @onclick="() => { ShowEvents = !ShowEvents; StateHasChanged(); }" title="Toggle events panel">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
                 @(warnCount > 0 ? $" {warnCount}" : " Events")
+            </button>
+
+            @{
+                var pfCount = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
+            }
+            <button class="aks-events-toggle @(ShowPortForwardSessions ? "active" : "")"
+                    @onclick="() => { ShowPortForwardSessions = !ShowPortForwardSessions; StateHasChanged(); }"
+                    title="Toggle port-forward sessions panel">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="14px" style="vertical-align:middle;" />
+                @(pfCount > 0 ? $" {pfCount} pf" : " Sessions")
             </button>
 
             <AutoRefreshToggle OnRefresh="LoadAsync" Paused="@HasAnyPanel" />
@@ -572,6 +584,7 @@
                                                             <div class="ctx-separator"></div>
                                                             <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
                                                                 pod</button>
+                                                                <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span> Port-forward…</button>
                                                                 <div class="ctx-separator"></div>
                                                                 <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
                                                                     Pod</button>
@@ -638,6 +651,20 @@
                                                                                                                                                 </ContextMenu>
 
                                                                                                                                             </div>
+
+@* ── Port-forward sessions panel ── *@
+@if (ShowPortForwardSessions)
+{
+    <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+}
+
+@* ── Port-forward start dialog ── *@
+<PortForwardStartDialog Visible="@ShowPortForwardDialog"
+                        PodName="@(_pfDialogPod?.Name ?? "")"
+                        Namespace="@(_pfDialogPod?.Namespace ?? "")"
+                        RemotePort="@_pfDialogRemotePort"
+                        OnStart="OnStartPortForward"
+                        OnCancel="@(() => { ShowPortForwardDialog = false; StateHasChanged(); })" />
 
 @code {
     private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
@@ -801,6 +828,12 @@
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
     private bool ShowEvents = false;
+    private bool ShowPortForwardSessions = false;
+
+    // Port-forward dialog state
+    private bool ShowPortForwardDialog;
+    private PodInfo? _pfDialogPod;
+    private int _pfDialogRemotePort;
 
     // Namespace picker state
     private bool NsDropOpen;
@@ -894,9 +927,20 @@
     HpaDetailTarget is not null ||
     YamlEditMode;
 
-    private bool HasAnyPanel => HasOpenPanel || ShowEvents;
+    private bool HasAnyPanel => HasOpenPanel || ShowEvents || ShowPortForwardSessions;
 
     private bool IsProduction => false;
+
+    protected override void OnInitialized()
+    {
+        EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+    }
+
+    private void OnOpenPortForwardPanel(OpenPortForwardPanelEvent _)
+    {
+        ShowPortForwardSessions = true;
+        InvokeAsync(StateHasChanged);
+    }
 
     protected override void OnParametersSet()
     {
@@ -1518,6 +1562,42 @@
         await Client.OpenShellAsync(pod.Namespace, pod.Name, container);
     }
 
+    // Port-forward actions
+    private void OnCtxPortForward()
+    {
+        var pod = CtxPod;
+        CloseAllMenus();
+        if (pod is null) return;
+
+        _pfDialogPod = pod;
+        _pfDialogRemotePort = 80; // default; user can change
+        ShowPortForwardDialog = true;
+        StateHasChanged();
+    }
+
+    private async Task OnStartPortForward(int localPort)
+    {
+        ShowPortForwardDialog = false;
+        if (_pfDialogPod is null || Client is null) return;
+
+        ShowPortForwardSessions = true;
+        try
+        {
+            await SessionService.StartAsync(Client, _pfDialogPod.Namespace, _pfDialogPod.Name, localPort, _pfDialogRemotePort);
+        }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Port-forward failed", ex.Message, ex: ex);
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnStopPortForwardSession(PortForwardSession session)
+    {
+        try { await SessionService.StopAsync(session); }
+        catch (Exception ex) { Notifications.ShowError("Failed to stop session", ex.Message, ex: ex); }
+    }
+
     private async Task OnRollbackToRevision(HelmRevisionInfo rev)
     {
         if (HelmHistoryTarget is null || Client is null) return;
@@ -1720,5 +1800,8 @@
     private static string TruncatePodName(string name)
     => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+    }
 }

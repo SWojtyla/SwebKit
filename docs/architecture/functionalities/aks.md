@@ -9,7 +9,7 @@
 - Stream pod logs with filtering.
 - Multi-pod log aggregation — stream logs from all pods of a deployment simultaneously; lines are prefixed with pod name and color-coded per pod.
 - View resource YAML.
-- Port-forward sessions.
+- **Port-forward sessions panel** — tracked, observable sessions with `Starting / Active / Stopping / Stopped / Error` lifecycle; dialog to configure local port; sticky sessions panel; status bar count badge; all sessions cancelled on app exit.
 - Pod shell launch (externally via `wt.exe` or `cmd.exe` with `kubectl exec`).
 - Deployment restart, scale operations, and pod delete.
 - StatefulSet visibility — browse, restart, and scale StatefulSets; degraded sets are highlighted.
@@ -41,7 +41,7 @@
 - **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
 - `KubernetesAksClient` includes Azure token fallback logic when kubeconfig exec auth is not enough.
 - Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
-- Port-forward lifecycle is tracked with process registry helpers and must be cleaned up on stop.
+- **Port-forward session management** is handled by `IPortForwardSessionService` (singleton). It holds a list of `PortForwardSession` objects, each with a `Status` enum (`Starting, Active, Stopping, Stopped, Error`) and an `OnStatusChanged` callback wired by the service. `KubernetesAksClient` sets `EnableRaisingEvents = true` and fires the callback on stdout/stderr/process-exit events. `StopAllAsync` is called from `AppDomain.CurrentDomain.ProcessExit` in `App.xaml.cs`. Sessions panel is rendered as a sticky-bottom strip in `AksPage.razor`; the status bar shows an active count button that navigates to AKS and opens the panel via `OpenPortForwardPanelEvent`.
 
 ## Main Code Locations
 
@@ -52,8 +52,12 @@
 - `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor`
 - `src/SwebKit.App/Components/Aks/SecretDetailPanel.razor`
 - `src/SwebKit.App/Components/Aks/ContainerDetailPanel.razor`
+- `src/SwebKit.App/Components/Aks/PortForwardSessionsPanel.razor`
+- `src/SwebKit.App/Components/Aks/PortForwardStartDialog.razor`
 - `src/SwebKit.Core/Abstractions/IAksClient.cs`
+- `src/SwebKit.Core/Abstractions/IPortForwardSessionService.cs`
 - `src/SwebKit.Core/Models/AksModels.cs`
+- `src/SwebKit.Core/Services/PortForwardSessionService.cs`
 - `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`
 - `src/SwebKit.Core/Services/DemoAksClient.cs`
 

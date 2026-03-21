@@ -1,9 +1,21 @@
 @inject ITaskQueue TaskQueue
+@inject IPortForwardSessionService SessionService
+@inject IAppEventBus EventBus
 @implements IDisposable
 
 <div class="status-bar">
     <span style="color: var(--color-text-muted);">SwebKit</span>
     <span style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        @{
+            var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
+        }
+        @if (pfActive > 0)
+        {
+            <button class="status-bar-btn" title="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
+                @pfActive pf
+            </button>
+        }
         @{
             var running = TaskQueue.Tasks.Count(t => t.Status == BackgroundTaskStatus.Running);
         }
@@ -17,8 +29,43 @@
     </span>
 </div>
 
+<style>
+    .status-bar-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--color-accent);
+        font-size: 12px;
+        padding: 0 4px;
+    }
+
+        .status-bar-btn:hover {
+            text-decoration: underline;
+        }
+</style>
+
 @code {
-    protected override void OnInitialized() => TaskQueue.TasksChanged += OnTasksChanged;
+    protected override void OnInitialized()
+    {
+        TaskQueue.TasksChanged += OnTasksChanged;
+        SessionService.SessionsChanged += OnSessionsChanged;
+    }
+
     private void OnTasksChanged() => InvokeAsync(StateHasChanged);
-    public void Dispose() => TaskQueue.TasksChanged -= OnTasksChanged;
+    private void OnSessionsChanged() => InvokeAsync(StateHasChanged);
+
+    private void OpenPortForwardPanel()
+    {
+        EventBus.Publish(new NavigateToAreaEvent("aks"));
+        EventBus.Publish(new OpenPortForwardPanelEvent());
+    }
+
+    public void Dispose()
+    {
+        TaskQueue.TasksChanged -= OnTasksChanged;
+        SessionService.SessionsChanged -= OnSessionsChanged;
+    }
 }

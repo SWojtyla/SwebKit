@@ -8,6 +8,8 @@ public class LogStreamOptions
     public string? TextFilter { get; set; }
 }
 
+public enum PortForwardStatus { Starting, Active, Stopping, Stopped, Error }
+
 public class PortForwardSession
 {
     public Guid SessionId { get; set; } = Guid.NewGuid();
@@ -16,8 +18,13 @@ public class PortForwardSession
     public int LocalPort { get; set; }
     public int RemotePort { get; set; }
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
-    public bool IsActive { get; set; }
+    public PortForwardStatus Status { get; set; } = PortForwardStatus.Starting;
+    public string? LastError { get; set; }
+    public bool IsActive => Status == PortForwardStatus.Active;
     public string LocalUrl => $"http://localhost:{LocalPort}";
+
+    // Fired by the IAksClient implementation on every status transition.
+    public Action<PortForwardSession>? OnStatusChanged { get; set; }
 }
 
 public class DeploymentInfo

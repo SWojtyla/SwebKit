@@ -532,19 +532,22 @@ public class DemoAksClient : IAksClient
 
     public Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default)
     {
-        return Task.FromResult(new PortForwardSession
+        var session = new PortForwardSession
         {
             Namespace = ns,
             ResourceName = resourceName,
             LocalPort = localPort,
             RemotePort = remotePort,
-            IsActive = true
-        });
+            Status = PortForwardStatus.Active
+        };
+        session.OnStatusChanged?.Invoke(session);
+        return Task.FromResult(session);
     }
 
     public Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default)
     {
-        session.IsActive = false;
+        session.Status = PortForwardStatus.Stopped;
+        session.OnStatusChanged?.Invoke(session);
         return Task.CompletedTask;
     }
 

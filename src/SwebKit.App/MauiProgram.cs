@@ -43,6 +43,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
 
         // DevOps / Releases
         builder.Services.AddSingleton<DevOpsAuthHandler>();

@@ -332,7 +332,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             ResourceName = resourceName,
             LocalPort = localPort,
             RemotePort = remotePort,
-            IsActive = false
+            Status = PortForwardStatus.Starting
         };
 
         var psi = new ProcessStartInfo("kubectl")
@@ -345,11 +345,36 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         };
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start kubectl port-forward.");
+
+        var stderrBuffer = new StringBuilder();
+
         process.OutputDataReceived += (_, e) =>
         {
-            if (e.Data?.Contains("Forwarding from") == true) session.IsActive = true;
+            if (e.Data?.Contains("Forwarding from") == true)
+            {
+                session.Status = PortForwardStatus.Active;
+                session.OnStatusChanged?.Invoke(session);
+            }
         };
+
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) stderrBuffer.AppendLine(e.Data);
+        };
+
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) =>
+        {
+            if (session.Status is not PortForwardStatus.Stopping and not PortForwardStatus.Stopped)
+            {
+                session.Status = PortForwardStatus.Error;
+                session.LastError = stderrBuffer.Length > 0 ? stderrBuffer.ToString().Trim() : "kubectl process exited unexpectedly.";
+                session.OnStatusChanged?.Invoke(session);
+            }
+        };
+
         process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         lock (_portForwardLock) _portForwardProcesses[session.SessionId] = process;
         return Task.FromResult(session);
@@ -357,12 +382,17 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default)
     {
+        session.Status = PortForwardStatus.Stopping;
+        session.OnStatusChanged?.Invoke(session);
+
         lock (_portForwardLock)
         {
             if (_portForwardProcesses.Remove(session.SessionId, out var p) && !p.HasExited)
                 p.Kill(entireProcessTree: true);
         }
-        session.IsActive = false;
+
+        session.Status = PortForwardStatus.Stopped;
+        session.OnStatusChanged?.Invoke(session);
         return Task.CompletedTask;
     }
 

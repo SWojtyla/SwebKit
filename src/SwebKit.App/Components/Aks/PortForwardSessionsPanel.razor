@@ -1,0 +1,272 @@
+@inject IPortForwardSessionService SessionService
+@implements IDisposable
+
+@{
+    var sessions = SessionService.Sessions;
+    var active = sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
+}
+
+<div class="pf-sessions-panel">
+    <div class="pf-sessions-header" @onclick="ToggleExpanded">
+        <span style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="14px" />
+            Port-Forward Sessions
+            @if (sessions.Count > 0)
+            {
+                <span class="pf-count-badge">@active active</span>
+            }
+        </span>
+        <span style="margin-left:auto; font-size:11px; color:var(--color-text-muted);">
+            @(Expanded ? "▲ collapse" : "▼ expand")
+        </span>
+    </div>
+
+    @if (Expanded)
+    {
+        @if (sessions.Count == 0)
+        {
+            <div class="pf-empty">No active port-forward sessions.</div>
+        }
+        else
+        {
+            <div class="pf-sessions-list">
+                @foreach (var s in sessions)
+                {
+                    var session = s;
+                    <div class="pf-session-row @(session.Status == PortForwardStatus.Error ? "pf-row-error" : "")">
+                        <span class="pf-col-pod" title="@session.Namespace">
+                            <span>@session.ResourceName</span>
+                            <span class="pf-ns-label">@session.Namespace</span>
+                        </span>
+                        <span class="pf-col-ports">localhost:@session.LocalPort → :@session.RemotePort</span>
+                        <span class="pf-col-status">
+                            <span class="pf-status-badge pf-status-@session.Status.ToString().ToLowerInvariant()">
+                                @session.Status
+                            </span>
+                        </span>
+                        <span class="pf-col-time" title="@session.StartedAt.LocalDateTime.ToString("g")">
+                            @FormatAge(session.StartedAt)
+                        </span>
+                        <span class="pf-col-actions">
+                            @if (session.Status == PortForwardStatus.Active)
+                            {
+                                <button class="pf-btn-open" title="Open @session.LocalUrl in browser"
+                                        @onclick="() => OpenInBrowser(session.LocalUrl)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Open())" Width="13px" />
+                                </button>
+                            }
+                            @if (session.Status is PortForwardStatus.Error)
+                            {
+                                <button class="pf-btn-stop" title="@session.LastError" @onclick="() => OnStop(session)">
+                                    Dismiss
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="pf-btn-stop"
+                                        disabled="@(session.Status is PortForwardStatus.Stopping or PortForwardStatus.Stopped)"
+                                        @onclick="() => OnStop(session)">
+                                    Stop
+                                </button>
+                            }
+                        </span>
+                    </div>
+
+                    @if (session.Status == PortForwardStatus.Error && session.LastError is not null)
+                    {
+                        <div class="pf-error-detail">@session.LastError</div>
+                    }
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .pf-sessions-panel {
+        border-top: 1px solid var(--color-border);
+        background: var(--color-surface);
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+    }
+
+    .pf-sessions-header {
+        display: flex;
+        align-items: center;
+        padding: 8px 16px;
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .pf-sessions-header:hover {
+            background: var(--color-surface-hover, rgba(255,255,255,0.04));
+        }
+
+    .pf-count-badge {
+        background: var(--color-accent);
+        color: white;
+        border-radius: 10px;
+        padding: 1px 7px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .pf-empty {
+        padding: 10px 16px;
+        font-size: 13px;
+        color: var(--color-text-muted);
+    }
+
+    .pf-sessions-list {
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 0 8px 8px;
+    }
+
+    .pf-session-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+        .pf-session-row:hover {
+            background: var(--color-surface-hover, rgba(255,255,255,0.04));
+        }
+
+    .pf-row-error {
+        background: rgba(244, 67, 54, 0.08);
+    }
+
+    .pf-col-pod {
+        min-width: 140px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .pf-ns-label {
+        color: var(--color-text-muted);
+        font-size: 11px;
+    }
+
+    .pf-col-ports {
+        flex: 1;
+        font-family: monospace;
+        white-space: nowrap;
+    }
+
+    .pf-col-status {
+        width: 90px;
+    }
+
+    .pf-col-time {
+        width: 60px;
+        text-align: right;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+    }
+
+    .pf-status-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .pf-status-starting { background: var(--color-border); color: var(--color-text-muted); }
+    .pf-status-active { background: rgba(76, 175, 80, 0.18); color: #4caf50; }
+    .pf-status-stopping { background: rgba(255, 152, 0, 0.18); color: #ff9800; }
+    .pf-status-stopped { background: var(--color-border); color: var(--color-text-muted); }
+    .pf-status-error { background: rgba(244, 67, 54, 0.18); color: #f44336; }
+
+    .pf-col-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        justify-content: flex-end;
+    }
+
+    .pf-btn-open {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 4px;
+        color: var(--color-accent);
+        display: flex;
+        align-items: center;
+        border-radius: 3px;
+        opacity: 0.8;
+    }
+
+        .pf-btn-open:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.06);
+        }
+
+    .pf-btn-stop {
+        font-size: 11px;
+        padding: 2px 8px;
+        cursor: pointer;
+        border-radius: 3px;
+    }
+
+        .pf-btn-stop:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+    .pf-error-detail {
+        margin: 0 8px 4px 24px;
+        padding: 6px 10px;
+        background: rgba(244, 67, 54, 0.1);
+        border-left: 2px solid #f44336;
+        border-radius: 2px;
+        font-size: 11px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        color: var(--color-text-muted);
+    }
+</style>
+
+@code {
+    [Parameter] public bool Expanded { get; set; } = true;
+    [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
+    [Parameter] public EventCallback<PortForwardSession> OnStopSession { get; set; }
+
+    protected override void OnInitialized()
+        => SessionService.SessionsChanged += OnSessionsChanged;
+
+    public void Dispose()
+        => SessionService.SessionsChanged -= OnSessionsChanged;
+
+    private void OnSessionsChanged()
+        => InvokeAsync(StateHasChanged);
+
+    private void ToggleExpanded()
+    {
+        Expanded = !Expanded;
+        ExpandedChanged.InvokeAsync(Expanded);
+    }
+
+    private Task OnStop(PortForwardSession session)
+        => OnStopSession.InvokeAsync(session);
+
+    private static async Task OpenInBrowser(string url)
+    {
+        try { await Microsoft.Maui.ApplicationModel.Launcher.Default.OpenAsync(new Uri(url)); }
+        catch { /* launcher unavailable */ }
+    }
+
+    private static string FormatAge(DateTimeOffset ts)
+    {
+        var age = DateTimeOffset.UtcNow - ts;
+        if (age.TotalSeconds < 60) return $"{(int)age.TotalSeconds}s";
+        if (age.TotalMinutes < 60) return $"{(int)age.TotalMinutes}m";
+        return $"{(int)age.TotalHours}h";
+    }
+}
