@@ -23,7 +23,7 @@ Use this structure as the default model:
 - `docs/ways-of-working/` for process and quality rules
 - `docs/pitfalls/` for recurring AI or implementation mistakes
 - `docs/features/active/<feature-name>/` for active feature work
-- `docs/features/archive/<year>/<feature-name>/` for completed feature history
+- `docs/features/archive/<feature-name>/` for completed feature history
 
 ## Functional architecture maintenance
 

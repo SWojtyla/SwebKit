@@ -11,13 +11,13 @@ Before doing any substantial work, read these files:
 
 ## Where things live
 
-| What | Where |
-|------|-------|
-| Active feature plans | `docs/features/active/<feature-name>/` |
-| Archived features | `docs/features/archive/<year>/<feature-name>/` |
-| Architecture | `docs/architecture/` |
-| Process rules | `docs/ways-of-working/` |
-| Pitfalls | `docs/pitfalls/` |
+| What                 | Where                                   |
+| -------------------- | --------------------------------------- |
+| Active feature plans | `docs/features/active/<feature-name>/`  |
+| Archived features    | `docs/features/archive/<feature-name>/` |
+| Architecture         | `docs/architecture/`                    |
+| Process rules        | `docs/ways-of-working/`                 |
+| Pitfalls             | `docs/pitfalls/`                        |
 
 **Never write plans, feature docs, or decisions outside the repository.** Everything belongs under `docs/`.
 
