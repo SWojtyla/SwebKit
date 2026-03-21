@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Components.ServiceBus;
+using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
@@ -25,6 +26,7 @@ public sealed class MessageComposerTests : TestContext
         Services.AddFluentUIComponents();
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
         Services.AddSingleton<ITaskQueue>(new TaskQueueService());
+        Services.AddSingleton<INotificationService>(new NotificationService());
     }
 
     [Fact]

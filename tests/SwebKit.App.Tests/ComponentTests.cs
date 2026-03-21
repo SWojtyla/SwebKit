@@ -11,6 +11,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
+using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
 namespace SwebKit.App.Tests;
 
@@ -32,11 +33,11 @@ public class ComponentTests : TestContext
     public void NavItem_CollapsedMode_HidesLabel()
     {
         var cut = RenderComponent<NavItem>(ps => ps
-            .Add(p => p.Icon, "📁")
+            .Add(p => p.NavIcon, new Icons.Regular.Size24.Settings())
             .Add(p => p.Label, "Projects")
             .Add(p => p.IsExpanded, false));
 
-        Assert.Single(cut.FindAll("div.nav-item > span"));
+        Assert.Empty(cut.FindAll("div.nav-item > span"));
     }
 
     [Fact]
@@ -267,6 +268,7 @@ public class ComponentTests : TestContext
         Services.AddSingleton(appState);
         Services.AddSingleton<IAppEventBus>(bus);
         Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton<INotificationService>(new NotificationService());
 
         var cut = RenderComponent<TopBar>();
         cut.Find("button.cmd-palette-btn").Click();

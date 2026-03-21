@@ -11,6 +11,7 @@
         <PackageReference Include="bunit.web" Version="1.29.5" />
         <PackageReference Include="coverlet.collector" Version="6.0.4" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.0" />
+        <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.14.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="xunit" Version="2.9.3" />
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -31,6 +32,7 @@
 
     <ItemGroup>
         <Compile Include="..\..\src\SwebKit.App\Services\CommandRegistry.cs" Link="Services\CommandRegistry.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\NotificationService.cs" Link="Services\NotificationService.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\NavItem.razor" Link="Components\Layout\NavItem.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\LeftNav.razor" Link="Components\Layout\LeftNav.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\TopBar.razor" Link="Components\Layout\TopBar.razor" />
