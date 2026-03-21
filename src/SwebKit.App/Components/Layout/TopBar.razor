@@ -1,6 +1,8 @@
 @inject AppStateService AppState
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
+@inject INotificationService Notifications
+@implements IDisposable
 
 <div class="top-bar" style="background: #1E1E2E;">
     <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation">&#9776;</button>
@@ -8,11 +10,31 @@
 
     <div style="display:flex; align-items:center; flex:1;"></div>
 
-    <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:rgba(255,255,255,0.7); cursor:pointer; margin-right:8px;"
-           title="Use demo data for AKS and Redis">
+    <label
+        style="display:flex; align-items:center; gap:4px; font-size:11px; color:rgba(255,255,255,0.7); cursor:pointer; margin-right:8px;"
+        title="Use demo data for AKS and Redis">
         <input type="checkbox" checked="@AppState.UseDemoData" @onchange="ToggleDemo" />
         Demo
     </label>
+
+    <div style="position:relative; margin-right:8px;">
+        <button @onclick="ToggleHistory"
+                style="background:transparent; border:none; color:white; font-size:18px; cursor:pointer; padding:4px 8px; position:relative; line-height:1;"
+                title="Notifications">
+            🔔
+            @if (UnreadCount > 0)
+            {
+                <span
+                style="position:absolute; top:0; right:0; background:#EF4444; color:white; font-size:9px; font-weight:700; border-radius:8px; padding:1px 4px; line-height:1.4; min-width:14px; text-align:center;">@UnreadCount</span>
+            }
+        </button>
+        @if (_isHistoryOpen)
+        {
+            <div style="position:absolute; top:100%; right:0; z-index:8000;">
+                <NotificationHistory />
+            </div>
+        }
+    </div>
 
     <button class="cmd-palette-btn" @onclick="OpenCommandPalette"
             style="background:rgba(255,255,255,0.1); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer;">
@@ -21,12 +43,43 @@
 </div>
 
 <style>
-    .nav-toggle { background:transparent; border:none; color:white; font-size:18px; cursor:pointer; padding:4px 8px; }
-    kbd { background:rgba(0,0,0,0.3); padding:1px 4px; border-radius:2px; font-size:10px; }
+    .nav-toggle {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        padding: 4px 8px;
+    }
+
+    kbd {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 1px 4px;
+        border-radius: 2px;
+        font-size: 10px;
+    }
 </style>
 
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
+
+    private bool _isHistoryOpen;
+    private int _lastSeenCount;
+    private int UnreadCount => Math.Max(0, Notifications.All.Count - _lastSeenCount);
+
+    protected override void OnInitialized()
+    {
+        Notifications.NotificationsChanged += OnNotificationsChanged;
+    }
+
+    private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleHistory()
+    {
+        _isHistoryOpen = !_isHistoryOpen;
+        if (_isHistoryOpen)
+            _lastSeenCount = Notifications.All.Count;
+    }
 
     private void ToggleDemo(ChangeEventArgs e)
     {
@@ -35,4 +88,9 @@
     }
 
     private void OpenCommandPalette() => Events.Publish(new CommandPaletteRequestedEvent());
+
+    public void Dispose()
+    {
+        Notifications.NotificationsChanged -= OnNotificationsChanged;
+    }
 }

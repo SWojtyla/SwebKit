@@ -4,23 +4,23 @@
 
 title: "Status - Global Notification System"
 owner: ""
-state: "Planned"
+state: "In Progress"
 branch: ""
-started: ""
+started: "2026-03-21"
 last_updated: "2026-03-21"
 
 ---
 
 ## Quick summary
 
-Current state: Planned — feature scoped, awaiting implementation start.
+Current state: In Progress — core service and UI components implemented. Integration across feature pages remaining.
 
 ## Progress checklist
 
 - [x] Planning complete
-- [ ] Design reviewed
-- [ ] Backend implementation (`INotificationService`)
-- [ ] Frontend implementation (`NotificationToast.razor`, history panel)
+- [x] Design reviewed
+- [x] Backend implementation (`INotificationService`)
+- [x] Frontend implementation (`NotificationToast.razor`, `NotificationHistory.razor`)
 - [ ] Integration across all feature pages
 - [ ] Tests (unit / manual)
 - [ ] Docs aligned
@@ -29,23 +29,26 @@ Current state: Planned — feature scoped, awaiting implementation start.
 ## Completed
 
 - Feature scoped in `index.md`
+- `NotificationModels.cs` — `Notification` record + `NotificationSeverity` enum (in `SwebKit.Core/Models/`)
+- `INotificationService.cs` — interface in `SwebKit.Core/Abstractions/`
+- `NotificationService.cs` — thread-safe singleton implementation in `SwebKit.App/Services/`
+- DI registration in `MauiProgram.cs` (`AddSingleton<INotificationService, NotificationService>`)
+- `NotificationToast.razor` — fixed top-right overlay, up to 4 stacked toasts, per-notification auto-dismiss timers (4s/8s), slide-in CSS animation, close button
+- `NotificationHistory.razor` — full session history panel, reverse chronological, clear-all button, empty state
+- `TopBar.razor` — bell icon with unread badge, toggles history panel
+- `MainLayout.razor` — hosts `<NotificationToast />` at app level
+- `_Imports.razor` — added `@using SwebKit.App.Components.Notifications`
 
 ## Remaining
 
-- Author `backend.md` with service API
-- Author `frontend.md` with toast component design and animation
-- Author `test-plan.md`
-- Implement `INotificationService` + `NotificationService` (thread-safe, singleton)
-- Register in `MauiProgram.cs`
-- Implement `NotificationToast.razor` (stacked, auto-dismiss, slide-in animation)
-- Add bell icon + history panel to `TopBar.razor`
-- Wire `MainLayout.razor` to host the toast component
-- Integrate into Service Bus feature (message sent, resubmitted, scheduled)
-- Integrate into AKS feature (restarted, deleted, port-forward started/stopped)
+- Integrate into Service Bus feature (message sent, resubmitted, scheduled cancelled)
+- Integrate into AKS feature (deployment restarted, pod deleted, port-forward started/stopped)
 - Integrate into Redis feature (key deleted, TTL updated, value saved, DB flushed)
-- Integrate into Storage feature (downloaded, SAS copied)
+- Integrate into Storage feature (blob downloaded, SAS URL copied)
 - Integrate into Releases feature (approval submitted, deployment triggered)
 - Migrate / deprecate inline `ErrorCallout` usages incrementally
+- Unit tests for `NotificationService`
+- Manual E2E verification (toasts appear, auto-dismiss, bell badge clears)
 
 ## Blockers
 
@@ -53,4 +56,4 @@ None.
 
 ## Validation
 
-Not started.
+Build: ✅ 0 errors, 6 pre-existing warnings (unrelated to this feature).

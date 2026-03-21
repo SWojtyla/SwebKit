@@ -1,0 +1,103 @@
+@implements IDisposable
+@inject INotificationService Notifications
+
+@if (Notifications.All.Count > 0)
+{
+    <div style="position:fixed; top:56px; right:16px; z-index:9000; pointer-events:none;">
+        @foreach (var n in Notifications.All.TakeLast(4))
+        {
+            <div style="pointer-events:auto; width:320px; margin-bottom:8px; background:#2D2D44; border-radius:6px; border-left:3px solid @GetAccentColor(n.Severity); padding:10px 12px; box-shadow:0 4px 12px rgba(0,0,0,0.4); position:relative; animation:slideInRight 0.25s ease-out;">
+                <button @onclick="() => Notifications.Dismiss(n.Id)"
+                        style="position:absolute; top:6px; right:8px; background:transparent; border:none; color:rgba(255,255,255,0.5); font-size:16px; cursor:pointer; line-height:1; padding:0;">
+                    ×
+                </button>
+                <div style="display:flex; align-items:baseline; gap:6px; margin-right:20px;">
+                    <span        style="color:@GetAccentColor(n.Severity); font-size:14px; font-weight:700;">@GetIcon(n.Severity)</span>
+                    <span style="color:white; font-size:13px; font-weight:600;">@n.Message</span>
+                </div>
+                @if (!string.IsNullOrEmpty(n.Detail))
+                {
+                    <div style="color:rgba(255,255,255,0.6); font-size:11px; margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.4; max-height:2.8em;">
+                        @n.Detail</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <style>
+        @@keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(40px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
+
+@code {
+    private readonly Dictionary<Guid, System.Timers.Timer> _timers = new();
+
+    protected override void OnInitialized()
+    {
+        Notifications.NotificationsChanged += OnNotificationsChanged;
+    }
+
+    private void OnNotificationsChanged()
+    {
+        var currentIds = Notifications.All.Select(n => n.Id).ToHashSet();
+
+        // Dispose timers for notifications that are no longer present
+        foreach (var id in _timers.Keys.Where(k => !currentIds.Contains(k)).ToList())
+        {
+            _timers[id].Dispose();
+            _timers.Remove(id);
+        }
+
+        // Start timers for newly added notifications
+        foreach (var n in Notifications.All)
+        {
+            if (_timers.ContainsKey(n.Id)) continue;
+
+            var intervalMs = n.Severity is NotificationSeverity.Success or NotificationSeverity.Info ? 4000 : 8000;
+            var timer = new System.Timers.Timer(intervalMs) { AutoReset = false };
+            var capturedId = n.Id;
+            timer.Elapsed += async (_, _) =>
+            {
+                Notifications.Dismiss(capturedId);
+                await InvokeAsync(StateHasChanged);
+            };
+            _timers[capturedId] = timer;
+            timer.Start();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetAccentColor(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Success => "#22C55E",
+        NotificationSeverity.Warning => "#F59E0B",
+        NotificationSeverity.Error => "#EF4444",
+        _ => "#3B82F6",
+    };
+
+    private static string GetIcon(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Success => "✓",
+        NotificationSeverity.Warning => "⚠",
+        NotificationSeverity.Error => "✕",
+        _ => "ℹ",
+    };
+
+    public void Dispose()
+    {
+        Notifications.NotificationsChanged -= OnNotificationsChanged;
+        foreach (var timer in _timers.Values) timer.Dispose();
+        _timers.Clear();
+    }
+}

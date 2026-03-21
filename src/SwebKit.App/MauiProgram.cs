@@ -42,6 +42,7 @@ public static class MauiProgram
         // App UI services
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
+        builder.Services.AddSingleton<INotificationService, NotificationService>();
 
         // DevOps / Releases
         builder.Services.AddSingleton<DevOpsAuthHandler>();
