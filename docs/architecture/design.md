@@ -26,40 +26,30 @@ production-focused projects, implementations, and automated tests described belo
 
 ### 1.1 Core Concept
 
-Everything is organized around a small set of first-class concepts: **Project**,
-`ProjectEnvironment`, and **Pane/Tab**. A `Project` is a logical grouping such as
-"OrderPlatform". Each `Project` contains one or more `ProjectEnvironment` entries
-(Dev/Test/Acc/Prod). Selecting an environment reconfigures feature clients (Service Bus,
-Observability, AKS, Redis, etc.) and updates all open panes.
+Each feature area (Service Bus, AKS, Redis, Storage, Releases) is independent. There is
+no global project or environment selection — each feature reads its own config from the
+single global `AppConfig` stored in `profiles.json`.
 
 ### 1.2 Domain Objects (summary)
 
-Project
+AppConfig (`SwebKit.Core.Domain.AppConfig`, stored as `profiles.json`)
 
-- Id: Guid
-- Name: string
-- Environments: List<ProjectEnvironment>
-
-ProjectEnvironment
-
-- Id: Guid
-- Name: string (Dev | Test | Acc | Prod)
-- Tier: EnvironmentTier (NonProd | Production)
-- ServiceBusConfig?: ServiceBusConfig
-- ObservabilityConfig?: ObservabilityConfig
 - AksConfig?: AksConfig
 - RedisConfig?: RedisConfig
+- StorageAccounts: List<StorageConfig>
+- DevOpsConfig?: DevOpsConfig
+- ServiceBusEntityLinks: List<SbEntityLink>
+- FavoriteEntities: List<FavoriteEntity>
+- LastUsedFilters: Dictionary<string, FilterState>
 
 The domain model lives in `SwebKit.Core` and is deliberately small: feature-specific
 implementations are provided by the `SwebKit.*` projects under `src/`.
 
 ### 1.3 Core Services & Runtime
 
-- `AppStateService` (singleton): holds `CurrentProject` and `CurrentEnvironment`, exposes
-  project lists and named namespaces, persists last-selected project/environment via
-  `UiStateRepository`, and publishes `ProjectChangedEvent` / `EnvironmentChangedEvent` on
-  changes. Initialization (`InitializeAsync`) loads profiles and UI state and restores
-  the last-used context.
+- `AppStateService` (singleton): exposes `AppConfig` and `ServiceBusNamespaces`, delegates
+  persistence to `ProfileRepository` and `UiStateRepository`. Initialization
+  (`InitializeAsync`) loads profiles and UI state.
 - DI registrations live in `SwebKit.App.MauiProgram` and include `AppStateService`,
   `ProfileRepository`, `UiStateRepository`, `ScheduledMessageRepository`, `ICredentialStore`,
   `IAppEventBus`, and UI helpers like `TabService` and `CommandRegistry`.
@@ -127,8 +117,7 @@ implementations are provided by the `SwebKit.*` projects under `src/`.
 ## 8. Cross-Cutting UX Decisions
 
 - Keyboard shortcuts and global command palette (`Ctrl+P`).
-- Production safety: `ProjectEnvironment.IsProduction` toggles UI warnings, confirmation dialogs,
-  and additional friction for destructive operations.
+- Production safety: a future production indicator may toggle UI warnings and confirmation dialogs for destructive operations.
 - Shared components: `FilterBar.razor`, `DataTable.razor`, and `DetailsPane.razor` to keep behavior uniform.
 
 ## 9. Implementation Roadmap

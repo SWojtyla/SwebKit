@@ -4,6 +4,7 @@
 @inject INotificationService Notifications
 @inject IPortForwardSessionService SessionService
 @inject IAppEventBus EventBus
+@inject IConnectionStateService ConnectionState
 @implements IDisposable
 
 <div class="aks-page" @oncontextmenu:preventDefault>
@@ -967,11 +968,16 @@
             await LoadContextsAsync();
             await LoadNamespacesAsync();
             await LoadAsync();
+            ConnectionState.SetConnected("aks");
             return;
         }
 
         var config = AppState.Config.AksConfig;
-        if (config is null) return;
+        if (config is null)
+        {
+            ConnectionState.SetNotConfigured("aks");
+            return;
+        }
 
         try
         {
@@ -981,8 +987,9 @@
             await LoadContextsAsync();
             await LoadNamespacesAsync();
             await LoadAsync();
+            ConnectionState.SetConnected("aks");
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = ex.Message; ConnectionState.SetError("aks", ex.Message); }
     }
 
     private async Task LoadContextsAsync()

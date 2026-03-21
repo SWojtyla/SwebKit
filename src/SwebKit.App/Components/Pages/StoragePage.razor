@@ -2,6 +2,7 @@
 @using SwebKit.Azure.Storage
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject IConnectionStateService ConnectionState
 
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
 
@@ -93,14 +94,25 @@
     {
         _storageClient = null;
         _storageAccounts = AppState.Config.StorageAccounts;
-        if (_storageAccounts.Count == 0) return;
+        if (_storageAccounts.Count == 0)
+        {
+            ConnectionState.SetNotConfigured("storage");
+            return;
+        }
 
         var selected = _storageAccounts.FirstOrDefault(a => a.Id == _selectedAccountId)
                        ?? _storageAccounts[0];
         _selectedAccountId = selected.Id;
 
-        try { _storageClient = new AzureStorageClient(selected, CredentialStore); }
-        catch { /* invalid config */ }
+        try
+        {
+            _storageClient = new AzureStorageClient(selected, CredentialStore);
+            ConnectionState.SetConnected("storage");
+        }
+        catch (Exception ex)
+        {
+            ConnectionState.SetError("storage", ex.Message);
+        }
     }
 
     private async Task OnAccountChangedAsync(ChangeEventArgs e)

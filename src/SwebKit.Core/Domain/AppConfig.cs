@@ -1,6 +1,6 @@
 namespace SwebKit.Core.Domain;
 
-public class ProjectEnvironment
+public class AppConfig
 {
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public AksConfig? AksConfig { get; set; }

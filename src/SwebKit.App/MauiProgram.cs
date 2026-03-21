@@ -40,6 +40,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppStateService>();
 
         // App UI services
+        builder.Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();

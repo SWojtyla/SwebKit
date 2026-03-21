@@ -65,7 +65,7 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public ProjectEnvironment Environment { get; set; } = default!;
+    [Parameter, EditorRequired] public AppConfig Environment { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
     private string DisplayName = string.Empty;

@@ -2,6 +2,7 @@
 @using SwebKit.Core.Services
 @inject AppStateService AppState
 @inject INotificationService Notifications
+@inject IConnectionStateService ConnectionState
 @implements IDisposable
 
 <div class="redis-page">
@@ -191,20 +192,26 @@
             {
                 var db = ActiveCacheEntry?.Database ?? 0;
                 Client = new DemoRedisClient(db);
+                ConnectionState.SetConnected("redis");
                 return;
             }
 
             var entry = ActiveCacheEntry;
             if (entry is null || string.IsNullOrWhiteSpace(entry.ConnectionString))
+            {
+                ConnectionState.SetNotConfigured("redis");
                 return;
+            }
 
             Client = new SwebKit.Redis.RedisClient(entry);
             await Client.TestConnectionAsync();
+            ConnectionState.SetConnected("redis");
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
             DisposeClient();
+            ConnectionState.SetError("redis", ex.Message);
         }
     }
 

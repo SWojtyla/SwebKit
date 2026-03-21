@@ -68,3 +68,4 @@ public record RefreshRequestedEvent(string Area);
 public record ServiceBusShortcutEvent(string Action);
 public record PortForwardSessionsChangedEvent;
 public record OpenPortForwardPanelEvent;
+public record ConnectionStateChangedEvent(string Area);

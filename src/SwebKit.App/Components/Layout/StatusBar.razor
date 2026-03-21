@@ -1,35 +1,139 @@
 @inject ITaskQueue TaskQueue
 @inject IPortForwardSessionService SessionService
+@inject IConnectionStateService ConnState
 @inject IAppEventBus EventBus
 @implements IDisposable
 
 <div class="status-bar">
-    <span style="color: var(--color-text-muted);">SwebKit</span>
-    <span style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-        @{
-            var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
-        }
-        @if (pfActive > 0)
+
+    @* ── Connection dots ── *@
+    <span class="status-section status-connections">
+        @foreach (var (area, label) in _areas)
         {
-            <button class="status-bar-btn" title="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
-                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
-                @pfActive pf
-            </button>
-        }
-        @{
-            var running = TaskQueue.Tasks.Count(t => t.Status == BackgroundTaskStatus.Running);
-        }
-        @if (running > 0)
-        {
-            <span style="display: flex; align-items: center; gap: 4px; color: var(--color-accent);">
-                <FluentProgressRing Width="12px" />
-                @running task@(running == 1 ? "" : "s") running
-            </span>
+            @if (ConnState.States.TryGetValue(area, out var s))
+            {
+                var css = s.State switch
+                {
+                    ConnectionState.Connected => "dot-connected",
+                    ConnectionState.Error => "dot-error",
+                    _ => "dot-unknown"
+                };
+                var tooltip = s.State == ConnectionState.Error && s.ErrorMessage is not null
+                    ? $"{label}: {s.ErrorMessage}"
+                    : $"{label}: {s.State}";
+                <span class="connection-indicator" title="@tooltip">
+                    <span class="connection-dot @css"></span>
+                    <span class="connection-label">@label</span>
+                </span>
+            }
         }
     </span>
+
+    @* ── Spacer ── *@
+    <span class="status-spacer"></span>
+
+    @* ── Last refresh timestamp ── *@
+    @if (_lastRefresh is not null)
+    {
+        <span class="status-section status-refresh" title="Last refresh">
+            @FormatRefresh(_lastRefresh.Value)
+        </span>
+    }
+
+    @* ── Port-forward count ── *@
+    @{
+        var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
+    }
+    @if (pfActive > 0)
+    {
+        <button class="status-bar-btn" title="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
+            @pfActive pf
+        </button>
+    }
+
+    @* ── Background tasks ── *@
+    @{
+        var running = TaskQueue.Tasks.Where(t => t.Status == BackgroundTaskStatus.Running).ToList();
+    }
+    @if (running.Count == 1)
+    {
+        <span class="status-section status-task" title="@running[0].Title">
+            <FluentProgressRing Width="12px" />
+            @running[0].Title
+        </span>
+    }
+    else if (running.Count > 1)
+    {
+        <span class="status-section status-task">
+            <FluentProgressRing Width="12px" />
+            @running.Count tasks running
+        </span>
+    }
+
 </div>
 
 <style>
+    .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 10px;
+        height: 100%;
+    }
+
+    .status-section {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--color-text-muted);
+    }
+
+    .status-spacer {
+        flex: 1;
+    }
+
+    .status-connections {
+        gap: 10px;
+    }
+
+    .connection-indicator {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        cursor: default;
+    }
+
+    .connection-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .dot-connected { background: var(--color-success, #22c55e); }
+    .dot-error { background: var(--color-error, #ef4444); }
+    .dot-unknown { background: var(--color-text-muted, #6b7280); }
+
+    .connection-label {
+        font-size: 11px;
+        color: var(--color-text-muted);
+    }
+
+    .status-refresh {
+        font-size: 11px;
+        color: var(--color-text-muted);
+    }
+
+    .status-task {
+        color: var(--color-accent);
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .status-bar-btn {
         background: none;
         border: none;
@@ -38,7 +142,7 @@
         align-items: center;
         gap: 4px;
         color: var(--color-accent);
-        font-size: 12px;
+        font-size: 11px;
         padding: 0 4px;
     }
 
@@ -48,14 +152,60 @@
 </style>
 
 @code {
+    private static readonly (string area, string label)[] _areas =
+    [
+        ("service-bus", "SB"),
+        ("aks", "AKS"),
+        ("redis", "Redis"),
+        ("storage", "Storage"),
+        ("releases", "Releases"),
+    ];
+
+    private DateTime? _lastRefresh;
+    private PeriodicTimer? _clockTimer;
+    private CancellationTokenSource _cts = new();
+
     protected override void OnInitialized()
     {
-        TaskQueue.TasksChanged += OnTasksChanged;
-        SessionService.SessionsChanged += OnSessionsChanged;
+        TaskQueue.TasksChanged += OnChanged;
+        SessionService.SessionsChanged += OnChanged;
+        ConnState.StatesChanged += OnChanged;
+        EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
     }
 
-    private void OnTasksChanged() => InvokeAsync(StateHasChanged);
-    private void OnSessionsChanged() => InvokeAsync(StateHasChanged);
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _clockTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = TickClockAsync(_cts.Token);
+    }
+
+    private async Task TickClockAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (await _clockTimer!.WaitForNextTickAsync(ct))
+                await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnRefreshRequested(RefreshRequestedEvent _)
+    {
+        _lastRefresh = DateTime.UtcNow;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatRefresh(DateTime utc)
+    {
+        var elapsed = DateTime.UtcNow - utc;
+        if (elapsed.TotalSeconds < 5) return "Refreshed just now";
+        if (elapsed.TotalSeconds < 60) return $"Refreshed {(int)elapsed.TotalSeconds}s ago";
+        if (elapsed.TotalMinutes < 60) return $"Refreshed {(int)elapsed.TotalMinutes}m ago";
+        return $"Refreshed {(int)elapsed.TotalHours}h ago";
+    }
 
     private void OpenPortForwardPanel()
     {
@@ -65,7 +215,12 @@
 
     public void Dispose()
     {
-        TaskQueue.TasksChanged -= OnTasksChanged;
-        SessionService.SessionsChanged -= OnSessionsChanged;
+        TaskQueue.TasksChanged -= OnChanged;
+        SessionService.SessionsChanged -= OnChanged;
+        ConnState.StatesChanged -= OnChanged;
+        EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        _cts.Cancel();
+        _cts.Dispose();
+        _clockTimer?.Dispose();
     }
 }

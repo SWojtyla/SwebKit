@@ -4,6 +4,7 @@
 @inject IAppEventBus Events
 @inject IJSRuntime JS
 @inject ScheduledMessageRepository ScheduledRepo
+@inject IConnectionStateService ConnectionState
 @implements IDisposable
 
 <div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
@@ -287,7 +288,27 @@
         if (AppState.UseDemoData)
             AddDemoNamespace();
 
+        ReportConnectionState();
         StateHasChanged();
+    }
+
+    private void ReportConnectionState()
+    {
+        if (!AppState.UseDemoData && _namespaceStates.Count == 0)
+        {
+            ConnectionState.SetNotConfigured("service-bus");
+            return;
+        }
+        var connected = _namespaceStates.Any(s => s.Client is not null);
+        if (connected)
+        {
+            ConnectionState.SetConnected("service-bus");
+        }
+        else
+        {
+            var firstError = _namespaceStates.FirstOrDefault(s => s.ConnectionError is not null)?.ConnectionError;
+            ConnectionState.SetError("service-bus", firstError ?? "All namespaces failed to connect.");
+        }
     }
 
     private async Task<IServiceBusClient?> TryConnectAsync(ServiceBusNamespace ns, NsState state)

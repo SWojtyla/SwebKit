@@ -83,7 +83,7 @@ containing only the `<BlazorWebView>`. This gives access to the full web compone
 
 ### Global Config Model
 
-- A single `ProjectEnvironment` instance (stored as `profiles.json`) holds all feature configs
+- A single `AppConfig` instance (stored as `profiles.json`) holds all feature configs
 - `AppStateService.Config` exposes the global config to all Blazor components
 - Feature pages (`ServiceBusPage`, `AksPage`, `RedisPage`, `StoragePage`) read their config directly from `AppState.Config`
 - `CascadingValue<AppStateService>` propagates context to all Blazor components

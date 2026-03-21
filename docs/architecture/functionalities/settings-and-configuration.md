@@ -13,9 +13,9 @@
 
 ## Core Runtime Flow
 
-1. Settings page resolves the selected project/environment from `AppStateService`.
-2. Accordion forms mutate the active `ProjectEnvironment` config objects.
-3. Save operation calls `AppState.UpdateProjectAsync` to persist profile changes.
+1. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
+2. Accordion forms mutate the config objects directly on `AppConfig`.
+3. Save operation calls `AppState.SaveConfigAsync` to persist changes to `profiles.json`.
 
 ## Main Code Locations
 

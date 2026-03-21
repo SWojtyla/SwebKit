@@ -4,6 +4,7 @@
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoClient
 @inject IAppEventBus Events
 @inject ReleaseRepository ReleaseRepo
+@inject IConnectionStateService ConnectionState
 @implements IDisposable
 
 <CascadingValue Value="ActiveClient" Name="DevOpsClient">
@@ -157,6 +158,11 @@
             }
 
             await LoadAsync();
+            ConnectionState.SetConnected("releases");
+        }
+        else
+        {
+            ConnectionState.SetNotConfigured("releases");
         }
     }
 

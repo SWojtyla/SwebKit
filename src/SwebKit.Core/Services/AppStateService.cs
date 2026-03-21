@@ -18,7 +18,7 @@ public class AppStateService
         _events = events;
     }
 
-    public ProjectEnvironment Config => _profiles.Config;
+    public AppConfig Config => _profiles.Config;
 
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _profiles.ServiceBusNamespaces;
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _profiles.MessageTemplates;
