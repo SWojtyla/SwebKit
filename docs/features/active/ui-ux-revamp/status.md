@@ -4,7 +4,7 @@
 
 title: "Status — ui-ux-revamp"
 owner: ""
-state: "In Progress"
+state: "Done"
 branch: "main"
 started: "2026-03-22"
 last_updated: "2026-03-22"

@@ -4,7 +4,7 @@
 
 title: "Feature Overview — ui-ux-revamp"
 owner: ""
-status: "Proposed"
+status: "Done"
 created: "2026-03-22"
 updated: "2026-03-22"
 
