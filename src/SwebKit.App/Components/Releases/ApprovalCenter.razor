@@ -119,6 +119,7 @@
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public EventCallback<int> OnCountChanged { get; set; }
+    [Parameter] public List<string> PinnedProjects { get; set; } = [];
 
     private bool _isLoading;
     private string? _errorMessage;
@@ -148,7 +149,10 @@
         _errorMessage = null;
         try
         {
-            var projects = await DevOpsClient.GetProjectsAsync();
+            var all = await DevOpsClient.GetProjectsAsync();
+            var projects = PinnedProjects.Count > 0
+                ? all.Where(p => PinnedProjects.Contains(p.Name)).ToList()
+                : all;
             _projects = projects.Select(p => p.Name).ToList();
 
             var items = new List<ProjectApproval>();

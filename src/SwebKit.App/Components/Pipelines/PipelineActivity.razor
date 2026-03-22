@@ -79,9 +79,9 @@
                             <span class="run-dot @RunDotClass(run.Run)" title="@RunTitle(run.Run)"></span>
                             <div class="activity-row__main">
                                 <span class="activity-pipeline-name">@run.PipelineName</span>
-                                <span class="text-muted text-sm activity-project">@run.ProjectName</span>
+                                <span class="activity-project">@run.ProjectName</span>
                             </div>
-                            <span class="text-muted text-sm activity-branch">@(run.Run.SourceBranch?.Replace("refs/heads/", "") ?? "")</span>
+                            <span class="activity-branch">@(run.Run.SourceBranch?.Replace("refs/heads/", "") ?? "")</span>
                             @if (run.Run.TriggeredBy is not null)
                             {
                                 <span class="text-muted text-sm">by @run.Run.TriggeredBy</span>
@@ -91,7 +91,7 @@
                                 var duration = run.Run.FinishedDate.Value - run.Run.CreatedDate;
                                 <span class="text-muted text-sm">@FormatDuration(duration)</span>
                             }
-                            <span class="text-muted text-sm activity-time">@RelativeTime(run.Run.CreatedDate)</span>
+                            <span class="activity-time">@RelativeTime(run.Run.CreatedDate)</span>
                             @if (run.Run.WebUrl is not null)
                             {
                                 <a href="@run.Run.WebUrl" target="_blank" class="btn-link-sm">↗</a>
@@ -106,6 +106,7 @@
 
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public List<string> PinnedProjects { get; set; } = [];
 
     private bool _isLoading;
     private string? _error;
@@ -134,28 +135,17 @@
         _error = null;
         try
         {
-            _projects = await DevOpsClient.GetProjectsAsync();
-            var allRuns = new List<RunRecord>();
+            var all = await DevOpsClient.GetProjectsAsync();
+            _projects = PinnedProjects.Count > 0
+                ? all.Where(p => PinnedProjects.Contains(p.Name)).ToList()
+                : all;
 
-            foreach (var project in _projects)
-            {
-                try
-                {
-                    var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
-                    foreach (var pipeline in pipelines)
-                    {
-                        try
-                        {
-                            var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, pipeline.Id, top: 10);
-                            allRuns.AddRange(runs.Select(r => new RunRecord(project.Name, pipeline.Name, r)));
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-
-            _allRuns = allRuns.OrderByDescending(r => r.Run.CreatedDate).ToList();
+            // Load all projects in parallel
+            var projectRunSets = await Task.WhenAll(_projects.Select(LoadProjectRunsAsync));
+            _allRuns = projectRunSets
+                .SelectMany(r => r)
+                .OrderByDescending(r => r.Run.CreatedDate)
+                .ToList();
         }
         catch (Exception ex) { _error = ex.Message; }
         finally
@@ -163,6 +153,28 @@
             _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task<List<RunRecord>> LoadProjectRunsAsync(AdoProject project)
+    {
+        try
+        {
+            var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
+
+            // Load runs for all pipelines in this project in parallel
+            var runSets = await Task.WhenAll(pipelines.Select(async pipeline =>
+            {
+                try
+                {
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, pipeline.Id, top: 10);
+                    return runs.Select(r => new RunRecord(project.Name, pipeline.Name, r)).ToList();
+                }
+                catch { return new List<RunRecord>(); }
+            }));
+
+            return runSets.SelectMany(r => r).ToList();
+        }
+        catch { return []; }
     }
 
     private IEnumerable<(string Label, List<RunRecord> Runs)> GroupedRuns()
@@ -174,11 +186,11 @@
 
         var groups = new[]
         {
-            ("Today", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == today).ToList()),
+            ("Today",     filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == today).ToList()),
             ("Yesterday", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == yesterday).ToList()),
             ("This week", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date >= thisWeekStart
-                && r.Run.CreatedDate.LocalDateTime.Date < yesterday).ToList()),
-            ("Older", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date < thisWeekStart).ToList())
+                                           && r.Run.CreatedDate.LocalDateTime.Date < yesterday).ToList()),
+            ("Older",     filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date < thisWeekStart).ToList())
         };
 
         return groups.Where(g => g.Item2.Count > 0).Select(g => (g.Item1, g.Item2));

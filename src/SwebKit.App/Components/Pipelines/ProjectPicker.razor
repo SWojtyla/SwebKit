@@ -1,0 +1,108 @@
+<div class="project-picker">
+    <div class="project-picker__header">
+        <h3 class="project-picker__title">Select Projects</h3>
+        <p class="project-picker__desc">
+            Choose which Azure DevOps projects to include. Only selected projects will load pipeline data.
+            @if (IsDemoMode)
+            {
+                <span class="project-picker__demo-note">Selection is session-only in demo mode.</span>
+            }
+            else
+            {
+                <span>Your selection is saved to the profile.</span>
+            }
+        </p>
+    </div>
+
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading projects from Azure DevOps..." />
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="project-picker__toolbar">
+            <span class="project-picker__count">@_selected.Count of @_allProjects.Count selected</span>
+            <button class="project-picker__action-btn" @onclick="SelectAll">Select all</button>
+            <button class="project-picker__action-btn" @onclick="ClearAll">Clear all</button>
+        </div>
+
+        <div class="project-picker__list">
+            @foreach (var project in _allProjects)
+            {
+                var isChecked = _selected.Contains(project.Name);
+                <label class="project-picker__item @(isChecked ? "project-picker__item--checked" : "")">
+                    <input type="checkbox" checked="@isChecked"
+                           @onchange="@(e => ToggleProject(project.Name, (bool)e.Value!))" />
+                    <div class="project-picker__item-body">
+                        <span class="project-picker__item-name">@project.Name</span>
+                        @if (!string.IsNullOrEmpty(project.Description))
+                        {
+                            <span class="project-picker__item-desc">@project.Description</span>
+                        }
+                    </div>
+                </label>
+            }
+        </div>
+
+        <div class="project-picker__footer">
+            @if (AllowCancel)
+            {
+                <button class="approval-btn-cancel" @onclick="@(() => OnCancelled.InvokeAsync())">Cancel</button>
+            }
+            <FluentButton Appearance="Appearance.Accent"
+                          @onclick="ConfirmAsync"
+                          Disabled="@(_selected.Count == 0)">
+                Confirm (@_selected.Count project@(_selected.Count == 1 ? "" : "s"))
+            </FluentButton>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public List<string> CurrentPinned { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> OnConfirmed { get; set; }
+    [Parameter] public EventCallback OnCancelled { get; set; }
+    [Parameter] public bool AllowCancel { get; set; }
+    [Parameter] public bool IsDemoMode { get; set; }
+
+    private bool _isLoading;
+    private string? _error;
+    private List<AdoProject> _allProjects = [];
+    private HashSet<string> _selected = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selected = [.. CurrentPinned];
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            _allProjects = await DevOpsClient.GetProjectsAsync();
+            // Pre-select all if nothing pinned yet
+            if (_selected.Count == 0)
+                _selected = [.. _allProjects.Select(p => p.Name)];
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _isLoading = false; }
+    }
+
+    private void ToggleProject(string name, bool isChecked)
+    {
+        if (isChecked) _selected.Add(name);
+        else _selected.Remove(name);
+    }
+
+    private void SelectAll() => _selected = [.. _allProjects.Select(p => p.Name)];
+    private void ClearAll() => _selected.Clear();
+    private Task ConfirmAsync() => OnConfirmed.InvokeAsync([.. _selected]);
+}

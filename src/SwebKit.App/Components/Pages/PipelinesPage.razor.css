@@ -59,3 +59,52 @@
     padding: var(--spacing-lg);
     min-width: 0;
 }
+
+/* ── Project scope indicator in page header ── */
+.pipelines-shell .page-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pipelines-scope-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.pipelines-scope-count {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.pipelines-demo-tag {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+}
+
+.pipelines-scope-change-btn {
+    font-size: 12px;
+    color: var(--color-accent);
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: border-color 0.1s, background 0.1s;
+}
+
+    .pipelines-scope-change-btn:hover {
+        border-color: var(--color-accent);
+        background: var(--color-accent-subtle);
+    }

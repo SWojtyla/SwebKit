@@ -68,6 +68,7 @@
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public EventCallback<(AdoProject Project, AdoPipeline Pipeline)> OnPipelineSelected { get; set; }
+    [Parameter] public List<string> PinnedProjects { get; set; } = [];
 
     private bool _isLoading;
     private string? _error;
@@ -90,50 +91,52 @@
         _error = null;
         try
         {
-            var projects = await DevOpsClient.GetProjectsAsync();
-            var summaries = new List<ProjectSummary>();
+            var all = await DevOpsClient.GetProjectsAsync();
+            var projects = PinnedProjects.Count > 0
+                ? all.Where(p => PinnedProjects.Contains(p.Name)).ToList()
+                : all;
 
-            foreach (var project in projects)
-            {
-                try
-                {
-                    var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
-                    var pipelineRuns = new List<(AdoPipeline, AdoPipelineRun?)>();
-                    int running = 0, failed = 0;
-
-                    foreach (var pipeline in pipelines)
-                    {
-                        try
-                        {
-                            var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, pipeline.Id, top: 1);
-                            var last = runs.FirstOrDefault();
-                            pipelineRuns.Add((pipeline, last));
-
-                            if (last?.State == "inProgress") running++;
-                            else if (last?.Result == "failed") failed++;
-                        }
-                        catch { pipelineRuns.Add((pipeline, null)); }
-                    }
-
-                    int approvals = 0;
-                    try
-                    {
-                        var pendingApprovals = await DevOpsClient.GetPendingApprovalsAsync(project.Name);
-                        approvals = pendingApprovals.Count;
-                    }
-                    catch { }
-
-                    summaries.Add(new ProjectSummary(
-                        project, project.Name, pipelines.Count,
-                        running, failed, approvals, pipelineRuns));
-                }
-                catch { }
-            }
-
-            _summaries = summaries;
+            // Load all project summaries in parallel
+            var results = await Task.WhenAll(projects.Select(LoadProjectSummaryAsync));
+            _summaries = results.OfType<ProjectSummary>().ToList();
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _isLoading = false; }
+    }
+
+    private async Task<ProjectSummary?> LoadProjectSummaryAsync(AdoProject project)
+    {
+        try
+        {
+            var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
+
+            // Load last run per pipeline in parallel
+            var runResults = await Task.WhenAll(pipelines.Select(async p =>
+            {
+                try
+                {
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, p.Id, top: 1);
+                    return (Pipeline: p, LastRun: (AdoPipelineRun?)runs.FirstOrDefault());
+                }
+                catch { return (Pipeline: p, LastRun: (AdoPipelineRun?)null); }
+            }));
+
+            int running = 0, failed = 0;
+            var pipelineRuns = new List<(AdoPipeline, AdoPipelineRun?)>();
+            foreach (var (p, last) in runResults)
+            {
+                pipelineRuns.Add((p, last));
+                if (last?.State == "inProgress") running++;
+                else if (last?.Result == "failed") failed++;
+            }
+
+            int approvals = 0;
+            try { approvals = (await DevOpsClient.GetPendingApprovalsAsync(project.Name)).Count; }
+            catch { }
+
+            return new ProjectSummary(project, project.Name, pipelines.Count, running, failed, approvals, pipelineRuns);
+        }
+        catch { return null; }
     }
 
     private Task SelectPipeline(AdoProject project, AdoPipeline pipeline) =>

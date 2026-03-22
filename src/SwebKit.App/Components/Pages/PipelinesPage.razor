@@ -12,6 +12,28 @@
     <div class="pipelines-shell">
         <div class="page-header">
             <h2 class="page-title">Pipelines</h2>
+            @if (IsConfigured && !_showProjectPicker)
+            {
+                <div class="pipelines-scope-info">
+                    <span class="pipelines-scope-count">
+                        @if (EffectivePinnedProjects.Count == 0)
+                        {
+                            <text>All projects</text>
+                        }
+                        else
+                        {
+                            <text>@EffectivePinnedProjects.Count project@(EffectivePinnedProjects.Count == 1 ? "" : "s")</text>
+                        }
+                        @if (AppState.UseDemoData)
+                        {
+                            <span class="pipelines-demo-tag">demo</span>
+                        }
+                    </span>
+                    <button class="pipelines-scope-change-btn" @onclick="@(() => _showProjectPicker = true)">
+                        Change
+                    </button>
+                </div>
+            }
         </div>
 
         @if (!IsConfigured)
@@ -20,6 +42,14 @@
                 <p>Azure DevOps is not configured for this project.</p>
                 <p>Go to <strong>Settings</strong> and configure the <strong>Azure DevOps</strong> section to get started.</p>
             </div>
+        }
+        else if (_showProjectPicker)
+        {
+            <ProjectPicker CurrentPinned="EffectivePinnedProjects"
+                           AllowCancel="@(EffectivePinnedProjects.Count > 0 || AppState.UseDemoData)"
+                           IsDemoMode="AppState.UseDemoData"
+                           OnConfirmed="OnProjectsPinned"
+                           OnCancelled="@(() => _showProjectPicker = false)" />
         }
         else
         {
@@ -47,7 +77,8 @@
                                               SelectedPipeline="_selectedPipeline"
                                               OnPipelineSelected="OnPipelineSelected"
                                               Collapsed="_leftCollapsed"
-                                              OnToggleCollapse="@(() => { _leftCollapsed = !_leftCollapsed; })" />
+                                              OnToggleCollapse="@(() => { _leftCollapsed = !_leftCollapsed; })"
+                                              PinnedProjects="EffectivePinnedProjects" />
                             </div>
                             <div class="pipeline-split__right">
                                 @if (_selectedPipeline is not null && _selectedProject is not null)
@@ -56,14 +87,15 @@
                                 }
                                 else
                                 {
-                                    <PipelinesOverview OnPipelineSelected="OnPipelineSelected" />
+                                    <PipelinesOverview OnPipelineSelected="OnPipelineSelected"
+                                                       PinnedProjects="EffectivePinnedProjects" />
                                 }
                             </div>
                         </div>
                         break;
 
                     case "activity":
-                        <PipelineActivity />
+                        <PipelineActivity PinnedProjects="EffectivePinnedProjects" />
                         break;
 
                     case "releases":
@@ -87,7 +119,8 @@
 
                     case "approvals":
                         <div class="pipelines-approvals-wrap">
-                            <ApprovalCenter OnCountChanged="OnApprovalCountChanged" />
+                            <ApprovalCenter OnCountChanged="OnApprovalCountChanged"
+                                            PinnedProjects="EffectivePinnedProjects" />
                         </div>
                         break;
                 }
@@ -140,6 +173,8 @@
 @code {
     private string ActiveTab = "pipelines";
     private int _pendingApprovalCount;
+    private bool _showProjectPicker;
+    private List<string> _demoPinnedProjects = [];
 
     // Pipelines tab state
     private AdoProject? _selectedProject;
@@ -161,6 +196,13 @@
         AppState.UseDemoData ||
         (AppState.Config.DevOpsConfig is not null
          && !string.IsNullOrEmpty(AppState.Config.DevOpsConfig.Organization));
+
+    private List<string> PinnedProjects =>
+        AppState.Config.DevOpsConfig?.PinnedProjects ?? [];
+
+    /// <summary>In demo mode uses in-memory selection; in real mode uses persisted PinnedProjects.</summary>
+    private List<string> EffectivePinnedProjects =>
+        AppState.UseDemoData ? _demoPinnedProjects : PinnedProjects;
 
     private IReadOnlyList<ReleaseRecord> EffectiveReleases =>
         AppState.UseDemoData
@@ -191,6 +233,8 @@
         {
             _selectedRelease = EffectiveReleases.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
             ConnectionState.SetConnected("pipelines");
+            // Show project picker when no projects are pinned (real mode only)
+            _showProjectPicker = !AppState.UseDemoData && PinnedProjects.Count == 0;
         }
         else
         {
@@ -201,6 +245,21 @@
     protected override void OnInitialized()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+    }
+
+    private async Task OnProjectsPinned(List<string> pinned)
+    {
+        if (AppState.UseDemoData)
+        {
+            _demoPinnedProjects = pinned;
+        }
+        else
+        {
+            if (AppState.Config.DevOpsConfig is not null)
+                AppState.Config.DevOpsConfig.PinnedProjects = pinned;
+            await AppState.SaveConfigAsync();
+        }
+        _showProjectPicker = false;
     }
 
     private void OnPipelineSelected((AdoProject Project, AdoPipeline Pipeline) sel)
