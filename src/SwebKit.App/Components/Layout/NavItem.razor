@@ -1,4 +1,7 @@
-<div class="nav-item @(CurrentArea == Area ? "active" : "")" @onclick="Navigate" title="@(IsExpanded ? "" : Label)">
+<div class="nav-item @(CurrentArea == Area ? "active" : "")"
+     data-area="@Area"
+     @onclick="Navigate"
+     title="@(IsExpanded ? "" : Label)">
     <FluentIcon Value="@NavIcon" Width="20px" />
     @if (IsExpanded)
     {

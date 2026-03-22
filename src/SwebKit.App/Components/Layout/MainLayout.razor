@@ -7,10 +7,12 @@
 @inject CommandRegistry Commands
 @implements IDisposable
 
-<FluentDesignTheme StorageName="swebkit-theme" />
+<FluentDesignTheme StorageName="swebkit-theme"
+                   Mode="@(_currentTheme == "dark" ? DesignThemeModes.Dark : DesignThemeModes.Light)" />
 
 <CascadingValue Value="AppState">
-    <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")">
+<CascadingValue Value="this" Name="Layout">
+    <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
         <TopBar OnNavToggle="ToggleNav" />
         @if (AppState.UseDemoData)
         {
@@ -33,12 +35,14 @@
 
     <NotificationToast />
 </CascadingValue>
+</CascadingValue>
 
 @code {
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
     private string CurrentArea = "dashboard";
     private DotNetObjectReference<MainLayout>? _jsRef;
+    private string _currentTheme = "dark";
 
     protected override async Task OnInitializedAsync()
     {
@@ -64,8 +68,34 @@
         {
             Console.Error.WriteLine($"[SwebKit] Keyboard shortcuts registration failed: {ex.Message}");
         }
+
+        // Load persisted theme preference (BL-6: must run in OnAfterRenderAsync)
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "swebkit-ui-theme");
+            if (!string.IsNullOrWhiteSpace(stored))
+                _currentTheme = stored;
+        }
+        catch
+        {
+            // localStorage unavailable — keep default dark theme
+        }
+
         StateHasChanged();
     }
+
+    public async Task SetThemeAsync(string theme)
+    {
+        _currentTheme = theme;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "swebkit-ui-theme", theme);
+        }
+        catch { /* ignore */ }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public string CurrentTheme => _currentTheme;
 
     protected override void OnInitialized()
     {

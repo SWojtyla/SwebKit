@@ -1,0 +1,37 @@
+@* AppearanceSettings — theme picker shown in SettingsPage Appearance section *@
+
+<div class="appearance-section">
+    <div class="form-field">
+        <label class="form-label">Theme</label>
+        <FluentSelect TOption="string"
+                      Value="@CurrentTheme"
+                      ValueChanged="OnThemeChanged"
+                      style="max-width:300px;">
+            <FluentOption Value="dark">Dark</FluentOption>
+            <FluentOption Value="light-azure-bloom">Light — Azure Bloom</FluentOption>
+            <FluentOption Value="light-coral-studio">Light — Coral Studio</FluentOption>
+            <FluentOption Value="light-forest-dev">Light — Forest Dev</FluentOption>
+            <FluentOption Value="light-violet-cloud">Light — Violet Cloud</FluentOption>
+        </FluentSelect>
+    </div>
+
+    <div class="theme-preview-swatch">
+        <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--color-accent); flex-shrink:0;"></span>
+        <span>Preview: @ThemeLabel(CurrentTheme)</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string CurrentTheme { get; set; } = "dark";
+    [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
+
+    private static string ThemeLabel(string theme) => theme switch
+    {
+        "dark"               => "Dark",
+        "light-azure-bloom"  => "Light — Azure Bloom",
+        "light-coral-studio" => "Light — Coral Studio",
+        "light-forest-dev"   => "Light — Forest Dev",
+        "light-violet-cloud" => "Light — Violet Cloud",
+        _                    => theme
+    };
+}

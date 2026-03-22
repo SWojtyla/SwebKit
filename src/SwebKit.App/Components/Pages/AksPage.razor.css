@@ -790,19 +790,19 @@
 /* ── YAML syntax highlight tokens ──
    ::deep is required because the <span> elements are injected at runtime via
    MarkupString and do not receive Blazor's CSS isolation scope attribute. */
-.aks-yaml-pre ::deep .yml-key        { color: #9cdcfe; }
+.aks-yaml-pre ::deep .yml-key        { color: var(--color-code-key); }
 .aks-yaml-pre ::deep .yml-colon      { color: var(--color-text-muted); }
-.aks-yaml-pre ::deep .yml-string     { color: #ce9178; }
-.aks-yaml-pre ::deep .yml-bool       { color: #569cd6; }
-.aks-yaml-pre ::deep .yml-null       { color: #569cd6; }
-.aks-yaml-pre ::deep .yml-number     { color: #b5cea8; }
-.aks-yaml-pre ::deep .yml-comment    { color: #6a9955; font-style: italic; }
-.aks-yaml-pre ::deep .yml-doc-marker { color: #808080; }
-.aks-yaml-pre ::deep .yml-directive  { color: #808080; }
-.aks-yaml-pre ::deep .yml-dash       { color: #c586c0; font-weight: 600; }
+.aks-yaml-pre ::deep .yml-string     { color: var(--color-code-string); }
+.aks-yaml-pre ::deep .yml-bool       { color: var(--color-code-keyword); }
+.aks-yaml-pre ::deep .yml-null       { color: var(--color-code-keyword); }
+.aks-yaml-pre ::deep .yml-number     { color: var(--color-code-number); }
+.aks-yaml-pre ::deep .yml-comment    { color: var(--color-code-comment); font-style: italic; }
+.aks-yaml-pre ::deep .yml-doc-marker { color: var(--color-text-faint); }
+.aks-yaml-pre ::deep .yml-directive  { color: var(--color-text-faint); }
+.aks-yaml-pre ::deep .yml-dash       { color: var(--color-code-special2); font-weight: 600; }
 .aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
-.aks-yaml-pre ::deep .yml-anchor     { color: #dcdcaa; }
-.aks-yaml-pre ::deep .yml-scalar     { color: #dcdcaa; }
+.aks-yaml-pre ::deep .yml-anchor     { color: var(--color-code-special); }
+.aks-yaml-pre ::deep .yml-scalar     { color: var(--color-code-special); }
 
 /* ════════════════════════════════════════════════
    AKS PAGE — HPA Details

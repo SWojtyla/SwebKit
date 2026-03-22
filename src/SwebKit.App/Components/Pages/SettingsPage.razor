@@ -2,44 +2,105 @@
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
 
-<div style="padding:20px; max-width:760px; overflow-y:auto; height:100%;">
-    <h2 style="margin:0 0 16px; font-size:18px;">Settings</h2>
+<div class="settings-shell">
 
-    <FluentAccordion>
-        <FluentAccordionItem Heading="Service Bus — Pinned Entities">
-            <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-        </FluentAccordionItem>
-        <FluentAccordionItem Heading="AKS / Kubernetes">
-            <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-        </FluentAccordionItem>
-        <FluentAccordionItem Heading="Redis">
-            <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-        </FluentAccordionItem>
-        <FluentAccordionItem Heading="Azure DevOps (Releases)">
-            <DevOpsConfigForm OnSaved="SaveAsync" />
-        </FluentAccordionItem>
-        <FluentAccordionItem Heading="Storage (Azure Blob)">
-            <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
-        </FluentAccordionItem>
-    </FluentAccordion>
+    @* ── Left navigation sidebar ── *@
+    <nav class="settings-nav">
+        <button class="settings-nav-item @(_active == "appearance" ? "active" : "")"
+                @onclick="@(() => _active = "appearance")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.PaintBrush())" Width="18px" />
+            Appearance
+        </button>
+        <button class="settings-nav-item @(_active == "servicebus" ? "active" : "")"
+                @onclick="@(() => _active = "servicebus")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
+            Service Bus
+        </button>
+        <button class="settings-nav-item @(_active == "aks" ? "active" : "")"
+                @onclick="@(() => _active = "aks")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="18px" />
+            AKS
+        </button>
+        <button class="settings-nav-item @(_active == "redis" ? "active" : "")"
+                @onclick="@(() => _active = "redis")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="18px" />
+            Redis
+        </button>
+        <button class="settings-nav-item @(_active == "devops" ? "active" : "")"
+                @onclick="@(() => _active = "devops")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="18px" />
+            DevOps
+        </button>
+        <button class="settings-nav-item @(_active == "storage" ? "active" : "")"
+                @onclick="@(() => _active = "storage")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
+            Storage
+        </button>
+    </nav>
 
-    @if (SavedMessage is not null)
-    {
-        <div style="margin-top:12px; padding:8px 12px; background:rgba(67,160,71,0.2); border:1px solid var(--color-success); border-radius:4px; font-size:12px; color:var(--color-success);">
-            @SavedMessage
-        </div>
-    }
+    @* ── Right content well ── *@
+    <div class="settings-content">
+        @switch (_active)
+        {
+            case "appearance":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Appearance</h3>
+                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme"
+                                    OnThemeChanged="ApplyThemeAsync" />
+                break;
+
+            case "servicebus":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Service Bus</h3>
+                <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+                break;
+
+            case "aks":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">AKS / Kubernetes</h3>
+                <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+                break;
+
+            case "redis":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Redis</h3>
+                <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+                break;
+
+            case "devops":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Azure DevOps (Releases)</h3>
+                <DevOpsConfigForm OnSaved="SaveAsync" />
+                break;
+
+            case "storage":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Storage (Azure Blob)</h3>
+                <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
+                break;
+        }
+
+        @if (_savedMessage is not null)
+        {
+            <div class="settings-saved-banner">@_savedMessage</div>
+        }
+    </div>
+
 </div>
 
 @code {
-    private string? SavedMessage;
+    [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
+
+    private string _active = "appearance";
+    private string? _savedMessage;
 
     private async Task SaveAsync()
     {
         await AppState.SaveConfigAsync();
-        SavedMessage = "Settings saved.";
-        await Task.Delay(3000);
-        SavedMessage = null;
+        _savedMessage = "Settings saved.";
         StateHasChanged();
+        await Task.Delay(3000);
+        _savedMessage = null;
+        StateHasChanged();
+    }
+
+    private async Task ApplyThemeAsync(string theme)
+    {
+        if (_layout is not null)
+            await _layout.SetThemeAsync(theme);
     }
 }

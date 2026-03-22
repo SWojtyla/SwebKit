@@ -14,10 +14,10 @@
                   @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Phase" Width="110px">
+    <TemplateColumn Title="Phase" Width="120px">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            <span class="aks-status @(context.Phase == "Running" ? "running" : context.Phase == "CrashLoopBackOff" ? "error" : "other")">
+            <span class="pod-status-badge pod-status-badge--@context.Phase.ToLower().Replace(" ", "").Replace(":", "")">
                 @context.Phase
             </span>
         </div>
