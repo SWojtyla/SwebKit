@@ -1,14 +1,27 @@
-# Releases (Azure DevOps) — Functionality Architecture
+# Pipelines & Releases (Azure DevOps) — Functionality Architecture
+
+> **Renamed from "Releases"** in the pipelines-revamp feature. The route `/releases` redirects to
+> `/pipelines`. The nav entry, health tile, and area key are all `pipelines`.
 
 ## What it supports today
 
-- **Local release records** — create, edit, and delete named releases stored locally in `releases.json`. Each release groups one or more ADO pipeline/repository pairs (components) for coordinated tracking.
-- **Release Board** — per-component pipeline run status matrix showing which deployment stage each component has reached (DEV → TST → STG → PRD, etc.).
-- **Approval Center** — lists pipeline stages awaiting approval across all in-scope components for the selected release. Supports in-app approve/reject with optional comment.
-- **Pipeline Trigger Hub (Deployments tab)** — browse pipelines per ADO project and trigger new runs with branch selection and optional template parameters.
-- **Tag Manager** — view existing annotated git tags per component repository and create new annotated tags from within SwebKit.
-- **Delete release** — confirmation dialog before removing a release and all its deployment snapshots from local storage.
-- **Demo mode** — `DemoDevOpsClient` (static singleton in `SwebKit.Core`) provides two synthetic releases, projects, pipelines with realistic `inProgress` runs, pending approvals, environments, repos, and tags. Demo-only releases suppress Edit/Delete buttons.
+- **Pipeline browser (Pipelines tab)** — two-panel layout: left tree shows all ADO projects and
+  pipelines with last-run status indicators; right panel shows pipeline detail (environment
+  deployment status, recent runs, inline trigger panel).
+- **Activity feed (Activity tab)** — chronological view of all pipeline runs across all ADO
+  projects. Filterable by project, status, and date range. Auto-refresh toggle.
+- **Release groupings (Releases tab)** — optional named groupings of pipelines. Left panel lists
+  local release records; right panel shows the component × environment matrix (same logic as the
+  former Release Board). Edit, delete, manage scope, and tag manager are accessible from here.
+- **Global Approvals (Approvals tab)** — all pending pipeline approvals across all ADO projects in
+  a single view. Badge count shown on the tab. Inline approve/reject with optional comment; PROD
+  gate requires typing "CONFIRM".
+- **Pipeline trigger** — inline panel in Pipeline detail. Branch selection, optional template
+  parameters, confirmation dialog.
+- **Tag Manager** — accessible from Release detail action bar. Creates annotated git tags per
+  component repository.
+- **Demo mode** — `DemoDevOpsClient` provides synthetic projects, pipelines, runs, approvals,
+  environments, and repos. Demo-only releases suppress Edit/Delete buttons.
 
 ## Configuration
 
@@ -19,7 +32,8 @@
 | `Organization` | Azure DevOps organization name (e.g. `mycompany`) |
 | `PatCredentialKey` | Logical key in `ICredentialStore` for the Personal Access Token |
 
-The PAT itself is never written to disk — it lives in Windows Credential Manager. `ReleasesPage` checks `IsConfigured` before showing content (`Organization` must be non-empty, or demo mode active).
+The PAT is never written to disk — it lives in Windows Credential Manager. `PipelinesPage` checks
+`IsConfigured` before showing content (`Organization` must be non-empty, or demo mode active).
 
 ## IDevOpsClient interface
 
@@ -38,9 +52,9 @@ GetPipelineRunsAsync(project, pipelineId, top?)
 GetPipelineRunAsync(project, pipelineId, runId)
 TriggerPipelineRunAsync(project, pipelineId, branch, templateParameters?)
 
-// Approvals & waiting stage checks
+// Approvals & Checks
 GetPendingApprovalsAsync(project)
-GetWaitingStagesAsync(project, runId)    — stages waiting for approval/checks
+GetWaitingStagesAsync(project, runId)
 ApproveAsync(project, approvalId, comment?)
 RejectAsync(project, approvalId, comment?)
 
@@ -48,66 +62,71 @@ RejectAsync(project, approvalId, comment?)
 GetRepositoriesAsync(project)
 GetTagsAsync(project, repositoryId)
 CreateAnnotatedTagAsync(project, repositoryId, name, commitSha, message)
-GetCommitsAsync(project, repositoryId, branch, top = 20)
+GetCommitsAsync(project, repositoryId, branch, top?)
 
 // Environments
 GetEnvironmentsAsync(project)
+GetEnvironmentStatusAsync(project, pipelineId, scanDepth?)  ← NEW
 ```
+
+### GetEnvironmentStatusAsync
+
+Returns `List<PipelineEnvironmentStatus>` — one entry per distinct environment/stage in the
+pipeline. Derived by scanning the most recent `scanDepth` (default 5) runs and taking the latest
+run that reached each stage. The `WaitingForApproval` flag is set when the stage is in `inProgress`
+state and appears in `GetWaitingStagesAsync`.
+
+Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Local data model
 
-`ReleaseRepository` (singleton, `SwebKit.Core/Configuration/ReleaseRepository.cs`) owns two collections persisted to `releases.json`:
+| Type | Storage | Purpose |
+|---|---|---|
+| `ReleaseRecord` | `releases.json` in AppData | Named grouping of pipeline/repo pairs |
+| `ComponentScope` | (nested in ReleaseRecord) | One pipeline binding per release component |
+| `DeploymentSnapshot` | `releases.json` in AppData | Audit trail of deployments |
+| `PipelineEnvironmentStatus` | In-memory only | Latest stage status per env for a pipeline |
 
-**ReleaseRecord** — top-level release entity
-- `Id` (Guid), `Name`, `SprintNumber?`, `Label?`, `CreatedAt`, `CreatedBy?`, `Status` (Draft/InProgress/Completed), `Notes?`
-- `Components` — list of `ComponentScope`
+## Key implementation notes
 
-**ComponentScope** — links a component to its ADO pipeline and repository
-- `ComponentName`, `ProjectName`, `RepositoryId`, `PipelineId`
-- `InScope` — whether this component participates in the current release
-- `TargetTag`, `TagConfirmed` — readiness gate: component is ready when InScope + TargetTag set + TagConfirmed
-- `ProductionStageName?` — optional pin for which ADO stage is considered "production". Falls back to last stage.
-
-**DeploymentSnapshot** — records a deployment event (component × environment × tag × approver)
+- `DevOpsClient.Configure()` may only be called once per singleton lifetime. `PipelinesPage`
+  wraps the call in `try/catch(InvalidOperationException)` to tolerate re-navigation.
+- `ApprovalCenter` is now global — it calls `GetPendingApprovalsAsync` per project to load all
+  approvals, not per release component. The `OnCountChanged` callback updates the tab badge count.
+- `GetEnvironmentStatusAsync` in `DevOpsClient` calls `GetPipelineRunAsync` (which fetches the
+  ADO timeline) for each scanned run to resolve stage data. Stops early after 3 runs if data
+  exists. Max 5 calls per invocation.
+- The Activity tab loads all runs on activation (no global cache). Auto-refresh is opt-in (30 s).
+- Release records are local to SwebKit and not synced to ADO.
 
 ## Main code locations
 
 | File | Role |
 |---|---|
-| `ReleasesPage.razor` | Main page: release selector, tab navigation (board/approvals/pipelines/tags), delete, modal hosting |
-| `Components/Releases/ReleaseBoard.razor` | Per-component run status grid |
-| `Components/Releases/ApprovalCenter.razor` | Pending stage approvals with approve/reject |
-| `Components/Releases/PipelineTriggerHub.razor` | Browse pipelines, trigger runs |
-| `Components/Releases/TagManager.razor` | View and create annotated git tags |
-| `Components/Releases/ReleaseEditor.razor` | Create/edit release modal |
-| `Components/Releases/ComponentScopeEditor.razor` | Edit component scopes for a release |
-| `Components/Releases/ReadinessGate.razor` | Per-component readiness check display |
-| `Pages/DevOpsConfigForm.razor` | DevOps config form (embedded in SettingsPage) |
+| `Pages/PipelinesPage.razor` | Page shell: tabs, split panels, client setup, modals |
+| `Pages/PipelinesPage.razor.css` | All layout CSS for Pipelines hub |
+| `Pipelines/PipelineTree.razor` | Left panel: project/pipeline tree with run status |
+| `Pipelines/PipelinesOverview.razor` | Right panel: project summary cards (no selection) |
+| `Pipelines/PipelineDetail.razor` | Right panel: env status, recent runs, trigger |
+| `Pipelines/PipelineActivity.razor` | Activity tab: chronological run feed |
+| `Releases/ReleaseList.razor` | Left panel: release record list |
+| `Releases/ReleaseDetail.razor` | Right panel: component × env matrix + action bar |
+| `Releases/ApprovalCenter.razor` | Approvals tab: global across all projects |
+| `Releases/TagManager.razor` | Tag creation (accessible from ReleaseDetail) |
+| `Releases/ReleaseEditor.razor` | Modal: create/edit release record |
+| `Releases/ComponentScopeEditor.razor` | Modal: manage pipeline scope per release |
 | `SwebKit.Core/Abstractions/IDevOpsClient.cs` | Interface |
-| `SwebKit.Core/Models/ReleaseModels.cs` | ReleaseRecord, ComponentScope, DeploymentSnapshot |
-| `SwebKit.Core/Models/DevOpsModels.cs` | ADO entity models (AdoProject, AdoPipeline, AdoPipelineRun, AdoPipelineStage, AdoApproval, WaitingStage, AdoRepository, AdoTag, AdoCommit, AdoEnvironment) |
-| `SwebKit.Core/Domain/DevOpsConfig.cs` | Config model |
-| `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (releases.json) |
-| `SwebKit.Core/Services/DemoDevOpsClient.cs` | Demo client |
-| `SwebKit.DevOps/DevOpsClient.cs` | HTTP client implementation (ADO REST API v7.1) |
-| `SwebKit.DevOps/DevOpsAuthHandler.cs` | PAT-based Basic auth handler |
+| `SwebKit.Core/Models/DevOpsModels.cs` | ADO domain models + `PipelineEnvironmentStatus` |
+| `SwebKit.Core/Models/ReleaseModels.cs` | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot` |
+| `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (JSON) |
+| `SwebKit.Core/Services/DemoDevOpsClient.cs` | Demo data |
+| `SwebKit.DevOps/DevOpsClient.cs` | Real ADO REST implementation |
 
-## Key implementation notes
+## Removed in pipelines-revamp
 
-**Client selection is page-level, not DI factory.** `ReleasesPage` computes `ActiveClient` as a property:
-```csharp
-private IDevOpsClient ActiveClient => AppState.UseDemoData ? DemoClient : RealDevOpsClient;
-```
-The client is cascaded via `CascadingValue<IDevOpsClient>` so child components receive the correct instance.
-
-**`DevOpsClient.Configure()` is once-only.** Calling it a second time throws `InvalidOperationException`. This enforces that client configuration happens once in `OnInitializedAsync` and is not accidentally re-applied.
-
-**Approval Center gate — `inProgress` only.** `GetWaitingStagesAsync` returns waiting stages only for runs where `State == "inProgress"`. Completed runs are skipped. Demo data seeds three `inProgress` runs (pipelines 101, 103, 201) specifically to show this badge.
-
-**Release records are local, not from ADO.** SwebKit maintains its own grouping of which components belong to which release. ADO's own release concept is not consumed — SwebKit works with pipelines (YAML-based CI/CD) rather than ADO's classic releases.
-
-**Demo releases suppress mutation.** `IsSelectedReleaseDemoOnly` checks whether the selected release exists in `ReleaseRepository`. If not (i.e., it's one of `DemoDevOpsClient.DemoReleases`), Edit/Delete buttons are hidden.
-
-**Readiness gate.** A component is considered ready to deploy when all three conditions hold: `InScope = true`, `TargetTag` is set, `TagConfirmed = true`. `ReadinessGate.razor` renders a per-component readiness row.
-
-**Tests.** `tests/SwebKit.DevOps.Tests` covers DevOpsClient behavior and DemoDevOpsClient scenarios (24 tests as of 2026-03-22).
+| File | Replaced by |
+|---|---|
+| `Pages/ReleasesPage.razor` | `Pages/PipelinesPage.razor` (route `/pipelines` + redirect `/releases`) |
+| `Releases/ReleaseBoard.razor` | `Releases/ReleaseDetail.razor` |
+| `Releases/ReadinessGate.razor` | Inline readiness computation in `ReleaseDetail` |
+| `Releases/PipelineTriggerHub.razor` | Inline trigger panel in `Pipelines/PipelineDetail.razor` |

@@ -361,6 +361,60 @@ public class DevOpsClient : IDevOpsClient
         )).ToList() ?? [];
     }
 
+    // ── Environment status ──
+
+    public async Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
+        string project, int pipelineId, int scanDepth = 5, CancellationToken ct = default)
+    {
+        var runs = await GetPipelineRunsAsync(project, pipelineId, top: scanDepth, ct: ct);
+        var envMap = new Dictionary<string, PipelineEnvironmentStatus>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var runHeader in runs)
+        {
+            AdoPipelineRun run;
+            try
+            {
+                run = runHeader.Stages.Count > 0
+                    ? runHeader
+                    : await GetPipelineRunAsync(project, pipelineId, runHeader.Id, ct);
+            }
+            catch { continue; }
+
+            var waitingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (run.State != "completed")
+            {
+                try
+                {
+                    var waiting = await GetWaitingStagesAsync(project, run.Id, ct);
+                    foreach (var w in waiting) waitingNames.Add(w.StageName);
+                }
+                catch { }
+            }
+
+            foreach (var stage in run.Stages)
+            {
+                var envName = stage.EnvironmentName ?? stage.Name;
+                if (envMap.ContainsKey(envName)) continue;
+
+                envMap[envName] = new PipelineEnvironmentStatus(
+                    EnvironmentName: envName,
+                    StageName: stage.Name,
+                    LatestRunId: run.Id,
+                    RunName: run.Name,
+                    State: stage.State,
+                    Result: stage.Result,
+                    FinishedAt: run.FinishedDate,
+                    TriggeredBy: run.TriggeredBy,
+                    WaitingForApproval: waitingNames.Contains(stage.Name));
+            }
+
+            if (envMap.Count > 0 && runs.IndexOf(runHeader) >= 2)
+                break; // have data from at least 3 runs, stop scanning
+        }
+
+        return [.. envMap.Values];
+    }
+
     // ── Environments ──
 
     public async Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default)

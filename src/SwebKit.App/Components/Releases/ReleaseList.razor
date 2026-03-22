@@ -1,0 +1,59 @@
+<div class="release-list">
+    @if (!IsDemoMode)
+    {
+        <div class="release-list__header">
+            <FluentButton Appearance="Appearance.Accent" @onclick="OnCreate">+ New Release</FluentButton>
+        </div>
+    }
+
+    @if (!Releases.Any())
+    {
+        <div class="text-muted text-sm" style="padding:12px;">
+            @if (IsDemoMode) { <text>No demo releases found.</text> }
+            else { <text>No releases yet. Create one to get started.</text> }
+        </div>
+    }
+    else
+    {
+        @foreach (var release in Releases.OrderByDescending(r => r.CreatedAt))
+        {
+            var isSelected = SelectedRelease?.Id == release.Id;
+            <button class="release-list__item @(isSelected ? "release-list__item--selected" : "")"
+                    @onclick="@(() => OnSelect.InvokeAsync(release))">
+                <div class="release-list__item-name">@release.Name</div>
+                <div class="release-list__item-meta">
+                    <span class="status-badge @StatusClass(release.Status)">@StatusLabel(release.Status)</span>
+                    @if (release.SprintNumber.HasValue)
+                    {
+                        <span class="text-muted text-sm">Sprint @release.SprintNumber</span>
+                    }
+                </div>
+                <div class="text-muted text-sm release-list__item-date">
+                    @release.CreatedAt.LocalDateTime.ToString("MMM d")
+                </div>
+            </button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ReleaseRecord> Releases { get; set; } = [];
+    [Parameter] public ReleaseRecord? SelectedRelease { get; set; }
+    [Parameter] public bool IsDemoMode { get; set; }
+    [Parameter] public EventCallback OnCreate { get; set; }
+    [Parameter] public EventCallback<ReleaseRecord> OnSelect { get; set; }
+
+    private static string StatusClass(ReleaseStatus s) => s switch
+    {
+        ReleaseStatus.Draft => "draft",
+        ReleaseStatus.InProgress => "inprogress",
+        ReleaseStatus.Completed => "completed",
+        _ => ""
+    };
+
+    private static string StatusLabel(ReleaseStatus s) => s switch
+    {
+        ReleaseStatus.InProgress => "In Progress",
+        _ => s.ToString()
+    };
+}

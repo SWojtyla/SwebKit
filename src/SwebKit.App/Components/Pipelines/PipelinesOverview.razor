@@ -1,0 +1,173 @@
+<div class="pipelines-overview">
+    <h3 class="pipeline-section-title" style="margin-bottom:16px;">All Projects</h3>
+
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading projects..." />
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_summaries.Count == 0)
+    {
+        <div class="text-muted">No ADO projects found.</div>
+    }
+    else
+    {
+        <div class="overview-grid">
+            @foreach (var s in _summaries)
+            {
+                <div class="overview-card">
+                    <div class="overview-card__header">
+                        <span class="overview-card__name">@s.ProjectName</span>
+                        <span class="text-muted text-sm">@s.TotalPipelines pipelines</span>
+                    </div>
+
+                    <div class="overview-card__stats">
+                        @if (s.RunningCount > 0)
+                        {
+                            <span class="overview-stat overview-stat--running">@s.RunningCount running</span>
+                        }
+                        @if (s.FailedCount > 0)
+                        {
+                            <span class="overview-stat overview-stat--failed">@s.FailedCount failed</span>
+                        }
+                        @if (s.PendingApprovals > 0)
+                        {
+                            <span class="overview-stat overview-stat--waiting">@s.PendingApprovals awaiting approval</span>
+                        }
+                        @if (s.RunningCount == 0 && s.FailedCount == 0 && s.PendingApprovals == 0)
+                        {
+                            <span class="overview-stat overview-stat--ok">All clear</span>
+                        }
+                    </div>
+
+                    @if (s.Pipelines.Count > 0)
+                    {
+                        <div class="overview-card__pipeline-list">
+                            @foreach (var (pipeline, lastRun) in s.Pipelines.Take(5))
+                            {
+                                <button class="overview-pipeline-row" @onclick="@(() => SelectPipeline(s.Project, pipeline))">
+                                    <span class="run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)"></span>
+                                    <span class="overview-pipeline-name">@pipeline.Name</span>
+                                    @if (lastRun is not null)
+                                    {
+                                        <span class="text-muted text-sm">@RelativeTime(lastRun.CreatedDate)</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public EventCallback<(AdoProject Project, AdoPipeline Pipeline)> OnPipelineSelected { get; set; }
+    [Parameter] public List<string> PinnedProjects { get; set; } = [];
+
+    private bool _isLoading;
+    private string? _error;
+    private List<ProjectSummary> _summaries = [];
+
+    private record ProjectSummary(
+        AdoProject Project,
+        string ProjectName,
+        int TotalPipelines,
+        int RunningCount,
+        int FailedCount,
+        int PendingApprovals,
+        List<(AdoPipeline Pipeline, AdoPipelineRun? LastRun)> Pipelines);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            var all = await DevOpsClient.GetProjectsAsync();
+            var projects = PinnedProjects.Count > 0
+                ? all.Where(p => PinnedProjects.Contains(p.Name)).ToList()
+                : all;
+
+            // Load all project summaries in parallel
+            var results = await Task.WhenAll(projects.Select(LoadProjectSummaryAsync));
+            _summaries = results.OfType<ProjectSummary>().ToList();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _isLoading = false; }
+    }
+
+    private async Task<ProjectSummary?> LoadProjectSummaryAsync(AdoProject project)
+    {
+        try
+        {
+            var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
+
+            // Load last run per pipeline in parallel
+            var runResults = await Task.WhenAll(pipelines.Select(async p =>
+            {
+                try
+                {
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, p.Id, top: 1);
+                    return (Pipeline: p, LastRun: (AdoPipelineRun?)runs.FirstOrDefault());
+                }
+                catch { return (Pipeline: p, LastRun: (AdoPipelineRun?)null); }
+            }));
+
+            int running = 0, failed = 0;
+            var pipelineRuns = new List<(AdoPipeline, AdoPipelineRun?)>();
+            foreach (var (p, last) in runResults)
+            {
+                pipelineRuns.Add((p, last));
+                if (last?.State == "inProgress") running++;
+                else if (last?.Result == "failed") failed++;
+            }
+
+            int approvals = 0;
+            try { approvals = (await DevOpsClient.GetPendingApprovalsAsync(project.Name)).Count; }
+            catch { }
+
+            return new ProjectSummary(project, project.Name, pipelines.Count, running, failed, approvals, pipelineRuns);
+        }
+        catch { return null; }
+    }
+
+    private Task SelectPipeline(AdoProject project, AdoPipeline pipeline) =>
+        OnPipelineSelected.InvokeAsync((project, pipeline));
+
+    private static string RunDotClass(AdoPipelineRun? run)
+    {
+        if (run is null) return "run-dot--none";
+        return run.Result switch
+        {
+            "succeeded" => "run-dot--success",
+            "failed" => "run-dot--failed",
+            _ when run.State == "inProgress" => "run-dot--running",
+            _ => "run-dot--none"
+        };
+    }
+
+    private static string RunTitle(AdoPipelineRun? run)
+    {
+        if (run is null) return "No runs";
+        return run.State == "inProgress" ? "Running" :
+               run.Result == "succeeded" ? "Succeeded" :
+               run.Result == "failed" ? "Failed" : run.State;
+    }
+
+    private static string RelativeTime(DateTimeOffset dt)
+    {
+        var ago = DateTimeOffset.UtcNow - dt;
+        if (ago.TotalMinutes < 2) return "just now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
+        return $"{(int)ago.TotalDays}d ago";
+    }
+}

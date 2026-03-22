@@ -191,12 +191,12 @@
 
         Commands.Register(new AppCommand
         {
-            Id = "navigate-releases",
-            Label = "Go to Releases",
+            Id = "navigate-pipelines",
+            Label = "Go to Pipelines",
             Category = "Navigation",
             Icon = "🚀",
             Shortcut = "Ctrl+6",
-            Execute = () => { NavigateTo("releases"); return Task.CompletedTask; }
+            Execute = () => { NavigateTo("pipelines"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
@@ -290,7 +290,7 @@
             case "NavAks":         NavigateTo("aks"); break;
             case "NavRedis":       NavigateTo("redis"); break;
             case "NavStorage":     NavigateTo("storage"); break;
-            case "NavReleases":        NavigateTo("releases");       break;
+            case "NavReleases":        NavigateTo("pipelines");       break;
             case "NavObservability":   NavigateTo("observability");  break;
             case "NavSettings":    NavigateTo("settings"); break;
             case "TabNext":  Tabs.SetActive(GetNextTabId(1) ?? ""); break;
