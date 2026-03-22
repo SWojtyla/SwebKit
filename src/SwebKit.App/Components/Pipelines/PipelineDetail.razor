@@ -13,7 +13,9 @@
             {
                 <a href="@Pipeline.Url" target="_blank" class="btn-link-sm">Open in ADO ↗</a>
             }
-            <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTrigger">▶ Trigger Run</FluentButton>
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTrigger">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="12px" /> Trigger Run
+            </FluentButton>
         </div>
     </div>
 
@@ -21,21 +23,32 @@
     @if (_showTrigger)
     {
         <div class="pipeline-trigger-panel">
+            <div class="trigger-panel__header">
+                <span class="trigger-panel__title">Trigger Run</span>
+                <button class="trigger-panel__close" @onclick="ToggleTrigger" title="Close">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+                </button>
+            </div>
             <div class="pipeline-trigger-row">
-                <div class="form-group" style="min-width:140px;">
+                <div class="form-group trigger-form__branch">
                     <label class="form-label">Branch</label>
-                    <input type="text" @bind="_branch"
-                           style="width:100%; padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:var(--radius-sm);" />
+                    <input type="text" list="trigger-branches" class="form-input" @bind="_branch" placeholder="main" />
+                    <datalist id="trigger-branches">
+                        @foreach (var b in BranchSuggestions)
+                        {
+                            <option value="@b" />
+                        }
+                    </datalist>
                 </div>
-                <div class="form-group" style="flex:1; min-width:200px;">
+                <div class="form-group trigger-form__params">
                     <label class="form-label">Template Parameters <span class="text-muted">(key=val, ...)</span></label>
-                    <input type="text" @bind="_templateParams" placeholder="optional"
-                           style="width:100%; padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:var(--radius-sm);" />
+                    <input type="text" class="form-input" @bind="_templateParams" placeholder="optional" />
                 </div>
-                <FluentButton Appearance="Appearance.Accent" @onclick="OpenTriggerConfirm" Disabled="@_triggering">
-                    @(_triggering ? "Running…" : "Run")
-                </FluentButton>
-                <button @onclick="ToggleTrigger" style="padding:4px 8px; cursor:pointer; border:none; background:transparent; color:var(--color-text-muted); font-size:16px;">×</button>
+                <div class="trigger-form__actions">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="OpenTriggerConfirm" Disabled="@_triggering">
+                        @(_triggering ? "Running…" : "Run")
+                    </FluentButton>
+                </div>
             </div>
         </div>
 
@@ -82,7 +95,7 @@
                                     <td>
                                         @if (env.WaitingForApproval)
                                         {
-                                            <span class="pipeline-status waiting">⏳ Awaiting Approval</span>
+                                            <span class="pipeline-status waiting">Awaiting Approval</span>
                                         }
                                         else
                                         {
@@ -113,9 +126,9 @@
                     @foreach (var run in _recentRuns)
                     {
                         <div class="pipeline-run-row">
-                            <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)">●</span>
+                            <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
                             <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
-                            <span class="text-muted text-sm pipeline-run-branch">@run.SourceBranch</span>
+                            <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
                             <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
                             @if (run.TriggeredBy is not null)
                             {
@@ -142,6 +155,13 @@
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public AdoProject Project { get; set; } = default!;
     [Parameter] public AdoPipeline Pipeline { get; set; } = default!;
+
+    private IEnumerable<string> BranchSuggestions =>
+        _recentRuns
+            .Select(r => r.SourceBranch?.Replace("refs/heads/", "") ?? "")
+            .Where(b => !string.IsNullOrEmpty(b))
+            .Distinct()
+            .Take(10);
 
     private bool _isLoading;
     private string? _error;
@@ -263,4 +283,7 @@
         if (ts.TotalHours < 1) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
         return $"{(int)ts.TotalHours}h {ts.Minutes}m";
     }
+
+    private static string FormatBranch(string? branch) =>
+        branch?.Replace("refs/heads/", "") ?? "";
 }

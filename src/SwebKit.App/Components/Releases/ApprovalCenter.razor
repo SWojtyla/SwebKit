@@ -1,19 +1,24 @@
 @implements IDisposable
 @inject INotificationService Notifications
 
-<div>
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-        <select class="activity-filter-select" @bind="_filterProject">
-            <option value="">All Projects</option>
-            @foreach (var p in _projects)
-            {
-                <option value="@p">@p</option>
-            }
-        </select>
+<div class="approval-center">
+
+    @* ── Toolbar ── *@
+    <div class="approval-toolbar">
+        <div class="filter-select-wrap">
+            <select class="filter-select" @bind="_filterProject">
+                <option value="">All Projects</option>
+                @foreach (var p in _projects)
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
         <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">Refresh</FluentButton>
         <AutoRefreshToggle OnRefresh="LoadAsync" />
     </div>
 
+    @* ── Content ── *@
     @if (_isLoading)
     {
         <LoadingSpinner Message="Checking for pending approvals..." />
@@ -24,95 +29,86 @@
     }
     else if (FilteredItems.Count == 0)
     {
-        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
-            No pending approvals across all projects.
-        </div>
+        <div class="approval-empty">No pending approvals across all projects.</div>
     }
     else
     {
-        <div style="display:grid; gap:12px;">
+        <div class="approval-list">
             @foreach (var item in FilteredItems)
             {
-                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <div>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:14px; font-weight:600;">@item.Approval.PipelineName</span>
-                                <span style="font-size:11px; color:var(--color-text-muted); padding:1px 6px; border:1px solid var(--color-border); border-radius:4px;">@item.ProjectName</span>
-                            </div>
-                            <div style="font-size:12px; color:var(--color-text-muted);">
-                                @(item.Approval.EnvironmentName ?? item.Approval.StageName)
-                                @if (item.Approval.TriggeredBy is not null)
-                                {
-                                    <text> — triggered by @item.Approval.TriggeredBy</text>
-                                }
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:6px; align-items:center;">
+                <div class="approval-card">
+                    <div class="approval-card__header">
+                        <div class="approval-card__meta">
+                            <span class="approval-card__pipeline-name">@item.Approval.PipelineName</span>
+                            <span class="approval-card__project-badge">@item.ProjectName</span>
                             @if (item.IsProd)
                             {
-                                <span style="font-size:10px; padding:2px 6px; background:rgba(200,0,42,0.2); color:var(--color-error); border-radius:4px; font-weight:600;">PROD</span>
+                                <span class="approval-prod-badge">PROD</span>
                             }
+                        </div>
+                        <div class="approval-card__actions">
                             <FluentButton Appearance="Appearance.Accent" @onclick="@(() => StartApprove(item))">Approve</FluentButton>
                             <FluentButton @onclick="@(() => StartReject(item))">Reject</FluentButton>
                             @if (item.Approval.WebUrl is not null)
                             {
-                                <a href="@item.Approval.WebUrl" target="_blank"
-                                   style="padding:6px 12px; font-size:12px; color:var(--color-accent); text-decoration:none; border:1px solid var(--color-border); border-radius:4px;">
-                                    ADO ↗
-                                </a>
+                                <a href="@item.Approval.WebUrl" target="_blank" class="approval-ado-link">ADO ↗</a>
                             }
                         </div>
                     </div>
-                    <div style="font-size:11px; color:var(--color-text-muted);">
-                        @item.Approval.CreatedOn.LocalDateTime.ToString("g")
+                    <div class="approval-card__info">
+                        @(item.Approval.EnvironmentName ?? item.Approval.StageName)
+                        @if (item.Approval.TriggeredBy is not null)
+                        {
+                            <text> — triggered by @item.Approval.TriggeredBy</text>
+                        }
                     </div>
+                    <div class="approval-card__time">@item.Approval.CreatedOn.LocalDateTime.ToString("g")</div>
                 </div>
             }
         </div>
     }
+
 </div>
 
-@* ── Comment + confirm dialog ── *@
+@* ── Approve / Reject dialog ── *@
 @if (_actionTarget is not null)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;">
+    <div class="approval-dialog-overlay">
+        <div class="approval-dialog">
             @if (_actionTarget.IsProd)
             {
-                <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" /> PRODUCTION — This approval will deploy to a production environment
+                <div class="approval-dialog__prod-warning">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" />
+                    PRODUCTION — This approval will deploy to a production environment
                 </div>
             }
-            <h3 style="margin:0 0 8px; font-size:15px;">@(_isApproving ? "Approve" : "Reject") — @_actionTarget.Approval.PipelineName</h3>
-            <p style="margin:0 0 4px; font-size:13px; color:var(--color-text-muted);">
+            <h3 class="approval-dialog__title">@(_isApproving ? "Approve" : "Reject") — @_actionTarget.Approval.PipelineName</h3>
+            <p class="approval-dialog__subtitle">
                 @_actionTarget.ProjectName — @(_actionTarget.Approval.EnvironmentName ?? _actionTarget.Approval.StageName)
             </p>
 
-            <div style="display:grid; gap:4px; margin-bottom:12px;">
-                <label style="font-size:12px; color:var(--color-text-muted);">Comment (optional)</label>
-                <textarea @bind="_actionComment" @bind:event="oninput" rows="2"
-                          style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; resize:vertical;"></textarea>
+            <div class="approval-dialog__field">
+                <label class="form-label">Comment (optional)</label>
+                <textarea class="form-input" @bind="_actionComment" @bind:event="oninput" rows="2" style="resize:vertical;"></textarea>
             </div>
 
             @if (_actionTarget.IsProd)
             {
-                <div style="margin-bottom:12px;">
-                    <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
-                    <input type="text" @bind="_typingConfirm" @bind:event="oninput"
-                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+                <div class="approval-dialog__field">
+                    <p class="approval-dialog__confirm-prompt">Type <strong>CONFIRM</strong> to proceed:</p>
+                    <input type="text" class="form-input" @bind="_typingConfirm" @bind:event="oninput" />
                 </div>
             }
 
             @if (_actionError is not null)
             {
-                <div style="font-size:12px; color:var(--color-error); margin-bottom:8px;">@_actionError</div>
+                <div class="approval-dialog__error">@_actionError</div>
             }
 
-            <div style="display:flex; gap:8px; justify-content:flex-end;">
-                <button @onclick="CancelAction" style="padding:6px 16px; cursor:pointer;">Cancel</button>
-                <button @onclick="ExecuteAction" disabled="@IsActionDisabled"
-                        style="padding:6px 16px; background:@(_isApproving ? "var(--color-accent)" : "var(--color-error)"); color:white; border:none; border-radius:4px; cursor:pointer; @(IsActionDisabled ? "opacity:0.5;" : "")">
+            <div class="approval-dialog__actions">
+                <button class="approval-btn-cancel" @onclick="CancelAction">Cancel</button>
+                <button class="approval-btn-confirm @(_isApproving ? "approve" : "reject")"
+                        @onclick="ExecuteAction" disabled="@IsActionDisabled">
                     @(_isApproving ? "Approve" : "Reject")
                 </button>
             </div>

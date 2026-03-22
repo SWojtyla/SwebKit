@@ -194,4 +194,29 @@ Do this in the C# layer rather than in JS so the fix is guaranteed regardless of
 
 ---
 
+## BL-11 — CSS isolation does not reach child components
+
+**Symptom:** A child component renders with no CSS — buttons look like default browser controls, layout classes have no effect, despite the styles clearly existing in the parent page's `.razor.css` file.
+
+**Cause:** Blazor CSS isolation scopes every rule in `PageFoo.razor.css` to elements rendered by `PageFoo.razor` only. The build step rewrites `.my-class` to `.my-class[b-xxxxxxxx]`, where `b-xxxxxxxx` is the page's unique scope attribute. Child components rendered inside the page (`<ChildBar />`) get a *different* scope attribute (`b-yyyyyyyy`), so parent page rules never match their elements.
+
+**Fix:** Create a sibling `.razor.css` file for each component. CSS must live next to the component it styles.
+
+```
+Components/
+  PipelinesPage.razor          ← page shell only
+  PipelinesPage.razor.css      ← page-level layout (split panels, tab bar)
+  Pipelines/
+    PipelineTree.razor
+    PipelineTree.razor.css     ← tree-item styles live HERE, not in the page CSS
+    PipelineActivity.razor
+    PipelineActivity.razor.css ← activity row styles live HERE
+```
+
+Styles that are used across multiple isolated components (status dots, status badges, form inputs, shared text utilities) must be placed in `wwwroot/app.css` so they are not isolated and apply globally.
+
+**Rule:** never write styles for a child component's internal elements in the parent's `.razor.css` file. If a class is used by more than one component, put it in `app.css`.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

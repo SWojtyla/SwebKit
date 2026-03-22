@@ -1,0 +1,208 @@
+.approval-center {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.approval-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.approval-empty {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    padding: 20px 0;
+}
+
+.approval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.approval-card {
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.approval-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.approval-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.approval-card__pipeline-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.approval-card__project-badge {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.approval-prod-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: rgba(200, 0, 42, 0.2);
+    color: var(--color-error);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.approval-card__actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.approval-ado-link {
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--color-accent);
+    text-decoration: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+    .approval-ado-link:hover {
+        border-color: var(--color-accent);
+        background: var(--color-accent-subtle);
+    }
+
+.approval-card__info {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.approval-card__time {
+    font-size: 11px;
+    color: var(--color-text-faint);
+}
+
+/* ── Confirm dialog ── */
+
+.approval-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.approval-dialog {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.approval-dialog__prod-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--color-prod, #C8002A);
+    color: white;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.approval-dialog__title {
+    margin: 0;
+    font-size: 15px;
+}
+
+.approval-dialog__subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.approval-dialog__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.approval-dialog__confirm-prompt {
+    font-size: 12px;
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.approval-dialog__error {
+    font-size: 12px;
+    color: var(--color-error);
+}
+
+.approval-dialog__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 4px;
+}
+
+.approval-btn-cancel {
+    padding: 6px 16px;
+    cursor: pointer;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+    .approval-btn-cancel:hover {
+        border-color: var(--color-text-muted);
+        color: var(--color-text);
+    }
+
+.approval-btn-confirm {
+    padding: 6px 20px;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+    .approval-btn-confirm.approve { background: var(--color-accent); }
+    .approval-btn-confirm.reject  { background: var(--color-error); }
+
+    .approval-btn-confirm:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }

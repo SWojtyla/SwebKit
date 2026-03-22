@@ -1653,3 +1653,138 @@ button:active { transform: scale(0.97); }
 
 /* Selected row in data grids (shared across features, harmless) */
 .selected-row { background: rgba(0, 120, 212, 0.12) !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   Pipelines — shared utilities (global, used across isolated components)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Run status dots */
+.run-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.run-dot--success { background: var(--color-success); }
+.run-dot--failed  { background: var(--color-error); }
+.run-dot--running { background: var(--color-accent); animation: pulse-dot 1.4s ease-in-out infinite; }
+.run-dot--none    { background: var(--color-text-faint); }
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+}
+
+/* Pipeline status badges */
+.pipeline-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.pipeline-status.succeeded   { background: rgba(67,160,71,0.15);  color: var(--color-success); }
+.pipeline-status.failed      { background: rgba(229,57,53,0.15);  color: var(--color-error); }
+.pipeline-status.running     { background: rgba(0,120,212,0.15);  color: var(--color-accent); }
+.pipeline-status.notdeployed { color: var(--color-text-faint); }
+.pipeline-status.waiting     { background: rgba(251,140,0,0.15);  color: var(--color-warning); }
+
+/* Shared form helpers */
+.form-group { display: grid; gap: 3px; }
+.form-label { font-size: 11px; color: var(--color-text-muted); }
+
+.form-input {
+    width: 100%;
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    box-sizing: border-box;
+}
+
+    .form-input:focus { border-color: var(--color-accent); }
+
+/* Shared text utilities */
+.text-mono  { font-family: Consolas, monospace; }
+.text-sm    { font-size: 12px; }
+.text-muted { color: var(--color-text-muted); }
+
+.btn-link-sm { font-size: 12px; color: var(--color-accent); text-decoration: none; }
+    .btn-link-sm:hover { text-decoration: underline; }
+
+/* ── Release status badges (global — used in ReleaseList + ReleaseDetail) ── */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.draft      { background: rgba(128,128,128,0.2); color: var(--color-text-muted); }
+.status-badge.inprogress { background: rgba(0,120,212,0.2);   color: var(--color-accent); }
+.status-badge.completed  { background: rgba(67,160,71,0.2);   color: var(--color-success); }
+
+/* ── Styled select wrapper (global — used in Activity + Approvals) ── */
+.filter-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+    .filter-select-wrap::after {
+        content: '';
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid var(--color-text-muted);
+        pointer-events: none;
+    }
+
+.filter-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 5px 28px 5px 10px;
+    font-size: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    outline: none;
+    min-width: 110px;
+}
+
+    .filter-select:focus {
+        border-color: var(--color-accent);
+    }
+
+/* ── Pipeline section heading (global — used in PipelineDetail + ReleaseDetail) ── */
+.pipeline-section {
+    margin-bottom: 24px;
+}
+
+.pipeline-section-title {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}

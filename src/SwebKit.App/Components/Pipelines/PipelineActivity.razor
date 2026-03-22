@@ -2,32 +2,48 @@
 
 <div class="pipeline-activity">
     @* ── Filter bar ── *@
-    <div class="activity-filter-bar">
-        <select class="activity-filter-select" @bind="_filterProject">
-            <option value="">All Projects</option>
-            @foreach (var p in _projects)
-            {
-                <option value="@p.Name">@p.Name</option>
-            }
-        </select>
+    <div class="activity-toolbar">
+        <div class="filter-btn-group">
+            <button class="filter-btn @(_filterStatus == "" ? "filter-btn--active" : "")"
+                    @onclick='() => _filterStatus = ""'>All</button>
+            <button class="filter-btn @(_filterStatus == "succeeded" ? "filter-btn--active" : "")"
+                    @onclick='() => _filterStatus = "succeeded"'>
+                <span class="run-dot run-dot--success"></span> Passed
+            </button>
+            <button class="filter-btn @(_filterStatus == "failed" ? "filter-btn--active" : "")"
+                    @onclick='() => _filterStatus = "failed"'>
+                <span class="run-dot run-dot--failed"></span> Failed
+            </button>
+            <button class="filter-btn @(_filterStatus == "inProgress" ? "filter-btn--active" : "")"
+                    @onclick='() => _filterStatus = "inProgress"'>
+                <span class="run-dot run-dot--running"></span> Running
+            </button>
+        </div>
 
-        <select class="activity-filter-select" @bind="_filterStatus">
-            <option value="">All Statuses</option>
-            <option value="succeeded">Succeeded</option>
-            <option value="failed">Failed</option>
-            <option value="inProgress">Running</option>
-        </select>
+        <div class="filter-select-wrap">
+            <select class="filter-select" @bind="_filterProject">
+                <option value="">All projects</option>
+                @foreach (var p in _projects)
+                {
+                    <option value="@p.Name">@p.Name</option>
+                }
+            </select>
+        </div>
 
-        <select class="activity-filter-select" @bind="_filterDate">
-            <option value="today">Today</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="">All time</option>
-        </select>
+        <div class="filter-select-wrap">
+            <select class="filter-select" @bind="_filterDate">
+                <option value="today">Today</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="">All time</option>
+            </select>
+        </div>
 
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">↺ Refresh</FluentButton>
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync" title="Refresh">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="14px" />
+        </FluentButton>
 
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-text-muted); margin-left:auto;">
+        <label class="auto-refresh-label">
             <input type="checkbox" @bind="_autoRefresh" />
             Auto-refresh
         </label>
@@ -60,12 +76,12 @@
                     @foreach (var run in runs)
                     {
                         <div class="activity-row">
-                            <span class="run-dot @RunDotClass(run.Run)" title="@RunTitle(run.Run)">●</span>
+                            <span class="run-dot @RunDotClass(run.Run)" title="@RunTitle(run.Run)"></span>
                             <div class="activity-row__main">
                                 <span class="activity-pipeline-name">@run.PipelineName</span>
                                 <span class="text-muted text-sm activity-project">@run.ProjectName</span>
                             </div>
-                            <span class="text-muted text-sm activity-branch">@run.Run.SourceBranch</span>
+                            <span class="text-muted text-sm activity-branch">@(run.Run.SourceBranch?.Replace("refs/heads/", "") ?? "")</span>
                             @if (run.Run.TriggeredBy is not null)
                             {
                                 <span class="text-muted text-sm">by @run.Run.TriggeredBy</span>

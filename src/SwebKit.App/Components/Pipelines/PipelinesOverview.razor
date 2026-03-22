@@ -49,7 +49,7 @@
                             @foreach (var (pipeline, lastRun) in s.Pipelines.Take(5))
                             {
                                 <button class="overview-pipeline-row" @onclick="@(() => SelectPipeline(s.Project, pipeline))">
-                                    <span class="run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)">●</span>
+                                    <span class="run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)"></span>
                                     <span class="overview-pipeline-name">@pipeline.Name</span>
                                     @if (lastRun is not null)
                                     {

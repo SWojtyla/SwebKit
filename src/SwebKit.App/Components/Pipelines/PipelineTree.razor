@@ -65,7 +65,7 @@
 
                             <button class="pipeline-tree__item @(isSelected ? "pipeline-tree__item--selected" : "")"
                                     @onclick="@(() => SelectPipeline(project, pipeline))">
-                                <span class="pipeline-tree__run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)">●</span>
+                                <span class="pipeline-tree__run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)"></span>
                                 <span class="pipeline-tree__item-name">@pipeline.Name</span>
                                 @if (lastRun is not null)
                                 {
