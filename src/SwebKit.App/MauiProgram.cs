@@ -7,6 +7,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
+using SwebKit.Observability;
 using SelectionContext = SwebKit.App.Services.SelectionContext;
 
 namespace SwebKit.App;
@@ -50,6 +51,9 @@ public static class MauiProgram
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoStorageClient>();
+
+        // Observability — real resource discovery (singleton for caching); providers are created per-resource by the page
+        builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
 
         // DevOps / Releases
         builder.Services.AddSingleton<DevOpsAuthHandler>();

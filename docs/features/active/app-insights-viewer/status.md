@@ -1,27 +1,39 @@
 # Status — Application Insights Viewer
 
-**Status:** Planned
+**Status:** In Progress
 
 ## Current Focus
 
-Planning phase — no implementation started.
+Implementation complete and compiling. Manual validation pending.
+
+## Completed
+
+- [x] `SwebKit.Observability` project created; wired into solution and `SwebKit.App`
+- [x] `IObservabilityProvider` + `IObservabilityResourceDiscovery` interfaces in `SwebKit.Core`
+- [x] All observability models in `SwebKit.Core/Models/ObservabilityModels.cs`
+- [x] `ObservabilityConfig` + `SavedQuery` added to `AppConfig`
+- [x] `DemoObservabilityProvider` + `DemoObservabilityResourceDiscovery` with realistic seed data
+- [x] `AzureAppInsightsProvider` (Azure Monitor Logs API via `LogsQueryClient`)
+- [x] `AppInsightsDiscoveryService` (subscription-level ARM scan, in-memory cache)
+- [x] `KqlPresets.cs` — 10 built-in presets
+- [x] `ObservabilityPage.razor` (tab host, resource selector, time range, drill-to-logs)
+- [x] `ObservabilityOverview.razor` (summary cards + ApexCharts area charts)
+- [x] `ObservabilityFailures.razor` (grouped exceptions, stack trace, copy, drill-to-logs)
+- [x] `ObservabilityPerformance.razor` (operation table, P95 inline bar, detail pane)
+- [x] `ObservabilityLogs.razor` (KQL textarea editor, preset sidebar, saved queries, CSV copy)
+- [x] `ObservabilityAvailability.razor` (pass/fail list, detail pane)
+- [x] `ResourceSelectorDialog.razor` (subscription-grouped flyout with search)
+- [x] `TimeRangePicker.razor` (preset + custom date range)
+- [x] `ObservabilityPage` CSS added to `app.css`
+- [x] Navigation: `LeftNav.razor` + command palette (`Ctrl+7`) + keyboard shortcut handler
+- [x] Demo mode: auto-selects first demo resource on first load; switches on demo toggle
 
 ## Remaining Work
 
-- [ ] Create `SwebKit.Observability` project and wire into solution
-- [ ] Define `IAppInsightsClient` interface in `SwebKit.Core`
-- [ ] Implement resource discovery (`AppInsightsDiscoveryService`)
-- [ ] Implement `AzureAppInsightsClient` in `SwebKit.Observability`
-- [ ] Add `AppInsightsConfig` to `AppConfig` / `profiles.json`
-- [ ] Build `AppInsightsPage.razor` with tab layout
-- [ ] Build Overview tab (summary cards + trend chart)
-- [ ] Build Failures tab (exception groups + detail pane)
-- [ ] Build Performance tab (operation latency table + P-chart)
-- [ ] Build Logs tab (Monaco KQL editor + preset library + results grid)
-- [ ] Time range picker component
-- [ ] Resource selector / switcher
-- [ ] Register in nav, keyboard shortcuts, command palette
-- [ ] Update `docs/architecture/architecture.md` and add functionality deep-dive
+- [ ] Manual smoke test in demo mode
+- [ ] Manual smoke test against real Azure App Insights resource
+- [ ] Update `docs/architecture/architecture.md` with new Observability functionality
+- [ ] Create `docs/architecture/functionalities/observability.md` deep-dive
 
 ## Blockers
 
@@ -29,4 +41,5 @@ None.
 
 ## Validation State
 
-Not started.
+Build: ✅ clean (0 errors, 0 warnings)
+Runtime: not yet validated

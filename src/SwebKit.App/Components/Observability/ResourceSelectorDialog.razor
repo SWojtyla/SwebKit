@@ -1,0 +1,127 @@
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+<div class="resource-selector-dialog">
+    <div class="resource-selector-search">
+        <FluentSearch Placeholder="Filter resources…" @bind-Value="_filter" Immediate="true" />
+    </div>
+
+    @if (_isLoading && !_resources.Any())
+    {
+        <div class="resource-selector-loading">
+            <FluentProgressRing /> Scanning subscriptions…
+        </div>
+    }
+    else if (!FilteredResources.Any())
+    {
+        <div class="resource-selector-empty">
+            @(_isLoading ? "Scanning…" : "No Application Insights resources found.")
+        </div>
+    }
+    else
+    {
+        <div class="resource-selector-list">
+            @foreach (var group in GroupedResources)
+            {
+                <div class="resource-group">
+                    <div class="resource-group-header">@group.Key</div>
+
+                    @foreach (var r in group)
+                    {
+                        var isSelected = r.ResourceId == SelectedResourceId;
+                        <div class="resource-item @(isSelected ? "selected" : "")"
+                             @onclick="() => SelectAsync(r)">
+                            <div class="resource-item-name">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.DataTrending())" />
+                                @r.Name
+                                @if (isSelected) { <span class="resource-item-badge">active</span> }
+                            </div>
+                            <div class="resource-item-meta">@r.ResourceGroup · @r.Location</div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_isLoading)
+            {
+                <div class="resource-selector-scanning">
+                    <FluentProgressRing Style="width:14px;height:14px" /> Scanning more subscriptions…
+                </div>
+            }
+        </div>
+    }
+
+    @if (_scanError is not null)
+    {
+        <div class="resource-selector-error">@_scanError</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? SelectedResourceId { get; set; }
+    [Parameter] public IObservabilityResourceDiscovery? Discovery { get; set; }
+    [Parameter] public EventCallback<ObservabilityResourceInfo> OnSelected { get; set; }
+
+    private readonly List<ObservabilityResourceInfo> _resources = [];
+    private bool _isLoading;
+    private string? _scanError;
+    private string _filter = string.Empty;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StartDiscoveryAsync();
+    }
+
+    private IEnumerable<ObservabilityResourceInfo> FilteredResources =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? _resources
+            : _resources.Where(r =>
+                r.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                r.SubscriptionName.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                r.ResourceGroup.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<IGrouping<string, ObservabilityResourceInfo>> GroupedResources =>
+        FilteredResources.GroupBy(r => r.SubscriptionName);
+
+    private async Task StartDiscoveryAsync()
+    {
+        if (Discovery is null) return;
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _resources.Clear();
+        _isLoading = true;
+        _scanError = null;
+
+        try
+        {
+            await foreach (var r in Discovery.DiscoverResourcesAsync(_cts.Token))
+            {
+                _resources.Add(r);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _scanError = $"Discovery failed: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SelectAsync(ObservabilityResourceInfo resource)
+    {
+        await OnSelected.InvokeAsync(resource);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

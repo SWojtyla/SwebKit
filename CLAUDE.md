@@ -40,4 +40,4 @@ Use exactly one of: `Proposed`, `Planned`, `In Progress`, `Review`, `Done`, `Arc
 
 ## Architecture maintenance
 
-When behavior changes in a supported functionality (AKS, Service Bus, Observability, Redis, Releases, Settings), update the matching file under `docs/architecture/functionalities/` in the same change set.
+When behavior changes in a supported functionality (Service Bus, AKS, Redis, Storage, Releases, Observability, Settings), update the matching file under `docs/architecture/functionalities/` in the same change set.

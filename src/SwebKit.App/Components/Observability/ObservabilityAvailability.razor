@@ -1,0 +1,143 @@
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+<div class="obs-availability">
+    @if (_isLoading && !_results.Any())
+    {
+        <div class="obs-loading"><FluentProgressRing /> Loading availability data…</div>
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" />
+    }
+    else
+    {
+        <div class="obs-avail-summary">
+            Overall: <strong class="@OverallClass()">@OverallFmt()</strong>
+            &nbsp;·&nbsp;
+            @PassCount passes, @FailCount failures
+        </div>
+
+        <div class="obs-split-layout">
+            <div class="obs-list-panel">
+                <FluentDataGrid Items="_results.AsQueryable()" TGridItem="AvailabilityResult"
+                                RowClass="@(r => r == _selected ? "selected-row" : "")"
+                                OnRowClick="@(r => { _selected = r.Item; StateHasChanged(); })">
+                    <TemplateColumn Title="Test">@context.TestName</TemplateColumn>
+                    <TemplateColumn Title="Location">@context.Location</TemplateColumn>
+                    <TemplateColumn Title="Result">
+                        <span class="@(context.Success ? "obs-avail-pass" : "obs-avail-fail")">
+                            @(context.Success ? "✓ Pass" : "✗ Fail")
+                        </span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Duration">@FormatMs(context.DurationMs)</TemplateColumn>
+                    <TemplateColumn Title="Time">@FormatAge(context.Timestamp)</TemplateColumn>
+                </FluentDataGrid>
+            </div>
+
+            <div class="obs-detail-panel">
+                @if (_selected is null)
+                {
+                    <div class="obs-detail-empty">Select a test result to view details.</div>
+                }
+                else
+                {
+                    <div class="obs-detail-header">
+                        <div class="obs-detail-title">@_selected.TestName</div>
+                        <div class="obs-detail-meta">@_selected.Location · @_selected.Timestamp.ToLocalTime().ToString("g")</div>
+                    </div>
+
+                    <div class="obs-perf-stats">
+                        <div class="obs-stat">
+                            <span class="obs-stat-label">Result</span>
+                            <span class="obs-stat-val @(_selected.Success ? "obs-green" : "obs-red")">
+                                @(_selected.Success ? "Pass" : "Fail")
+                            </span>
+                        </div>
+                        <div class="obs-stat">
+                            <span class="obs-stat-label">Duration</span>
+                            <span class="obs-stat-val">@FormatMs(_selected.DurationMs)</span>
+                        </div>
+                    </div>
+
+                    @if (!_selected.Success && _selected.FailureMessage is not null)
+                    {
+                        <div class="obs-detail-section-title">Failure Message</div>
+                        <div class="obs-detail-message obs-red">@_selected.FailureMessage</div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IObservabilityProvider? Provider { get; set; }
+    [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+
+    private readonly List<AvailabilityResult> _results = [];
+    private AvailabilityResult? _selected;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource _cts = new();
+
+    private double OverallAvailability =>
+        _results.Count == 0 ? 100 :
+        _results.Count(r => r.Success) * 100.0 / _results.Count;
+
+    private int PassCount => _results.Count(r => r.Success);
+    private int FailCount => _results.Count(r => !r.Success);
+
+    // Use methods to avoid Razor parser issues with relational patterns in expressions
+    private string OverallClass()
+    {
+        var pct = OverallAvailability;
+        if (pct < 95) return "obs-red";
+        if (pct < 99) return "obs-amber";
+        return "obs-green";
+    }
+
+    private string OverallFmt() => $"{OverallAvailability:F1}%";
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    public async Task RefreshAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (Provider is null) return;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var data = await Provider.GetAvailabilityAsync(Range, _cts.Token);
+            _results.Clear();
+            _results.AddRange(data);
+            _selected = null;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string FormatMs(double ms) =>
+        ms == 0 ? "—" : ms >= 1000 ? $"{ms / 1000:F2}s" : $"{ms:F0}ms";
+
+    private static string FormatAge(DateTimeOffset dt)
+    {
+        var age = DateTimeOffset.UtcNow - dt;
+        if (age.TotalMinutes < 1) return "just now";
+        if (age.TotalHours < 1)   return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalDays < 1)    return $"{(int)age.TotalHours}h ago";
+        return $"{(int)age.TotalDays}d ago";
+    }
+}

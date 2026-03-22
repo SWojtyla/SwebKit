@@ -1,0 +1,212 @@
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+<div class="obs-failures">
+    @if (_isLoading && !_exceptions.Any())
+    {
+        <div class="obs-loading"><FluentProgressRing /> Loading failures…</div>
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" />
+    }
+    else
+    {
+        <div class="obs-split-layout">
+            <!-- Left: exception list -->
+            <div class="obs-list-panel">
+                <div class="obs-list-toolbar">
+                    <FluentSearch Placeholder="Filter exceptions…" @bind-Value="_filter" Immediate="true" />
+                    <FluentButton @onclick="LoadAsync" Disabled="_isLoading" title="Refresh">↻</FluentButton>
+                </div>
+
+                <FluentDataGrid Items="FilteredExceptions" TGridItem="ExceptionGroup"
+                                RowClass="@(e => e.ProblemId == _selected?.ProblemId ? "selected-row" : "")"
+                                OnRowClick="@(r => SelectException(r.Item))">
+                    <TemplateColumn Title="Exception Type" Sortable="true">
+                        <div class="obs-exception-name" title="@context.ExceptionType">
+                            @ShortType(context.ExceptionType)
+                        </div>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(e => e.Count)" Title="Count" Sortable="true" />
+                    <TemplateColumn Title="Last seen">
+                        @FormatAge(context.LastSeen)
+                    </TemplateColumn>
+                </FluentDataGrid>
+            </div>
+
+            <!-- Right: detail pane -->
+            <div class="obs-detail-panel">
+                @if (_selected is null)
+                {
+                    <div class="obs-detail-empty">Select an exception to view details.</div>
+                }
+                else
+                {
+                    <div class="obs-detail-header">
+                        <div class="obs-detail-title" title="@_selected.ExceptionType">
+                            @ShortType(_selected.ExceptionType)
+                        </div>
+                        <div class="obs-detail-meta">
+                            Count: <strong>@_selected.Count.ToString("N0")</strong>
+                            &nbsp;·&nbsp;
+                            Last seen: <strong>@FormatAge(_selected.LastSeen)</strong>
+                        </div>
+                    </div>
+
+                    @if (_selected.SampleMessage is not null)
+                    {
+                        <div class="obs-detail-section-title">Message</div>
+                        <div class="obs-detail-message">@_selected.SampleMessage</div>
+                    }
+
+                    @if (_selected.SampleStackTrace is not null)
+                    {
+                        <div class="obs-detail-section-title">
+                            Stack Trace
+                            <button class="obs-copy-btn" @onclick="CopyStackAsync" title="Copy stack trace">📋 Copy</button>
+                        </div>
+                        <pre class="obs-stack-trace">@_selected.SampleStackTrace</pre>
+                    }
+
+                    <div class="obs-detail-section-title">Recent Occurrences</div>
+                    @if (_samplesLoading)
+                    {
+                        <div class="obs-loading-inline"><FluentProgressRing Style="width:14px;height:14px" /></div>
+                    }
+                    else
+                    {
+                        <div class="obs-samples">
+                            @foreach (var row in _samples)
+                            {
+                                <div class="obs-sample-row">
+                                    <span class="obs-sample-time">@FormatTimestamp(row)</span>
+                                    <span class="obs-sample-op">@GetCol(row, "operationName")</span>
+                                    <span class="obs-sample-id">@GetCol(row, "operationId")</span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <button class="obs-drill-link" @onclick="DrillToLogs">
+                        → View in Logs tab
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@inject IJSRuntime JS
+
+@code {
+    [Parameter] public IObservabilityProvider? Provider { get; set; }
+    [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public EventCallback<string> OnDrillToLogs { get; set; }
+
+    private readonly List<ExceptionGroup> _exceptions = [];
+    private ExceptionGroup? _selected;
+    private bool _isLoading;
+    private bool _samplesLoading;
+    private string? _error;
+    private string _filter = string.Empty;
+    private IReadOnlyList<LogRow> _samples = [];
+    private CancellationTokenSource _cts = new();
+
+    private IQueryable<ExceptionGroup> FilteredExceptions =>
+        (string.IsNullOrWhiteSpace(_filter)
+            ? _exceptions
+            : _exceptions.Where(e => e.ExceptionType.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
+        .AsQueryable();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    public async Task RefreshAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (Provider is null) return;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var groups = await Provider.GetTopExceptionsAsync(Range, ct: _cts.Token);
+            _exceptions.Clear();
+            _exceptions.AddRange(groups);
+            _selected = null;
+            _samples = [];
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SelectException(ExceptionGroup? e)
+    {
+        if (e is null) return;
+        _selected = e;
+        _samples = [];
+        _samplesLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _samples = await Provider!.GetExceptionSamplesAsync(e.ExceptionType, Range, _cts.Token);
+        }
+        catch { /* non-critical */ }
+        finally
+        {
+            _samplesLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CopyStackAsync()
+    {
+        if (_selected?.SampleStackTrace is null) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selected.SampleStackTrace);
+    }
+
+    private async Task DrillToLogs()
+    {
+        if (_selected is null) return;
+        var kql = $"exceptions\n| where type == '{_selected.ExceptionType}'\n| order by timestamp desc\n| take 50";
+        await OnDrillToLogs.InvokeAsync(kql);
+    }
+
+    private static string ShortType(string fullType)
+    {
+        var parts = fullType.Split('.');
+        return parts.Length > 2 ? $"…{parts[^2]}.{parts[^1]}" : fullType;
+    }
+
+    private static string FormatAge(DateTimeOffset dt)
+    {
+        var age = DateTimeOffset.UtcNow - dt;
+        return age.TotalMinutes < 1 ? "just now"
+            : age.TotalHours < 1 ? $"{(int)age.TotalMinutes}m ago"
+            : age.TotalDays < 1 ? $"{(int)age.TotalHours}h ago"
+            : $"{(int)age.TotalDays}d ago";
+    }
+
+    private static string FormatTimestamp(LogRow row)
+    {
+        var ts = GetCol(row, "timestamp");
+        return DateTimeOffset.TryParse(ts, out var dto) ? dto.ToLocalTime().ToString("HH:mm:ss") : ts;
+    }
+
+    private static string GetCol(LogRow row, string col) =>
+        row.Columns.TryGetValue(col, out var v) ? v?.ToString() ?? string.Empty : string.Empty;
+}

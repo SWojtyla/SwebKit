@@ -80,8 +80,8 @@ If implementation needs to diverge from documented architecture or design:
 - update the relevant decision record or feature decision note
 - explain the reason for the change
 
-When implementation changes behavior for an app functionality (Projects, Service Bus,
-Observability, AKS, Redis, Settings), also update the corresponding file under
+When implementation changes behavior for an app functionality (Service Bus, AKS, Redis,
+Storage, Releases, Observability, Settings), also update the corresponding file under
 `docs/architecture/functionalities/` in the same change set.
 
 ## Archive discipline

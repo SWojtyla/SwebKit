@@ -84,6 +84,7 @@
 
         <ProjectReference Include="..\SwebKit.Redis\SwebKit.Redis.csproj" />
         <ProjectReference Include="..\SwebKit.DevOps\SwebKit.DevOps.csproj" />
+        <ProjectReference Include="..\SwebKit.Observability\SwebKit.Observability.csproj" />
     </ItemGroup>
 
 </Project>

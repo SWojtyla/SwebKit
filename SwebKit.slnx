@@ -6,6 +6,7 @@
     <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />
     <Project Path="src/SwebKit.Redis/SwebKit.Redis.csproj" />
     <Project Path="src/SwebKit.DevOps/SwebKit.DevOps.csproj" />
+    <Project Path="src/SwebKit.Observability/SwebKit.Observability.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj" />

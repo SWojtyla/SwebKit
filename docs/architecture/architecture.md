@@ -13,6 +13,7 @@ A .NET MAUI Blazor Hybrid desktop tool for .NET developers who work daily with:
 - **Redis** — inspect keys, view values, manage cache
 - **Azure Storage** — browse blobs, containers
 - **Azure DevOps** — view and trigger releases
+- **Observability** — Application Insights viewer (failures, performance, logs, availability)
 
 Each feature is standalone with its own configuration stored in a single global `AppConfig` (`profiles.json`).
 
@@ -33,6 +34,7 @@ Per-functionality architecture notes live in `docs/architecture/functionalities/
 - [Settings and Configuration](functionalities/settings-and-configuration.md)
 - [Storage](functionalities/storage.md)
 - [Releases (Azure DevOps)](functionalities/releases.md)
+- [Observability (Application Insights)](functionalities/observability.md)
 
 ### Update Rule
 

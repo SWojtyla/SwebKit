@@ -1,0 +1,90 @@
+# Observability — Functionality Deep Dive
+
+## What It Supports Today
+
+- Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
+- Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (KQL query editor + preset library + saved queries), **Availability** (test results)
+- Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
+- Drill-to-Logs: clicking "View in Logs" from any tab pre-populates the KQL editor and switches tab
+- Saved queries persisted to `profiles.json`
+- Full demo mode with realistic in-memory data (no Azure connection required)
+
+## Authentication
+
+**No configuration required.** The feature uses `DefaultAzureCredential` from `Azure.Identity`, which tries these sources in order:
+
+1. Environment variables (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`)
+2. **Azure CLI** — if the user has run `az login`, this is the typical path for developers
+3. Azure Developer CLI (`azd auth login`)
+4. Visual Studio credential
+5. Visual Studio Code credential
+6. Azure PowerShell
+7. Managed Identity (when running on Azure infrastructure)
+
+The developer typically just needs to have run `az login` once. No secrets or settings need to be stored in SwebKit.
+
+The resolved identity is shown as a badge in the Observability toolbar (provider type label) so the user can confirm which account is active.
+
+## Resource Discovery
+
+`AppInsightsDiscoveryService` (singleton, `SwebKit.Observability`):
+
+1. Lists all subscriptions via `ArmClient.GetSubscriptions().GetAllAsync()`
+2. For each subscription, calls `subscription.GetApplicationInsightsComponentsAsync()` to list all App Insights components in that subscription across all resource groups
+3. Streams results progressively — the resource selector flyout updates as each subscription finishes
+4. Results are cached in-memory for the session lifetime; "Refresh" in the resource selector calls `InvalidateCache()` then re-scans
+
+**Pitfall:** Subscriptions with many resource groups can be slow. The cache prevents repeated scans on every resource-selector open.
+
+## Core Technical Flow
+
+```
+User opens Observability page
+  → DemoObservabilityProvider (demo mode) OR AzureAppInsightsProvider (real)
+  → ResourceSelectorDialog streams ObservabilityResourceInfo via IObservabilityResourceDiscovery
+  → User selects resource → ObservabilityPage.ActivateResourceAsync()
+  → AzureAppInsightsProvider created with the selected resource's ARM resource ID
+  → Each tab calls provider.GetXxx(TimeRange, ct)
+      → LogsQueryClient.QueryResourceAsync(resourceId, kql, QueryTimeRange)
+      → Returns LogsQueryResult / OverviewMetrics / ExceptionGroup[] / etc.
+  → Razor components render data; detail pane opens on row click
+```
+
+## Key Code Locations
+
+| What | Where |
+|---|---|
+| Provider interface | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` |
+| Discovery interface | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` |
+| Domain models | `src/SwebKit.Core/Models/ObservabilityModels.cs` |
+| Config model | `src/SwebKit.Core/Domain/ObservabilityConfig.cs` |
+| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs` |
+| Azure implementation | `src/SwebKit.Observability/AzureAppInsightsProvider.cs` |
+| ARM discovery | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
+| Built-in KQL presets | `src/SwebKit.Observability/KqlPresets.cs` |
+| Page + sub-components | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor` |
+| Sub-components | `src/SwebKit.App/Components/Observability/` |
+| CSS | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page") |
+| DI registration | `src/SwebKit.App/MauiProgram.cs` |
+
+## NuGet Packages (SwebKit.Observability)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `Azure.Identity` | 1.18.0 | `DefaultAzureCredential` |
+| `Azure.Monitor.Query` | 1.5.0 | `LogsQueryClient` for KQL queries |
+| `Azure.ResourceManager` | 1.13.2 | ARM base client |
+| `Azure.ResourceManager.ApplicationInsights` | 1.1.0-beta.1 | App Insights ARM extension methods |
+
+## Important Constraints
+
+- **Query cost:** Azure Monitor bills per GB scanned. The `MaxRowsPerQuery` setting (default 500, configurable in `ObservabilityConfig`) caps result sets. A truncation warning is shown in the Logs tab when the cap is hit.
+- **Data latency:** Azure Monitor Logs has 1–5 minute ingestion latency. Live streaming is not supported.
+- **ARM beta package:** `Azure.ResourceManager.ApplicationInsights` is still in beta (1.1.0-beta.1). The specific method used is `SubscriptionResource.GetApplicationInsightsComponentsAsync()`.
+
+## Future Extension Points
+
+- **OTLP / Prometheus backend:** Implement `IObservabilityProvider` for a self-hosted OTLP endpoint. The UI requires zero changes — swap the provider in `ObservabilityPage.CreateProvider()`.
+- **Live near-real-time tab:** Poll Azure Monitor every 2–5 minutes and append rows to the Logs view.
+- **Application map:** Requires `dependencies` table queries and a graph layout library (deferred).
+- **Multi-resource comparison:** Run the same KQL across multiple resources and merge results (deferred).

@@ -27,8 +27,8 @@ Use this structure as the default model:
 
 ## Functional architecture maintenance
 
-When behavior changes in a supported app functionality (for example Projects, Service Bus,
-Observability, AKS, Redis, Settings), update the matching file under
+When behavior changes in a supported app functionality (Service Bus, AKS, Redis,
+Storage, Releases, Observability, Settings), update the matching file under
 `docs/architecture/functionalities/` in the same change set.
 
 If a new top-level functionality is added, create a new deep-dive file and add it to

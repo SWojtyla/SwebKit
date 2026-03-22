@@ -1,0 +1,137 @@
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+<div class="obs-performance">
+    @if (_isLoading && !_ops.Any())
+    {
+        <div class="obs-loading"><FluentProgressRing /> Loading performance data…</div>
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" />
+    }
+    else
+    {
+        <div class="obs-split-layout">
+            <div class="obs-list-panel">
+                <div class="obs-list-toolbar">
+                    <FluentSearch Placeholder="Filter operations…" @bind-Value="_filter" Immediate="true" />
+                    <FluentButton @onclick="LoadAsync" Disabled="_isLoading" title="Refresh">↻</FluentButton>
+                </div>
+
+                <FluentDataGrid Items="FilteredOps" TGridItem="OperationPerformance"
+                                RowClass="@(op => op.OperationName == _selected?.OperationName ? "selected-row" : "")"
+                                OnRowClick="@(r => { _selected = r.Item; StateHasChanged(); })">
+                    <TemplateColumn Title="Operation" Sortable="true">
+                        <span class="obs-op-name" title="@context.OperationName">@context.OperationName</span>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(op => op.RequestCount)" Title="Req/h" Sortable="true" />
+                    <TemplateColumn Title="Failure %" Sortable="true">
+                        <span class="@FailClass(context.FailureRate)">@FmtPct(context.FailureRate)</span>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(op => FmtMs(op.P50Ms))" Title="P50" />
+                    <TemplateColumn Title="P95">
+                        <div class="obs-p95-bar-cell">
+                            <span class="@P95Class(context.P95Ms)">@($"{context.P95Ms:F0}ms")</span>
+                            <div class="obs-p95-bar-track">
+                                <div class="obs-p95-bar-fill @P95Class(context.P95Ms)"
+                                     style="width:@BarWidth(context.P95Ms)%"></div>
+                            </div>
+                        </div>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            </div>
+
+            <div class="obs-detail-panel">
+                @if (_selected is null)
+                {
+                    <div class="obs-detail-empty">Select an operation to view details.</div>
+                }
+                else
+                {
+                    <div class="obs-detail-header">
+                        <div class="obs-detail-title" title="@_selected.OperationName">@_selected.OperationName</div>
+                    </div>
+
+                    <div class="obs-perf-stats">
+                        <div class="obs-stat"><span class="obs-stat-label">Requests</span><span class="obs-stat-val">@_selected.RequestCount.ToString("N0")</span></div>
+                        <div class="obs-stat"><span class="obs-stat-label">Failure Rate</span><span class="obs-stat-val @FailClass(_selected.FailureRate)">@FmtPct(_selected.FailureRate)</span></div>
+                        <div class="obs-stat"><span class="obs-stat-label">P50</span><span class="obs-stat-val">@($"{_selected.P50Ms:F0}ms")</span></div>
+                        <div class="obs-stat"><span class="obs-stat-label">P95</span><span class="obs-stat-val @P95Class(_selected.P95Ms)">@($"{_selected.P95Ms:F0}ms")</span></div>
+                        <div class="obs-stat"><span class="obs-stat-label">P99</span><span class="obs-stat-val @P95Class(_selected.P99Ms)">@($"{_selected.P99Ms:F0}ms")</span></div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IObservabilityProvider? Provider { get; set; }
+    [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+
+    private readonly List<OperationPerformance> _ops = [];
+    private OperationPerformance? _selected;
+    private bool _isLoading;
+    private string? _error;
+    private string _filter = string.Empty;
+    private CancellationTokenSource _cts = new();
+
+    private double _maxP95 = 1;
+
+    private IQueryable<OperationPerformance> FilteredOps =>
+        (string.IsNullOrWhiteSpace(_filter)
+            ? _ops
+            : _ops.Where(op => op.OperationName.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
+        .AsQueryable();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    public async Task RefreshAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (Provider is null) return;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var ops = await Provider.GetOperationPerformanceAsync(Range, _cts.Token);
+            _ops.Clear();
+            _ops.AddRange(ops);
+            _maxP95 = _ops.Count > 0 ? Math.Max(1, _ops.Max(op => op.P95Ms)) : 1;
+            _selected = null;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private double BarWidth(double p95) => Math.Clamp(p95 / _maxP95 * 100, 2, 100);
+
+    private static string FmtPct(double rate) => $"{rate * 100:F1}%";
+    private static string FmtMs(double ms) => $"{ms:F0}ms";
+
+    private static string FailClass(double rate)
+    {
+        if (rate > 0.05) return "obs-red";
+        if (rate > 0.01) return "obs-amber";
+        return "obs-green";
+    }
+
+    private static string P95Class(double ms)
+    {
+        if (ms > 2000) return "obs-red";
+        if (ms > 500)  return "obs-amber";
+        return "obs-green";
+    }
+}

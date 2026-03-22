@@ -7,6 +7,7 @@ public class AppConfig
     public RedisConfig? RedisConfig { get; set; }
     public List<StorageConfig> StorageAccounts { get; set; } = [];
     public DevOpsConfig? DevOpsConfig { get; set; }
+    public ObservabilityConfig? ObservabilityConfig { get; set; }
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];
 }

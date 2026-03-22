@@ -1,0 +1,171 @@
+@using ApexCharts
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+@if (_isLoading)
+{
+    <div class="obs-loading"><FluentProgressRing /> Loading overview…</div>
+}
+else if (_error is not null)
+{
+    <ErrorCallout Message="@_error" />
+}
+else if (_metrics is not null)
+{
+    <div class="obs-overview">
+        <div class="obs-summary-cards">
+            <div class="obs-card">
+                <div class="obs-card-label">Requests</div>
+                <div class="obs-card-value">@_metrics.RequestCount.ToString("N0")</div>
+            </div>
+            <div class="obs-card @FailureRateClass()">
+                <div class="obs-card-label">Failure Rate</div>
+                <div class="obs-card-value">@FailureRateFmt()</div>
+            </div>
+            <div class="obs-card">
+                <div class="obs-card-label">P50 Response</div>
+                <div class="obs-card-value">@FormatMs(_metrics.P50ResponseTimeMs)</div>
+            </div>
+            <div class="obs-card @P95Class()">
+                <div class="obs-card-label">P95 Response</div>
+                <div class="obs-card-value">@FormatMs(_metrics.P95ResponseTimeMs)</div>
+            </div>
+            <div class="obs-card">
+                <div class="obs-card-label">Exceptions</div>
+                <div class="obs-card-value">@_metrics.ExceptionCount.ToString("N0")</div>
+            </div>
+            <div class="obs-card @AvailClass()">
+                <div class="obs-card-label">Availability</div>
+                <div class="obs-card-value">@AvailFmt()</div>
+            </div>
+        </div>
+
+        <div class="obs-charts">
+            <div class="obs-chart-panel">
+                <div class="obs-chart-title">Request Volume</div>
+                <ApexChart TItem="TimeSeriesPoint" Options="_requestChartOptions">
+                    <ApexPointSeries TItem="TimeSeriesPoint"
+                                     Items="_metrics.RequestTrend"
+                                     SeriesType="SeriesType.Area"
+                                     Name="Requests"
+                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
+                                     YValue="@(p => (decimal)p.Value)" />
+                </ApexChart>
+            </div>
+            <div class="obs-chart-panel">
+                <div class="obs-chart-title">Failure Rate (%)</div>
+                <ApexChart TItem="TimeSeriesPoint" Options="_failureChartOptions">
+                    <ApexPointSeries TItem="TimeSeriesPoint"
+                                     Items="_metrics.FailureTrend"
+                                     SeriesType="SeriesType.Area"
+                                     Name="Failure Rate"
+                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
+                                     YValue="@(p => (decimal)(p.Value * 100))" />
+                </ApexChart>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public IObservabilityProvider? Provider { get; set; }
+    [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+
+    private OverviewMetrics? _metrics;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource _cts = new();
+
+    private ApexChartOptions<TimeSeriesPoint> _requestChartOptions = MakeChartOptions("#0078d4");
+    private ApexChartOptions<TimeSeriesPoint> _failureChartOptions = MakeChartOptions("#c8002a");
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    public async Task RefreshAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (Provider is null) return;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _metrics = await Provider.GetOverviewAsync(Range, _cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Use methods instead of properties with relational patterns to avoid Razor parser issues
+    private string FailureRateClass()
+    {
+        if (_metrics is null) return string.Empty;
+        if (_metrics.FailureRate > 0.05) return "obs-card-red";
+        if (_metrics.FailureRate > 0.01) return "obs-card-amber";
+        return string.Empty;
+    }
+
+    private string P95Class()
+    {
+        if (_metrics is null) return string.Empty;
+        if (_metrics.P95ResponseTimeMs > 2000) return "obs-card-red";
+        if (_metrics.P95ResponseTimeMs > 500)  return "obs-card-amber";
+        return string.Empty;
+    }
+
+    private string AvailClass()
+    {
+        if (_metrics is null) return string.Empty;
+        if (_metrics.AvailabilityPct < 95) return "obs-card-red";
+        if (_metrics.AvailabilityPct < 99) return "obs-card-amber";
+        return string.Empty;
+    }
+
+    private string FailureRateFmt() =>
+        _metrics is null ? "—" : $"{_metrics.FailureRate * 100:F1}%";
+
+    private string AvailFmt() =>
+        _metrics is null ? "—" : $"{_metrics.AvailabilityPct:F1}%";
+
+    private static string FormatMs(double ms) =>
+        ms >= 1000 ? $"{ms / 1000:F2}s" : $"{ms:F0}ms";
+
+    private static ApexChartOptions<TimeSeriesPoint> MakeChartOptions(string color) => new()
+    {
+        Chart = new Chart
+        {
+            Type = ChartType.Area,
+            Height = 180,
+            Toolbar = new Toolbar { Show = false },
+            Animations = new Animations { Enabled = false },
+        },
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = new List<double> { 2 } },
+        Fill = new Fill
+        {
+            Type = new List<FillType> { FillType.Gradient },
+            Gradient = new FillGradient
+            {
+                ShadeIntensity = 1,
+                OpacityFrom = 0.4,
+                OpacityTo = 0.05,
+                Stops = new List<double> { 0, 100 }
+            }
+        },
+        Colors = new List<string> { color },
+        Xaxis = new XAxis { Type = XAxisType.Datetime },
+        Yaxis = new List<YAxis> { new() { Labels = new YAxisLabels { MinWidth = 40 } } },
+        Tooltip = new Tooltip { X = new TooltipX { Format = "dd MMM HH:mm" } },
+        Grid = new Grid { BorderColor = "#333", StrokeDashArray = 3 },
+        Legend = new Legend { Show = false },
+    };
+}

@@ -1,0 +1,242 @@
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+<div class="obs-logs">
+    <div class="obs-logs-layout">
+        <!-- Left: preset + saved queries sidebar -->
+        <div class="obs-logs-sidebar">
+            <div class="obs-sidebar-section-title">Presets</div>
+            @foreach (var preset in _presets)
+            {
+                <button class="obs-preset-item @(_activePresetId == preset.Id ? "active" : "")"
+                        @onclick="() => ApplyPreset(preset)"
+                        title="@preset.Description">
+                    @preset.Name
+                </button>
+            }
+
+            @if (_savedQueries.Any())
+            {
+                <div class="obs-sidebar-section-title" style="margin-top:12px">Saved Queries</div>
+                @foreach (var sq in _savedQueries)
+                {
+                    <div class="obs-saved-query-row">
+                        <button class="obs-preset-item" @onclick="() => LoadSaved(sq)" title="@sq.Query">
+                            @sq.Name
+                        </button>
+                        <button class="obs-saved-query-delete" @onclick="() => DeleteSaved(sq)" title="Delete">✕</button>
+                    </div>
+                }
+            }
+
+            <button class="obs-save-query-btn" @onclick="SaveCurrentQuery" disabled="@string.IsNullOrWhiteSpace(_query)">
+                + Save Query
+            </button>
+        </div>
+
+        <!-- Right: editor + results -->
+        <div class="obs-logs-main">
+            <div class="obs-query-toolbar">
+                <textarea class="obs-query-editor"
+                          @bind="_query" @bind:event="oninput"
+                          rows="5"
+                          placeholder="Enter KQL query… (Ctrl+Enter to run)"
+                          @onkeydown="OnEditorKeyDown" />
+                <div class="obs-query-actions">
+                    <FluentButton Appearance="Appearance.Accent"
+                                  @onclick="RunQueryAsync"
+                                  Disabled="_isRunning">
+                        ▶ Run
+                    </FluentButton>
+                    @if (_result is not null)
+                    {
+                        <button class="obs-copy-btn" @onclick="CopyCsvAsync">📋 Copy CSV</button>
+                    }
+                </div>
+            </div>
+
+            @if (_isRunning)
+            {
+                <div class="obs-loading"><FluentProgressRing /> Running query…</div>
+            }
+            else if (_error is not null)
+            {
+                <ErrorCallout Message="@_error" />
+            }
+            else if (_result is not null)
+            {
+                <div class="obs-results-header">
+                    @_result.Rows.Count results
+                    @if (_result.Truncated)
+                    {
+                        <span class="obs-truncated-badge">⚠ Truncated — showing first @_result.Rows.Count rows</span>
+                    }
+                    <span class="obs-exec-time">(@_result.ExecutionTime.TotalMilliseconds:F0 ms)</span>
+                </div>
+
+                <div class="obs-results-grid">
+                    <FluentDataGrid Items="_result.Rows.AsQueryable()" TGridItem="LogRow">
+                        @foreach (var col in _result.ColumnNames)
+                        {
+                            var colName = col;
+                            <TemplateColumn Title="@colName">
+                                <span class="obs-cell" title="@GetCell(context, colName)">
+                                    @Truncate(GetCell(context, colName), 80)
+                                </span>
+                            </TemplateColumn>
+                        }
+                    </FluentDataGrid>
+                </div>
+            }
+            else
+            {
+                <div class="obs-results-empty">Run a query to see results.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (_saveDialogOpen)
+{
+    <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
+        <FluentDialogHeader>Save Query</FluentDialogHeader>
+        <FluentDialogBody>
+            <FluentTextField @bind-Value="_saveQueryName" Label="Query Name" Autofocus="true" />
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
+            <FluentButton @onclick="() => { _saveDialogOpen = false; _saveDialogHidden = true; }">Cancel</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
+@inject IJSRuntime JS
+
+@code {
+    [Parameter] public IObservabilityProvider? Provider { get; set; }
+    [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public int MaxRows { get; set; } = 500;
+    [Parameter] public List<SwebKit.Core.Domain.SavedQuery> SavedQueries { get; set; } = [];
+    [Parameter] public EventCallback<List<SwebKit.Core.Domain.SavedQuery>> SavedQueriesChanged { get; set; }
+
+    private string _query = string.Empty;
+    private LogQueryResult? _result;
+    private bool _isRunning;
+    private string? _error;
+    private string? _activePresetId;
+    private IReadOnlyList<QueryPreset> _presets = [];
+    private List<SwebKit.Core.Domain.SavedQuery> _savedQueries = [];
+    private CancellationTokenSource _cts = new();
+
+    // Save dialog
+    private bool _saveDialogOpen;
+    private bool _saveDialogHidden = true;
+    private string _saveQueryName = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        _presets = Provider?.GetPresets() ?? [];
+        _savedQueries = SavedQueries;
+    }
+
+    /// <summary>Load a query from outside (e.g. "Drill to Logs" from Failures tab).</summary>
+    public async Task LoadQueryAsync(string kql)
+    {
+        _query = kql;
+        _activePresetId = null;
+        await RunQueryAsync();
+    }
+
+    private void ApplyPreset(QueryPreset preset)
+    {
+        _query = preset.Query;
+        _activePresetId = preset.Id;
+        _ = RunQueryAsync();
+    }
+
+    private void LoadSaved(SwebKit.Core.Domain.SavedQuery sq)
+    {
+        _query = sq.Query;
+        _activePresetId = null;
+        _ = RunQueryAsync();
+    }
+
+    private async Task RunQueryAsync()
+    {
+        if (Provider is null || string.IsNullOrWhiteSpace(_query)) return;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _isRunning = true;
+        _error = null;
+        _result = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _result = await Provider.RunQueryAsync(_query, Range, MaxRows, _cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isRunning = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnEditorKeyDown(KeyboardEventArgs e)
+    {
+        if (e.CtrlKey && e.Key == "Enter")
+            await RunQueryAsync();
+    }
+
+    private async Task CopyCsvAsync()
+    {
+        if (_result is null) return;
+        var lines = new List<string> { string.Join(",", _result.ColumnNames) };
+        lines.AddRange(_result.Rows.Select(r =>
+            string.Join(",", _result.ColumnNames.Select(c =>
+            {
+                var v = GetCell(r, c);
+                return v.Contains(',') || v.Contains('"') ? $"\"{v.Replace("\"", "\"\"")}\"" : v;
+            }))));
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join("\n", lines));
+    }
+
+    private void SaveCurrentQuery()
+    {
+        _saveQueryName = string.Empty;
+        _saveDialogOpen = true;
+        _saveDialogHidden = false;
+    }
+
+    private async Task ConfirmSaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_saveQueryName)) return;
+
+        var sq = new SwebKit.Core.Domain.SavedQuery
+        {
+            Name = _saveQueryName.Trim(),
+            Query = _query
+        };
+        _savedQueries.Add(sq);
+        await SavedQueriesChanged.InvokeAsync(_savedQueries);
+        _saveDialogOpen = false;
+        _saveDialogHidden = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DeleteSaved(SwebKit.Core.Domain.SavedQuery sq)
+    {
+        _savedQueries.Remove(sq);
+        await SavedQueriesChanged.InvokeAsync(_savedQueries);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetCell(LogRow row, string col) =>
+        row.Columns.TryGetValue(col, out var v) ? v?.ToString() ?? string.Empty : string.Empty;
+
+    private static string Truncate(string s, int max) =>
+        s.Length > max ? s[..max] + "…" : s;
+}

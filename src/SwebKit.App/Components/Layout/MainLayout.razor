@@ -201,6 +201,16 @@
 
         Commands.Register(new AppCommand
         {
+            Id = "navigate-observability",
+            Label = "Go to Observability",
+            Category = "Navigation",
+            Icon = "📊",
+            Shortcut = "Ctrl+7",
+            Execute = () => { NavigateTo("observability"); return Task.CompletedTask; }
+        });
+
+        Commands.Register(new AppCommand
+        {
             Id = "navigate-settings",
             Label = "Go to Settings",
             Category = "Navigation",
@@ -280,7 +290,8 @@
             case "NavAks":         NavigateTo("aks"); break;
             case "NavRedis":       NavigateTo("redis"); break;
             case "NavStorage":     NavigateTo("storage"); break;
-            case "NavReleases":    NavigateTo("releases"); break;
+            case "NavReleases":        NavigateTo("releases");       break;
+            case "NavObservability":   NavigateTo("observability");  break;
             case "NavSettings":    NavigateTo("settings"); break;
             case "TabNext":  Tabs.SetActive(GetNextTabId(1) ?? ""); break;
             case "TabPrev":  Tabs.SetActive(GetNextTabId(-1) ?? ""); break;

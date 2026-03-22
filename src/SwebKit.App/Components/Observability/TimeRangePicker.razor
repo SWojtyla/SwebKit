@@ -1,0 +1,61 @@
+@using SwebKit.Core.Models
+
+<div class="time-range-picker">
+    <FluentSelect TOption="string" @bind-Value="_selectedPreset" @bind-Value:after="OnPresetChanged"
+                  Style="min-width:160px">
+        @foreach (var (label, _) in TimeRange.Presets)
+        {
+            <FluentOption Value="@label">@label</FluentOption>
+        }
+        <FluentOption Value="custom">Custom range…</FluentOption>
+    </FluentSelect>
+
+    @if (_selectedPreset == "custom")
+    {
+        <div class="custom-range">
+            <FluentDatePicker @bind-Value="_customStart" Label="From" />
+            <FluentDatePicker @bind-Value="_customEnd" Label="To" />
+            <FluentButton Appearance="Appearance.Accent" @onclick="ApplyCustomAsync">Apply</FluentButton>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public TimeRange Value { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public EventCallback<TimeRange> ValueChanged { get; set; }
+
+    private string _selectedPreset = "Last 24 hours";
+    private DateTime? _customStart;
+    private DateTime? _customEnd;
+
+    protected override void OnParametersSet()
+    {
+        // Keep selector in sync if parent changes the value externally
+        if (_selectedPreset == "custom") return;
+    }
+
+    private async Task OnPresetChanged()
+    {
+        if (_selectedPreset == "custom") return;
+
+        var factory = TimeRange.Presets
+            .FirstOrDefault(p => p.Label == _selectedPreset)
+            .Factory;
+
+        if (factory is null) return;
+
+        await ValueChanged.InvokeAsync(factory());
+    }
+
+    private async Task ApplyCustomAsync()
+    {
+        if (_customStart is null || _customEnd is null) return;
+
+        var start = new DateTimeOffset(_customStart.Value, TimeSpan.Zero);
+        var end   = new DateTimeOffset(_customEnd.Value,   TimeSpan.Zero);
+
+        if (end <= start) return;
+
+        await ValueChanged.InvokeAsync(new TimeRange(start, end));
+    }
+}
