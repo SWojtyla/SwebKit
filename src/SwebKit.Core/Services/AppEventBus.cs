@@ -74,3 +74,4 @@ public record ActivityEvent(string Description, string Icon, string Area, DateTi
     public ActivityEvent(string description, string icon, string area)
         : this(description, icon, area, DateTimeOffset.Now) { }
 }
+public record FocusFilterRequestedEvent(string Area);

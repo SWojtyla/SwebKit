@@ -12,6 +12,8 @@
 
 <CascadingValue Value="AppState">
 <CascadingValue Value="this" Name="Layout">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
         <TopBar OnNavToggle="ToggleNav" />
         @if (AppState.UseDemoData)
@@ -22,24 +24,32 @@
             </div>
         }
         <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
-        <main class="main-content">
+        <main id="main-content" class="main-content" tabindex="-1">
             @Body
         </main>
         <StatusBar />
+
+        @* Overlays must live inside the themed container so CSS variables resolve correctly *@
+        @if (IsCommandPaletteOpen)
+        {
+            <CommandPalette CurrentArea="@CurrentArea"
+                            OnClose="@(() => { IsCommandPaletteOpen = false; StateHasChanged(); })" />
+        }
+
+        @if (_isShortcutsPanelOpen)
+        {
+            <KeyboardShortcutsPanel OnClose="@(() => { _isShortcutsPanelOpen = false; StateHasChanged(); })" />
+        }
+
+        <NotificationToast />
     </div>
-
-    @if (IsCommandPaletteOpen)
-    {
-        <CommandPalette OnClose="@(() => { IsCommandPaletteOpen = false; StateHasChanged(); })" />
-    }
-
-    <NotificationToast />
 </CascadingValue>
 </CascadingValue>
 
 @code {
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
+    private bool _isShortcutsPanelOpen;
     private string CurrentArea = "dashboard";
     private DotNetObjectReference<MainLayout>? _jsRef;
     private string _currentTheme = "dark";
@@ -131,80 +141,113 @@
 
         Commands.Register(new AppCommand
         {
-            Id = "navigate-service-bus",
-            Label = "Navigate to Service Bus",
+            Id = "navigate-dashboard",
+            Label = "Go to Dashboard",
             Category = "Navigation",
-            Shortcut = "Alt+1",
-            Execute = () =>
-            {
-                NavigateTo("service-bus");
-                return Task.CompletedTask;
-            }
+            Icon = "🏠",
+            Shortcut = "Ctrl+1",
+            Execute = () => { NavigateTo("dashboard"); return Task.CompletedTask; }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-service-bus",
+            Label = "Go to Service Bus",
+            Category = "Navigation",
+            Icon = "📨",
+            Shortcut = "Ctrl+2",
+            Execute = () => { NavigateTo("service-bus"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
         {
             Id = "navigate-aks",
-            Label = "Navigate to AKS",
+            Label = "Go to AKS",
             Category = "Navigation",
-            Shortcut = "Alt+2",
-            Execute = () =>
-            {
-                NavigateTo("aks");
-                return Task.CompletedTask;
-            }
+            Icon = "☸",
+            Shortcut = "Ctrl+4",
+            Execute = () => { NavigateTo("aks"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
         {
             Id = "navigate-redis",
-            Label = "Navigate to Redis",
+            Label = "Go to Redis",
             Category = "Navigation",
-            Shortcut = "Alt+3",
-            Execute = () =>
-            {
-                NavigateTo("redis");
-                return Task.CompletedTask;
-            }
+            Icon = "⚡",
+            Execute = () => { NavigateTo("redis"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
         {
             Id = "navigate-releases",
-            Label = "Navigate to Releases",
+            Label = "Go to Releases",
             Category = "Navigation",
-            Shortcut = "Alt+4",
-            Execute = () =>
-            {
-                NavigateTo("releases");
-                return Task.CompletedTask;
-            }
+            Icon = "🚀",
+            Shortcut = "Ctrl+5",
+            Execute = () => { NavigateTo("releases"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
         {
             Id = "navigate-settings",
-            Label = "Navigate to Settings",
+            Label = "Go to Settings",
             Category = "Navigation",
-            Shortcut = "Alt+5",
-            Execute = () =>
-            {
-                NavigateTo("settings");
-                return Task.CompletedTask;
-            }
+            Icon = "⚙",
+            Shortcut = "Ctrl+,",
+            Execute = () => { NavigateTo("settings"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
         {
             Id = "refresh-current-area",
-            Label = "Refresh Current Area",
+            Label = "Refresh",
             Category = "Actions",
+            Icon = "↻",
             Shortcut = "F5",
             Execute = () =>
             {
                 Events.Publish(new RefreshRequestedEvent(CurrentArea));
                 return Task.CompletedTask;
             }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "toggle-command-palette",
+            Label = "Open Command Palette",
+            Category = "Actions",
+            Icon = "⌕",
+            Shortcut = "Ctrl+P",
+            Execute = () =>
+            {
+                IsCommandPaletteOpen = true;
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "open-keyboard-shortcuts",
+            Label = "Keyboard Shortcuts",
+            Category = "Actions",
+            Icon = "⌨",
+            Shortcut = "?",
+            Execute = () =>
+            {
+                _isShortcutsPanelOpen = true;
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "toggle-nav",
+            Label = "Toggle Sidebar",
+            Category = "Actions",
+            Execute = () => { ToggleNav(); return Task.CompletedTask; }
         });
     }
 
@@ -213,20 +256,32 @@
     {
         switch (shortcut)
         {
-            case "CommandPalette": IsCommandPaletteOpen = !IsCommandPaletteOpen; break;
-            case "NavServiceBus": NavigateTo("service-bus"); break;
-            case "NavAks": NavigateTo("aks"); break;
-            case "NavReleases": NavigateTo("releases"); break;
-            case "NavSettings": NavigateTo("settings"); break;
-            case "TabNext": Tabs.SetActive(GetNextTabId(1) ?? ""); break;
-            case "TabPrev": Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
+            case "CommandPalette":
+                IsCommandPaletteOpen = !IsCommandPaletteOpen;
+                _isShortcutsPanelOpen = false;
+                break;
+            case "KeyboardShortcuts":
+                _isShortcutsPanelOpen = !_isShortcutsPanelOpen;
+                IsCommandPaletteOpen = false;
+                break;
+            case "NavProjects":    NavigateTo("dashboard"); break;
+            case "NavServiceBus":  NavigateTo("service-bus"); break;
+            case "NavAks":         NavigateTo("aks"); break;
+            case "NavReleases":    NavigateTo("releases"); break;
+            case "NavSettings":    NavigateTo("settings"); break;
+            case "TabNext":  Tabs.SetActive(GetNextTabId(1) ?? ""); break;
+            case "TabPrev":  Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
             case "TabClose": if (Tabs.ActiveTab is not null) Tabs.CloseTab(Tabs.ActiveTab.Id); break;
-            case "Escape": IsCommandPaletteOpen = false; break;
+            case "Escape":
+                IsCommandPaletteOpen = false;
+                _isShortcutsPanelOpen = false;
+                break;
             case "Refresh": Events.Publish(new RefreshRequestedEvent(CurrentArea)); break;
+            case "FocusFilter": Events.Publish(new FocusFilterRequestedEvent(CurrentArea)); break;
             case "SbEditResubmit": Events.Publish(new ServiceBusShortcutEvent("Edit")); break;
-            case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
-            case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
-            case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
+            case "SbReplay":       Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
+            case "SbSchedule":     Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
+            case "SbPeek":         Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
         }
         await InvokeAsync(StateHasChanged);
     }

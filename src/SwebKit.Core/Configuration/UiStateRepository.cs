@@ -72,6 +72,8 @@ public class UiState
     public Dictionary<string, object> ViewStates { get; set; } = [];
     /// <summary>Saved message list filters keyed by "{namespaceId}:{entityPath}".</summary>
     public Dictionary<string, List<SavedFilter>> SavedFilters { get; set; } = [];
+    /// <summary>Most-recently-used command IDs (newest first, max 5).</summary>
+    public List<string> RecentCommandIds { get; set; } = [];
 }
 
 public class SavedFilter

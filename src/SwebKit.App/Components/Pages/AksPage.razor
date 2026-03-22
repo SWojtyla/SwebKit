@@ -136,7 +136,8 @@
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
                                 ValueChanged="OnFilterChanged" />
-                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault>
+                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault
+                     tabindex="0" @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
                     @switch (ActiveResourceType)
                     {
                         case "Deployments":
@@ -830,6 +831,7 @@
     private string ActiveResourceType = "Deployments";
     private bool ShowEvents = false;
     private bool ShowPortForwardSessions = false;
+    private bool _preventGridKey;
 
     // Port-forward dialog state
     private bool ShowPortForwardDialog;
@@ -1125,6 +1127,41 @@
     {
         ActiveFilter = value;
         StateHasChanged();
+    }
+
+    // ── Grid keyboard navigation ──
+
+    private void HandleGridKeyDown(KeyboardEventArgs e)
+    {
+        _preventGridKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+
+        if (ActiveResourceType == "Deployments")
+        {
+            var items = FilteredDeployments.ToList();
+            if (items.Count == 0) return;
+
+            var currentIdx = SelectedDeployment is null
+                ? -1
+                : items.FindIndex(d => d.Name == SelectedDeployment.Name);
+
+            switch (e.Key)
+            {
+                case "ArrowDown":
+                    SelectedDeployment = items[Math.Min(currentIdx + 1, items.Count - 1)];
+                    StateHasChanged();
+                    break;
+                case "ArrowUp":
+                    SelectedDeployment = currentIdx > 0
+                        ? items[Math.Max(currentIdx - 1, 0)]
+                        : SelectedDeployment;
+                    StateHasChanged();
+                    break;
+                case "Escape":
+                    SelectedDeployment = null;
+                    StateHasChanged();
+                    break;
+            }
+        }
     }
 
     // ── Context menu show helpers ──

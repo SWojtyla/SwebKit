@@ -7,6 +7,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
+using SelectionContext = SwebKit.App.Services.SelectionContext;
 
 namespace SwebKit.App;
 
@@ -45,6 +46,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<CommandRegistry>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
+        builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoStorageClient>();

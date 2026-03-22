@@ -8,7 +8,8 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         const key = e.key;
 
         // Skip if inside an input/textarea/select (except designated shortcuts)
-        const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+        const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
+            || document.activeElement?.isContentEditable;
 
         if (ctrl && key === 'p' && !shift) { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'CommandPalette'); return; }
         if (ctrl && key === '1') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'NavProjects'); return; }
@@ -31,6 +32,9 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
         if (alt && key === '4') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'EnvProd'); return; }
         if (alt && shift && key === 'P') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'FocusProjectSelector'); return; }
 
+        // ? shortcut — open keyboard shortcuts panel (not when typing)
+        if (key === '?' && !inInput) { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'KeyboardShortcuts'); return; }
+
         // Service Bus quick actions (only when not in text input)
         if (!inInput) {
             if (ctrl && key === 'e') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbEditResubmit'); return; }
@@ -39,6 +43,50 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
             if (ctrl && shift && key === 'P') { e.preventDefault(); dotNetRef.invokeMethodAsync('OnShortcut', 'SbPeek'); return; }
         }
     });
+};
+
+/**
+ * Trap keyboard focus inside an element (Tab cycles, focus goes to first focusable).
+ */
+window.SwebKit.trapFocus = function (element) {
+    if (!element) return;
+    const selector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusables = () => Array.from(element.querySelectorAll(selector)).filter(el => !el.closest('[hidden]'));
+    element._trapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+        const focusables = getFocusables();
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+            if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    };
+    element.addEventListener('keydown', element._trapHandler);
+    // Focus first focusable element (autofocus attribute handled by browser for inputs)
+    const focusables = getFocusables();
+    if (focusables.length > 0 && !element.contains(document.activeElement)) {
+        focusables[0].focus();
+    }
+};
+
+/**
+ * Release the focus trap on an element.
+ */
+window.SwebKit.releaseTrap = function (element) {
+    if (!element || !element._trapHandler) return;
+    element.removeEventListener('keydown', element._trapHandler);
+    delete element._trapHandler;
+};
+
+/**
+ * Scrolls the currently focused command-item row into view inside the results list.
+ */
+window.SwebKit.scrollFocusedCommandIntoView = function () {
+    const focused = document.querySelector('.cp-results .command-item.focused');
+    if (focused) focused.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 };
 
 /**

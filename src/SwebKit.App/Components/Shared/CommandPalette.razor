@@ -1,64 +1,214 @@
 @inject CommandRegistry Registry
-@inject NavigationManager Nav
-@inject IAppEventBus Events
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="command-palette-overlay" @onclick="Close">
-    <div class="command-palette" @onclick:stopPropagation="true">
-        <input type="text" placeholder="Type a command..." @bind-value="Query" @bind-value:event="oninput"
-               @onkeydown="OnKeyDown" autofocus />
-        <div>
+    <div class="command-palette" @onclick:stopPropagation="true" @ref="_paletteRef">
+
+        <div class="cp-input-row">
+            <span class="cp-search-icon">⌕</span>
+            <input type="text"
+                   placeholder="Type a command or search…"
+                   value="@_query"
+                   @oninput="OnQueryInput"
+                   @onkeydown="OnKeyDown"
+                   @ref="_inputRef"
+                   autofocus />
+        </div>
+
+        <div class="cp-results" @ref="_resultsRef">
             @{
-                var results = Registry.Search(Query);
+                var sections = GetSections();
+                var allCmds = sections.SelectMany(s => s.Commands).ToList();
+                int renderIdx = 0;
             }
-            @if (!results.Any())
+            @if (allCmds.Count == 0 && !string.IsNullOrWhiteSpace(_query))
             {
-                <div style="padding: 12px 16px; color: var(--color-text-muted); font-size: 12px;">No commands found</div>
+                <div class="cp-empty">No commands match "<em>@_query</em>"</div>
             }
-            @for (int i = 0; i < results.Count; i++)
+            @foreach (var grp in sections)
             {
-                var cmd = results[i];
-                var idx = i;
-                <div class="command-item @(idx == FocusedIndex ? "focused" : "")" @onclick="() => ExecuteAsync(cmd)">
-                    @if (!string.IsNullOrEmpty(cmd.Category))
-                    {
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.5); min-width: 80px;">@cmd.Category</span>
-                    }
-                    <span>@cmd.Label</span>
-                    @if (!string.IsNullOrEmpty(cmd.Shortcut))
-                    {
-                        <span style="margin-left: auto; font-size: 10px; color: rgba(255,255,255,0.4);">@cmd.Shortcut</span>
-                    }
-                </div>
+                <div class="cp-section-header">@grp.Label</div>
+                @foreach (var cmd in grp.Commands)
+                {
+                    var idx = renderIdx++;
+                    var cmdCapture = cmd;
+                    <div class="command-item @(idx == _focusedIndex ? "focused" : "")"
+                         @onclick="() => ExecuteAsync(cmdCapture)"
+                         @onmousemove="() => { _focusedIndex = idx; }">
+                        @if (!string.IsNullOrEmpty(cmd.Icon))
+                        {
+                            <span class="cp-cmd-icon">@cmd.Icon</span>
+                        }
+                        @if (!string.IsNullOrEmpty(cmd.Category) && string.IsNullOrWhiteSpace(_query))
+                        {
+                            @* Category label hidden when grouped by section header *@
+                        }
+                        <span class="cp-cmd-label">@cmd.Label</span>
+                        @if (!string.IsNullOrEmpty(cmd.Shortcut))
+                        {
+                            <span class="cp-cmd-shortcut">
+                                @foreach (var part in cmd.Shortcut.Split('+'))
+                                {
+                                    <kbd>@part.Trim()</kbd>
+                                }
+                            </span>
+                        }
+                    </div>
+                }
             }
         </div>
+
+        <div class="cp-footer">
+            <span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span>
+            <span><kbd>↵</kbd> execute</span>
+            <span><kbd>Esc</kbd> close</span>
+        </div>
+
     </div>
 </div>
 
 @code {
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string? CurrentArea { get; set; }
 
-    private string Query = "";
-    private int FocusedIndex;
+    private record CommandSection(string Label, IReadOnlyList<AppCommand> Commands);
 
-    private void Close() => OnClose.InvokeAsync();
+    private string _query = "";
+    private int _focusedIndex;
+    private ElementReference _inputRef;
+    private ElementReference _paletteRef;
+    private ElementReference _resultsRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { await JS.InvokeVoidAsync("SwebKit.trapFocus", _paletteRef); }
+        catch { /* JS may not be ready in unit tests */ }
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
 
     private async Task ExecuteAsync(AppCommand cmd)
     {
         await OnClose.InvokeAsync();
+        await Registry.RecordUsedAsync(cmd.Id);
         await cmd.Execute();
+    }
+
+    private void OnQueryInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        _focusedIndex = 0;
     }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        var results = Registry.Search(Query);
+        var allCmds = GetSections().SelectMany(s => s.Commands).ToList();
+
         switch (e.Key)
         {
-            case "ArrowDown": FocusedIndex = Math.Min(FocusedIndex + 1, results.Count - 1); break;
-            case "ArrowUp": FocusedIndex = Math.Max(FocusedIndex - 1, 0); break;
-            case "Enter":
-                if (FocusedIndex < results.Count) await ExecuteAsync(results[FocusedIndex]);
+            case "ArrowDown":
+                _focusedIndex = allCmds.Count == 0 ? 0 : (_focusedIndex + 1) % allCmds.Count;
+                await ScrollFocused();
                 break;
-            case "Escape": await OnClose.InvokeAsync(); break;
+
+            case "ArrowUp":
+                _focusedIndex = allCmds.Count == 0 ? 0 : (_focusedIndex - 1 + allCmds.Count) % allCmds.Count;
+                await ScrollFocused();
+                break;
+
+            case "Enter":
+                if (_focusedIndex < allCmds.Count)
+                    await ExecuteAsync(allCmds[_focusedIndex]);
+                break;
+
+            case "Escape":
+                await OnClose.InvokeAsync();
+                break;
         }
+    }
+
+    private async Task ScrollFocused()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.scrollFocusedCommandIntoView"); }
+        catch { }
+    }
+
+    private List<CommandSection> GetSections()
+    {
+        var available = Registry.GetAvailable(CurrentArea);
+        var result = new List<CommandSection>();
+
+        if (string.IsNullOrWhiteSpace(_query))
+        {
+            // Show recent commands first, then group the rest by category
+            var recentIds = Registry.RecentCommandIds;
+            var recentCmds = recentIds
+                .Select(id => available.FirstOrDefault(c => c.Id == id))
+                .OfType<AppCommand>()
+                .ToList();
+
+            if (recentCmds.Count > 0)
+                result.Add(new CommandSection("Recent", recentCmds));
+
+            foreach (var group in available
+                .Where(c => !recentIds.Contains(c.Id))
+                .GroupBy(c => c.Category ?? "General")
+                .OrderBy(g => CategoryOrder(g.Key)))
+            {
+                result.Add(new CommandSection(group.Key, group.ToList()));
+            }
+        }
+        else
+        {
+            // Fuzzy-match all available commands, group by category, rank by score
+            var scored = available
+                .Select(c => (cmd: c, score: FuzzyScore(_query, c.Label)))
+                .Where(x => x.score > 0)
+                .OrderByDescending(x => x.score)
+                .Select(x => x.cmd)
+                .ToList();
+
+            foreach (var group in scored
+                .GroupBy(c => c.Category ?? "General")
+                .OrderBy(g => CategoryOrder(g.Key)))
+            {
+                result.Add(new CommandSection(group.Key, group.ToList()));
+            }
+        }
+
+        return result;
+    }
+
+    private static int FuzzyScore(string query, string label)
+    {
+        var q = query.ToLowerInvariant();
+        var l = label.ToLowerInvariant();
+        int qi = 0, score = 0, lastMatch = -1;
+
+        for (int i = 0; i < l.Length && qi < q.Length; i++)
+        {
+            if (l[i] != q[qi]) continue;
+            score += (i == lastMatch + 1) ? 2 : 1; // bonus for consecutive chars
+            lastMatch = i;
+            qi++;
+        }
+
+        return qi == q.Length ? score : 0;
+    }
+
+    private static int CategoryOrder(string cat) => cat switch
+    {
+        "Navigation" => 0,
+        "Actions"    => 1,
+        "General"    => 2,
+        _            => 99
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _paletteRef); }
+        catch { }
     }
 }

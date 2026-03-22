@@ -1,0 +1,84 @@
+@inject CommandRegistry Registry
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="shortcuts-overlay" @onclick="Close">
+    <div class="shortcuts-panel" @onclick:stopPropagation="true" @ref="_panelRef" @onkeydown="OnKeyDown">
+
+        <div class="shortcuts-header">
+            <h2 class="shortcuts-title">Keyboard Shortcuts</h2>
+            <button class="shortcuts-close" @onclick="Close" title="Close">✕</button>
+        </div>
+
+        <div class="shortcuts-body">
+            @{
+                var grouped = Registry.Commands
+                    .GroupBy(c => c.Category ?? "General")
+                    .OrderBy(g => g.Key);
+            }
+            @foreach (var group in grouped)
+            {
+                var withShortcut = group.Where(c => !string.IsNullOrEmpty(c.Shortcut)).OrderBy(c => c.Label).ToList();
+                var withoutShortcut = group.Where(c => string.IsNullOrEmpty(c.Shortcut)).OrderBy(c => c.Label).ToList();
+
+                @if (withShortcut.Count > 0 || withoutShortcut.Count > 0)
+                {
+                    <div class="shortcuts-category">
+                        <div class="shortcuts-category-header">@group.Key</div>
+                        @foreach (var cmd in withShortcut)
+                        {
+                            <div class="shortcut-row">
+                                <span class="shortcut-row-label">@cmd.Label</span>
+                                <span class="shortcut-row-keys">
+                                    @foreach (var part in cmd.Shortcut!.Split('+'))
+                                    {
+                                        <kbd>@part.Trim()</kbd>
+                                    }
+                                </span>
+                            </div>
+                        }
+                        @foreach (var cmd in withoutShortcut)
+                        {
+                            <div class="shortcut-row">
+                                <span class="shortcut-row-label">@cmd.Label</span>
+                                <span class="shortcut-row-keys shortcut-row-keys--palette">via palette</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="shortcuts-footer">
+            Press <kbd>?</kbd> to toggle · <kbd>Ctrl+P</kbd> to open command palette
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference _panelRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { await JS.InvokeVoidAsync("SwebKit.trapFocus", _panelRef); }
+        catch { }
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            await OnClose.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _panelRef); }
+        catch { }
+    }
+}

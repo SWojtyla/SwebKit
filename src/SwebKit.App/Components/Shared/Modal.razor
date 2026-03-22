@@ -1,9 +1,11 @@
 @* Full-screen backdrop modal. Click backdrop to close; click content area does not close. *@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @if (IsOpen)
 {
     <div class="modal-backdrop" @onclick="HandleBackdropClick">
-        <div class="modal-container" @onclick:stopPropagation="true">
+        <div class="modal-container" @onclick:stopPropagation="true" @ref="_containerRef">
             @ChildContent
         </div>
     </div>
@@ -15,5 +17,27 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public string Width { get; set; } = "520px";
 
+    private ElementReference _containerRef;
+    private bool _trapApplied;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsOpen || _trapApplied) return;
+        _trapApplied = true;
+        try { await JS.InvokeVoidAsync("SwebKit.trapFocus", _containerRef); }
+        catch { }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!IsOpen) _trapApplied = false;
+    }
+
     private async Task HandleBackdropClick() => await OnClose.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _containerRef); }
+        catch { }
+    }
 }
