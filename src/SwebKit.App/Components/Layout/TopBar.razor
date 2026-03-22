@@ -135,9 +135,11 @@
     protected override void OnInitialized()
     {
         Notifications.NotificationsChanged += OnNotificationsChanged;
+        AppState.DemoModeChanged += OnDemoModeChanged;
     }
 
     private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
+    private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
 
     private void ToggleHistory()
     {
@@ -167,5 +169,6 @@
     public void Dispose()
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
+        AppState.DemoModeChanged -= OnDemoModeChanged;
     }
 }

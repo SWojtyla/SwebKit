@@ -76,6 +76,50 @@ public class DemoDevOpsClient : IDevOpsClient
     private readonly Dictionary<string, List<AdoTag>> _createdTags = new();
     private int _nextRunId = 5000;
 
+    // ── Pre-built demo releases ————————————————————————————————————————————
+    // These are returned by ReleasesPage when demo mode is on and no user-created
+    // releases exist, so the board, approval center, and tag manager all have
+    // realistic content without any ADO configuration.
+
+    public static readonly IReadOnlyList<ReleaseRecord> DemoReleases =
+    [
+        new()
+        {
+            Id = new Guid("d3e0beef-0000-0000-0001-000000000001"),
+            Name = "E-Commerce Platform v2.4",
+            SprintNumber = 42,
+            Label = "release/2.4",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-3),
+            CreatedBy = "Alice Johnson",
+            Status = ReleaseStatus.InProgress,
+            Notes = "Sprint 42 release — payment retry logic, cart fixes, user-service hardening.",
+            Components =
+            [
+                new() { ComponentName = "order-api",       ProjectName = "ecommerce-platform", RepositoryId = "repo-1",  PipelineId = 101, InScope = true, TargetTag = "v2.4.0", TagConfirmed = true  },
+                new() { ComponentName = "payment-gateway", ProjectName = "ecommerce-platform", RepositoryId = "repo-3",  PipelineId = 103, InScope = true, TargetTag = "v2.4.0", TagConfirmed = true  },
+                new() { ComponentName = "cart-api",        ProjectName = "ecommerce-platform", RepositoryId = "repo-4",  PipelineId = 104, InScope = true, TargetTag = "v2.4.0", TagConfirmed = false },
+                new() { ComponentName = "user-service",    ProjectName = "ecommerce-platform", RepositoryId = "repo-5",  PipelineId = 105, InScope = true, TargetTag = "v2.4.0", TagConfirmed = true  },
+            ]
+        },
+        new()
+        {
+            Id = new Guid("d3e0beef-0000-0000-0001-000000000002"),
+            Name = "Internal Tools Q1 2026",
+            SprintNumber = 12,
+            Label = "q1-release",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            CreatedBy = "Charlie Davis",
+            Status = ReleaseStatus.Draft,
+            Notes = "Q1 admin-dashboard update and notification service refresh.",
+            Components =
+            [
+                new() { ComponentName = "admin-dashboard",        ProjectName = "internal-tools", RepositoryId = "repo-10", PipelineId = 201, InScope = true, TargetTag = "v1.2.0", TagConfirmed = true  },
+                new() { ComponentName = "notification-service",   ProjectName = "internal-tools", RepositoryId = "repo-11", PipelineId = 202, InScope = true, TargetTag = "v1.2.0", TagConfirmed = false },
+                new() { ComponentName = "report-generator",       ProjectName = "internal-tools", RepositoryId = "repo-12", PipelineId = 203, InScope = false },
+            ]
+        }
+    ];
+
     public DemoDevOpsClient()
     {
         // Seed pending approvals
@@ -119,20 +163,49 @@ public class DemoDevOpsClient : IDevOpsClient
 
         var runs = new List<AdoPipelineRun>();
 
-        // Generate 3 historical runs
+        // Generate 3 historical runs.
+        // Pipelines 101 (order-api), 103 (payment-gateway), 201 (admin-dashboard):
+        // latest run (i=0) is "inProgress" with one stage awaiting approval so that
+        // ApprovalCenter and the release board display meaningful demo content.
         for (var i = 0; i < 3; i++)
         {
             var runId = pipelineId * 10 + i;
             var age = TimeSpan.FromHours(6 * (i + 1) + Rng.Next(12));
-            var stages = envs.Select((env, idx) => new AdoPipelineStage(
-                $"Deploy to {env.Name}", "completed",
-                i == 2 && idx == envs.Length - 1 ? "failed" : "succeeded",
-                idx + 1, env.Name)).ToList();
+
+            // Stage index (0-based) that should show as "inProgress / awaiting approval"
+            var waitingIdx = pipelineId switch
+            {
+                101 => 2, // Deploy to STG  (envs: DEV TST STG PRD)
+                103 => 3, // Deploy to PRD  (envs: DEV TST STG PRD)
+                201 => 1, // Deploy to ACC  (envs: DEV ACC PRD)
+                _ => -1
+            };
+            var isInProgress = i == 0 && waitingIdx >= 0;
+
+            List<AdoPipelineStage> stages;
+            if (isInProgress)
+            {
+                stages = envs.Select((env, idx) =>
+                    idx < waitingIdx
+                        ? new AdoPipelineStage($"Deploy to {env.Name}", "completed", "succeeded", idx + 1, env.Name)
+                        : idx == waitingIdx
+                            ? new AdoPipelineStage($"Deploy to {env.Name}", "inProgress", "", idx + 1, env.Name)
+                            : new AdoPipelineStage($"Deploy to {env.Name}", "pending", "", idx + 1, env.Name))
+                    .ToList();
+            }
+            else
+            {
+                stages = envs.Select((env, idx) => new AdoPipelineStage(
+                    $"Deploy to {env.Name}", "completed",
+                    i == 2 && idx == envs.Length - 1 ? "failed" : "succeeded",
+                    idx + 1, env.Name)).ToList();
+            }
 
             runs.Add(new AdoPipelineRun(
                 runId, pipelineId, pipeline.Name,
-                "completed", i == 2 ? "failed" : "succeeded",
-                now - age, now - age + TimeSpan.FromMinutes(8),
+                isInProgress ? "inProgress" : "completed",
+                isInProgress ? "" : (i == 2 ? "failed" : "succeeded"),
+                now - age, isInProgress ? null : now - age + TimeSpan.FromMinutes(8),
                 "main", "CI Trigger",
                 $"https://dev.azure.com/demo/{project}/_build/results?buildId={runId}",
                 stages));
@@ -189,11 +262,10 @@ public class DemoDevOpsClient : IDevOpsClient
     public Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
     {
         var waitingStages = new List<WaitingStage>();
-        // The first pipeline run for pipeline 101 (order-api) simulates a waiting approval on STG
-        if (runId == 1010)
-            waitingStages.Add(new WaitingStage("Deploy to STG", "appr-1"));
-        if (runId == 1030)
-            waitingStages.Add(new WaitingStage("Deploy to PRD", "appr-2"));
+        // runId formula: pipelineId * 10 + i; latest run is i=0.
+        if (runId == 1010) waitingStages.Add(new WaitingStage("Deploy to STG", "appr-1")); // order-api
+        if (runId == 1030) waitingStages.Add(new WaitingStage("Deploy to PRD", "appr-2")); // payment-gateway
+        if (runId == 2010) waitingStages.Add(new WaitingStage("Deploy to ACC", "appr-3")); // admin-dashboard
         return Task.FromResult(waitingStages);
     }
 
