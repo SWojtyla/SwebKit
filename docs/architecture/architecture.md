@@ -32,6 +32,7 @@ Per-functionality architecture notes live in `docs/architecture/functionalities/
 - [Redis](functionalities/redis.md)
 - [Settings and Configuration](functionalities/settings-and-configuration.md)
 - [Storage](functionalities/storage.md)
+- [Releases (Azure DevOps)](functionalities/releases.md)
 
 ### Update Rule
 
@@ -62,13 +63,18 @@ Whenever behavior changes in one of these areas, update the corresponding file u
 SwebKit.sln
 ├── src/
 │   ├── SwebKit.App/          # MAUI Blazor Hybrid app (all Razor components)
-│   ├── SwebKit.Core/         # Domain models, interfaces, config logic
-│   ├── SwebKit.Azure/        # Azure SB + App Insights implementations
+│   ├── SwebKit.Core/         # Domain models, interfaces, config logic, demo clients
+│   ├── SwebKit.Azure/        # Service Bus + Storage implementations
 │   ├── SwebKit.Kubernetes/   # Kubernetes/AKS implementation
+│   ├── SwebKit.Redis/        # Redis implementation (StackExchange.Redis)
+│   └── SwebKit.DevOps/       # Azure DevOps REST API implementation
 └── tests/
     ├── SwebKit.Core.Tests/
     ├── SwebKit.Azure.Tests/
-    └── SwebKit.Kubernetes.Tests/
+    ├── SwebKit.Kubernetes.Tests/
+    ├── SwebKit.DevOps.Tests/
+    ├── SwebKit.App.Tests/    # Blazor component tests (bUnit)
+    └── SwebKit.E2E.Tests/    # End-to-end tests (Playwright)
 ```
 
 ---
@@ -98,6 +104,9 @@ containing only the `<BlazorWebView>`. This gives access to the full web compone
 
 - `IServiceBusClient` — Peek, Send, Resubmit DLQ, Complete, List entities
 - `IAksClient` — GetDeployments, GetPods, StreamLogs, PortForward, OpenShell
+- `IRedisClient` — Scan, GetValue, SetValue, Delete, GetTtl, SetTtl, Flush
+- `IStorageClient` — ListContainers, ListBlobs, GetBlobContent, DownloadBlob, GetSasUrl
+- `IDevOpsClient` — GetProjects, GetPipelines, TriggerRun, GetPendingApprovals, ApproveAsync, GetTags, CreateTag
 - `ICredentialStore` — Save, Get, Delete
 
 ### UI Consistency
