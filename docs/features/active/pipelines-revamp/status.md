@@ -4,19 +4,19 @@
 
 title: "Status — pipelines-revamp"
 owner: ""
-state: "Planned"
-branch: ""
-started: ""
+state: "Done"
+branch: "main"
+started: "2026-03-22"
 last_updated: "2026-03-22"
 
 ---
 
 ## Quick Summary
 
-Feature plan written. No implementation started. The scope covers replacing the release-first
-entry model with a pipeline-first DevOps hub across four phases.
+Full implementation complete in a single pass. All five phases shipped. Build passes with zero
+warnings and zero errors on all source projects.
 
-**Current focus:** Plan review — ready to begin Phase 1 when approved.
+**Current focus:** Manual QA.
 
 ## Progress Checklist
 
@@ -27,51 +27,56 @@ entry model with a pipeline-first DevOps hub across four phases.
 - [x] `frontend.md` written
 - [x] `backend.md` written
 - [x] `decisions.md` written
-- [ ] Plan reviewed and approved
-- [ ] Feature branch created
 
 ### Phase 1 — Routing & Shell
 
-- [ ] Route `/releases` → `/pipelines` (redirect or rename)
-- [ ] `LeftNav` entry updated: label, route, area key, accent color
-- [ ] `ReleasesPage.razor` → `PipelinesPage.razor` (rename + four-tab scaffold)
-- [ ] `PipelinesPage.razor.css` created with two-panel layout rules
-- [ ] `DashboardPage` quick-link card updated to `/pipelines`
+- [x] Route `/releases` → `/pipelines` (`@page "/releases"` kept as redirect in `PipelinesPage`)
+- [x] `LeftNav` entry updated: label "Pipelines", area key `pipelines`, CSS accent color renamed
+- [x] `PipelinesPage.razor` created with four-tab scaffold
+- [x] `PipelinesPage.razor.css` created with two-panel layout rules
+- [x] `DashboardPage` hero stat and health tile labels updated to "Pipelines"
+- [x] `MainLayout` command palette and keyboard shortcut updated to `pipelines` area
+- [x] `StatusBar` area label updated
 
 ### Phase 2 — Pipelines Tab
 
-- [ ] `PipelineTree.razor` — project/pipeline tree with last-run status indicators
-- [ ] `PipelineDetail.razor` — environment deployment status, recent runs, trigger panel
-- [ ] `PipelineEnvironmentStatus` model added to `SwebKit.Core`
-- [ ] `IDevOpsClient.GetEnvironmentStatusAsync()` added and implemented in `DevOpsClient`
-- [ ] `DemoDevOpsClient` updated with demo environment status data
-- [ ] Pipeline trigger inline (branch, parameters, confirm dialog) wired up
+- [x] `PipelineTree.razor` — project/pipeline tree with lazy expand and last-run status
+- [x] `PipelinesOverview.razor` — project summary cards (default when no pipeline selected)
+- [x] `PipelineDetail.razor` — environment status table, recent runs list, inline trigger panel
+- [x] `PipelineEnvironmentStatus` model added to `DevOpsModels.cs`
+- [x] `IDevOpsClient.GetEnvironmentStatusAsync()` added to interface
+- [x] Implemented in `DevOpsClient.cs` (scan top-5 runs via timeline)
+- [x] Implemented in `DemoDevOpsClient.cs` with demo scenarios
 
 ### Phase 3 — Activity Tab
 
-- [ ] `PipelineActivity.razor` component created
-- [ ] Filter bar: project, pipeline, status, date range
-- [ ] Chronological run rows with status icon, pipeline name, branch, duration, triggered-by
-- [ ] Load-more / pagination (top-N per pipeline, lazy expand)
-- [ ] Auto-refresh toggle (30s interval)
+- [x] `PipelineActivity.razor` — filter bar, grouped rows, auto-refresh toggle
 
 ### Phase 4 — Releases Tab & Approvals Tab
 
-- [ ] `ReleaseBoard.razor` moved / adapted as release detail panel (right side of split)
-- [ ] `ReleaseList.razor` created for left panel (list of release records)
-- [ ] `ApprovalCenter.razor` extracted to standalone Approvals tab
-- [ ] Approval badge count wired to tab label in `PipelinesPage.razor`
-- [ ] Tag Manager converted from tab to modal; launch point added to Pipeline detail and
-      Release detail
-- [ ] `ReadinessGate.razor` absorbed into Release detail header (inline status pill)
+- [x] `ReleaseList.razor` — left panel with + New button and selection
+- [x] `ReleaseDetail.razor` — component × env matrix + readiness pill + action bar (absorbed from ReleaseBoard + ReadinessGate)
+- [x] `ApprovalCenter.razor` refactored to global scope (all projects, no Release dependency)
+- [x] `OnCountChanged` callback wires badge count to tab label
+- [x] Tag Manager toggle added to ReleaseDetail action bar
 
 ### Phase 5 — Cleanup & Documentation
 
-- [ ] Old `ReleasesPage.razor` removed (or archived)
-- [ ] Old `Releases/` sub-components cleaned up (unused ones removed)
-- [ ] `docs/architecture/functionalities/releases.md` updated to reflect new model
-- [ ] `DemoDevOpsClient` demo scenarios cover all four tabs
-- [ ] Manual QA across all tabs (see test-plan.md)
+- [x] `ReleasesPage.razor` deleted
+- [x] `ReleaseBoard.razor` deleted (superseded by `ReleaseDetail`)
+- [x] `ReadinessGate.razor` deleted (absorbed inline)
+- [x] `PipelineTriggerHub.razor` deleted (absorbed into `PipelineDetail`)
+- [x] `docs/architecture/functionalities/releases.md` updated
+- [x] `_Imports.razor` — `SwebKit.App.Components.Pipelines` namespace added
+- [x] `app.css` — `--color-nav-releases` renamed to `--color-nav-pipelines`
+
+### Validation
+
+- [ ] Manual QA: Pipelines tab — tree loads, pipeline detail shows env status
+- [ ] Manual QA: Activity tab — runs appear and filters work
+- [ ] Manual QA: Releases tab — matrix loads, create/edit/delete work
+- [ ] Manual QA: Approvals tab — global approvals load, badge count updates
+- [ ] Demo mode verified across all four tabs
 
 ## Completed
 

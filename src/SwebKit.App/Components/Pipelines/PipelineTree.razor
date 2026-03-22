@@ -1,0 +1,199 @@
+<div class="pipeline-tree">
+    @if (!Collapsed)
+    {
+        <div class="pipeline-tree__toolbar">
+            <input class="pipeline-tree__search" type="search" @bind="_search" @bind:event="oninput"
+                   placeholder="Filter..." />
+            <button class="pipeline-tree__collapse-btn" @onclick="ToggleCollapse"
+                    title="Collapse panel">
+                <FluentIcon Value="@(new Icons.Regular.Size16.PanelLeft())" Width="14px" />
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="pipeline-tree__collapsed-bar">
+            <button class="pipeline-tree__collapse-btn" @onclick="ToggleCollapse" title="Expand panel">
+                <FluentIcon Value="@(new Icons.Regular.Size16.PanelLeftExpand())" Width="14px" />
+            </button>
+        </div>
+    }
+
+    @if (!Collapsed)
+    {
+        @if (_isLoading)
+        {
+            <div style="padding:12px;"><LoadingSpinner Message="Loading..." /></div>
+        }
+        else if (_error is not null)
+        {
+            <div class="text-muted text-sm" style="padding:12px;">@_error</div>
+        }
+        else
+        {
+            @foreach (var project in _projects)
+            {
+                var expanded = _expandedProjects.Contains(project.Name);
+                var pipelines = FilteredPipelines(project.Name);
+
+                <div class="pipeline-tree__project">
+                    <button class="pipeline-tree__project-header" @onclick="@(() => ToggleProject(project.Name))">
+                        @{
+                            Icon expandIcon = expanded
+                                ? new Icons.Regular.Size16.ChevronDown()
+                                : new Icons.Regular.Size16.ChevronRight();
+                        }
+                        <FluentIcon Value="@expandIcon" Width="12px" />
+                        <span class="pipeline-tree__project-name">@project.Name</span>
+                        @if (_loadingProjects.Contains(project.Name))
+                        {
+                            <span class="pipeline-tree__loading-dot">…</span>
+                        }
+                    </button>
+
+                    @if (expanded)
+                    {
+                        @if (pipelines.Count == 0 && !_loadingProjects.Contains(project.Name))
+                        {
+                            <div class="pipeline-tree__empty">No pipelines found.</div>
+                        }
+                        @foreach (var pipeline in pipelines)
+                        {
+                            var lastRun = _lastRuns.GetValueOrDefault((project.Name, pipeline.Id));
+                            var isSelected = SelectedPipeline?.Id == pipeline.Id
+                                          && SelectedProject?.Name == project.Name;
+
+                            <button class="pipeline-tree__item @(isSelected ? "pipeline-tree__item--selected" : "")"
+                                    @onclick="@(() => SelectPipeline(project, pipeline))">
+                                <span class="pipeline-tree__run-dot @RunDotClass(lastRun)" title="@RunTitle(lastRun)">●</span>
+                                <span class="pipeline-tree__item-name">@pipeline.Name</span>
+                                @if (lastRun is not null)
+                                {
+                                    <span class="pipeline-tree__item-time">@RelativeTime(lastRun.CreatedDate)</span>
+                                }
+                            </button>
+                        }
+                    }
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public AdoProject? SelectedProject { get; set; }
+    [Parameter] public AdoPipeline? SelectedPipeline { get; set; }
+    [Parameter] public EventCallback<(AdoProject Project, AdoPipeline Pipeline)> OnPipelineSelected { get; set; }
+    [Parameter] public bool Collapsed { get; set; }
+    [Parameter] public EventCallback OnToggleCollapse { get; set; }
+
+    private bool _isLoading;
+    private string? _error;
+    private string _search = string.Empty;
+    private List<AdoProject> _projects = [];
+    private Dictionary<string, List<AdoPipeline>> _pipelinesByProject = new();
+    private Dictionary<(string, int), AdoPipelineRun> _lastRuns = new();
+    private HashSet<string> _expandedProjects = [];
+    private HashSet<string> _loadingProjects = [];
+
+    protected override async Task OnInitializedAsync() => await LoadProjectsAsync();
+
+    private async Task LoadProjectsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _projects = await DevOpsClient.GetProjectsAsync();
+            if (_projects.Count > 0)
+                await ExpandProjectAsync(_projects[0].Name);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _isLoading = false; }
+    }
+
+    private async Task ExpandProjectAsync(string projectName)
+    {
+        _expandedProjects.Add(projectName);
+        if (_pipelinesByProject.ContainsKey(projectName)) return;
+
+        _loadingProjects.Add(projectName);
+        StateHasChanged();
+        try
+        {
+            var pipelines = await DevOpsClient.GetPipelinesAsync(projectName);
+            _pipelinesByProject[projectName] = pipelines;
+
+            foreach (var p in pipelines)
+            {
+                try
+                {
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(projectName, p.Id, top: 1);
+                    if (runs.Count > 0)
+                        _lastRuns[(projectName, p.Id)] = runs[0];
+                }
+                catch { }
+            }
+        }
+        catch { }
+        finally
+        {
+            _loadingProjects.Remove(projectName);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleProject(string name)
+    {
+        if (_expandedProjects.Contains(name))
+        {
+            _expandedProjects.Remove(name);
+        }
+        else
+        {
+            await ExpandProjectAsync(name);
+        }
+    }
+
+    private void ToggleCollapse() => OnToggleCollapse.InvokeAsync();
+
+    private List<AdoPipeline> FilteredPipelines(string project)
+    {
+        var all = _pipelinesByProject.GetValueOrDefault(project) ?? [];
+        return string.IsNullOrWhiteSpace(_search)
+            ? all
+            : all.Where(p => p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private Task SelectPipeline(AdoProject project, AdoPipeline pipeline) =>
+        OnPipelineSelected.InvokeAsync((project, pipeline));
+
+    private static string RunDotClass(AdoPipelineRun? run)
+    {
+        if (run is null) return "run-dot--none";
+        return run.Result switch
+        {
+            "succeeded" => "run-dot--success",
+            "failed" => "run-dot--failed",
+            _ when run.State == "inProgress" => "run-dot--running",
+            _ => "run-dot--none"
+        };
+    }
+
+    private static string RunTitle(AdoPipelineRun? run)
+    {
+        if (run is null) return "No runs";
+        return run.State == "inProgress" ? "Running" :
+               run.Result == "succeeded" ? "Succeeded" :
+               run.Result == "failed" ? "Failed" : run.State;
+    }
+
+    private static string RelativeTime(DateTimeOffset dt)
+    {
+        var ago = DateTimeOffset.UtcNow - dt;
+        if (ago.TotalMinutes < 2) return "now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h";
+        return $"{(int)ago.TotalDays}d";
+    }
+}

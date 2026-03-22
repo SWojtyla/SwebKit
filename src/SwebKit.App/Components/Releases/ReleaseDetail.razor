@@ -1,0 +1,346 @@
+@inject ReleaseRepository ReleaseRepo
+
+<div class="release-detail">
+    @if (Release is null)
+    {
+        <div class="text-muted" style="padding:20px 0;">
+            Select a release from the list, or create a new one.
+        </div>
+    }
+    else if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading deployment status from ADO..." />
+    }
+    else if (_errorMessage is not null)
+    {
+        <ErrorCallout Message="@_errorMessage" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        @* ── Release header ── *@
+        <div class="release-detail__header">
+            <div class="release-detail__title-row">
+                <h3 class="release-detail__name">@Release.Name</h3>
+                <span class="status-badge @StatusClass(Release.Status)">@StatusLabel(Release.Status)</span>
+                @if (Release.SprintNumber.HasValue)
+                {
+                    <span class="text-muted text-sm">Sprint @Release.SprintNumber</span>
+                }
+                @if (Release.Label is not null)
+                {
+                    <span class="text-muted text-sm">@Release.Label</span>
+                }
+                <div class="release-detail__readiness">
+                    @{
+                        var (readinessIcon, readinessLabel, readinessColor) = ComputeReadiness();
+                    }
+                    <span style="color:@readinessColor; display:inline-flex; align-items:center; gap:4px;">
+                        <FluentIcon Value="@readinessIcon" Width="14px" />
+                        <span style="font-size:12px; font-weight:600;">@readinessLabel</span>
+                    </span>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Release.Notes))
+            {
+                <div class="release-detail__notes">@Release.Notes</div>
+            }
+
+            @* ── Action bar ── *@
+            @if (!IsDemoOnly)
+            {
+                <div class="release-detail__actions">
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditComponents.InvokeAsync())">Manage Scope</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTagManager">Tag Manager</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditRelease.InvokeAsync())">Edit</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnDeleteRelease.InvokeAsync())"
+                                  style="color:var(--color-error);">Delete</FluentButton>
+                </div>
+            }
+        </div>
+
+        @* ── Component × Environment matrix ── *@
+        @if (_scopedComponents.Count == 0)
+        {
+            <div class="text-muted text-sm" style="padding:16px 0;">
+                No components in scope. Click <strong>Manage Scope</strong> to add repos and pipelines.
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x:auto; margin-top:16px;">
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--color-border);">
+                            <th style="text-align:left; padding:8px; min-width:180px;">Component</th>
+                            <th style="text-align:center; padding:8px; min-width:80px;">Tag</th>
+                            @foreach (var env in _discoveredEnvironments)
+                            {
+                                <th style="text-align:center; padding:8px; min-width:100px;">@env</th>
+                            }
+                            <th style="text-align:center; padding:8px; min-width:60px;">Ready</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var comp in _scopedComponents)
+                        {
+                            var compData = _boardData.GetValueOrDefault(comp.ComponentName);
+                            var runName = _runNames.GetValueOrDefault(comp.ComponentName);
+                            <tr style="border-bottom:1px solid var(--color-border);">
+                                <td style="padding:8px;">
+                                    <div style="font-family:Consolas,monospace;">@comp.ComponentName</div>
+                                    @if (runName is not null)
+                                    {
+                                        <div class="text-sm text-mono" style="color:var(--color-accent);">#@runName</div>
+                                    }
+                                </td>
+                                <td style="padding:8px; text-align:center;">
+                                    @if (comp.TagConfirmed)
+                                    {
+                                        <span style="color:var(--color-success);">@comp.TargetTag</span>
+                                    }
+                                    else if (!string.IsNullOrEmpty(comp.TargetTag))
+                                    {
+                                        <span class="text-muted">@comp.TargetTag</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                @foreach (var env in _discoveredEnvironments)
+                                {
+                                    var cell = compData?.GetValueOrDefault(env);
+                                    <td style="padding:8px; text-align:center;">
+                                        @if (cell is not null)
+                                        {
+                                            <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result"
+                                               style="text-decoration:none;">
+                                                <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                }
+                                <td style="padding:8px; text-align:center;">
+                                    @{
+                                        var (icon, tooltip) = ComponentReadiness(comp, compData);
+                                    }
+                                    <span title="@tooltip" style="display:inline-flex; align-items:center;">
+                                        <FluentIcon Value="@icon" Width="14px" />
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @* ── Tag Manager (inline toggle) ── *@
+        @if (_showTagManager)
+        {
+            <div class="pipeline-section" style="margin-top:24px;">
+                <h4 class="pipeline-section-title">Tag Manager</h4>
+                <TagManager Release="Release" />
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .status-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; text-transform:uppercase; }
+    .status-badge.draft { background:rgba(128,128,128,0.2); color:var(--color-text-muted); }
+    .status-badge.inprogress { background:rgba(0,120,212,0.2); color:var(--color-accent); }
+    .status-badge.completed { background:rgba(67,160,71,0.2); color:var(--color-success); }
+    .pipeline-status { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500; }
+    .pipeline-status.succeeded { background:rgba(67,160,71,0.2); color:var(--color-success); }
+    .pipeline-status.failed { background:rgba(200,0,42,0.2); color:var(--color-error); }
+    .pipeline-status.running { background:rgba(0,120,212,0.2); color:var(--color-accent); }
+    .pipeline-status.notdeployed { color:var(--color-text-muted); }
+    .pipeline-status.waiting { background:rgba(255,152,0,0.2); color:#FF9800; }
+</style>
+
+@code {
+    [Parameter] public ReleaseRecord? Release { get; set; }
+    [Parameter] public bool IsDemoOnly { get; set; }
+    [Parameter] public EventCallback OnEditRelease { get; set; }
+    [Parameter] public EventCallback OnEditComponents { get; set; }
+    [Parameter] public EventCallback OnDeleteRelease { get; set; }
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+
+    private bool _isLoading;
+    private string? _errorMessage;
+    private bool _showTagManager;
+
+    private List<string> _discoveredEnvironments = [];
+    private List<ComponentScope> _scopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
+    private Dictionary<string, Dictionary<string, CellData>> _boardData = new();
+    private Dictionary<string, string> _runNames = new();
+
+    public record CellData(string State, string Result, string DisplayText, string CssClass, string? WebUrl);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Release is not null && _scopedComponents.Count > 0)
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        _boardData.Clear();
+        _runNames.Clear();
+        _discoveredEnvironments = [];
+
+        try
+        {
+            var projectNames = _scopedComponents.Select(c => c.ProjectName).Distinct().ToList();
+            var allEnvs = new HashSet<string>();
+            foreach (var proj in projectNames)
+            {
+                try
+                {
+                    var envs = await DevOpsClient.GetEnvironmentsAsync(proj);
+                    foreach (var env in envs) allEnvs.Add(env.Name);
+                }
+                catch { }
+            }
+            _discoveredEnvironments = [.. allEnvs];
+
+            foreach (var comp in _scopedComponents)
+            {
+                if (comp.PipelineId == 0) continue;
+                try
+                {
+                    var runs = await DevOpsClient.GetPipelineRunsAsync(comp.ProjectName, comp.PipelineId, top: 5);
+                    var latestRun = runs.FirstOrDefault();
+                    if (latestRun is null) continue;
+
+                    if (latestRun.Stages.Count == 0)
+                    {
+                        try { latestRun = await DevOpsClient.GetPipelineRunAsync(comp.ProjectName, comp.PipelineId, latestRun.Id); }
+                        catch { }
+                    }
+
+                    var waitingStageNames = new HashSet<string>();
+                    if (latestRun.State != "completed")
+                    {
+                        try
+                        {
+                            var waiting = await DevOpsClient.GetWaitingStagesAsync(comp.ProjectName, latestRun.Id);
+                            foreach (var w in waiting) waitingStageNames.Add(w.StageName);
+                        }
+                        catch { }
+                    }
+
+                    if (!string.IsNullOrEmpty(latestRun.Name))
+                        _runNames[comp.ComponentName] = latestRun.Name;
+
+                    var envMap = new Dictionary<string, CellData>();
+                    foreach (var stage in latestRun.Stages)
+                    {
+                        var envName = ResolveEnvironmentName(stage, _discoveredEnvironments);
+                        if (envName is null) continue;
+                        var isWaiting = waitingStageNames.Contains(stage.Name);
+
+                        var (display, css) = (stage.State, isWaiting) switch
+                        {
+                            (_, true) => ("Awaiting Approval", "waiting"),
+                            ("completed", _) when stage.Result == "succeeded" => ("Deployed", "succeeded"),
+                            ("completed", _) when stage.Result == "failed" => ("Failed", "failed"),
+                            ("inProgress", _) => ("Running", "running"),
+                            _ => ("Pending", "notdeployed")
+                        };
+                        envMap[envName] = new CellData(stage.State, stage.Result, display, css, latestRun.WebUrl);
+                    }
+                    _boardData[comp.ComponentName] = envMap;
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _isLoading = false; }
+    }
+
+    private static string? ResolveEnvironmentName(AdoPipelineStage stage, List<string> environments)
+    {
+        if (stage.EnvironmentName is not null)
+        {
+            var direct = environments.FirstOrDefault(e =>
+                string.Equals(e, stage.EnvironmentName, StringComparison.OrdinalIgnoreCase));
+            if (direct is not null) return direct;
+        }
+
+        var byContains = environments.FirstOrDefault(e =>
+            stage.Name.Contains(e, StringComparison.OrdinalIgnoreCase));
+        if (byContains is not null) return byContains;
+
+        if (stage.EnvironmentName is not null)
+        {
+            var normalized = stage.EnvironmentName.Replace('_', '-');
+            var byNormalized = environments.FirstOrDefault(e =>
+                string.Equals(e, normalized, StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains(e, StringComparison.OrdinalIgnoreCase));
+            if (byNormalized is not null) return byNormalized;
+        }
+
+        return null;
+    }
+
+    private (Icon Icon, string Tooltip) ComponentReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
+    {
+        if (envData is null) return (new Icons.Regular.Size16.CircleOff(), "No deployment data");
+        if (envData.Values.Any(c => c.CssClass == "failed")) return (new Icons.Filled.Size16.DismissCircle(), "Pipeline has failed stages");
+        if (envData.Values.Any(c => c.CssClass == "waiting")) return (new Icons.Regular.Size16.LockClosed(), "Waiting for approval");
+        if (envData.Values.Any(c => c.CssClass == "running")) return (new Icons.Regular.Size16.Clock(), "Pipeline is running");
+        if (!comp.TagConfirmed) return (new Icons.Regular.Size16.Warning(), "Tag not yet confirmed");
+        if (envData.Values.All(c => c.CssClass is "succeeded" or "notdeployed") && comp.TagConfirmed)
+            return (new Icons.Filled.Size16.CheckmarkCircle(), "Ready for release");
+        return (new Icons.Regular.Size16.CircleOff(), "Unknown state");
+    }
+
+    private (Icon Icon, string Label, string Color) ComputeReadiness()
+    {
+        if (_scopedComponents.Count == 0)
+            return (new Icons.Regular.Size16.CircleOff(), "No components", "var(--color-text-muted)");
+
+        var hasFailure = false;
+        var hasPending = false;
+        var allReady = true;
+
+        foreach (var comp in _scopedComponents)
+        {
+            var envData = _boardData.GetValueOrDefault(comp.ComponentName);
+            if (envData is null) { allReady = false; continue; }
+            if (envData.Values.Any(c => c.CssClass == "failed")) { hasFailure = true; allReady = false; }
+            if (envData.Values.Any(c => c.CssClass == "running")) { hasPending = true; allReady = false; }
+            if (!comp.TagConfirmed) allReady = false;
+        }
+
+        if (hasFailure) return (new Icons.Filled.Size16.DismissCircle(), "Not Ready", "var(--color-error)");
+        if (hasPending) return (new Icons.Regular.Size16.Clock(), "In Progress", "var(--color-accent)");
+        if (allReady) return (new Icons.Filled.Size16.CheckmarkCircle(), "Release Ready", "var(--color-success)");
+        return (new Icons.Regular.Size16.Warning(), "Partially Ready", "var(--color-text-muted)");
+    }
+
+    private static string StatusClass(ReleaseStatus s) => s switch
+    {
+        ReleaseStatus.Draft => "draft",
+        ReleaseStatus.InProgress => "inprogress",
+        ReleaseStatus.Completed => "completed",
+        _ => ""
+    };
+
+    private static string StatusLabel(ReleaseStatus s) => s switch
+    {
+        ReleaseStatus.InProgress => "In Progress",
+        _ => s.ToString()
+    };
+
+    private void ToggleTagManager() => _showTagManager = !_showTagManager;
+}

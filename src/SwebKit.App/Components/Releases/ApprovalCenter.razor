@@ -3,84 +3,69 @@
 
 <div>
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        <select class="activity-filter-select" @bind="_filterProject">
+            <option value="">All Projects</option>
+            @foreach (var p in _projects)
+            {
+                <option value="@p">@p</option>
+            }
+        </select>
         <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">Refresh</FluentButton>
         <AutoRefreshToggle OnRefresh="LoadAsync" />
     </div>
 
-    @if (Release is null)
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Checking for pending approvals..." />
+    }
+    else if (_errorMessage is not null)
+    {
+        <ErrorCallout Message="@_errorMessage" OnRetry="LoadAsync" />
+    }
+    else if (FilteredItems.Count == 0)
     {
         <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
-            Select a release to see pending approvals.
-        </div>
-    }
-    else if (IsLoading)
-    {
-        <LoadingSpinner Message="Checking pipelines for pending approvals..." />
-    }
-    else if (ErrorMessage is not null)
-    {
-        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
-    }
-    else if (PendingItems.Count == 0)
-    {
-        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
-            No pending approvals for the components in this release.
+            No pending approvals across all projects.
         </div>
     }
     else
     {
         <div style="display:grid; gap:12px;">
-            @foreach (var item in PendingItems)
+            @foreach (var item in FilteredItems)
             {
-                <div
-                    style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
+                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                         <div>
                             <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:14px; font-weight:600;">@item.ComponentName</span>
-                                @if (!string.IsNullOrEmpty(item.RunName))
-                                {
-                                    <span
-                                    style="font-size:12px; color:var(--color-accent); font-family:Consolas,monospace;">#@item.RunName</span>
-                                }
+                                <span style="font-size:14px; font-weight:600;">@item.Approval.PipelineName</span>
+                                <span style="font-size:11px; color:var(--color-text-muted); padding:1px 6px; border:1px solid var(--color-border); border-radius:4px;">@item.ProjectName</span>
                             </div>
                             <div style="font-size:12px; color:var(--color-text-muted);">
-                                @item.ProjectName — waiting at <strong>@item.StageName</strong>
-                                @if (item.TriggeredBy is not null)
+                                @(item.Approval.EnvironmentName ?? item.Approval.StageName)
+                                @if (item.Approval.TriggeredBy is not null)
                                 {
-                                    <text> — triggered by @item.TriggeredBy</text>
+                                    <text> — triggered by @item.Approval.TriggeredBy</text>
                                 }
                             </div>
                         </div>
                         <div style="display:flex; gap:6px; align-items:center;">
                             @if (item.IsProd)
                             {
-                                <span
-                                style="font-size:10px; padding:2px 6px; background:rgba(200,0,42,0.2); color:var(--color-error); border-radius:4px; font-weight:600;">PROD</span>
+                                <span style="font-size:10px; padding:2px 6px; background:rgba(200,0,42,0.2); color:var(--color-error); border-radius:4px; font-weight:600;">PROD</span>
                             }
-                            @if (item.ApprovalId is not null)
+                            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => StartApprove(item))">Approve</FluentButton>
+                            <FluentButton @onclick="@(() => StartReject(item))">Reject</FluentButton>
+                            @if (item.Approval.WebUrl is not null)
                             {
-                                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => StartApprove(item))">Approve
-                                </FluentButton>
-                                <FluentButton @onclick="@(() => StartReject(item))">Reject</FluentButton>
-                            }
-                            else if (item.WebUrl is not null)
-                            {
-                                <a href="@item.WebUrl" target="_blank"
-                                       style="padding:6px 12px; font-size:12px; color:var(--color-accent); text-decoration:none; border:1px solid var(--color-border); border-radius:4px;">
-                                    Review in ADO
+                                <a href="@item.Approval.WebUrl" target="_blank"
+                                   style="padding:6px 12px; font-size:12px; color:var(--color-accent); text-decoration:none; border:1px solid var(--color-border); border-radius:4px;">
+                                    ADO ↗
                                 </a>
                             }
                         </div>
                     </div>
                     <div style="font-size:11px; color:var(--color-text-muted);">
-                        Run started @item.CreatedDate.LocalDateTime.ToString("g")
-                        — Branch: @item.SourceBranch
-                        @if (item.WebUrl is not null && item.ApprovalId is not null)
-                        {
-                            <text> — </text>
-                            <a href="@item.WebUrl" target="_blank" style="color:var(--color-accent);">View in ADO</a>
-                        }
+                        @item.Approval.CreatedOn.LocalDateTime.ToString("g")
                     </div>
                 </div>
             }
@@ -89,215 +74,139 @@
 </div>
 
 @* ── Comment + confirm dialog ── *@
-@if (ActionTarget is not null)
+@if (_actionTarget is not null)
 {
-    <div
-        style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
-        <div
-            style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;">
-            @if (ActionTarget.IsProd)
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;">
+            @if (_actionTarget.IsProd)
             {
-                <div
-                    style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" /> PRODUCTION
-                    — This approval will deploy to a production environment
+                <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" /> PRODUCTION — This approval will deploy to a production environment
                 </div>
             }
-            <h3 style="margin:0 0 8px; font-size:15px;">@(IsApproving ? "Approve" : "Reject") — @ActionTarget.ComponentName
-            </h3>
+            <h3 style="margin:0 0 8px; font-size:15px;">@(_isApproving ? "Approve" : "Reject") — @_actionTarget.Approval.PipelineName</h3>
             <p style="margin:0 0 4px; font-size:13px; color:var(--color-text-muted);">
-                @ActionTarget.ProjectName — @ActionTarget.StageName
+                @_actionTarget.ProjectName — @(_actionTarget.Approval.EnvironmentName ?? _actionTarget.Approval.StageName)
             </p>
-            @if (!string.IsNullOrEmpty(ActionTarget.RunName))
+
+            <div style="display:grid; gap:4px; margin-bottom:12px;">
+                <label style="font-size:12px; color:var(--color-text-muted);">Comment (optional)</label>
+                <textarea @bind="_actionComment" @bind:event="oninput" rows="2"
+                          style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; resize:vertical;"></textarea>
+            </div>
+
+            @if (_actionTarget.IsProd)
             {
-                <p style="margin:0 0 12px; font-size:12px; color:var(--color-accent); font-family:Consolas,monospace;">
-                    #@ActionTarget.RunName</p>
-                }
-
-                <div style="display:grid; gap:4px; margin-bottom:12px;">
-                    <label style="font-size:12px; color:var(--color-text-muted);">Comment (optional)</label>
-                    <textarea @bind="ActionComment" @bind:event="oninput" rows="2"
-                              style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; resize:vertical;"></textarea>
+                <div style="margin-bottom:12px;">
+                    <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
+                    <input type="text" @bind="_typingConfirm" @bind:event="oninput"
+                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
                 </div>
+            }
 
-                @if (ActionTarget.IsProd)
-                {
-                    <div style="margin-bottom:12px;">
-                        <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
-                        <input type="text" @bind="TypingConfirm" @bind:event="oninput"
-                               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
-                    </div>
-                }
+            @if (_actionError is not null)
+            {
+                <div style="font-size:12px; color:var(--color-error); margin-bottom:8px;">@_actionError</div>
+            }
 
-                @if (ActionError is not null)
-                {
-                    <div style="font-size:12px; color:var(--color-error); margin-bottom:8px;">@ActionError</div>
-                }
-
-                <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button @onclick="CancelAction" style="padding:6px 16px; cursor:pointer;">Cancel</button>
-                    <button @onclick="ExecuteAction" disabled="@IsActionDisabled"
-                            style="padding:6px 16px; background:@(IsApproving ? "var(--color-accent)" : "var(--color-error)"); color:white; border:none; border-radius:4px; cursor:pointer; @(IsActionDisabled ? "opacity:0.5;" : "")">
-                        @(IsApproving ? "Approve" : "Reject")
-                    </button>
-                </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button @onclick="CancelAction" style="padding:6px 16px; cursor:pointer;">Cancel</button>
+                <button @onclick="ExecuteAction" disabled="@IsActionDisabled"
+                        style="padding:6px 16px; background:@(_isApproving ? "var(--color-accent)" : "var(--color-error)"); color:white; border:none; border-radius:4px; cursor:pointer; @(IsActionDisabled ? "opacity:0.5;" : "")">
+                    @(_isApproving ? "Approve" : "Reject")
+                </button>
             </div>
         </div>
-    }
+    </div>
+}
 
 @code {
-    [Parameter] public ReleaseRecord? Release { get; set; }
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public EventCallback<int> OnCountChanged { get; set; }
 
-    private bool IsLoading;
-    private string? ErrorMessage;
-    private List<PendingApprovalItem> PendingItems = [];
+    private bool _isLoading;
+    private string? _errorMessage;
+    private string _filterProject = string.Empty;
+    private List<string> _projects = [];
+    private List<ProjectApproval> _allItems = [];
 
     // Action state
-    private PendingApprovalItem? ActionTarget;
-    private bool IsApproving;
-    private string ActionComment = string.Empty;
-    private string TypingConfirm = string.Empty;
-    private string? ActionError;
-    private bool IsActionDisabled => ActionTarget?.IsProd == true && TypingConfirm != "CONFIRM";
+    private ProjectApproval? _actionTarget;
+    private bool _isApproving;
+    private string _actionComment = string.Empty;
+    private string _typingConfirm = string.Empty;
+    private string? _actionError;
+    private bool IsActionDisabled => _actionTarget?.IsProd == true && _typingConfirm != "CONFIRM";
 
-    private List<ComponentScope> ScopedComponents =>
-    Release?.Components.Where(c => c.InScope && c.PipelineId > 0).ToList() ?? [];
+    private List<ProjectApproval> FilteredItems => string.IsNullOrEmpty(_filterProject)
+        ? _allItems
+        : _allItems.Where(i => i.ProjectName == _filterProject).ToList();
 
-    private record PendingApprovalItem(
-    string ComponentName,
-    string ProjectName,
-    string StageName,
-    string? RunName,
-    string SourceBranch,
-    string? TriggeredBy,
-    string? ApprovalId,
-    string? WebUrl,
-    DateTimeOffset CreatedDate,
-    bool IsProd);
+    private record ProjectApproval(string ProjectName, AdoApproval Approval, bool IsProd);
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (Release is not null)
-            await LoadAsync();
-    }
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
-        if (Release is null || ScopedComponents.Count == 0)
-        {
-            PendingItems = [];
-            return;
-        }
-
-        IsLoading = true;
-        ErrorMessage = null;
+        _isLoading = true;
+        _errorMessage = null;
         try
         {
-            var items = new List<PendingApprovalItem>();
+            var projects = await DevOpsClient.GetProjectsAsync();
+            _projects = projects.Select(p => p.Name).ToList();
 
-            foreach (var comp in ScopedComponents)
+            var items = new List<ProjectApproval>();
+            foreach (var project in projects)
             {
                 try
                 {
-                    var runs = await DevOpsClient.GetPipelineRunsAsync(comp.ProjectName, comp.PipelineId, top: 1);
-                    var latestRun = runs.FirstOrDefault();
-                    if (latestRun is null || latestRun.State == "completed") continue;
-
-                    var waitingStages = await DevOpsClient.GetWaitingStagesAsync(
-                    comp.ProjectName, latestRun.Id);
-
-                    if (waitingStages.Count == 0) continue;
-
-                    foreach (var stage in waitingStages)
-                    {
-                        // Name-based production detection
-                        var isProd = IsProdStage(stage.StageName);
-
-                        items.Add(new PendingApprovalItem(
-                        comp.ComponentName,
-                        comp.ProjectName,
-                        stage.StageName,
-                        latestRun.Name,
-                        latestRun.SourceBranch,
-                        latestRun.TriggeredBy,
-                        stage.ApprovalId,
-                        latestRun.WebUrl,
-                        latestRun.CreatedDate,
-                        isProd));
-                    }
+                    var approvals = await DevOpsClient.GetPendingApprovalsAsync(project.Name);
+                    items.AddRange(approvals.Select(a => new ProjectApproval(
+                        project.Name, a, IsProdApproval(a))));
                 }
-                catch { /* Skip components that fail */ }
+                catch { }
             }
 
-            PendingItems = items.OrderBy(i => i.CreatedDate).ToList();
+            _allItems = items.OrderBy(i => i.Approval.CreatedOn).ToList();
+            await OnCountChanged.InvokeAsync(_allItems.Count);
         }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
         finally
         {
-            IsLoading = false;
+            _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
     }
 
-    /// <summary>
-    /// Detects production stages by name rather than by position.
-    /// </summary>
-    private static bool IsProdStage(string stageName)
+    private static bool IsProdApproval(AdoApproval a)
     {
-        var lower = stageName.ToLowerInvariant();
-        return lower.Contains("prd") || lower.Contains("prod") || lower.Contains("production");
+        var name = ((a.EnvironmentName ?? string.Empty) + " " + (a.StageName ?? string.Empty)).ToLowerInvariant();
+        return name.Contains("prd") || name.Contains("prod") || name.Contains("production");
     }
 
-    private void StartApprove(PendingApprovalItem item)
-    {
-        ActionTarget = item;
-        IsApproving = true;
-        ActionComment = string.Empty;
-        TypingConfirm = string.Empty;
-        ActionError = null;
-    }
-
-    private void StartReject(PendingApprovalItem item)
-    {
-        ActionTarget = item;
-        IsApproving = false;
-        ActionComment = string.Empty;
-        TypingConfirm = string.Empty;
-        ActionError = null;
-    }
-
-    private void CancelAction()
-    {
-        ActionTarget = null;
-        ActionComment = string.Empty;
-        TypingConfirm = string.Empty;
-        ActionError = null;
-    }
+    private void StartApprove(ProjectApproval item) { _actionTarget = item; _isApproving = true; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
+    private void StartReject(ProjectApproval item) { _actionTarget = item; _isApproving = false; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
+    private void CancelAction() { _actionTarget = null; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
 
     private async Task ExecuteAction()
     {
-        if (ActionTarget?.ApprovalId is null) return;
-        var comment = string.IsNullOrWhiteSpace(ActionComment) ? null : ActionComment.Trim();
+        if (_actionTarget is null) return;
+        var comment = string.IsNullOrWhiteSpace(_actionComment) ? null : _actionComment.Trim();
 
         try
         {
-            if (IsApproving)
-                await DevOpsClient.ApproveAsync(ActionTarget.ProjectName, ActionTarget.ApprovalId, comment);
+            if (_isApproving)
+                await DevOpsClient.ApproveAsync(_actionTarget.ProjectName, _actionTarget.Approval.Id, comment);
             else
-                await DevOpsClient.RejectAsync(ActionTarget.ProjectName, ActionTarget.ApprovalId, comment);
+                await DevOpsClient.RejectAsync(_actionTarget.ProjectName, _actionTarget.Approval.Id, comment);
 
-            var label = IsApproving ? "Approval submitted" : "Approval rejected";
-            Notifications.ShowSuccess(label);
+            Notifications.ShowSuccess(_isApproving ? "Approval submitted" : "Approval rejected");
             CancelAction();
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            ActionError = $"Failed: {ex.Message}";
+            _actionError = $"Failed: {ex.Message}";
             Notifications.ShowError("Action failed", ex: ex);
         }
     }

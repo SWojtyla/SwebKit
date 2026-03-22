@@ -1,0 +1,247 @@
+@implements IDisposable
+
+<div class="pipeline-activity">
+    @* ── Filter bar ── *@
+    <div class="activity-filter-bar">
+        <select class="activity-filter-select" @bind="_filterProject">
+            <option value="">All Projects</option>
+            @foreach (var p in _projects)
+            {
+                <option value="@p.Name">@p.Name</option>
+            }
+        </select>
+
+        <select class="activity-filter-select" @bind="_filterStatus">
+            <option value="">All Statuses</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+            <option value="inProgress">Running</option>
+        </select>
+
+        <select class="activity-filter-select" @bind="_filterDate">
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="">All time</option>
+        </select>
+
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync">↺ Refresh</FluentButton>
+
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-text-muted); margin-left:auto;">
+            <input type="checkbox" @bind="_autoRefresh" />
+            Auto-refresh
+        </label>
+    </div>
+
+    @* ── Content ── *@
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading activity across all pipelines..." />
+    }
+    else if (_error is not null)
+    {
+        <ErrorCallout Message="@_error" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        var groups = GroupedRuns();
+
+        @if (!groups.Any())
+        {
+            <div class="text-muted" style="padding:20px 0;">No pipeline runs found for the selected filters.</div>
+        }
+        else
+        {
+            @foreach (var (groupLabel, runs) in groups)
+            {
+                <div class="activity-group">
+                    <div class="activity-group-header">@groupLabel</div>
+
+                    @foreach (var run in runs)
+                    {
+                        <div class="activity-row">
+                            <span class="run-dot @RunDotClass(run.Run)" title="@RunTitle(run.Run)">●</span>
+                            <div class="activity-row__main">
+                                <span class="activity-pipeline-name">@run.PipelineName</span>
+                                <span class="text-muted text-sm activity-project">@run.ProjectName</span>
+                            </div>
+                            <span class="text-muted text-sm activity-branch">@run.Run.SourceBranch</span>
+                            @if (run.Run.TriggeredBy is not null)
+                            {
+                                <span class="text-muted text-sm">by @run.Run.TriggeredBy</span>
+                            }
+                            @if (run.Run.FinishedDate.HasValue && run.Run.State == "completed")
+                            {
+                                var duration = run.Run.FinishedDate.Value - run.Run.CreatedDate;
+                                <span class="text-muted text-sm">@FormatDuration(duration)</span>
+                            }
+                            <span class="text-muted text-sm activity-time">@RelativeTime(run.Run.CreatedDate)</span>
+                            @if (run.Run.WebUrl is not null)
+                            {
+                                <a href="@run.Run.WebUrl" target="_blank" class="btn-link-sm">↗</a>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+
+    private bool _isLoading;
+    private string? _error;
+    private string _filterProject = string.Empty;
+    private string _filterStatus = string.Empty;
+    private string _filterDate = "today";
+    private bool _autoRefresh;
+    private PeriodicTimer? _timer;
+
+    private List<AdoProject> _projects = [];
+    private List<RunRecord> _allRuns = [];
+
+    private record RunRecord(string ProjectName, string PipelineName, AdoPipelineRun Run);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    protected override void OnParametersSet()
+    {
+        if (_autoRefresh && _timer is null) StartAutoRefresh();
+        if (!_autoRefresh && _timer is not null) StopAutoRefresh();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            _projects = await DevOpsClient.GetProjectsAsync();
+            var allRuns = new List<RunRecord>();
+
+            foreach (var project in _projects)
+            {
+                try
+                {
+                    var pipelines = await DevOpsClient.GetPipelinesAsync(project.Name);
+                    foreach (var pipeline in pipelines)
+                    {
+                        try
+                        {
+                            var runs = await DevOpsClient.GetPipelineRunsAsync(project.Name, pipeline.Id, top: 10);
+                            allRuns.AddRange(runs.Select(r => new RunRecord(project.Name, pipeline.Name, r)));
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+
+            _allRuns = allRuns.OrderByDescending(r => r.Run.CreatedDate).ToList();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private IEnumerable<(string Label, List<RunRecord> Runs)> GroupedRuns()
+    {
+        var filtered = FilteredRuns().ToList();
+        var today = DateTimeOffset.Now.Date;
+        var yesterday = today.AddDays(-1);
+        var thisWeekStart = today.AddDays(-(int)today.DayOfWeek);
+
+        var groups = new[]
+        {
+            ("Today", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == today).ToList()),
+            ("Yesterday", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == yesterday).ToList()),
+            ("This week", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date >= thisWeekStart
+                && r.Run.CreatedDate.LocalDateTime.Date < yesterday).ToList()),
+            ("Older", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date < thisWeekStart).ToList())
+        };
+
+        return groups.Where(g => g.Item2.Count > 0).Select(g => (g.Item1, g.Item2));
+    }
+
+    private IEnumerable<RunRecord> FilteredRuns()
+    {
+        var runs = _allRuns.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(_filterProject))
+            runs = runs.Where(r => r.ProjectName == _filterProject);
+
+        if (!string.IsNullOrEmpty(_filterStatus))
+            runs = _filterStatus == "inProgress"
+                ? runs.Where(r => r.Run.State == "inProgress")
+                : runs.Where(r => r.Run.Result == _filterStatus);
+
+        if (_filterDate == "today")
+            runs = runs.Where(r => r.Run.CreatedDate.LocalDateTime.Date == DateTimeOffset.Now.Date);
+        else if (_filterDate == "7d")
+            runs = runs.Where(r => r.Run.CreatedDate >= DateTimeOffset.Now.AddDays(-7));
+        else if (_filterDate == "30d")
+            runs = runs.Where(r => r.Run.CreatedDate >= DateTimeOffset.Now.AddDays(-30));
+
+        return runs;
+    }
+
+    private void StartAutoRefresh()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _ = RefreshLoopAsync();
+    }
+
+    private void StopAutoRefresh()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private async Task RefreshLoopAsync()
+    {
+        if (_timer is null) return;
+        try
+        {
+            while (await _timer.WaitForNextTickAsync())
+                await LoadAsync();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private static string RunDotClass(AdoPipelineRun run) =>
+        run.Result switch
+        {
+            "succeeded" => "run-dot--success",
+            "failed" => "run-dot--failed",
+            _ when run.State == "inProgress" => "run-dot--running",
+            _ => "run-dot--none"
+        };
+
+    private static string RunTitle(AdoPipelineRun run) =>
+        run.State == "inProgress" ? "Running" :
+        run.Result == "succeeded" ? "Succeeded" :
+        run.Result == "failed" ? "Failed" : run.State;
+
+    private static string RelativeTime(DateTimeOffset dt)
+    {
+        var ago = DateTimeOffset.UtcNow - dt;
+        if (ago.TotalMinutes < 2) return "just now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
+        return $"{(int)ago.TotalDays}d ago";
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalMinutes < 1) return $"{(int)ts.TotalSeconds}s";
+        if (ts.TotalHours < 1) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+        return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+    }
+
+    public void Dispose() => StopAutoRefresh();
+}

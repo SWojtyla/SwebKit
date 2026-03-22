@@ -131,7 +131,7 @@
 .health-tile-wrap--servicebus { border-left-color: var(--color-nav-servicebus); }
 .health-tile-wrap--aks        { border-left-color: var(--color-nav-aks); }
 .health-tile-wrap--redis      { border-left-color: var(--color-nav-redis); }
-.health-tile-wrap--releases   { border-left-color: var(--color-nav-releases); }
+.health-tile-wrap--pipelines  { border-left-color: var(--color-nav-pipelines); }
 
 /* ── Lower 2-column layout ── */
 

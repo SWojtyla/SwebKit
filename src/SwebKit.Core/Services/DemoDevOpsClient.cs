@@ -364,4 +364,47 @@ public class DemoDevOpsClient : IDevOpsClient
             ? [.. envs]
             : [];
     }
+
+    public async Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
+        string project, int pipelineId, int scanDepth = 5, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct);
+        var envs = EnvironmentsByProject.GetValueOrDefault(project) ?? [];
+        var pipeline = PipelinesByProject.GetValueOrDefault(project)?
+            .FirstOrDefault(p => p.Id == pipelineId);
+        if (pipeline is null || envs.Length == 0) return [];
+
+        var now = DateTimeOffset.UtcNow;
+        var runId = pipelineId * 10; // latest run id formula
+
+        // Determine waiting stage index for known pipelines
+        var waitingIdx = pipelineId switch
+        {
+            101 => 2,
+            103 => 3,
+            201 => 1,
+            _ => -1
+        };
+
+        var statuses = new List<PipelineEnvironmentStatus>();
+        for (var i = 0; i < envs.Length; i++)
+        {
+            var env = envs[i];
+            var isWaiting = i == waitingIdx;
+            var isCompleted = i < waitingIdx || waitingIdx < 0;
+
+            statuses.Add(new PipelineEnvironmentStatus(
+                EnvironmentName: env.Name,
+                StageName: $"Deploy to {env.Name}",
+                LatestRunId: runId,
+                RunName: pipeline.Name,
+                State: isWaiting ? "inProgress" : (isCompleted ? "completed" : "pending"),
+                Result: isCompleted ? "succeeded" : "",
+                FinishedAt: isCompleted ? now.AddHours(-(envs.Length - i) * 2) : null,
+                TriggeredBy: "CI Trigger",
+                WaitingForApproval: isWaiting));
+        }
+
+        return statuses;
+    }
 }

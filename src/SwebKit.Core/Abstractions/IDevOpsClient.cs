@@ -65,4 +65,15 @@ public interface IDevOpsClient
     // ── Environments ──
 
     Task<List<AdoEnvironment>> GetEnvironmentsAsync(string project, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the latest deployment status per environment stage for a given pipeline.
+    /// Scans the most recent <paramref name="scanDepth"/> runs and returns one entry per
+    /// distinct environment/stage (the most recent run that reached that stage).
+    /// </summary>
+    Task<List<PipelineEnvironmentStatus>> GetEnvironmentStatusAsync(
+        string project,
+        int pipelineId,
+        int scanDepth = 5,
+        CancellationToken ct = default);
 }

@@ -39,7 +39,7 @@
         <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
             <span class="hero-stat-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" /></span>
             <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" : "—")</span>
-            <span class="hero-stat-label">Releases</span>
+            <span class="hero-stat-label">Pipelines</span>
         </div>
     </div>
 
@@ -68,8 +68,8 @@
                             Error="@_redisError"
                             OnNavigateToSettings="NavigateToSettings" />
             </div>
-            <div class="health-tile-wrap health-tile-wrap--releases">
-                <HealthTile Title="Releases" Icon="🚀"
+            <div class="health-tile-wrap health-tile-wrap--pipelines">
+                <HealthTile Title="Pipelines" Icon="🚀"
                             IsConfigured="@_releasesConfigured"
                             Data="@_releasesData"
                             Error="@_releasesError"
