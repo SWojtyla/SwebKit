@@ -1,65 +1,333 @@
 @page "/"
+@page "/dashboard"
 @inject AppStateService AppState
 @inject IAppEventBus Events
+@inject ICredentialStore CredentialStore
+@inject SwebKit.DevOps.DevOpsClient RealDevOpsClient
+@inject SwebKit.Core.Services.DemoDevOpsClient DemoDevOpsClient
+@implements IDisposable
 
 <div class="dashboard-page">
+
     <div class="dashboard-header">
-        <h1 class="dashboard-title">SwebKit</h1>
-        <p class="dashboard-subtitle">Select a feature to get started</p>
-    </div>
-
-    <div class="dashboard-grid">
-        <button class="dashboard-card" @onclick='() => Navigate("service-bus")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.ArrowSwap())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">Service Bus</div>
-            <div class="dashboard-card-desc">Manage queues, topics, and messages</div>
-        </button>
-
-        <button class="dashboard-card" @onclick='() => Navigate("aks")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.CloudCube())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">AKS</div>
-            <div class="dashboard-card-desc">Browse clusters, nodes, and workloads</div>
-        </button>
-
-        <button class="dashboard-card" @onclick='() => Navigate("redis")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.Database())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">Redis</div>
-            <div class="dashboard-card-desc">Explore keys and cache data</div>
-        </button>
-
-        <button class="dashboard-card" @onclick='() => Navigate("storage")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.FolderOpen())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">Storage</div>
-            <div class="dashboard-card-desc">Browse blobs and containers</div>
-        </button>
-
-        <button class="dashboard-card" @onclick='() => Navigate("releases")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.Rocket())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">Releases</div>
-            <div class="dashboard-card-desc">Track deployments and pipelines</div>
-        </button>
-
-        <button class="dashboard-card" @onclick='() => Navigate("settings")'>
-            <div class="dashboard-card-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size24.Settings())" Width="32px" />
-            </div>
-            <div class="dashboard-card-name">Settings</div>
-            <div class="dashboard-card-desc">Configure profiles and connections</div>
+        <div>
+            <h1 class="dashboard-title">SwebKit</h1>
+            <p class="dashboard-subtitle">Here's what needs attention.</p>
+        </div>
+        <button class="dashboard-refresh-btn" @onclick="RefreshAll" title="Refresh health data" aria-label="Refresh">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="16px" />
         </button>
     </div>
+
+    @* ── Section 1: Health tiles ── *@
+    <section class="dashboard-section">
+        <h2 class="dashboard-section-title">Health</h2>
+        <div class="health-grid">
+            <HealthTile Title="Service Bus" Icon="⇄"
+                        IsConfigured="@_sbConfigured"
+                        Data="@_sbData"
+                        Error="@_sbError"
+                        OnNavigateToSettings="NavigateToSettings" />
+
+            <HealthTile Title="AKS" Icon="☁"
+                        IsConfigured="@_aksConfigured"
+                        Data="@_aksData"
+                        Error="@_aksError"
+                        OnNavigateToSettings="NavigateToSettings" />
+
+            <HealthTile Title="Redis" Icon="⬡"
+                        IsConfigured="@_redisConfigured"
+                        Data="@_redisData"
+                        Error="@_redisError"
+                        OnNavigateToSettings="NavigateToSettings" />
+
+            <HealthTile Title="Releases" Icon="🚀"
+                        IsConfigured="@_releasesConfigured"
+                        Data="@_releasesData"
+                        Error="@_releasesError"
+                        OnNavigateToSettings="NavigateToSettings" />
+        </div>
+    </section>
+
+    @* ── Section 2: Recent activity ── *@
+    <section class="dashboard-section">
+        <h2 class="dashboard-section-title">Recent Activity</h2>
+        @if (_activities.Count == 0)
+        {
+            <p class="dashboard-empty">No recent activity — actions you take will appear here.</p>
+        }
+        else
+        {
+            <div class="activity-list">
+                @foreach (var a in _activities)
+                {
+                    <div class="activity-item">
+                        <span class="activity-icon">@a.Icon</span>
+                        <span class="activity-desc">@a.Description</span>
+                        <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    @* ── Section 3: Pinned quick-access ── *@
+    <section class="dashboard-section">
+        <h2 class="dashboard-section-title">Pinned</h2>
+        @if (_pins.Count == 0)
+        {
+            <p class="dashboard-empty">No pinned items — pin queues and pods from their respective pages.</p>
+        }
+        else
+        {
+            <div class="pinned-chips">
+                @foreach (var pin in _pins)
+                {
+                    <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
+                        <span class="pinned-chip-icon">@PinIcon(pin.EntityType)</span>
+                        <span class="pinned-chip-name">@pin.DisplayPath</span>
+                    </button>
+                }
+            </div>
+        }
+    </section>
+
 </div>
 
 @code {
-    private void Navigate(string area) =>
+    // ── Health state ────────────────────────────────────────────────────────────────
+    private bool _sbConfigured, _aksConfigured, _redisConfigured, _releasesConfigured;
+    private HealthTileData? _sbData, _aksData, _redisData, _releasesData;
+    private string? _sbError, _aksError, _redisError, _releasesError;
+
+    // ── Activity feed ───────────────────────────────────────────────────────────────
+    private record ActivityRecord(string Description, string Icon, string Area, DateTimeOffset OccurredAt);
+    private readonly List<ActivityRecord> _activities = [];
+
+    // ── Pinned entities ─────────────────────────────────────────────────────────────
+    private IReadOnlyList<FavoriteEntity> _pins = [];
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────────────
+    private readonly CancellationTokenSource _cts = new();
+    private PeriodicTimer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        _pins = AppState.Config.FavoriteEntities;
+        Events.Subscribe<ActivityEvent>(OnActivityReceived);
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        _ = LoadHealthDataAsync(_cts.Token);
+        _ = StartRefreshLoopAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task StartRefreshLoopAsync()
+    {
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(_cts.Token))
+                await LoadHealthDataAsync(_cts.Token);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void OnActivityReceived(ActivityEvent e)
+    {
+        var record = new ActivityRecord(e.Description, e.Icon, e.Area, e.OccurredAt);
+        _ = InvokeAsync(() =>
+        {
+            _activities.Insert(0, record);
+            if (_activities.Count > 10)
+                _activities.RemoveAt(_activities.Count - 1);
+            StateHasChanged();
+        });
+    }
+
+    private Task RefreshAll() => LoadHealthDataAsync(_cts.Token);
+
+    private async Task LoadHealthDataAsync(CancellationToken ct)
+    {
+        DetermineConfiguredState();
+        await InvokeAsync(StateHasChanged);
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linked.CancelAfter(TimeSpan.FromSeconds(10));
+
+        await Task.WhenAll(
+            FetchServiceBusAsync(linked.Token),
+            FetchAksAsync(linked.Token),
+            FetchRedisAsync(linked.Token),
+            FetchReleasesAsync(linked.Token));
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void DetermineConfiguredState()
+    {
+        _sbConfigured = AppState.UseDemoData || AppState.ServiceBusNamespaces.Count > 0;
+        _aksConfigured = AppState.UseDemoData || AppState.Config.AksConfig is not null;
+        _redisConfigured = AppState.UseDemoData || AppState.Config.RedisConfig?.ActiveCache is not null;
+        _releasesConfigured = AppState.UseDemoData ||
+            (AppState.Config.DevOpsConfig is not null && !string.IsNullOrEmpty(AppState.Config.DevOpsConfig.Organization));
+    }
+
+    // ── Service Bus ─────────────────────────────────────────────────────────────────
+
+    private async Task FetchServiceBusAsync(CancellationToken ct)
+    {
+        if (!_sbConfigured) return;
+        try
+        {
+            long dlq = 0;
+            if (AppState.UseDemoData)
+            {
+                dlq += await SumDlqAsync(DemoServiceBusClient.OrdersDev(), ct);
+            }
+            else
+            {
+                foreach (var ns in AppState.ServiceBusNamespaces)
+                {
+                    var connStr = CredentialStore.Get(ns.CredentialKey);
+                    if (string.IsNullOrWhiteSpace(connStr)) continue;
+                    await using var client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(connStr);
+                    dlq += await SumDlqAsync(client, ct);
+                }
+            }
+            _sbData = new HealthTileData((int)dlq, "dead-lettered", DateTimeOffset.Now);
+            _sbError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _sbError = ex.Message;
+        }
+    }
+
+    private static async Task<long> SumDlqAsync(IServiceBusClient client, CancellationToken ct)
+    {
+        var queues = await client.ListQueuesAsync(ct);
+        var statsTasks = queues.Select(q => client.GetEntityStatsAsync(q.EntityPath, ct));
+        var stats = await Task.WhenAll(statsTasks);
+        return stats.Sum(s => s.DeadLetterMessageCount);
+    }
+
+    // ── AKS ─────────────────────────────────────────────────────────────────────────
+
+    private async Task FetchAksAsync(CancellationToken ct)
+    {
+        if (!_aksConfigured) return;
+        try
+        {
+            var aksConfig = AppState.Config.AksConfig;
+            var ns = aksConfig?.DefaultNamespace ?? "default";
+
+            IAksClient client = AppState.UseDemoData
+                ? new DemoAksClient()
+                : new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
+                    aksConfig!.KubeconfigContext,
+                    aksConfig.KubeconfigPath);
+
+            var pods = await client.GetPodsAsync(ns, null, ct);
+            var unhealthy = pods.Count(p => p.Phase is not ("Running" or "Succeeded" or "Completed"));
+            _aksData = new HealthTileData(unhealthy, "unhealthy pods", DateTimeOffset.Now);
+            _aksError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _aksError = ex.Message;
+        }
+    }
+
+    // ── Redis ────────────────────────────────────────────────────────────────────────
+
+    private async Task FetchRedisAsync(CancellationToken ct)
+    {
+        if (!_redisConfigured) return;
+        try
+        {
+            IRedisClient client = AppState.UseDemoData
+                ? new DemoRedisClient(0)
+                : new SwebKit.Redis.RedisClient(AppState.Config.RedisConfig!.ActiveCache!);
+
+            using (client)
+            {
+                var scan = await client.ScanKeysAsync("*", 0, 100, ct);
+                var infoTasks = scan.Keys.Select(k => client.GetKeyInfoAsync(k, ct));
+                var infos = await Task.WhenAll(infoTasks);
+                var nearExpiry = infos.Count(i => i.Ttl is { } ttl && ttl < TimeSpan.FromMinutes(5) && ttl > TimeSpan.Zero);
+                _redisData = new HealthTileData(nearExpiry, "keys expiring < 5m", DateTimeOffset.Now);
+                _redisError = null;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _redisError = ex.Message;
+        }
+    }
+
+    // ── Releases ─────────────────────────────────────────────────────────────────────
+
+    private async Task FetchReleasesAsync(CancellationToken ct)
+    {
+        if (!_releasesConfigured) return;
+        try
+        {
+            IDevOpsClient client = AppState.UseDemoData ? DemoDevOpsClient : RealDevOpsClient;
+            var projects = await client.GetProjectsAsync(ct);
+            var approvalTasks = projects.Select(p => client.GetPendingApprovalsAsync(p.Name, ct));
+            var results = await Task.WhenAll(approvalTasks);
+            var total = results.Sum(r => r.Count);
+            _releasesData = new HealthTileData(total, "pending approvals", DateTimeOffset.Now);
+            _releasesError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _releasesError = ex.Message;
+        }
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────────────────
+
+    private void NavigateToSettings() => Events.Publish(new NavigateToAreaEvent("settings"));
+
+    private void NavigateToPin(FavoriteEntity pin)
+    {
+        var area = pin.EntityType switch
+        {
+            EntityType.Queue or EntityType.Topic or EntityType.Subscription => "service-bus",
+            EntityType.Deployment => "aks",
+            _ => "settings"
+        };
         Events.Publish(new NavigateToAreaEvent(area));
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────────────
+
+    private static string PinIcon(EntityType type) => type switch
+    {
+        EntityType.Queue or EntityType.Topic or EntityType.Subscription => "⇄",
+        EntityType.Deployment => "☁",
+        _ => "⬡"
+    };
+
+    private static string RelativeTime(DateTimeOffset at)
+    {
+        var elapsed = DateTimeOffset.Now - at;
+        return elapsed.TotalSeconds < 60
+            ? $"{(int)elapsed.TotalSeconds}s ago"
+            : elapsed.TotalMinutes < 60
+                ? $"{(int)elapsed.TotalMinutes}m ago"
+                : $"{(int)elapsed.TotalHours}h ago";
+    }
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<ActivityEvent>(OnActivityReceived);
+        _cts.Cancel();
+        _cts.Dispose();
+        _refreshTimer?.Dispose();
+    }
 }

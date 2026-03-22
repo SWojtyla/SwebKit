@@ -1,0 +1,124 @@
+.health-tile {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 100px;
+    border-left: 4px solid transparent;
+    transition: border-color 0.15s;
+}
+
+.tile-warning {
+    border-left-color: var(--warning);
+}
+
+.tile-error {
+    border-left-color: var(--error);
+}
+
+.tile-ok {
+    border-left-color: var(--success, #22c55e);
+}
+
+.tile-unconfigured {
+    border-left-color: var(--color-border);
+}
+
+.health-tile-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.health-tile-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.health-tile-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+}
+
+.health-tile-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.health-tile-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0;
+}
+
+.health-tile-unconfigured {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.health-tile-unconfigured-text {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.health-tile-settings-link {
+    font-size: 0.8rem;
+    color: var(--color-accent);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.health-tile-settings-link:hover {
+    text-decoration: underline;
+}
+
+.health-tile-error-body {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--error);
+}
+
+.health-tile-error-text {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.health-tile-metric {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.health-tile-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.tile-warning .health-tile-value {
+    color: var(--warning);
+}
+
+.health-tile-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.health-tile-updated {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
+}

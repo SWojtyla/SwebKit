@@ -37,7 +37,7 @@
 @code {
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
-    private string CurrentArea = "";
+    private string CurrentArea = "dashboard";
     private DotNetObjectReference<MainLayout>? _jsRef;
 
     protected override async Task OnInitializedAsync()
@@ -48,7 +48,7 @@
     private async Task DisableDemoAsync()
     {
         await AppState.SetDemoModeAsync(false);
-        Nav.NavigateTo("/");
+        NavigateTo("dashboard");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

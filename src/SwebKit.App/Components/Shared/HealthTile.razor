@@ -1,0 +1,73 @@
+@* Health summary tile for the dashboard. Shows one of 5 states: loading, not configured, error, healthy (value=0), warning (value>0). *@
+
+<div class="health-tile @TileClass" role="region" aria-label="@Title health">
+    <div class="health-tile-header">
+        <span class="health-tile-icon">@Icon</span>
+        <span class="health-tile-title">@Title</span>
+    </div>
+
+    <div class="health-tile-body">
+        @if (!IsConfigured)
+        {
+            <div class="health-tile-unconfigured">
+                <span class="health-tile-unconfigured-text">Not configured</span>
+                <a class="health-tile-settings-link" href="#" @onclick="NavigateToSettings" @onclick:preventDefault>
+                    Configure in Settings
+                </a>
+            </div>
+        }
+        else if (Error is not null)
+        {
+            <div class="health-tile-error-body">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" />
+                <span class="health-tile-error-text" title="@Error">@TruncateError(Error)</span>
+            </div>
+        }
+        else if (Data is null)
+        {
+            <div class="health-tile-loading">
+                <FluentProgressRing Width="24px" />
+            </div>
+        }
+        else
+        {
+            <div class="health-tile-metric">
+                <span class="health-tile-value">@Data.Value</span>
+                <span class="health-tile-label">@Data.Label</span>
+            </div>
+            <div class="health-tile-updated">Updated @RelativeTime(Data.LastUpdated)</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter] public HealthTileData? Data { get; set; }
+    [Parameter] public bool IsConfigured { get; set; } = true;
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnNavigateToSettings { get; set; }
+
+    private string TileClass => (!IsConfigured, Error is not null, Data is not null && Data.Value > 0) switch
+    {
+        (true, _, _) => "tile-unconfigured",
+        (_, true, _) => "tile-error",
+        (_, _, true) => "tile-warning",
+        _ => "tile-ok"
+    };
+
+    private static string TruncateError(string error) =>
+        error.Length > 60 ? error[..57] + "…" : error;
+
+    private static string RelativeTime(DateTimeOffset at)
+    {
+        var elapsed = DateTimeOffset.Now - at;
+        return elapsed.TotalSeconds < 60
+            ? $"{(int)elapsed.TotalSeconds}s ago"
+            : elapsed.TotalMinutes < 60
+                ? $"{(int)elapsed.TotalMinutes}m ago"
+                : $"{(int)elapsed.TotalHours}h ago";
+    }
+
+    private Task NavigateToSettings() => OnNavigateToSettings.InvokeAsync();
+}

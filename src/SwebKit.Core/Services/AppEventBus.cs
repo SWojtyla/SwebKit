@@ -69,3 +69,8 @@ public record ServiceBusShortcutEvent(string Action);
 public record PortForwardSessionsChangedEvent;
 public record OpenPortForwardPanelEvent;
 public record ConnectionStateChangedEvent(string Area);
+public record ActivityEvent(string Description, string Icon, string Area, DateTimeOffset OccurredAt)
+{
+    public ActivityEvent(string description, string icon, string area)
+        : this(description, icon, area, DateTimeOffset.Now) { }
+}
