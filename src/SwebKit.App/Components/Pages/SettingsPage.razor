@@ -36,6 +36,11 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
             Storage
         </button>
+        <button class="settings-nav-item @(_active == "observability" ? "active" : "")"
+                @onclick="@(() => _active = "observability")">
+            <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="18px" />
+            Observability
+        </button>
     </nav>
 
     @* ── Right content well ── *@
@@ -71,6 +76,45 @@
             case "storage":
                 <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Storage (Azure Blob)</h3>
                 <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
+                break;
+
+            case "observability":
+                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Observability</h3>
+                <div class="settings-info-card">
+                    <div class="settings-info-icon">🔑</div>
+                    <div>
+                        <div class="settings-info-title">No credentials to configure</div>
+                        <p class="settings-info-body">
+                            The Observability tab connects to Azure Application Insights using
+                            <strong>DefaultAzureCredential</strong> — the same identity your Azure CLI session uses.
+                            No secrets or connection strings are stored here.
+                        </p>
+                        <p class="settings-info-body">
+                            If you can run <code class="settings-info-code">az account show</code> in a terminal and
+                            see your account, you're ready. SwebKit will automatically discover every Application
+                            Insights resource you have read access to across all your subscriptions.
+                        </p>
+                        <p class="settings-info-body">
+                            <strong>Not seeing your resources?</strong> Run <code class="settings-info-code">az login</code>
+                            (or <code class="settings-info-code">az login --tenant &lt;tenant-id&gt;</code> if you work
+                            across multiple tenants) and reopen the Observability tab.
+                        </p>
+                    </div>
+                </div>
+
+                @if (AppState.Config.ObservabilityConfig is { } obsCfg)
+                {
+                    <div class="settings-field-group" style="margin-top:var(--spacing-xl);">
+                        <label class="settings-label">Max rows per query</label>
+                        <p class="settings-hint">
+                            Caps the number of rows returned by any KQL query. Lower values reduce Azure Monitor query costs.
+                            Range: 100 – 5000.
+                        </p>
+                        <input class="settings-input" type="number" min="100" max="5000"
+                               value="@obsCfg.MaxRowsPerQuery"
+                               @onchange="async e => { obsCfg.MaxRowsPerQuery = Math.Clamp(int.TryParse(e.Value?.ToString(), out var v) ? v : 500, 100, 5000); await SaveAsync(); }" />
+                    </div>
+                }
                 break;
         }
 
