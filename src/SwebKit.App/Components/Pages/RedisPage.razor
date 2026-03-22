@@ -4,6 +4,8 @@
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
 
 <div class="redis-page">
     <div class="page-header">
@@ -65,7 +67,7 @@
 
         <div class="content-grid">
             <div class="left-column">
-                <div class="panel key-tree-panel">
+                <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown" @onkeydown:preventDefault="@_preventKeyListKey">
                     <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
                                         KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
                                         OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync" />
@@ -155,6 +157,67 @@
             var name = ActiveCacheEntry?.DisplayName;
             return $"Connected: {(string.IsNullOrWhiteSpace(name) ? "Redis" : name)}";
         }
+    }
+
+    protected override void OnInitialized()
+    {
+        RegisterRedisCommands();
+    }
+
+    private void RegisterRedisCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-scan",
+            Label = "Scan Keys",
+            Category = "Redis",
+            AreaScope = "redis",
+            Execute = () => ScanAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-refresh-key",
+            Label = "Refresh Selected Key",
+            Category = "Redis",
+            AreaScope = "redis",
+            IsAvailable = () => SelectedKey is not null,
+            Execute = () => RefreshSelectedAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-delete-key",
+            Label = "Delete Selected Key",
+            Category = "Redis",
+            AreaScope = "redis",
+            IsAvailable = () => SelectedKey is not null,
+            Execute = () => DeleteSelectedKeyAsync()
+        });
+    }
+
+    // ── Key list keyboard navigation ──
+
+    private bool _preventKeyListKey;
+
+    private async Task HandleKeyListKeyDown(KeyboardEventArgs e)
+    {
+        _preventKeyListKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+        switch (e.Key)
+        {
+            case "ArrowDown": SelectKeyRelative(+1); break;
+            case "ArrowUp":   SelectKeyRelative(-1); break;
+            case "Escape":    SelectedKey = null; Selection.SetSelection("redis", null); StateHasChanged(); break;
+            case "Enter":     if (SelectedKey is not null) await RefreshSelectedAsync(); break;
+        }
+    }
+
+    private void SelectKeyRelative(int delta)
+    {
+        if (Keys.Count == 0) return;
+        var idx = SelectedKey is null ? -1 : Keys.IndexOf(SelectedKey);
+        var next = Keys[Math.Clamp(idx + delta, 0, Keys.Count - 1)];
+        SelectedKey = next;
+        Selection.SetSelection("redis", next);
+        _ = RefreshSelectedAsync();
     }
 
     protected override void OnParametersSet()
@@ -282,6 +345,7 @@
     private async Task SelectKeyAsync(string key)
     {
         SelectedKey = key;
+        Selection.SetSelection("redis", key);
         await RefreshSelectedAsync();
     }
 
@@ -585,5 +649,8 @@
     public void Dispose()
     {
         DisposeClient();
+        foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
+            Commands.Unregister(id);
+        Selection.SetSelection("redis", null);
     }
 }

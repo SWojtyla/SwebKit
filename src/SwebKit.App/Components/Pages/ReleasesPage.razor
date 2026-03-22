@@ -6,6 +6,7 @@
 @inject ReleaseRepository ReleaseRepo
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
 
 <CascadingValue Value="ActiveClient" Name="DevOpsClient">
     <div class="page-content">
@@ -206,6 +207,46 @@
     protected override void OnInitialized()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+        RegisterReleasesCommands();
+    }
+
+    private void RegisterReleasesCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-refresh",
+            Label = "Refresh Releases",
+            Category = "Releases",
+            AreaScope = "releases",
+            Execute = () => LoadAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-new",
+            Label = "New Release",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => IsConfigured,
+            Execute = () => { CreateRelease(); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-edit",
+            Label = "Edit Release",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => SelectedRelease is not null && !IsSelectedReleaseDemoOnly,
+            Execute = () => { EditRelease(); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-approvals",
+            Label = "Open Approval Center",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => IsConfigured,
+            Execute = () => { SetTab("approvals"); return Task.CompletedTask; }
+        });
     }
 
     private async Task LoadAsync()
@@ -340,5 +381,7 @@
     public void Dispose()
     {
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+        foreach (var id in new[] { "releases-refresh", "releases-new", "releases-edit", "releases-approvals" })
+            Commands.Unregister(id);
     }
 }

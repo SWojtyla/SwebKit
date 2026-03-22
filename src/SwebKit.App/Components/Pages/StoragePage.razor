@@ -4,6 +4,11 @@
 @inject ICredentialStore CredentialStore
 @inject IConnectionStateService ConnectionState
 @inject SwebKit.Core.Services.DemoStorageClient DemoStorage
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
+@inject INotificationService Notifications
+@inject IJSRuntime JS
+@implements IDisposable
 
 <div class="storage-page-shell">
 
@@ -88,6 +93,44 @@
     protected override void OnInitialized()
     {
         RebuildClient();
+        RegisterStorageCommands();
+    }
+
+    private void RegisterStorageCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "storage-refresh",
+            Label = "Refresh Blobs",
+            Category = "Storage",
+            AreaScope = "storage",
+            Execute = () => { RebuildClient(); InvokeAsync(StateHasChanged); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "storage-download-blob",
+            Label = "Download Selected Blob",
+            Category = "Storage",
+            AreaScope = "storage",
+            IsAvailable = () => _selectedBlob is not null && _storageClient is not null,
+            Execute = () => DownloadSelectedBlobAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "storage-copy-sas",
+            Label = "Copy SAS URL",
+            Category = "Storage",
+            AreaScope = "storage",
+            IsAvailable = () => _selectedBlob is not null && _storageClient is not null,
+            Execute = () => CopySelectedBlobSasAsync()
+        });
+    }
+
+    public void Dispose()
+    {
+        foreach (var id in new[] { "storage-refresh", "storage-download-blob", "storage-copy-sas" })
+            Commands.Unregister(id);
+        Selection.SetSelection("storage", null);
     }
 
     private void RebuildClient()
@@ -144,7 +187,43 @@
     private async Task OnBlobSelectedAsync(StorageBlobItem? blob)
     {
         _selectedBlob = blob;
+        Selection.SetSelection("storage", blob);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DownloadSelectedBlobAsync()
+    {
+        if (_storageClient is null || _selectedBlob is null || _selectedContainer is null) return;
+        try
+        {
+            var fileName = System.IO.Path.GetFileName(_selectedBlob.Name.TrimEnd('/'));
+            if (string.IsNullOrEmpty(fileName)) fileName = _selectedBlob.Name.Replace('/', '_');
+            var destPath = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                "Downloads", fileName);
+            await using var fs = System.IO.File.OpenWrite(destPath);
+            await _storageClient.DownloadBlobAsync(_selectedContainer, _selectedBlob.Name, fs);
+            Notifications.ShowSuccess("Blob downloaded", fileName);
+        }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Download failed", ex: ex);
+        }
+    }
+
+    private async Task CopySelectedBlobSasAsync()
+    {
+        if (_storageClient is null || _selectedBlob is null || _selectedContainer is null) return;
+        try
+        {
+            var url = await _storageClient.GetBlobSasUrlAsync(_selectedContainer, _selectedBlob.Name, TimeSpan.FromHours(24));
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Notifications.ShowSuccess("SAS URL copied", "Expires in 24 hours");
+        }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to copy SAS URL", ex: ex);
+        }
     }
 
 }

@@ -6,6 +6,8 @@
 @inject IAppEventBus EventBus
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     @* ── Toolbar ── *@
@@ -144,14 +146,14 @@
                             <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
                                             SelectedDeployment="@SelectedDeployment"
                                             OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                            OnSelectRow="@((d) => { SelectedDeployment = d; StateHasChanged(); })" OnOpenHpa="@OpenHpaDetail"
+                                            OnSelectRow="@((d) => { SelectedDeployment = d; Selection.SetSelection("aks", d); StateHasChanged(); })" OnOpenHpa="@OpenHpaDetail"
                                             OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "StatefulSets":
                             <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
                                              SelectedStatefulSet="@SelectedStatefulSet"
-                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; StateHasChanged(); })"
+                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
                                              OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
                                              OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
@@ -159,14 +161,14 @@
                         case "ConfigMaps":
                             <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
                                            SelectedConfigMap="@SelectedConfigMap"
-                                           OnSelectRow="@((cm) => { SelectedConfigMap = cm; StateHasChanged(); })"
+                                           OnSelectRow="@((cm) => { SelectedConfigMap = cm; Selection.SetSelection("aks", cm); StateHasChanged(); })"
                                            OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "Secrets":
                             <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
                                         SelectedSecret="@SelectedSecret"
-                                        OnSelectRow="@((s) => { SelectedSecret = s; StateHasChanged(); })"
+                                        OnSelectRow="@((s) => { SelectedSecret = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
                                         OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
                             break;
 
@@ -174,7 +176,7 @@
                             <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
                                      IsMultiNamespace="@IsMultiNamespace"
                                      SelectedPod="@SelectedPod"
-                                     OnSelectRow="@((p) => { SelectedPod = p; StateHasChanged(); })"
+                                     OnSelectRow="@((p) => { SelectedPod = p; Selection.SetSelection("aks", p); StateHasChanged(); })"
                                      OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
@@ -182,7 +184,7 @@
                         case "Ingresses":
                             <IngressGrid FilteredItems="@FilteredIngresses"
                                          SelectedIngress="@SelectedIngress"
-                                         OnSelectRow="@((i) => { SelectedIngress = i; StateHasChanged(); })"
+                                         OnSelectRow="@((i) => { SelectedIngress = i; Selection.SetSelection("aks", i); StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
                                          OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
                             break;
@@ -190,14 +192,14 @@
                         case "Helm":
                             <HelmGrid FilteredItems="@FilteredHelmReleases"
                                       SelectedHelm="@SelectedHelmRelease"
-                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; StateHasChanged(); })"
+                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; Selection.SetSelection("aks", h); StateHasChanged(); })"
                                       OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "CronJobs":
                             <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
                                          SelectedCronJob="@SelectedCronJob"
-                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; StateHasChanged(); })"
+                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; Selection.SetSelection("aks", cj); StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
                                          OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
@@ -993,6 +995,70 @@
     protected override void OnInitialized()
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        RegisterAksCommands();
+    }
+
+    private void RegisterAksCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-refresh",
+            Label = "Refresh",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "F5",
+            Execute = () => LoadAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-restart-deployment",
+            Label = "Restart Deployment",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null,
+            Execute = async () => { if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; await OnCtxRestartDeployment(); } }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-scale-deployment",
+            Label = "Scale Deployment",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null,
+            Execute = () => { if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxScaleDeployment(); } return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-view-logs",
+            Label = "View Logs",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null || SelectedPod is not null,
+            Execute = () =>
+            {
+                if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
+                else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
+                return Task.CompletedTask;
+            }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-open-pod-shell",
+            Label = "Open Pod Shell",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedPod is not null,
+            Execute = async () => { if (SelectedPod is not null) { CtxPod = SelectedPod; await OnCtxOpenPodShell(); } }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-port-forward",
+            Label = "Port-forward Pod",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedPod is not null,
+            Execute = () => { if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxPortForward(); } return Task.CompletedTask; }
+        });
     }
 
     private void OnOpenPortForwardPanel(OpenPortForwardPanelEvent _)
@@ -1272,7 +1338,25 @@
                 break;
             }
         }
+        PushAksSelection();
         StateHasChanged();
+    }
+
+    private void PushAksSelection()
+    {
+        object? selected = ActiveResourceType switch
+        {
+            "Deployments" => SelectedDeployment,
+            "Pods"        => SelectedPod,
+            "StatefulSets"=> SelectedStatefulSet,
+            "ConfigMaps"  => SelectedConfigMap,
+            "Secrets"     => SelectedSecret,
+            "Ingresses"   => SelectedIngress,
+            "Helm"        => SelectedHelmRelease,
+            "CronJobs"    => SelectedCronJob,
+            _             => null
+        };
+        Selection.SetSelection("aks", selected);
     }
 
     private void ClearSelection()
@@ -1285,6 +1369,7 @@
         SelectedIngress = null;
         SelectedHelmRelease = null;
         SelectedCronJob = null;
+        Selection.SetSelection("aks", null);
         StateHasChanged();
     }
 
@@ -2056,5 +2141,9 @@
     public void Dispose()
     {
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
+                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
+            Commands.Unregister(id);
+        Selection.SetSelection("aks", null);
     }
 }

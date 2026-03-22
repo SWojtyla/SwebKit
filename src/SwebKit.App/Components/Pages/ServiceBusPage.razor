@@ -6,6 +6,8 @@
 @inject ScheduledMessageRepository ScheduledRepo
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
 
 <div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
      style="display:flex; height:100%; overflow:hidden;">
@@ -178,7 +180,7 @@
                         <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                              NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
-                                             OnMessageSelected="async msg => { _activeTab.SelectedMessage = msg; await InvokeAsync(StateHasChanged); }" />
+                                             OnMessageSelected="async msg => { _activeTab.SelectedMessage = msg; Selection.SetSelection("service-bus", msg); await InvokeAsync(StateHasChanged); }" />
                         </div>
                         <div @ref="_splitterRef" class="pane-splitter"></div>
                         <div @ref="_detailPaneRef" class="details-pane">
@@ -252,8 +254,49 @@
     protected override async Task OnInitializedAsync()
     {
         Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
+        RegisterSbCommands();
         await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
+    }
+
+    private void RegisterSbCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "sb-peek",
+            Label = "Peek Messages",
+            Category = "Service Bus",
+            AreaScope = "service-bus",
+            Execute = () => { Events.Publish(new RefreshRequestedEvent("service-bus")); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "sb-resubmit",
+            Label = "Resubmit Selected Message",
+            Category = "Service Bus",
+            AreaScope = "service-bus",
+            IsAvailable = () => _activeTab?.SelectedMessage is not null,
+            Execute = () =>
+            {
+                if (_activeTab?.SelectedMessage is not null)
+                    Events.Publish(new ServiceBusShortcutEvent("Replay"));
+                return Task.CompletedTask;
+            }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "sb-edit-resubmit",
+            Label = "Edit & Resubmit Selected",
+            Category = "Service Bus",
+            AreaScope = "service-bus",
+            IsAvailable = () => _activeTab?.SelectedMessage is not null,
+            Execute = () =>
+            {
+                if (_activeTab?.SelectedMessage is not null)
+                    Events.Publish(new ServiceBusShortcutEvent("Edit"));
+                return Task.CompletedTask;
+            }
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -550,6 +593,9 @@
     public void Dispose()
     {
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
+        foreach (var id in new[] { "sb-peek", "sb-resubmit", "sb-edit-resubmit" })
+            Commands.Unregister(id);
+        Selection.SetSelection("service-bus", null);
         if (_splitterHandle is not null)
         {
             try { _ = _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
