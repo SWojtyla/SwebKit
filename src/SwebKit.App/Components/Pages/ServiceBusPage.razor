@@ -180,7 +180,7 @@
                         <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                              NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
-                                             OnMessageSelected="async msg => { _activeTab.SelectedMessage = msg; Selection.SetSelection("service-bus", msg); await InvokeAsync(StateHasChanged); }" />
+                                             OnMessageSelected="OnMessageSelected" />
                         </div>
                         <div @ref="_splitterRef" class="pane-splitter"></div>
                         <div @ref="_detailPaneRef" class="details-pane">
@@ -240,6 +240,14 @@
     {
         _composerMessage = null;
         StateHasChanged();
+    }
+
+    private async Task OnMessageSelected(SbMessage? msg)
+    {
+        if (_activeTab is null) return;
+        _activeTab.SelectedMessage = msg;
+        Selection.SetSelection("service-bus", msg);
+        await InvokeAsync(StateHasChanged);
     }
 
     private Task OnComposerSent(ScheduledMessageEntry? _)
