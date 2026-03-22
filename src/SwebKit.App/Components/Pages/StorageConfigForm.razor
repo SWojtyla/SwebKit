@@ -107,8 +107,6 @@
     private string? _connStatus;
     private bool _connOk;
     private bool _testing;
-    private Guid? _loadedEnvironmentId;
-
     private bool CanSave => !string.IsNullOrWhiteSpace(_displayName) && (_useAad
         ? !string.IsNullOrWhiteSpace(_accountName)
         : !string.IsNullOrWhiteSpace(_connectionStringRef));

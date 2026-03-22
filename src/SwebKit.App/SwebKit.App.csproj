@@ -19,6 +19,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
+        <!-- Certificate not installed in this dev environment; suppress packaging-only warnings -->
+        <NoWarn>$(NoWarn);APPX0102;APPX0107</NoWarn>
 
         <!-- Enable XAML source generation for faster build times and improved performance.
              This generates C# code from XAML at compile time instead of runtime inflation.
