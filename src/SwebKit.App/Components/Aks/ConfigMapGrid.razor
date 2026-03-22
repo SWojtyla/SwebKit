@@ -1,6 +1,8 @@
 @* Renders the ConfigMaps FluentDataGrid. *@
 
-<FluentDataGrid Items="@FilteredItems" TGridItem="ConfigMapInfo" Virtualize="true" ItemSize="36">
+<FluentDataGrid Items="@FilteredItems" TGridItem="ConfigMapInfo" Virtualize="true" ItemSize="36"
+                RowClass="@(cm => cm.Name == SelectedConfigMap?.Name ? "selected-row" : "")"
+                OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
@@ -30,5 +32,7 @@
 @code {
     [Parameter] public IQueryable<ConfigMapInfo> FilteredItems { get; set; } = Enumerable.Empty<ConfigMapInfo>().AsQueryable();
     [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public ConfigMapInfo? SelectedConfigMap { get; set; }
+    [Parameter] public EventCallback<ConfigMapInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, ConfigMapInfo)> OnContextMenu { get; set; }
 }

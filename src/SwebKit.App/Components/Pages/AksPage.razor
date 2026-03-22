@@ -150,44 +150,93 @@
 
                         case "StatefulSets":
                             <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
+                                             SelectedStatefulSet="@SelectedStatefulSet"
+                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; StateHasChanged(); })"
                                              OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
                                              OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "ConfigMaps":
                             <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
+                                           SelectedConfigMap="@SelectedConfigMap"
+                                           OnSelectRow="@((cm) => { SelectedConfigMap = cm; StateHasChanged(); })"
                                            OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "Secrets":
                             <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
+                                        SelectedSecret="@SelectedSecret"
+                                        OnSelectRow="@((s) => { SelectedSecret = s; StateHasChanged(); })"
                                         OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "Pods":
                             <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
                                      IsMultiNamespace="@IsMultiNamespace"
+                                     SelectedPod="@SelectedPod"
+                                     OnSelectRow="@((p) => { SelectedPod = p; StateHasChanged(); })"
                                      OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "Ingresses":
                             <IngressGrid FilteredItems="@FilteredIngresses"
+                                         SelectedIngress="@SelectedIngress"
+                                         OnSelectRow="@((i) => { SelectedIngress = i; StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
                                          OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
                             break;
 
                         case "Helm":
                             <HelmGrid FilteredItems="@FilteredHelmReleases"
+                                      SelectedHelm="@SelectedHelmRelease"
+                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; StateHasChanged(); })"
                                       OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "CronJobs":
                             <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
+                                         SelectedCronJob="@SelectedCronJob"
+                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
                                          OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
                     }
+                </div>
+
+                @* ── Keyboard hint bar ── *@
+                <div class="aks-kbd-hints">
+                    <span class="aks-kbd-hint"><kbd>↑↓</kbd> navigate</span>
+                    @if (ActiveResourceType is "Deployments" or "StatefulSets" or "Pods")
+                    {
+                        <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
+                    }
+                    @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
+                        or "Ingresses" or "Pods" or "CronJobs")
+                    {
+                        <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
+                    }
+                    @if (ActiveResourceType is "Deployments" or "StatefulSets")
+                    {
+                        <span class="aks-kbd-hint"><kbd>r</kbd> restart</span>
+                    }
+                    @if (ActiveResourceType == "Pods")
+                    {
+                        <span class="aks-kbd-hint"><kbd>s</kbd> shell</span>
+                        <span class="aks-kbd-hint"><kbd>p</kbd> port-fwd</span>
+                        <span class="aks-kbd-hint"><kbd>d</kbd> kill</span>
+                    }
+                    @if (ActiveResourceType == "Helm")
+                    {
+                        <span class="aks-kbd-hint"><kbd>h</kbd> history</span>
+                        <span class="aks-kbd-hint"><kbd>v</kbd> values</span>
+                    }
+                    @if (ActiveResourceType is "ConfigMaps" or "Secrets")
+                    {
+                        <span class="aks-kbd-hint"><kbd>Enter</kbd> view keys</span>
+                    }
+                    <span class="aks-kbd-hint"><kbd>/</kbd> filter</span>
+                    <span class="aks-kbd-hint"><kbd>Esc</kbd> deselect</span>
                 </div>
             </div>
 
@@ -686,6 +735,13 @@
     private List<string> Namespaces = ["default"];
     private List<KubeContextInfo> Contexts = [];
     private DeploymentInfo? SelectedDeployment;
+    private PodInfo? SelectedPod;
+    private StatefulSetInfo? SelectedStatefulSet;
+    private ConfigMapInfo? SelectedConfigMap;
+    private SecretInfo? SelectedSecret;
+    private IngressInfo? SelectedIngress;
+    private HelmReleaseInfo? SelectedHelmRelease;
+    private CronJobInfo? SelectedCronJob;
     private bool IsLoading;
     private string? ErrorMessage;
     private string? LogPodName;
@@ -1120,7 +1176,7 @@
     private void SwitchResourceType(string type)
     {
         ActiveResourceType = type;
-        StateHasChanged();
+        ClearSelection();
     }
 
     private void OnFilterChanged(string value)
@@ -1131,36 +1187,191 @@
 
     // ── Grid keyboard navigation ──
 
+    private ElementReference _tableWrapRef;
+
     private void HandleGridKeyDown(KeyboardEventArgs e)
     {
-        _preventGridKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+        var actionKeys = new[] { "l", "y", "r", "s", "p", "d", "h", "v", "Enter", "/" };
+        _preventGridKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape" || actionKeys.Contains(e.Key);
 
-        if (ActiveResourceType == "Deployments")
+        switch (e.Key)
         {
-            var items = FilteredDeployments.ToList();
-            if (items.Count == 0) return;
+            case "ArrowDown": SelectRelative(+1); return;
+            case "ArrowUp":   SelectRelative(-1); return;
+            case "Escape":    ClearSelection();   return;
+            case "/":         _ = FocusFilterAsync(); return;
+        }
 
-            var currentIdx = SelectedDeployment is null
-                ? -1
-                : items.FindIndex(d => d.Name == SelectedDeployment.Name);
+        _ = HandleLetterActionAsync(e.Key);
+    }
 
-            switch (e.Key)
+    private void SelectRelative(int delta)
+    {
+        switch (ActiveResourceType)
+        {
+            case "Deployments":
             {
-                case "ArrowDown":
-                    SelectedDeployment = items[Math.Min(currentIdx + 1, items.Count - 1)];
-                    StateHasChanged();
-                    break;
-                case "ArrowUp":
-                    SelectedDeployment = currentIdx > 0
-                        ? items[Math.Max(currentIdx - 1, 0)]
-                        : SelectedDeployment;
-                    StateHasChanged();
-                    break;
-                case "Escape":
-                    SelectedDeployment = null;
-                    StateHasChanged();
-                    break;
+                var items = FilteredDeployments.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedDeployment is null ? -1 : items.FindIndex(d => d.Name == SelectedDeployment.Name);
+                SelectedDeployment = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
             }
+            case "Pods":
+            {
+                var items = FilteredPods.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedPod is null ? -1 : items.FindIndex(p => p.Name == SelectedPod.Name);
+                SelectedPod = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "StatefulSets":
+            {
+                var items = FilteredStatefulSets.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedStatefulSet is null ? -1 : items.FindIndex(s => s.Name == SelectedStatefulSet.Name);
+                SelectedStatefulSet = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "ConfigMaps":
+            {
+                var items = FilteredConfigMaps.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedConfigMap is null ? -1 : items.FindIndex(cm => cm.Name == SelectedConfigMap.Name);
+                SelectedConfigMap = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "Secrets":
+            {
+                var items = FilteredSecrets.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedSecret is null ? -1 : items.FindIndex(s => s.Name == SelectedSecret.Name);
+                SelectedSecret = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "Ingresses":
+            {
+                var items = FilteredIngresses.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedIngress is null ? -1 : items.FindIndex(i => i.Name == SelectedIngress.Name);
+                SelectedIngress = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "Helm":
+            {
+                var items = FilteredHelmReleases.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedHelmRelease is null ? -1 : items.FindIndex(h => h.Name == SelectedHelmRelease.Name);
+                SelectedHelmRelease = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+            case "CronJobs":
+            {
+                var items = FilteredCronJobs.ToList();
+                if (items.Count == 0) return;
+                var idx = SelectedCronJob is null ? -1 : items.FindIndex(cj => cj.Name == SelectedCronJob.Name);
+                SelectedCronJob = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        SelectedDeployment = null;
+        SelectedPod = null;
+        SelectedStatefulSet = null;
+        SelectedConfigMap = null;
+        SelectedSecret = null;
+        SelectedIngress = null;
+        SelectedHelmRelease = null;
+        SelectedCronJob = null;
+        StateHasChanged();
+    }
+
+    private async Task FocusFilterAsync()
+    {
+        await JS.InvokeVoidAsync("SwebKit.focusAksFilter");
+    }
+
+    private async Task HandleLetterActionAsync(string key)
+    {
+        switch (ActiveResourceType)
+        {
+            case "Deployments" when SelectedDeployment is not null:
+                switch (key)
+                {
+                    case "l": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
+                    case "y": await OpenYaml("Deployment", SelectedDeployment.Name); break;
+                    case "r": CtxDeployment = SelectedDeployment; await OnCtxRestartDeployment(); break;
+                    case "Enter": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
+                }
+                break;
+
+            case "Pods" when SelectedPod is not null:
+                switch (key)
+                {
+                    case "l": CtxPod = SelectedPod; OnCtxViewPodLogs(); break;
+                    case "y": await OpenYaml("Pod", SelectedPod.Name); break;
+                    case "s": CtxPod = SelectedPod; await OnCtxOpenPodShell(); break;
+                    case "p": CtxPod = SelectedPod; OnCtxPortForward(); break;
+                    case "d": CtxPod = SelectedPod; await OnCtxKillPod(); break;
+                    case "Enter": CtxPod = SelectedPod; OnCtxViewPodLogs(); break;
+                }
+                break;
+
+            case "StatefulSets" when SelectedStatefulSet is not null:
+                switch (key)
+                {
+                    case "l": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
+                    case "y": await OpenYaml("StatefulSet", SelectedStatefulSet.Name); break;
+                    case "r": CtxStatefulSet = SelectedStatefulSet; await OnCtxRestartStatefulSet(); break;
+                    case "Enter": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
+                }
+                break;
+
+            case "ConfigMaps" when SelectedConfigMap is not null:
+                switch (key)
+                {
+                    case "y": await OpenYaml("ConfigMap", SelectedConfigMap.Name); break;
+                    case "Enter": CtxConfigMap = SelectedConfigMap; OnCtxViewConfigMapKeys(); break;
+                }
+                break;
+
+            case "Secrets" when SelectedSecret is not null:
+                switch (key)
+                {
+                    case "y": await OpenYaml("Secret", SelectedSecret.Name); break;
+                    case "Enter": CtxSecret = SelectedSecret; OnCtxViewSecretKeys(); break;
+                }
+                break;
+
+            case "Ingresses" when SelectedIngress is not null:
+                switch (key)
+                {
+                    case "y": await OpenYaml("Ingress", SelectedIngress.Name); break;
+                    case "Enter": CtxIngress = SelectedIngress; await OnCtxOpenIngressUrl(); break;
+                }
+                break;
+
+            case "Helm" when SelectedHelmRelease is not null:
+                switch (key)
+                {
+                    case "y": CtxHelm = SelectedHelmRelease; await OnCtxViewYaml('H'); break;
+                    case "h": CtxHelm = SelectedHelmRelease; await OnCtxViewHelmHistory(); break;
+                    case "v": CtxHelm = SelectedHelmRelease; await OnCtxViewHelmValues(); break;
+                    case "Enter": CtxHelm = SelectedHelmRelease; await OnCtxViewHelmHistory(); break;
+                }
+                break;
+
+            case "CronJobs" when SelectedCronJob is not null:
+                switch (key)
+                {
+                    case "y": CtxCronJob = SelectedCronJob; await OnCtxViewYamlCronJob(); break;
+                    case "Enter": CtxCronJob = SelectedCronJob; await OnCtxViewYamlCronJob(); break;
+                }
+                break;
         }
     }
 

@@ -1,6 +1,8 @@
 @* Renders the StatefulSets FluentDataGrid. *@
 
-<FluentDataGrid Items="@FilteredItems" TGridItem="StatefulSetInfo" Virtualize="true" ItemSize="36">
+<FluentDataGrid Items="@FilteredItems" TGridItem="StatefulSetInfo" Virtualize="true" ItemSize="36"
+                RowClass="@(s => s.Name == SelectedStatefulSet?.Name ? "selected-row" : "")"
+                OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
@@ -55,6 +57,8 @@
     [Parameter] public IQueryable<StatefulSetInfo> FilteredItems { get; set; } = Enumerable.Empty<StatefulSetInfo>().AsQueryable();
     [Parameter] public List<HpaInfo> Hpas { get; set; } = [];
     [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public StatefulSetInfo? SelectedStatefulSet { get; set; }
+    [Parameter] public EventCallback<StatefulSetInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, StatefulSetInfo)> OnContextMenu { get; set; }
     [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }

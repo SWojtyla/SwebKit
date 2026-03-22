@@ -165,7 +165,7 @@
             Label = "Go to AKS",
             Category = "Navigation",
             Icon = "☸",
-            Shortcut = "Ctrl+4",
+            Shortcut = "Ctrl+3",
             Execute = () => { NavigateTo("aks"); return Task.CompletedTask; }
         });
 
@@ -175,7 +175,18 @@
             Label = "Go to Redis",
             Category = "Navigation",
             Icon = "⚡",
+            Shortcut = "Ctrl+4",
             Execute = () => { NavigateTo("redis"); return Task.CompletedTask; }
+        });
+
+        Commands.Register(new AppCommand
+        {
+            Id = "navigate-storage",
+            Label = "Go to Storage",
+            Category = "Navigation",
+            Icon = "📁",
+            Shortcut = "Ctrl+5",
+            Execute = () => { NavigateTo("storage"); return Task.CompletedTask; }
         });
 
         Commands.Register(new AppCommand
@@ -184,7 +195,7 @@
             Label = "Go to Releases",
             Category = "Navigation",
             Icon = "🚀",
-            Shortcut = "Ctrl+5",
+            Shortcut = "Ctrl+6",
             Execute = () => { NavigateTo("releases"); return Task.CompletedTask; }
         });
 
@@ -264,9 +275,11 @@
                 _isShortcutsPanelOpen = !_isShortcutsPanelOpen;
                 IsCommandPaletteOpen = false;
                 break;
-            case "NavProjects":    NavigateTo("dashboard"); break;
+            case "NavDashboard":   NavigateTo("dashboard"); break;
             case "NavServiceBus":  NavigateTo("service-bus"); break;
             case "NavAks":         NavigateTo("aks"); break;
+            case "NavRedis":       NavigateTo("redis"); break;
+            case "NavStorage":     NavigateTo("storage"); break;
             case "NavReleases":    NavigateTo("releases"); break;
             case "NavSettings":    NavigateTo("settings"); break;
             case "TabNext":  Tabs.SetActive(GetNextTabId(1) ?? ""); break;
