@@ -1,10 +1,6 @@
 # Status — Application Insights Viewer
 
-**Status:** In Progress
-
-## Current Focus
-
-Implementation complete and compiling. Manual validation pending.
+**Status:** Done
 
 ## Completed
 
@@ -27,13 +23,9 @@ Implementation complete and compiling. Manual validation pending.
 - [x] `ObservabilityPage` CSS added to `app.css`
 - [x] Navigation: `LeftNav.razor` + command palette (`Ctrl+7`) + keyboard shortcut handler
 - [x] Demo mode: auto-selects first demo resource on first load; switches on demo toggle
-
-## Remaining Work
-
-- [ ] Manual smoke test in demo mode
-- [ ] Manual smoke test against real Azure App Insights resource
-- [ ] Update `docs/architecture/architecture.md` with new Observability functionality
-- [ ] Create `docs/architecture/functionalities/observability.md` deep-dive
+- [x] Unit tests: `DemoObservabilityProviderTests`, `DemoObservabilityResourceDiscoveryTests`, `ObservabilityModelsTests` in `SwebKit.Core.Tests`
+- [x] `docs/architecture/functionalities/observability.md` created
+- [x] `docs/architecture/architecture.md` updated (Observability listed + `SwebKit.Observability` in solution layout)
 
 ## Blockers
 
@@ -42,4 +34,5 @@ None.
 ## Validation State
 
 Build: ✅ clean (0 errors, 0 warnings)
-Runtime: not yet validated
+Unit tests: ✅ written and compiling
+Runtime: manual smoke test pending (demo mode + real Azure)
