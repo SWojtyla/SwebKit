@@ -7,6 +7,12 @@ public class DevOpsConfig
     /// <summary>Key in ICredentialStore for the PAT. Never logged or exposed in UI.</summary>
     public string PatCredentialKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// ADO project names the user has opted into. Only these projects load pipeline data.
+    /// Empty list means not yet configured (project picker will be shown).
+    /// </summary>
+    public List<string> PinnedProjects { get; set; } = [];
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Organization))

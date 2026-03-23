@@ -85,3 +85,20 @@ public record AdoCommit(
 public record AdoEnvironment(
     int Id,
     string Name);
+
+// ── Pipeline environment status ──
+
+/// <summary>
+/// The latest deployment state for a single environment stage in a pipeline.
+/// Derived by scanning recent pipeline runs — not from the ADO Environments API.
+/// </summary>
+public record PipelineEnvironmentStatus(
+    string EnvironmentName,
+    string StageName,
+    int? LatestRunId,
+    string? RunName,
+    string? State,
+    string? Result,
+    DateTimeOffset? FinishedAt,
+    string? TriggeredBy,
+    bool WaitingForApproval);
