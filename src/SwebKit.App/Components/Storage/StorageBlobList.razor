@@ -40,7 +40,8 @@
     }
     else
     {
-        <div style="overflow-y:auto; flex:1;">
+        <div style="overflow-y:auto; flex:1;" tabindex="0" @onkeydown="HandleBlobKeyDown"
+             @onkeydown:preventDefault="_preventBlobKey">
             @if (_items.Count == 0 && !_loading)
             {
                 <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">No items in this folder.</div>
@@ -93,7 +94,7 @@
                                                                 style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                                                 @(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
                                                                 <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ?
-                                                                                            "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
+                                                                                                                                                                "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
                                                                 </tr>
                                                             }
                                                         </tbody>
@@ -139,6 +140,7 @@
     private string? _loadedContainerName;
     private ContextMenu _ctxMenu = default!;
     private StorageBlobItem? _ctxItem;
+    private bool _preventBlobKey;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -248,6 +250,46 @@
             await NavigateToFolderAsync(item.Name);
         else
             await SelectedBlobChanged.InvokeAsync(item);
+    }
+
+    private async Task HandleBlobKeyDown(KeyboardEventArgs e)
+    {
+        _preventBlobKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape" or "Enter";
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                SelectBlobRelative(+1);
+                break;
+            case "ArrowUp":
+                SelectBlobRelative(-1);
+                break;
+            case "Escape":
+                await SelectedBlobChanged.InvokeAsync(null);
+                break;
+            case "Enter":
+                if (SelectedBlob is not null)
+                {
+                    await OnRowClickAsync(SelectedBlob);
+                }
+                else
+                {
+                    var firstBlob = _items.FirstOrDefault(i => !i.IsPrefix);
+                    if (firstBlob is not null)
+                        await SelectedBlobChanged.InvokeAsync(firstBlob);
+                }
+                break;
+        }
+    }
+
+    private void SelectBlobRelative(int delta)
+    {
+        if (_items.Count == 0) return;
+        var currentIdx = SelectedBlob is null
+            ? -1
+            : _items.FindIndex(i => !i.IsPrefix && i.Name == SelectedBlob.Name);
+        var newIdx = Math.Max(0, Math.Min(currentIdx + delta, _items.Count - 1));
+        var item = _items[newIdx];
+        _ = OnRowClickAsync(item);
     }
 
     private async Task CopyUrlAsync(StorageBlobItem item)
