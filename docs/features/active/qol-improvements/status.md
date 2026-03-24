@@ -9,15 +9,15 @@ Full detailed technical plans written for all areas. Ready for implementation.
 
 ## Implementation documents
 
-| Area | Document | Items |
-|------|----------|-------|
-| AKS | [aks.md](aks.md) | AKS-1 – AKS-21 |
-| Observability | [observability.md](observability.md) | OBS-1 – OBS-15 |
-| Redis | [redis.md](redis.md) | RDS-1 – RDS-12 |
-| Storage | [storage.md](storage.md) | STG-3 – STG-12 (no upload/delete) |
-| Releases | [releases.md](releases.md) | REL-1 – REL-6 |
-| UI Shell | [ui-shell.md](ui-shell.md) | UI-1 – UI-24 |
-| Service Bus Revamp | [../service-bus-ui-revamp/](../service-bus-ui-revamp/index.md) | Full layout redesign |
+| Area               | Document                                                       | Items                             |
+| ------------------ | -------------------------------------------------------------- | --------------------------------- |
+| AKS                | [aks.md](aks.md)                                               | AKS-1 – AKS-21                    |
+| Observability      | [observability.md](observability.md)                           | OBS-1 – OBS-15                    |
+| Redis              | [redis.md](redis.md)                                           | RDS-1 – RDS-12                    |
+| Storage            | [storage.md](storage.md)                                       | STG-3 – STG-12 (no upload/delete) |
+| Releases           | [releases.md](releases.md)                                     | REL-1 – REL-6                     |
+| UI Shell           | [ui-shell.md](ui-shell.md)                                     | UI-1 – UI-24                      |
+| Service Bus Revamp | [../service-bus-ui-revamp/](../service-bus-ui-revamp/index.md) | Full layout redesign              |
 
 ## How to progress items
 
@@ -28,7 +28,7 @@ Full detailed technical plans written for all areas. Ready for implementation.
 
 ## Promoted items
 
-_(none yet)_
+- **UI-8, UI-9, UI-10, UI-11** — Referenced as dependencies / cross-cuts by [performance-improvements](../performance-improvements/index.md) (PERF-13, PERF-14, PERF-15)
 
 ## Blockers
 
