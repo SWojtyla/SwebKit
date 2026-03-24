@@ -8,7 +8,8 @@
         <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">Configured Caches</div>
         @foreach (var cache in Caches)
         {
-            <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
+            <div
+                style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
                 <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@cache.DisplayName</span>
                 <span style="font-size:11px; color:var(--color-text-muted);">DB@cache.Database</span>
                 <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditCache(cache)">Edit</FluentButton>
@@ -59,7 +60,8 @@
 
         @if (ConnectionStatus is not null)
         {
-            <span style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
+            <span
+            style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
         }
     </div>
 </div>
@@ -177,7 +179,7 @@
 
         try
         {
-            using var client = CreateClient();
+            using var client = await CreateClientAsync();
             var ok = await client.TestConnectionAsync();
             ConnectionOk = ok;
             ConnectionStatus = ok ? "Connection successful." : "Connection failed.";
@@ -191,7 +193,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private IRedisClient CreateClient()
+    private async Task<IRedisClient> CreateClientAsync()
     {
         if (AppState.UseDemoData)
             return new DemoRedisClient(Database);
@@ -199,7 +201,7 @@
         if (string.IsNullOrWhiteSpace(ConnectionString))
             throw new InvalidOperationException("Provide a Redis connection string before testing.");
 
-        return new SwebKit.Redis.RedisClient(new RedisCacheEntry
+        return await SwebKit.Redis.RedisClient.CreateAsync(new RedisCacheEntry
         {
             DisplayName = DisplayName,
             ConnectionString = ConnectionString,

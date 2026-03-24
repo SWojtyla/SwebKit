@@ -22,107 +22,105 @@
     @* ── Hero stats row ── *@
     <div class="dashboard-hero-row">
         <div class="hero-stat @(_sbConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon"><FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="20px" /></span>
+            <span class="hero-stat-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="20px" />
+            </span>
             <span class="hero-stat-value">@(_sbData is not null ? $"{_sbData.Value} {_sbData.Label}" : "—")</span>
             <span class="hero-stat-label">Service Bus</span>
         </div>
         <div class="hero-stat @(_aksConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="20px" /></span>
+            <span class="hero-stat-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="20px" />
+            </span>
             <span class="hero-stat-value">@(_aksData is not null ? $"{_aksData.Value} {_aksData.Label}" : "—")</span>
             <span class="hero-stat-label">AKS</span>
         </div>
         <div class="hero-stat @(_redisConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" /></span>
-            <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" : "—")</span>
-            <span class="hero-stat-label">Redis</span>
-        </div>
-        <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" /></span>
-            <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" : "—")</span>
-            <span class="hero-stat-label">Pipelines</span>
-        </div>
-    </div>
+            <span class="hero-stat-icon">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
+            </span>
+            <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
+                        "—")</span>
+                <span class="hero-stat-label">Redis</span>
+            </div>
+            <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
+                <span class="hero-stat-icon">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
+                </span>
+                <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
+                         "—")</span>
+                    <span class="hero-stat-label">Pipelines</span>
+                </div>
+            </div>
 
-    @* ── Health tiles ── *@
-    <section class="dashboard-section">
-        <h2 class="dashboard-section-title">Health</h2>
-        <div class="health-grid">
-            <div class="health-tile-wrap health-tile-wrap--servicebus">
-                <HealthTile Title="Service Bus" Icon="⇄"
-                            IsConfigured="@_sbConfigured"
-                            Data="@_sbData"
-                            Error="@_sbError"
-                            OnNavigateToSettings="NavigateToSettings" />
-            </div>
-            <div class="health-tile-wrap health-tile-wrap--aks">
-                <HealthTile Title="AKS" Icon="☁"
-                            IsConfigured="@_aksConfigured"
-                            Data="@_aksData"
-                            Error="@_aksError"
-                            OnNavigateToSettings="NavigateToSettings" />
-            </div>
-            <div class="health-tile-wrap health-tile-wrap--redis">
-                <HealthTile Title="Redis" Icon="⬡"
-                            IsConfigured="@_redisConfigured"
-                            Data="@_redisData"
-                            Error="@_redisError"
-                            OnNavigateToSettings="NavigateToSettings" />
-            </div>
-            <div class="health-tile-wrap health-tile-wrap--pipelines">
-                <HealthTile Title="Pipelines" Icon="🚀"
-                            IsConfigured="@_releasesConfigured"
-                            Data="@_releasesData"
-                            Error="@_releasesError"
-                            OnNavigateToSettings="NavigateToSettings" />
-            </div>
-        </div>
-    </section>
+            @* ── Health tiles ── *@
+            <section class="dashboard-section">
+                <h2 class="dashboard-section-title">Health</h2>
+                <div class="health-grid">
+                    <div class="health-tile-wrap health-tile-wrap--servicebus">
+                        <HealthTile Title="Service Bus" Icon="⇄" IsConfigured="@_sbConfigured" Data="@_sbData" Error="@_sbError"
+                                    OnNavigateToSettings="NavigateToSettings" />
+                    </div>
+                    <div class="health-tile-wrap health-tile-wrap--aks">
+                        <HealthTile Title="AKS" Icon="☁" IsConfigured="@_aksConfigured" Data="@_aksData" Error="@_aksError"
+                                    OnNavigateToSettings="NavigateToSettings" />
+                    </div>
+                    <div class="health-tile-wrap health-tile-wrap--redis">
+                        <HealthTile Title="Redis" Icon="⬡" IsConfigured="@_redisConfigured" Data="@_redisData"
+                                    Error="@_redisError" OnNavigateToSettings="NavigateToSettings" />
+                    </div>
+                    <div class="health-tile-wrap health-tile-wrap--pipelines">
+                        <HealthTile Title="Pipelines" Icon="🚀" IsConfigured="@_releasesConfigured" Data="@_releasesData"
+                                    Error="@_releasesError" OnNavigateToSettings="NavigateToSettings" />
+                    </div>
+                </div>
+            </section>
 
-    @* ── Lower 2-column: activity feed + pinned ── *@
-    <div class="dashboard-lower">
-        <section class="dashboard-activity-panel">
-            <h2 class="dashboard-section-title">Recent Activity</h2>
-            @if (_activities.Count == 0)
-            {
-                <p class="dashboard-empty">No recent activity — actions you take will appear here.</p>
-            }
-            else
-            {
-                <div class="activity-list">
-                    @foreach (var a in _activities)
+            @* ── Lower 2-column: activity feed + pinned ── *@
+            <div class="dashboard-lower">
+                <section class="dashboard-activity-panel">
+                    <h2 class="dashboard-section-title">Recent Activity</h2>
+                    @if (_activities.Count == 0)
                     {
-                        <div class="activity-item">
-                            <span class="activity-icon">@a.Icon</span>
-                            <span class="activity-desc">@a.Description</span>
-                            <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                        <p class="dashboard-empty">No recent activity — actions you take will appear here.</p>
+                    }
+                    else
+                    {
+                        <div class="activity-list">
+                            @foreach (var a in _activities)
+                            {
+                                <div class="activity-item">
+                                    <span class="activity-icon">@a.Icon</span>
+                                    <span class="activity-desc">@a.Description</span>
+                                    <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                                </div>
+                            }
                         </div>
                     }
-                </div>
-            }
-        </section>
+                </section>
 
-        <aside class="dashboard-pinned-panel">
-            <h2 class="dashboard-section-title">Pinned</h2>
-            @if (_pins.Count == 0)
-            {
-                <p class="dashboard-empty">No pinned items — pin queues and pods from their respective pages.</p>
-            }
-            else
-            {
-                <div class="pinned-chips">
-                    @foreach (var pin in _pins)
+                <aside class="dashboard-pinned-panel">
+                    <h2 class="dashboard-section-title">Pinned</h2>
+                    @if (_pins.Count == 0)
                     {
-                        <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
-                            <span class="pinned-chip-icon">@PinIcon(pin.EntityType)</span>
-                            <span class="pinned-chip-name">@pin.DisplayPath</span>
-                        </button>
+                        <p class="dashboard-empty">No pinned items — pin queues and pods from their respective pages.</p>
                     }
-                </div>
-            }
-        </aside>
-    </div>
+                    else
+                    {
+                        <div class="pinned-chips">
+                            @foreach (var pin in _pins)
+                            {
+                                <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
+                                    <span class="pinned-chip-icon">@PinIcon(pin.EntityType)</span>
+                                    <span class="pinned-chip-name">@pin.DisplayPath</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </aside>
+            </div>
 
-</div>
+        </div>
 
 @code {
     // ── Health state ────────────────────────────────────────────────────────────────
@@ -280,7 +278,7 @@
         {
             IRedisClient client = AppState.UseDemoData
                 ? new DemoRedisClient(0)
-                : new SwebKit.Redis.RedisClient(AppState.Config.RedisConfig!.ActiveCache!);
+                : await SwebKit.Redis.RedisClient.CreateAsync(AppState.Config.RedisConfig!.ActiveCache!);
 
             using (client)
             {

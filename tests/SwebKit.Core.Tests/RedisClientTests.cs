@@ -12,7 +12,7 @@ public class RedisClientTests
     // network attempt (null/empty/malformed connection string).
 
     [Fact]
-    public void Ctor_NullConnectionString_Throws()
+    public async Task CreateAsync_NullConnectionString_Throws()
     {
         var entry = new RedisCacheEntry
         {
@@ -20,11 +20,11 @@ public class RedisClientTests
             Database = 0
         };
 
-        Assert.ThrowsAny<Exception>(() => new RedisClient(entry));
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.CreateAsync(entry));
     }
 
     [Fact]
-    public void Ctor_EmptyConnectionString_Throws()
+    public async Task CreateAsync_EmptyConnectionString_Throws()
     {
         var entry = new RedisCacheEntry
         {
@@ -32,11 +32,11 @@ public class RedisClientTests
             Database = 0
         };
 
-        Assert.ThrowsAny<Exception>(() => new RedisClient(entry));
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.CreateAsync(entry));
     }
 
     [Fact]
-    public void Ctor_WhitespaceConnectionString_Throws()
+    public async Task CreateAsync_WhitespaceConnectionString_Throws()
     {
         var entry = new RedisCacheEntry
         {
@@ -44,11 +44,11 @@ public class RedisClientTests
             Database = 0
         };
 
-        Assert.ThrowsAny<Exception>(() => new RedisClient(entry));
+        await Assert.ThrowsAnyAsync<Exception>(() => RedisClient.CreateAsync(entry));
     }
 
     [Fact]
-    public void Ctor_WithLogger_NullConnectionString_Throws()
+    public async Task CreateAsync_WithLogger_NullConnectionString_Throws()
     {
         var entry = new RedisCacheEntry
         {
@@ -56,8 +56,8 @@ public class RedisClientTests
             Database = 0
         };
 
-        Assert.ThrowsAny<Exception>(
-            () => new RedisClient(entry, NullLogger<RedisClient>.Instance));
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => RedisClient.CreateAsync(entry, NullLogger<RedisClient>.Instance));
     }
 
     // ── RedisConfig.Validate() ──

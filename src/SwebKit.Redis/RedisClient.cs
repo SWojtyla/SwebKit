@@ -16,23 +16,25 @@ public sealed class RedisClient : IRedisClient
     private readonly IServer _server;
     private readonly ILogger<RedisClient> _logger;
 
-    public RedisClient(RedisCacheEntry cacheEntry)
-        : this(cacheEntry, NullLogger<RedisClient>.Instance) { }
-
-    public RedisClient(RedisCacheEntry cacheEntry, ILogger<RedisClient> logger)
+    private RedisClient(RedisCacheEntry cacheEntry, ConnectionMultiplexer mux, ILogger<RedisClient> logger)
     {
         _logger = logger;
         _cacheEntry = cacheEntry;
-
-        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
-        options.AbortOnConnectFail = false;
-
-        _mux = ConnectionMultiplexer.Connect(options);
+        _mux = mux;
         _db = _mux.GetDatabase(Math.Clamp(cacheEntry.Database, 0, 15));
 
         var endpoint = _mux.GetEndPoints().FirstOrDefault()
             ?? throw new InvalidOperationException("No Redis endpoints available.");
         _server = _mux.GetServer(endpoint);
+    }
+
+    public static async Task<RedisClient> CreateAsync(RedisCacheEntry cacheEntry, ILogger<RedisClient>? logger = null)
+    {
+        logger ??= NullLogger<RedisClient>.Instance;
+        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
+        options.AbortOnConnectFail = false;
+        var mux = await ConnectionMultiplexer.ConnectAsync(options);
+        return new RedisClient(cacheEntry, mux, logger);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
