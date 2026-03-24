@@ -38,6 +38,7 @@
 - Scoped entity path connection strings are handled to surface only reachable entities.
 - DLQ resubmit path uses peek-lock receive, forward send, and explicit complete.
 - Production protections rely on current environment and are enforced at UI interaction level.
+- Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow), with row density and panel state persisted in local storage.
 
 ## Validation Pointers
 

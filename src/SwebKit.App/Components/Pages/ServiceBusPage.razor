@@ -9,24 +9,28 @@
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 
-<div class="service-bus-page-shell @(_isNamespacePaneCollapsed ? "left-pane-collapsed" : string.Empty)"
-     style="display:flex; height:100%; overflow:hidden;">
+<div class="service-bus-page-shell" style="display:flex; height:100%; overflow:hidden; position:relative;">
     <!-- Left: namespace list + entity trees -->
-    <div class="service-bus-left-pane @(_isNamespacePaneCollapsed ? "collapsed" : string.Empty)"
-         style="border-right:1px solid var(--color-border); display:flex; flex-direction:column; overflow:hidden;">
-
-        <!-- Namespace panel header -->
-        <div
-            style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
-            @if (_isNamespacePaneCollapsed)
+    <div class="sb-entity-panel @(_isNamespacePaneCollapsed ? "collapsed" : string.Empty)">
+        <div class="sb-entity-panel-icon-strip">
+            <button type="button" class="namespace-pane-toggle" title="Expand namespace panel"
+                    aria-label="Expand namespace panel" aria-expanded="false"
+                    @onclick="() => SetNamespacePaneCollapsedAsync(false)">
+                ▶
+            </button>
+            @foreach (var ns in _namespaceStates)
             {
-                <button type="button" class="namespace-pane-toggle" title="Expand namespace panel"
-                        aria-label="Expand namespace panel" aria-expanded="false" @onclick="ToggleNamespacePane">
-                    ▶
+                <button type="button" class="sb-ns-icon-badge" title="@ns.Namespace.Alias"
+                        @onclick="() => ExpandNamespaceAsync(ns)">
+                    @(ns.Namespace.Alias.Length > 0 ? char.ToUpper(ns.Namespace.Alias[0]).ToString() : "?")
                 </button>
             }
-            else
-            {
+        </div>
+
+        <div class="sb-entity-panel-body" style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+            <!-- Namespace panel header -->
+            <div
+                style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
                 <span
                 style="color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Namespaces</span>
                 <div style="display:flex; gap:4px; align-items:center;">
@@ -34,20 +38,20 @@
                     style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
                     @onclick="ToggleAddForm">+ Add</button>
                     <button type="button" class="namespace-pane-toggle" title="Collapse namespace panel"
-                            aria-label="Collapse namespace panel" aria-expanded="true" @onclick="ToggleNamespacePane">
+                            aria-label="Collapse namespace panel" aria-expanded="true"
+                            @onclick="() => SetNamespacePaneCollapsedAsync(true)">
                         ◀
                     </button>
                 </div>
-            }
-        </div>
+            </div>
 
-        @if (!_isNamespacePaneCollapsed)
-        {
             <!-- Add namespace form -->
             @if (_showAddForm)
             {
-                <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
-                    <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection string:
+                <div
+                    style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
+                    <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection
+                        string:
                     </div>
                     <textarea @bind="_addConnStr" rows="3"
                               placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
@@ -131,7 +135,7 @@
                     }
                 }
             </div>
-        }
+        </div>
     </div>
 
     <!-- Right: tabbed content -->
@@ -145,7 +149,7 @@
         else
         {
             <!-- Tab bar -->
-            <div class="tab-bar">
+            <div class="tab-bar sb-tab-bar">
                 @foreach (var tab in _openTabs)
                 {
                     <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
@@ -176,19 +180,50 @@
                 }
                 else
                 {
-                    <div @key="_activeTab.Id" class="service-bus-active-workspace" style="display:flex; flex:1; overflow:hidden;">
-                        <div class="service-bus-message-pane" style="flex:1; overflow:hidden;">
+                    <div @key="_activeTab.Id" class="sb-active-workspace">
+                        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
                             <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                              NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
-                                             OnMessageSelected="OnMessageSelected" />
+                                             IsDetailPaneOpen="IsDetailPaneOpen" OnMessageSelected="OnMessageSelectedAsync"
+                                             OnCloseDetails="CloseDetailPane" />
                         </div>
-                        <div @ref="_splitterRef" class="pane-splitter"></div>
-                        <div @ref="_detailPaneRef" class="details-pane">
-                            <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
-                        </div>
+                        @if (IsDetailPaneOpen)
+                        {
+                            if (_isDetailDrawerOverlay)
+                            {
+                                <div class="sb-detail-drawer overlay">
+                                    <div class="sb-detail-drawer-header">
+                                        <span>Message details</span>
+                                        <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                @onclick="CloseDetailPane">×</button>
+                                    </div>
+                                    <div style="flex:1; overflow:hidden;">
+                                        <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                           OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                           OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                           OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
+                                    <div class="sb-detail-drawer">
+                                        <div class="sb-detail-drawer-header">
+                                            <span>Message details</span>
+                                            <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                    @onclick="CloseDetailPane">×</button>
+                                        </div>
+                                        <div style="flex:1; overflow:hidden;">
+                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                        </div>
+                                    </div>
+                                </ResizablePanel>
+                            }
+                        }
                     </div>
                 }
             }
@@ -215,9 +250,12 @@
     private bool _isNamespacePaneCollapsed;
     private string _addConnStr = string.Empty;
     private string? _addError;
-    private ElementReference _splitterRef;
-    private ElementReference _detailPaneRef;
-    private IJSObjectReference? _splitterHandle;
+    private bool _isDetailDrawerOverlay;
+
+    private const string NamespacePaneStateKey = "sb:namespace-pane-collapsed";
+    private const int DetailOverlayBreakpoint = 1400;
+
+    private bool IsDetailPaneOpen => _activeTab?.SelectedMessage is not null;
 
     // Composer modal state
     private SbMessage? _composerMessage;
@@ -242,11 +280,24 @@
         StateHasChanged();
     }
 
-    private async Task OnMessageSelected(SbMessage? msg)
+    private async Task OnMessageSelectedAsync(SbMessage? msg)
     {
         if (_activeTab is null) return;
         _activeTab.SelectedMessage = msg;
         Selection.SetSelection("service-bus", msg);
+        if (msg is not null)
+        {
+            var width = await JS.InvokeAsync<int>("SwebKitUi.getWindowWidth");
+            _isDetailDrawerOverlay = width > 0 && width < DetailOverlayBreakpoint;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CloseDetailPane()
+    {
+        if (_activeTab is null) return;
+        _activeTab.SelectedMessage = null;
+        Selection.SetSelection("service-bus", null);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -309,19 +360,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_activeTab is not null && !_activeTab.IsDlq && !_activeTab.IsScheduled && _splitterHandle is null)
-        {
-            try
-            {
-                _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
-                "SwebKitSplitter.init", _splitterRef, _detailPaneRef,
-                new { minWidth = 200, maxWidth = 700 });
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[SwebKit] Splitter init failed: {ex.Message}");
-            }
-        }
+        if (!firstRender) return;
+        var stored = await JS.InvokeAsync<string?>("SwebKitUi.getLocalStorage", NamespacePaneStateKey);
+        if (bool.TryParse(stored, out var collapsed))
+            _isNamespacePaneCollapsed = collapsed;
+        if (_isNamespacePaneCollapsed)
+            _showAddForm = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadNamespacesAsync()
@@ -408,13 +453,19 @@
         _addError = null;
     }
 
-    private void ToggleNamespacePane()
+    private async Task SetNamespacePaneCollapsedAsync(bool isCollapsed)
     {
-        _isNamespacePaneCollapsed = !_isNamespacePaneCollapsed;
+        _isNamespacePaneCollapsed = isCollapsed;
         if (_isNamespacePaneCollapsed)
-        {
             _showAddForm = false;
-        }
+        await JS.InvokeVoidAsync("SwebKitUi.setLocalStorage", NamespacePaneStateKey, isCollapsed.ToString().ToLowerInvariant());
+    }
+
+    private async Task ExpandNamespaceAsync(NsState ns)
+    {
+        await SetNamespacePaneCollapsedAsync(false);
+        ns.IsExpanded = true;
+        StateHasChanged();
     }
 
     private async Task AddNamespaceAsync()
@@ -558,15 +609,11 @@
         StateHasChanged();
     }
 
-    private async Task SetActive(SbTab tab)
+    private Task SetActive(SbTab tab)
     {
-        if (_splitterHandle is not null)
-        {
-            try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
-            _splitterHandle = null;
-        }
         _activeTab = tab;
         StateHasChanged();
+        return Task.CompletedTask;
     }
 
     private void CloseTab(SbTab tab)
@@ -604,10 +651,6 @@
         foreach (var id in new[] { "sb-peek", "sb-resubmit", "sb-edit-resubmit" })
             Commands.Unregister(id);
         Selection.SetSelection("service-bus", null);
-        if (_splitterHandle is not null)
-        {
-            try { _ = _splitterHandle.InvokeVoidAsync("dispose"); } catch { }
-        }
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
     }

@@ -11,6 +11,9 @@
     --nav-collapsed-width: 56px;
     --status-bar-height: 28px;
     --top-bar-height: 48px;
+    --sb-entity-panel-width: 260px;
+    --sb-entity-panel-collapsed-width: 48px;
+    --sb-detail-drawer-width: 380px;
 
     /* z-index scale */
     --z-dropdown: 200;
@@ -995,6 +998,148 @@ html, body {
 }
 
 .service-bus-left-pane.collapsed { border-right-width: 1px; }
+
+/* ── Service Bus UI revamp ─────────────────────────────── */
+
+.sb-entity-panel {
+    flex: 0 0 var(--sb-entity-panel-width);
+    min-width: var(--sb-entity-panel-width);
+    max-width: var(--sb-entity-panel-width);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: flex-basis 0.2s ease, min-width 0.2s ease, max-width 0.2s ease;
+}
+
+.sb-entity-panel.collapsed {
+    flex-basis: var(--sb-entity-panel-collapsed-width);
+    min-width: var(--sb-entity-panel-collapsed-width);
+    max-width: var(--sb-entity-panel-collapsed-width);
+}
+
+.sb-entity-panel-icon-strip {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.sb-entity-panel.collapsed .sb-entity-panel-icon-strip { display: flex; }
+.sb-entity-panel.collapsed .sb-entity-panel-body { display: none; }
+
+.sb-ns-icon-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    color: var(--color-nav-servicebus);
+    cursor: pointer;
+}
+
+.sb-ns-icon-badge:hover {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+}
+
+.sb-active-workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+}
+
+.sb-detail-drawer {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-surface);
+    animation: sb-drawer-slide-in 0.18s ease;
+}
+
+.sb-detail-drawer.overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--sb-detail-drawer-width);
+    z-index: var(--z-dropdown);
+    box-shadow: var(--shadow-lg);
+    border-left: 1px solid var(--color-border);
+}
+
+.sb-detail-drawer-header {
+    padding: 6px 8px 6px 12px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-xs);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.sb-detail-close-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    line-height: 1;
+}
+
+.sb-detail-close-btn:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+}
+
+.sb-tab-bar .tab-item {
+    padding: 4px 10px;
+}
+
+.density-toggle {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 2px;
+    background: var(--color-surface-2);
+}
+
+.density-btn {
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.density-btn.active {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+}
+
+.message-grid-host.density-compact fluent-data-grid-row { height: 28px; }
+.message-grid-host.density-default fluent-data-grid-row { height: 36px; }
+.message-grid-host.density-comfort fluent-data-grid-row { height: 44px; }
+
+@keyframes sb-drawer-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
 
 .sb-page-shell {
     display: grid;
