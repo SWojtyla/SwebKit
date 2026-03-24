@@ -49,13 +49,14 @@
                 </div>
             </div>
 
-            <FluentButton Appearance="Appearance.Accent" @onclick="ScanAsync" Disabled="@IsLoading">Scan</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="() => ScanAsync(_cts.Token)" Disabled="@IsLoading">Scan
+            </FluentButton>
             <FluentButton @onclick="RefreshSelectedAsync" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
             </FluentButton>
             <FluentButton @onclick="DeleteSelectedKeyAsync" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
             </FluentButton>
             <FluentButton @onclick="PurgeAllAsync" Disabled="@IsLoading">Purge All</FluentButton>
-            <AutoRefreshToggle OnRefresh="ScanAsync" Paused="@IsLoading" />
+            <AutoRefreshToggle OnRefresh="() => ScanAsync(_cts.Token)" Paused="@IsLoading" />
 
             <span class="connection">@ConnectionLabel</span>
         </div>
@@ -67,7 +68,8 @@
 
         <div class="content-grid">
             <div class="left-column">
-                <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown" @onkeydown:preventDefault="@_preventKeyListKey">
+                <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown"
+                     @onkeydown:preventDefault="@_preventKeyListKey">
                     <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
                                         KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
                                         OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync" />
@@ -98,6 +100,7 @@
     private string Pattern = "*";
     private bool IsLoading;
     private string? ErrorMessage;
+    private CancellationTokenSource _cts = new();
 
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
@@ -172,7 +175,7 @@
             Label = "Scan Keys",
             Category = "Redis",
             AreaScope = "redis",
-            Execute = () => ScanAsync()
+            Execute = () => ScanAsync(_cts.Token)
         });
         Commands.Register(new AppCommand
         {
@@ -204,9 +207,9 @@
         switch (e.Key)
         {
             case "ArrowDown": SelectKeyRelative(+1); break;
-            case "ArrowUp":   SelectKeyRelative(-1); break;
-            case "Escape":    SelectedKey = null; Selection.SetSelection("redis", null); StateHasChanged(); break;
-            case "Enter":     if (SelectedKey is not null) await RefreshSelectedAsync(); break;
+            case "ArrowUp": SelectKeyRelative(-1); break;
+            case "Escape": SelectedKey = null; Selection.SetSelection("redis", null); StateHasChanged(); break;
+            case "Enter": if (SelectedKey is not null) await RefreshSelectedAsync(); break;
         }
     }
 
@@ -220,7 +223,9 @@
         _ = RefreshSelectedAsync();
     }
 
-    protected override void OnParametersSet()
+    private string? _loadedCacheId;
+
+    protected override async Task OnParametersSetAsync()
     {
         // Initialize separator from config
         CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? "-";
@@ -233,14 +238,25 @@
             SelectedCacheId = config.ActiveCacheId ?? config.Caches.FirstOrDefault()?.Id ?? "";
         }
 
-        // Fire-and-forget so the UI renders immediately with loading state
-        _ = ConnectAndScanAsync();
+        // PERF-10: Guard — only reload if the cache selection actually changed (BL-3, BL-5)
+        if (string.Equals(_loadedCacheId, SelectedCacheId, StringComparison.Ordinal))
+            return;
+
+        _loadedCacheId = SelectedCacheId; // Set guard BEFORE await (BL-3)
+
+        // PERF-16: Cancel any in-flight scan before starting new connection
+        _cts.Cancel();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+
+        await ConnectAndScanAsync(_cts.Token);
     }
 
-    private async Task ConnectAndScanAsync()
+    private async Task ConnectAndScanAsync(CancellationToken ct = default)
     {
         await ConnectAsync();
-        await ScanAsync();
+        ct.ThrowIfCancellationRequested();
+        await ScanAsync(ct);
     }
 
     private async Task ConnectAsync()
@@ -277,7 +293,7 @@
         }
     }
 
-    private async Task ScanAsync()
+    private async Task ScanAsync(CancellationToken ct = default)
     {
         if (Client is null)
             return;
@@ -298,6 +314,7 @@
 
             do
             {
+                ct.ThrowIfCancellationRequested();
                 var result = await Client.ScanKeysAsync(pattern, cursor, 500);
                 var newKeys = result.Keys.Where(k => seen.Add(k)).ToList();
                 Keys.AddRange(newKeys);
@@ -307,17 +324,22 @@
                     break;
             } while (true);
 
+            ct.ThrowIfCancellationRequested();
             await LoadVisibleKeyTypesAsync(Keys);
             RebuildNamespaceTree();
         }
+        catch (OperationCanceledException) { return; } // CS-2: cancelled — silently abort
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
         }
         finally
         {
-            IsLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!ct.IsCancellationRequested)
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -648,6 +670,8 @@
 
     public void Dispose()
     {
+        _cts.Cancel();
+        _cts.Dispose();
         DisposeClient();
         foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
             Commands.Unregister(id);

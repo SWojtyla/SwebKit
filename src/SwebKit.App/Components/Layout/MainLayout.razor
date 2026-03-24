@@ -11,39 +11,46 @@
                    Mode="@(_currentTheme == "dark" ? DesignThemeModes.Dark : DesignThemeModes.Light)" />
 
 <CascadingValue Value="AppState">
-<CascadingValue Value="this" Name="Layout">
-    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <CascadingValue Value="this" Name="Layout">
+        <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
-        <TopBar OnNavToggle="ToggleNav" />
-        @if (AppState.UseDemoData)
-        {
-            <div class="demo-banner">
-                <span>&#9888; DEMO MODE — data is synthetic. No live connections are used.</span>
-                <button class="demo-banner-disable" @onclick="DisableDemoAsync">Disable</button>
-            </div>
-        }
-        <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
-        <main id="main-content" class="main-content" tabindex="-1">
-            @Body
-        </main>
-        <StatusBar />
+        <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
+            <TopBar OnNavToggle="ToggleNav" />
+            @if (AppState.UseDemoData)
+            {
+                <div class="demo-banner">
+                    <span>&#9888; DEMO MODE — data is synthetic. No live connections are used.</span>
+                    <button class="demo-banner-disable" @onclick="DisableDemoAsync">Disable</button>
+                </div>
+            }
+            <LeftNav IsExpanded="IsNavExpanded" CurrentArea="@CurrentArea" OnNavigate="NavigateTo" />
+            <main id="main-content" class="main-content" tabindex="-1">
+                @if (AppState.IsInitialized)
+                {
+                    @Body
+                }
+                else
+                {
+                    <LoadingSpinner Message="Starting SwebKit\u2026" />
+                }
+            </main>
+            <StatusBar />
 
-        @* Overlays must live inside the themed container so CSS variables resolve correctly *@
-        @if (IsCommandPaletteOpen)
-        {
-            <CommandPalette CurrentArea="@CurrentArea"
-                            OnClose="@(() => { IsCommandPaletteOpen = false; StateHasChanged(); })" />
-        }
+            @* Overlays must live inside the themed container so CSS variables resolve correctly *@
+            @if (IsCommandPaletteOpen)
+            {
+                <CommandPalette CurrentArea="@CurrentArea"
+                                OnClose="@(() => { IsCommandPaletteOpen = false; StateHasChanged(); })" />
+            }
 
-        @if (_isShortcutsPanelOpen)
-        {
-            <KeyboardShortcutsPanel OnClose="@(() => { _isShortcutsPanelOpen = false; StateHasChanged(); })" />
-        }
+            @if (_isShortcutsPanelOpen)
+            {
+                <KeyboardShortcutsPanel OnClose="@(() => { _isShortcutsPanelOpen = false; StateHasChanged(); })" />
+            }
 
-        <NotificationToast />
-    </div>
-</CascadingValue>
+            <NotificationToast />
+        </div>
+    </CascadingValue>
 </CascadingValue>
 
 @code {
@@ -56,7 +63,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await AppState.InitializeAsync();
+        await AppState.InitializeEssentialsAsync();
+        // Fire full init in background — shell renders immediately
+        _ = InitializeInBackgroundAsync();
+    }
+
+    private async Task InitializeInBackgroundAsync()
+    {
+        try
+        {
+            await AppState.InitializeAsync();
+            await InvokeAsync(StateHasChanged); // BL-2: dispatch on Blazor thread
+        }
+        catch (OperationCanceledException)
+        {
+            throw; // CS-2: never swallow cancellation
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[SwebKit] Background initialization failed: {ex.Message}");
+        }
     }
 
     private async Task DisableDemoAsync()
@@ -113,7 +139,10 @@
         Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged += StateHasChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
+        AppState.Initialized += OnAppStateInitialized;
     }
+
+    private void OnAppStateInitialized() => InvokeAsync(StateHasChanged);
 
     private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
 
@@ -285,16 +314,16 @@
                 _isShortcutsPanelOpen = !_isShortcutsPanelOpen;
                 IsCommandPaletteOpen = false;
                 break;
-            case "NavDashboard":   NavigateTo("dashboard"); break;
-            case "NavServiceBus":  NavigateTo("service-bus"); break;
-            case "NavAks":         NavigateTo("aks"); break;
-            case "NavRedis":       NavigateTo("redis"); break;
-            case "NavStorage":     NavigateTo("storage"); break;
-            case "NavReleases":        NavigateTo("pipelines");       break;
-            case "NavObservability":   NavigateTo("observability");  break;
-            case "NavSettings":    NavigateTo("settings"); break;
-            case "TabNext":  Tabs.SetActive(GetNextTabId(1) ?? ""); break;
-            case "TabPrev":  Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
+            case "NavDashboard": NavigateTo("dashboard"); break;
+            case "NavServiceBus": NavigateTo("service-bus"); break;
+            case "NavAks": NavigateTo("aks"); break;
+            case "NavRedis": NavigateTo("redis"); break;
+            case "NavStorage": NavigateTo("storage"); break;
+            case "NavReleases": NavigateTo("pipelines"); break;
+            case "NavObservability": NavigateTo("observability"); break;
+            case "NavSettings": NavigateTo("settings"); break;
+            case "TabNext": Tabs.SetActive(GetNextTabId(1) ?? ""); break;
+            case "TabPrev": Tabs.SetActive(GetNextTabId(-1) ?? ""); break;
             case "TabClose": if (Tabs.ActiveTab is not null) Tabs.CloseTab(Tabs.ActiveTab.Id); break;
             case "Escape":
                 IsCommandPaletteOpen = false;
@@ -303,9 +332,9 @@
             case "Refresh": Events.Publish(new RefreshRequestedEvent(CurrentArea)); break;
             case "FocusFilter": Events.Publish(new FocusFilterRequestedEvent(CurrentArea)); break;
             case "SbEditResubmit": Events.Publish(new ServiceBusShortcutEvent("Edit")); break;
-            case "SbReplay":       Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
-            case "SbSchedule":     Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
-            case "SbPeek":         Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
+            case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
+            case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
+            case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -327,6 +356,7 @@
         Events.Unsubscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged -= StateHasChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
+        AppState.Initialized -= OnAppStateInitialized;
         _jsRef?.Dispose();
     }
 }

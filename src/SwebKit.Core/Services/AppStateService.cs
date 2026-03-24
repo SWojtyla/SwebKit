@@ -10,6 +10,7 @@ public class AppStateService
     private readonly ProfileRepository _profiles;
     private readonly UiStateRepository _uiState;
     private readonly IAppEventBus _events;
+    private readonly TaskCompletionSource _initializedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public AppStateService(ProfileRepository profiles, UiStateRepository uiState, IAppEventBus events)
     {
@@ -25,14 +26,32 @@ public class AppStateService
 
     public bool UseDemoData { get; private set; }
 
+    public bool IsInitialized { get; private set; }
+
+    /// <summary>Raised when full initialization completes so UI components can re-render.</summary>
+    public event Action? Initialized;
+
     /// <summary>Raised when <see cref="UseDemoData"/> changes so layout components can re-render.</summary>
     public event Action? DemoModeChanged;
 
+    /// <summary>Returns a task that completes when <see cref="InitializeAsync"/> has finished.</summary>
+    public Task WhenInitializedAsync() => _initializedTcs.Task;
+
+    /// <summary>Sets up essential defaults with no disk I/O. Placeholder for future two-phase init.</summary>
+    public Task InitializeEssentialsAsync() => Task.CompletedTask;
+
     public async Task InitializeAsync()
     {
+        if (IsInitialized)
+            return;
+
         await _profiles.LoadAsync();
         await _uiState.LoadAsync();
         UseDemoData = _uiState.State.UseDemoData;
+
+        IsInitialized = true;
+        _initializedTcs.TrySetResult();
+        Initialized?.Invoke();
     }
 
     public async Task SetDemoModeAsync(bool enabled)

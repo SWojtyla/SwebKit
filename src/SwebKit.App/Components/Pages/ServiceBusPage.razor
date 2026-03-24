@@ -371,21 +371,34 @@
 
     private async Task LoadNamespacesAsync()
     {
-        // Build namespace states from global list and connect each
+        // PERF-8: Build all states immediately so the UI shows namespace list with loading indicators
         var incoming = AppState.ServiceBusNamespaces;
-        var tasks = incoming.Select(async ns =>
+
+        _namespaceStates = incoming.Select(ns => new NsState
         {
-            var state = new NsState { Namespace = ns, IsExpanded = true, IsConnecting = true };
-            state.Client = await TryConnectAsync(ns, state);
-            return state;
-        });
-        _namespaceStates = (await Task.WhenAll(tasks)).ToList();
+            Namespace = ns,
+            IsExpanded = true,
+            IsConnecting = true
+        }).ToList();
 
         if (AppState.UseDemoData)
             AddDemoNamespace();
 
-        ReportConnectionState();
         StateHasChanged();
+
+        // Connect each namespace independently — render as each completes
+        var tasks = _namespaceStates
+            .Where(s => s.Client is null && s.ConnectionError is null)
+            .Select(async state =>
+            {
+                state.Client = await TryConnectAsync(state.Namespace, state);
+                await InvokeAsync(StateHasChanged); // BL-2
+            });
+
+        await Task.WhenAll(tasks);
+
+        ReportConnectionState();
+        await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private void ReportConnectionState()

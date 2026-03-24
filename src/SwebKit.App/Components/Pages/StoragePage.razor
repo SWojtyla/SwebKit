@@ -16,72 +16,69 @@
     {
         <div class="storage-not-configured">
             <p style="margin:0 0 8px;">Storage is not configured for this environment.</p>
-            <p style="margin:0;">Go to <strong>Settings</strong> and configure the <strong>Storage (Azure Blob)</strong> section.</p>
-        </div>
-    }
+            <p style="margin:0;">Go to <strong>Settings</strong> and configure the <strong>Storage (Azure Blob)</strong>
+                section.</p>
+            </div>
+        }
     else
-    {
-        @* ── Account selector (only when >1 account) ── *@
-        @if (_storageAccounts.Count > 1)
         {
-            <div class="storage-account-bar">
-                <span>Account:</span>
-                <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
-                    @foreach (var acc in _storageAccounts)
-                    {
-                        <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
-                    }
-                </select>
-            </div>
-        }
-
-        @if (_storageClient is null)
-        {
-            <div class="storage-not-configured">
-                Selected storage account has invalid configuration.
-            </div>
-        }
-        else
-        {
-            <div class="storage-body">
-                @* ── Left pane: containers ── *@
-                <div class="storage-container-pane">
-                    <StorageContainerTree Client="_storageClient"
-                                          SelectedContainer="_selectedContainer"
-                                          SelectedContainerChanged="OnContainerSelectedAsync" />
+            @* ── Account selector (only when >1 account) ── *@
+            @if (_storageAccounts.Count > 1)
+            {
+                <div class="storage-account-bar">
+                    <span>Account:</span>
+                    <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
+                        @foreach (var acc in _storageAccounts)
+                        {
+                            <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
+                        }
+                    </select>
                 </div>
+            }
 
-                @* ── Right pane ── *@
-                <div class="storage-blob-pane">
-                    @if (_selectedContainer is null)
-                    {
-                        <div class="storage-not-configured text-muted text-sm">Select a container.</div>
-                    }
-                    else
-                    {
-                        <div style="flex:1; display:flex; height:100%; overflow:hidden;">
-                            <div style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
-                                <StorageBlobList Client="_storageClient"
-                                                 ContainerName="@_selectedContainer"
-                                                 SelectedBlob="_selectedBlob"
-                                                 SelectedBlobChanged="OnBlobSelectedAsync" />
-                            </div>
-                            @if (_selectedBlob is not null)
-                            {
-                                <div style="width:480px; flex-shrink:0; height:100%; overflow:hidden;">
-                                    <BlobDetailPane Client="_storageClient"
-                                                    ContainerName="@_selectedContainer"
-                                                    Blob="_selectedBlob" />
+            @if (_storageClient is null)
+            {
+                <div class="storage-not-configured">
+                    Selected storage account has invalid configuration.
+                </div>
+            }
+            else
+            {
+                <div class="storage-body">
+                    @* ── Left pane: containers ── *@
+                    <div class="storage-container-pane">
+                        <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
+                                              SelectedContainerChanged="OnContainerSelectedAsync" />
+                    </div>
+
+                    @* ── Right pane ── *@
+                    <div class="storage-blob-pane">
+                        @if (_selectedContainer is null)
+                        {
+                            <div class="storage-not-configured text-muted text-sm">Select a container.</div>
+                        }
+                        else
+                        {
+                            <div style="flex:1; display:flex; height:100%; overflow:hidden;">
+                                <div
+                                    style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
+                                    <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
+                                                     SelectedBlob="_selectedBlob" SelectedBlobChanged="OnBlobSelectedAsync" />
                                 </div>
-                            }
-                        </div>
-                    }
+                                @if (_selectedBlob is not null)
+                                {
+                                    <div style="width:480px; flex-shrink:0; height:100%; overflow:hidden;">
+                                        <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
-            </div>
+            }
         }
-    }
 
-</div>
+    </div>
 
 @code {
     private IStorageClient? _storageClient;
@@ -89,6 +86,7 @@
     private string? _selectedAccountId;
     private string? _selectedContainer;
     private StorageBlobItem? _selectedBlob;
+    private CancellationTokenSource _cts = new();
 
     protected override void OnInitialized()
     {
@@ -128,6 +126,8 @@
 
     public void Dispose()
     {
+        _cts.Cancel();
+        _cts.Dispose();
         foreach (var id in new[] { "storage-refresh", "storage-download-blob", "storage-copy-sas" })
             Commands.Unregister(id);
         Selection.SetSelection("storage", null);
