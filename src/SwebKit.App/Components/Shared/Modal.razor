@@ -19,17 +19,40 @@
 
     private ElementReference _containerRef;
     private bool _trapApplied;
+    private bool _wasOpen;
+    private IJSObjectReference? _savedFocusRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!IsOpen || _trapApplied) return;
         _trapApplied = true;
-        try { await JS.InvokeVoidAsync("SwebKit.trapFocus", _containerRef); }
+        try
+        {
+            _savedFocusRef = await JS.InvokeAsync<IJSObjectReference>("SwebKit.saveFocus");
+            await JS.InvokeVoidAsync("SwebKit.trapFocus", _containerRef);
+        }
         catch { }
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+        }
+        else if (!IsOpen && _wasOpen)
+        {
+            _wasOpen = false;
+            if (_savedFocusRef is not null)
+            {
+                try { await JS.InvokeVoidAsync("SwebKit.restoreFocus", _savedFocusRef); }
+                catch { }
+                try { await _savedFocusRef.DisposeAsync(); }
+                catch { }
+                _savedFocusRef = null;
+            }
+        }
+
         if (!IsOpen) _trapApplied = false;
     }
 
@@ -39,5 +62,10 @@
     {
         try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _containerRef); }
         catch { }
+        if (_savedFocusRef is not null)
+        {
+            try { await _savedFocusRef.DisposeAsync(); }
+            catch { }
+        }
     }
 }

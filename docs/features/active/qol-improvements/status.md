@@ -5,7 +5,7 @@
 
 ## Current state
 
-UI Shell Wave 0–1 items implemented. Area-specific plans ready for implementation.
+UI Shell Waves 0–3 implemented. Area-specific plans progressing (RDS-5, OBS-5, OBS-14 done).
 
 ## Implementation documents
 
@@ -34,8 +34,19 @@ UI Shell Wave 0–1 items implemented. Area-specific plans ready for implementat
 - [x] **UI-3** — Prefix-boosted fuzzy search (+3 bonus for label-start matches in `CommandPalette`)
 - [x] **UI-10** — Retry with exponential backoff on `ErrorCallout` (0→1s→2s→4s, attempt counter)
 - [x] **UI-11** — Error message expansion ("Show more" toggle on `NotificationToast` detail)
+- [x] **UI-12** — Consistent copy feedback (`ShowSuccess("Copied!")` across 6 components)
+- [x] **UI-20** — System dark/light preference auto-detect (OS `prefers-color-scheme` on first launch)
+- [x] **UI-22** — Color-blind safe status indicators (✓/✗/? symbols in connection dots)
 - [x] **UI-23** — Visible focus rings (`:focus-visible` with `--color-accent` outline)
 - [x] **UI-24** — Demo banner CSS variable (`#d97706` → `var(--color-warning)`)
+- [x] **SB-15** — Detail pane flash fix (already had null guard — verified)
+- [x] **OBS-14** — Copy feedback on stack trace copy (`ShowSuccess("Copied!")`)
+- [x] **UI-1** — Observability command palette commands (5 commands: refresh, run query, switch to logs/failures/overview)
+- [x] **UI-5** — Grid keyboard nav completeness (Redis and Storage already had ↑↓/Enter/Escape — verified)
+- [x] **UI-6** — Focus restoration on modal close (`Modal.razor` + `ConfirmDialog.razor` save/restore via JS)
+- [x] **UI-15** — Unsaved changes detection + navigation guard (snapshot-based dirty tracking on `SettingsPage`)
+- [x] **RDS-5** — Copy key name button (📋 icon in `RedisKeyDetail` header with clipboard + toast)
+- [x] **OBS-5** — MaxRowsPerQuery in Settings UI (already present in `SettingsPage` observability section — verified)
 
 ## Promoted items
 
@@ -43,6 +54,7 @@ UI Shell Wave 0–1 items implemented. Area-specific plans ready for implementat
 
 ## Blockers
 
-- `ISelectionContext` (UI-7) landed — UI-1 and UI-2 are now unblocked
+- All UI-1/UI-2 prerequisites landed — command palette coverage complete for all existing pages
 - `pipelines-revamp` active feature takes precedence over REL items for Releases
 - Storage bulk download (STG-3) has no blockers; upload/delete are explicitly out of scope
+- ReleasesPage does not exist yet — REL items and UI-1 for Releases deferred

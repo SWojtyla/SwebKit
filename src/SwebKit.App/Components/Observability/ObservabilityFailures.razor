@@ -4,7 +4,9 @@
 <div class="obs-failures">
     @if (_isLoading && !_exceptions.Any())
     {
-        <div class="obs-loading"><FluentProgressRing /> Loading failures…</div>
+        <div class="obs-loading">
+            <FluentProgressRing /> Loading failures…
+        </div>
     }
     else if (_error is not null)
     {
@@ -72,7 +74,9 @@
                     <div class="obs-detail-section-title">Recent Occurrences</div>
                     @if (_samplesLoading)
                     {
-                        <div class="obs-loading-inline"><FluentProgressRing Style="width:14px;height:14px" /></div>
+                        <div class="obs-loading-inline">
+                            <FluentProgressRing Style="width:14px;height:14px" />
+                        </div>
                     }
                     else
                     {
@@ -98,6 +102,7 @@
 </div>
 
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
@@ -177,6 +182,7 @@
     {
         if (_selected?.SampleStackTrace is null) return;
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selected.SampleStackTrace);
+        Notifications.ShowSuccess("Copied!");
     }
 
     private async Task DrillToLogs()

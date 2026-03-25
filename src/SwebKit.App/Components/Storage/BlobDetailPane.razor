@@ -291,6 +291,7 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "URL copied.";
         }
@@ -327,6 +328,7 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", _displayContent);
+            Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "Content copied.";
         }

@@ -8,9 +8,29 @@
     gap: var(--spacing-xs);
 }
 
+.key-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
 .key-name {
     font-family: Consolas, monospace;
     font-size: var(--font-size-md);
+}
+
+.copy-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    padding: 2px 4px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.copy-btn:hover {
+    color: var(--color-text);
 }
 
 .kv {

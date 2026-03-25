@@ -22,7 +22,12 @@
                     ? $"{label}: {s.ErrorMessage}"
                     : $"{label}: {s.State}";
                 <span class="connection-indicator" title="@tooltip">
-                    <span class="connection-dot @css"></span>
+                    <span class="connection-dot @css">@(s.State switch
+                    {
+                        ConnectionState.Connected => "✓",
+                        ConnectionState.Error => "✗",
+                        _ => "?"
+                    })</span>
                     <span class="connection-label">@label</span>
                 </span>
             }
@@ -106,10 +111,17 @@
     }
 
     .connection-dot {
-        width: 6px;
-        height: 6px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        font-weight: 700;
+        line-height: 1;
+        color: #fff;
     }
 
     .dot-connected { background: var(--color-success, #22c55e); }

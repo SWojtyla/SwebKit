@@ -107,16 +107,22 @@
             Console.Error.WriteLine($"[SwebKit] Keyboard shortcuts registration failed: {ex.Message}");
         }
 
-        // Load persisted theme preference (BL-6: must run in OnAfterRenderAsync)
+        // Load persisted theme preference, fallback to OS preference (BL-6: must run in OnAfterRenderAsync)
         try
         {
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "swebkit-ui-theme");
             if (!string.IsNullOrWhiteSpace(stored))
+            {
                 _currentTheme = stored;
+            }
+            else
+            {
+                _currentTheme = await JS.InvokeAsync<string>("SwebKit.getSystemTheme");
+            }
         }
         catch
         {
-            // localStorage unavailable — keep default dark theme
+            // localStorage/matchMedia unavailable — keep default dark theme
         }
 
         StateHasChanged();

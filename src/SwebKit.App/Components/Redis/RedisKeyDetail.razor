@@ -1,6 +1,8 @@
 @using SwebKit.Redis
 @using System.Globalization
 @using SwebKit.Core.Services
+@inject IJSRuntime JS
+@inject INotificationService Notifications
 @implements IDisposable
 
 <div class="redis-key-detail">
@@ -15,13 +17,20 @@
     else
     {
         <div class="meta">
-            <div class="key-name">@KeyInfo.Key</div>
+            <div class="key-name-row">
+                <div class="key-name">@KeyInfo.Key</div>
+                <button class="copy-btn" title="Copy key name" @onclick="CopyKeyNameAsync">
+                    📋
+                </button>
+            </div>
             <div class="kv">Type: @KeyInfo.Type</div>
             <div class="kv @GetTtlClass()">TTL: @TtlFormatter.FormatHuman(_displayedTtl)</div>
             @if (_displayedTtl.HasValue && _displayedTtl.Value > TimeSpan.Zero)
             {
                 <div class="ttl-bar-wrapper">
-                    <div class="ttl-bar-fill" style="width: @(TtlFormatter.GetBarWidthPercent(_displayedTtl, _originalTtl).ToString("F1", CultureInfo.InvariantCulture))%; background-color: @TtlFormatter.GetColor(_displayedTtl, _originalTtl);"></div>
+                    <div class="ttl-bar-fill"
+                         style="width: @(TtlFormatter.GetBarWidthPercent(_displayedTtl, _originalTtl).ToString("F1", CultureInfo.InvariantCulture))%; background-color: @TtlFormatter.GetColor(_displayedTtl, _originalTtl);">
+                    </div>
                 </div>
             }
             @if (KeyInfo.MemoryBytes.HasValue)
@@ -64,36 +73,39 @@
         {
             <table class="table">
                 <thead>
-                <tr><th>Field</th><th>Value</th></tr>
+                    <tr>
+                        <th>Field</th>
+                        <th>Value</th>
+                    </tr>
                 </thead>
                 <tbody>
-                @foreach (var field in HashFields)
-                {
-                    <tr>
-                        <td>@field.Field</td>
-                        <td>
-                            @if (IsEditingHash && EditingHashField == field.Field)
-                            {
-                                <input class="hash-editor" type="text" @bind="HashEditorValue" />
-                            }
-                            else
-                            {
-                                @field.Value
-                            }
-                        </td>
-                        <td class="hash-actions">
-                            @if (IsEditingHash && EditingHashField == field.Field)
-                            {
-                                <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
-                                <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
-                            }
-                            else
-                            {
-                                <FluentButton @onclick="() => BeginHashFieldEdit(field.Field, field.Value)">Edit</FluentButton>
-                            }
-                        </td>
-                    </tr>
-                }
+                    @foreach (var field in HashFields)
+                    {
+                        <tr>
+                            <td>@field.Field</td>
+                            <td>
+                                @if (IsEditingHash && EditingHashField == field.Field)
+                                {
+                                    <input class="hash-editor" type="text" @bind="HashEditorValue" />
+                                }
+                                else
+                                {
+                                    @field.Value
+                                }
+                            </td>
+                            <td class="hash-actions">
+                                @if (IsEditingHash && EditingHashField == field.Field)
+                                {
+                                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
+                                    <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                                }
+                                else
+                                {
+                                    <FluentButton @onclick="() => BeginHashFieldEdit(field.Field, field.Value)">Edit</FluentButton>
+                                }
+                            </td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         }
@@ -110,13 +122,19 @@
         {
             <table class="table">
                 <thead>
-                <tr><th>Member</th><th>Score</th></tr>
+                    <tr>
+                        <th>Member</th>
+                        <th>Score</th>
+                    </tr>
                 </thead>
                 <tbody>
-                @foreach (var item in SortedSetItems)
-                {
-                    <tr><td>@item.Member</td><td>@item.Score</td></tr>
-                }
+                    @foreach (var item in SortedSetItems)
+                    {
+                        <tr>
+                            <td>@item.Member</td>
+                            <td>@item.Score</td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         }
@@ -294,6 +312,13 @@
         {
             // Expected on disposal or key change
         }
+    }
+
+    private async Task CopyKeyNameAsync()
+    {
+        if (string.IsNullOrEmpty(KeyInfo?.Key)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", KeyInfo.Key);
+        Notifications.ShowSuccess("Copied!");
     }
 
     public void Dispose()

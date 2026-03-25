@@ -9,8 +9,7 @@
             @foreach (var preset in _presets)
             {
                 <button class="obs-preset-item @(_activePresetId == preset.Id ? "active" : "")"
-                        @onclick="() => ApplyPreset(preset)"
-                        title="@preset.Description">
+                        @onclick="() => ApplyPreset(preset)" title="@preset.Description">
                     @preset.Name
                 </button>
             }
@@ -29,7 +28,8 @@
                 }
             }
 
-            <button class="obs-save-query-btn" @onclick="SaveCurrentQuery" disabled="@string.IsNullOrWhiteSpace(_query)">
+            <button class="obs-save-query-btn" @onclick="SaveCurrentQuery"
+                    disabled="@string.IsNullOrWhiteSpace(_query)">
                 + Save Query
             </button>
         </div>
@@ -37,15 +37,10 @@
         <!-- Right: editor + results -->
         <div class="obs-logs-main">
             <div class="obs-query-toolbar">
-                <textarea class="obs-query-editor"
-                          @bind="_query" @bind:event="oninput"
-                          rows="5"
-                          placeholder="Enter KQL query… (Ctrl+Enter to run)"
-                          @onkeydown="OnEditorKeyDown" />
+                <textarea class="obs-query-editor" @bind="_query" @bind:event="oninput" rows="5"
+                          placeholder="Enter KQL query… (Ctrl+Enter to run)" @onkeydown="OnEditorKeyDown" />
                 <div class="obs-query-actions">
-                    <FluentButton Appearance="Appearance.Accent"
-                                  @onclick="RunQueryAsync"
-                                  Disabled="_isRunning">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="RunQueryAsync" Disabled="_isRunning">
                         ▶ Run
                     </FluentButton>
                     @if (_result is not null)
@@ -57,7 +52,9 @@
 
             @if (_isRunning)
             {
-                <div class="obs-loading"><FluentProgressRing /> Running query…</div>
+                <div class="obs-loading">
+                    <FluentProgressRing /> Running query…
+                </div>
             }
             else if (_error is not null)
             {
@@ -111,6 +108,7 @@
 }
 
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
@@ -202,6 +200,7 @@
                 return v.Contains(',') || v.Contains('"') ? $"\"{v.Replace("\"", "\"\"")}\"" : v;
             }))));
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join("\n", lines));
+        Notifications.ShowSuccess("Copied!");
     }
 
     private void SaveCurrentQuery()

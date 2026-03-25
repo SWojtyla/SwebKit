@@ -94,7 +94,7 @@
                                                                 style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                                                 @(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
                                                                 <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ?
-                                                                                                                                                                "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
+                                                                                                                                                                                                                                    "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
                                                                 </tr>
                                                             }
                                                         </tbody>
@@ -298,6 +298,7 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "URL copied to clipboard.";
         }

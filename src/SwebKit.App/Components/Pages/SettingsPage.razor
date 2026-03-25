@@ -1,6 +1,9 @@
 @page "/settings"
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
 
 <div class="settings-shell">
 
@@ -16,18 +19,15 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
             Service Bus
         </button>
-        <button class="settings-nav-item @(_active == "aks" ? "active" : "")"
-                @onclick="@(() => _active = "aks")">
+        <button class="settings-nav-item @(_active == "aks" ? "active" : "")" @onclick="@(() => _active = "aks")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="18px" />
             AKS
         </button>
-        <button class="settings-nav-item @(_active == "redis" ? "active" : "")"
-                @onclick="@(() => _active = "redis")">
+        <button class="settings-nav-item @(_active == "redis" ? "active" : "")" @onclick="@(() => _active = "redis")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="18px" />
             Redis
         </button>
-        <button class="settings-nav-item @(_active == "devops" ? "active" : "")"
-                @onclick="@(() => _active = "devops")">
+        <button class="settings-nav-item @(_active == "devops" ? "active" : "")" @onclick="@(() => _active = "devops")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="18px" />
             DevOps
         </button>
@@ -45,12 +45,19 @@
 
     @* ── Right content well ── *@
     <div class="settings-content">
+        @if (IsDirty)
+        {
+            <div class="settings-unsaved-banner" role="status">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Width="16px" />
+                Unsaved changes
+            </div>
+        }
+
         @switch (_active)
         {
             case "appearance":
                 <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Appearance</h3>
-                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme"
-                                    OnThemeChanged="ApplyThemeAsync" />
+                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
                 break;
 
             case "servicebus":
@@ -110,8 +117,7 @@
                             Caps the number of rows returned by any KQL query. Lower values reduce Azure Monitor query costs.
                             Range: 100 – 5000.
                         </p>
-                        <input class="settings-input" type="number" min="100" max="5000"
-                               value="@obsCfg.MaxRowsPerQuery"
+                        <input class="settings-input" type="number" min="100" max="5000" value="@obsCfg.MaxRowsPerQuery"
                                @onchange="async e => { obsCfg.MaxRowsPerQuery = Math.Clamp(int.TryParse(e.Value?.ToString(), out var v) ? v : 500, 100, 5000); await SaveAsync(); }" />
                     </div>
                 }
@@ -131,20 +137,51 @@
 
     private string _active = "appearance";
     private string? _savedMessage;
+    private string _configSnapshot = string.Empty;
+    private IDisposable? _navGuard;
+
+    private bool IsDirty => _configSnapshot.Length > 0
+        && _configSnapshot != CurrentConfigJson();
+
+    protected override void OnInitialized()
+    {
+        _configSnapshot = CurrentConfigJson();
+        _navGuard = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!IsDirty)
+            return;
+
+        var leave = await JS.InvokeAsync<bool>("confirm",
+            "You have unsaved changes. Leave this page?");
+        if (!leave)
+            context.PreventNavigation();
+    }
+
+    private string CurrentConfigJson() =>
+        System.Text.Json.JsonSerializer.Serialize(AppState.Config);
 
     private async Task SaveAsync()
     {
         await AppState.SaveConfigAsync();
+        _configSnapshot = CurrentConfigJson();
         _savedMessage = "Settings saved.";
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         await Task.Delay(3000);
         _savedMessage = null;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ApplyThemeAsync(string theme)
     {
         if (_layout is not null)
             await _layout.SetThemeAsync(theme);
+    }
+
+    public void Dispose()
+    {
+        _navGuard?.Dispose();
     }
 }
