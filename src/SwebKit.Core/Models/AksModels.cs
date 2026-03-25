@@ -43,10 +43,17 @@ public class PodInfo
     public required string Namespace { get; set; }
     public string Phase { get; set; } = "Unknown";
     public bool Ready { get; set; }
+    public int ReadyContainers { get; set; }
+    public int TotalContainers { get; set; }
+    public int RestartCount { get; set; }
+    public DateTimeOffset? LastRestartTime { get; set; }
+    public string? LastRestartReason { get; set; }
+    public string? PodIP { get; set; }
     public string? NodeName { get; set; }
     public DateTimeOffset? StartTime { get; set; }
     public List<string> Containers { get; set; } = [];
     public Dictionary<string, string> Labels { get; set; } = [];
+    public string ReadyDisplay => $"{ReadyContainers}/{TotalContainers}";
 }
 
 public class KubernetesEvent

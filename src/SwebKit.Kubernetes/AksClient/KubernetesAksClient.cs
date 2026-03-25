@@ -103,16 +103,32 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     public async Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
     {
         var result = await _client.CoreV1.ListNamespacedPodAsync(ns, labelSelector: labelSelector, cancellationToken: ct);
-        return result.Items.Select(p => new PodInfo
+        return result.Items.Select(p =>
         {
-            Name = p.Metadata.Name,
-            Namespace = p.Metadata.NamespaceProperty ?? ns,
-            Phase = p.Status?.Phase ?? "Unknown",
-            Ready = p.Status?.ContainerStatuses?.All(c => c.Ready) ?? false,
-            NodeName = p.Spec?.NodeName,
-            StartTime = p.Status?.StartTime.HasValue == true ? new DateTimeOffset(p.Status.StartTime.Value) : null,
-            Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
-            Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
+            var containerStatuses = p.Status?.ContainerStatuses;
+            var lastTerminated = containerStatuses?
+                .Select(c => c.LastState?.Terminated)
+                .Where(t => t?.FinishedAt is not null)
+                .OrderByDescending(t => t!.FinishedAt)
+                .FirstOrDefault();
+
+            return new PodInfo
+            {
+                Name = p.Metadata.Name,
+                Namespace = p.Metadata.NamespaceProperty ?? ns,
+                Phase = p.Status?.Phase ?? "Unknown",
+                Ready = containerStatuses?.All(c => c.Ready) ?? false,
+                ReadyContainers = containerStatuses?.Count(c => c.Ready) ?? 0,
+                TotalContainers = p.Spec?.Containers?.Count ?? 0,
+                RestartCount = containerStatuses?.Sum(c => c.RestartCount) ?? 0,
+                LastRestartTime = lastTerminated?.FinishedAt is { } fin ? new DateTimeOffset(fin) : null,
+                LastRestartReason = lastTerminated?.Reason,
+                PodIP = p.Status?.PodIP,
+                NodeName = p.Spec?.NodeName,
+                StartTime = p.Status?.StartTime.HasValue == true ? new DateTimeOffset(p.Status.StartTime.Value) : null,
+                Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
+                Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
+            };
         }).ToList();
     }
 
