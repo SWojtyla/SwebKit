@@ -1,11 +1,11 @@
 # QOL Improvements — Status
 
-**Status:** Planned
-**Last updated:** 2026-03-22
+**Status:** In Progress
+**Last updated:** 2026-03-25
 
 ## Current state
 
-Full detailed technical plans written for all areas. Ready for implementation.
+UI Shell Wave 0–1 items implemented. Area-specific plans ready for implementation.
 
 ## Implementation documents
 
@@ -26,12 +26,23 @@ Full detailed technical plans written for all areas. Ready for implementation.
 3. If the item spans multiple files or layers → create a dedicated feature folder under `docs/features/active/` and reference this catalog.
 4. Mark items as promoted below once work begins.
 
+## Completed items
+
+- [x] **UI-7** — `ISelectionContext` service (interface, `SelectionContext` implementation, DI singleton)
+- [x] **UI-8** — Generic error boundary (`AppErrorBoundary.razor` wrapping `@Body` in `MainLayout`)
+- [x] **UI-9** — Skeleton loaders (`SkeletonRows.razor` + CSS shimmer animation)
+- [x] **UI-3** — Prefix-boosted fuzzy search (+3 bonus for label-start matches in `CommandPalette`)
+- [x] **UI-10** — Retry with exponential backoff on `ErrorCallout` (0→1s→2s→4s, attempt counter)
+- [x] **UI-11** — Error message expansion ("Show more" toggle on `NotificationToast` detail)
+- [x] **UI-23** — Visible focus rings (`:focus-visible` with `--color-accent` outline)
+- [x] **UI-24** — Demo banner CSS variable (`#d97706` → `var(--color-warning)`)
+
 ## Promoted items
 
 - **UI-8, UI-9, UI-10, UI-11** — Referenced as dependencies / cross-cuts by [performance-improvements](../performance-improvements/index.md) (PERF-13, PERF-14, PERF-15)
 
 ## Blockers
 
-- `ISelectionContext` (UI-7) must land before area-specific command palette commands (UI-1, UI-2)
+- `ISelectionContext` (UI-7) landed — UI-1 and UI-2 are now unblocked
 - `pipelines-revamp` active feature takes precedence over REL items for Releases
 - Storage bulk download (STG-3) has no blockers; upload/delete are explicitly out of scope

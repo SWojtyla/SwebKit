@@ -1,0 +1,19 @@
+@inherits ErrorBoundary
+
+@if (CurrentException is null)
+{
+    @ChildContent
+}
+else
+{
+    <div class="error-boundary-page">
+        <div class="error-boundary-icon">⚠</div>
+        <h2>Something went wrong</h2>
+        <p class="error-boundary-message">@CurrentException.Message</p>
+        <button class="error-boundary-retry" @onclick="Recover">Reload this area</button>
+        <details class="error-boundary-details">
+            <summary>Technical details</summary>
+            <pre>@CurrentException.ToString()</pre>
+        </details>
+    </div>
+}

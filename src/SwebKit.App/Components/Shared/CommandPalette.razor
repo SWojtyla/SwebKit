@@ -7,13 +7,8 @@
 
         <div class="cp-input-row">
             <span class="cp-search-icon">⌕</span>
-            <input type="text"
-                   placeholder="Type a command or search…"
-                   value="@_query"
-                   @oninput="OnQueryInput"
-                   @onkeydown="OnKeyDown"
-                   @ref="_inputRef"
-                   autofocus />
+            <input type="text" placeholder="Type a command or search…" value="@_query" @oninput="OnQueryInput"
+                   @onkeydown="OnKeyDown" @ref="_inputRef" autofocus />
         </div>
 
         <div class="cp-results" @ref="_resultsRef">
@@ -33,8 +28,7 @@
                 {
                     var idx = renderIdx++;
                     var cmdCapture = cmd;
-                    <div class="command-item @(idx == _focusedIndex ? "focused" : "")"
-                         @onclick="() => ExecuteAsync(cmdCapture)"
+                    <div class="command-item @(idx == _focusedIndex ? "focused" : "")" @onclick="() => ExecuteAsync(cmdCapture)"
                          @onmousemove="() => { _focusedIndex = idx; }">
                         @if (!string.IsNullOrEmpty(cmd.Icon))
                         {
@@ -186,11 +180,15 @@
         var q = query.ToLowerInvariant();
         var l = label.ToLowerInvariant();
         int qi = 0, score = 0, lastMatch = -1;
+        bool firstMatchSeen = false;
 
         for (int i = 0; i < l.Length && qi < q.Length; i++)
         {
             if (l[i] != q[qi]) continue;
-            score += (i == lastMatch + 1) ? 2 : 1; // bonus for consecutive chars
+            int bonus = (i == lastMatch + 1) ? 2 : 1; // consecutive char bonus
+            if (!firstMatchSeen && i == 0) bonus += 3; // prefix bonus
+            firstMatchSeen = true;
+            score += bonus;
             lastMatch = i;
             qi++;
         }
@@ -201,9 +199,9 @@
     private static int CategoryOrder(string cat) => cat switch
     {
         "Navigation" => 0,
-        "Actions"    => 1,
-        "General"    => 2,
-        _            => 99
+        "Actions" => 1,
+        "General" => 2,
+        _ => 99
     };
 
     public async ValueTask DisposeAsync()

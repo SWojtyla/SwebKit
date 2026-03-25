@@ -2,11 +2,49 @@
     <strong>Error:</strong> @Message
     @if (OnRetry.HasDelegate)
     {
-        <button style="margin-left: 8px; padding: 2px 8px; font-size: 11px; cursor: pointer;" @onclick="OnRetry">Retry</button>
+        <button class="error-callout-retry" disabled="@_retrying" @onclick="RetryAsync">
+            @if (_retrying)
+            {
+                <span>Retrying…</span>
+            }
+            else if (_attemptCount > 0)
+            {
+                <span>Retry #@(_attemptCount + 1)</span>
+            }
+            else
+            {
+                <span>Retry</span>
+            }
+        </button>
     }
 </div>
 
 @code {
     [Parameter] public string Message { get; set; } = "An error occurred.";
     [Parameter] public EventCallback OnRetry { get; set; }
+
+    private bool _retrying;
+    private int _attemptCount;
+
+    private async Task RetryAsync()
+    {
+        if (_retrying) return;
+        _retrying = true;
+
+        if (_attemptCount > 0)
+        {
+            var delayMs = Math.Min(1000 * (1 << (_attemptCount - 1)), 4000);
+            await Task.Delay(delayMs);
+        }
+
+        try
+        {
+            await OnRetry.InvokeAsync();
+        }
+        finally
+        {
+            _attemptCount++;
+            _retrying = false;
+        }
+    }
 }

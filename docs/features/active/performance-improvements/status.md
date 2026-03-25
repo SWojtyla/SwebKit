@@ -83,7 +83,7 @@ Waves 0–4 complete. Only PERF-13 (skeleton screens) remains, blocked on QOL UI
 
 ## Blockers
 
-- PERF-13 blocked on QOL UI-9 (skeleton component). All other work is complete.
+- PERF-13: Skeleton screen integration — QOL UI-9 (skeleton component) is now available. Ready for implementation.
 
 ## Validation
 
