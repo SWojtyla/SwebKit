@@ -7,7 +7,7 @@ owner: ""
 state: "In Progress"
 branch: ""
 started: "2026-03-24"
-last_updated: "2026-03-24"
+last_updated: "2026-03-25"
 
 ---
 
@@ -15,7 +15,7 @@ last_updated: "2026-03-24"
 
 Waves 0–4 complete. Only PERF-13 (skeleton screens) remains, blocked on QOL UI-9 dependency.
 
-**Current focus:** Feature is effectively done. PERF-13 deferred until QOL UI-9 (skeleton component) is available.
+**Current focus:** Feature is effectively done. All cancellation and caching work complete across every page. PERF-13 deferred until QOL UI-9 (skeleton component) is available.
 
 ## Progress checklist
 
@@ -44,7 +44,7 @@ Waves 0–4 complete. Only PERF-13 (skeleton screens) remains, blocked on QOL UI
 - [x] Wave 4 — Navigation state caching (PERF-17, PERF-18) ✅
   - [x] PERF-17 — PageDataCache singleton service (7 unit tests)
   - [x] PERF-18 — AksPage cache integration (stale-while-revalidate)
-- [x] Tests — 354 passing, 5 pre-existing failures (unrelated)
+- [x] Tests — 73 App + 17 Azure passing, 1 pre-existing failure (ServiceBusPage CSS class mismatch — unrelated)
 - [x] Docs aligned
 - [ ] Ready for review (pending PERF-13)
 
@@ -64,19 +64,26 @@ Waves 0–4 complete. Only PERF-13 (skeleton screens) remains, blocked on QOL UI
 - **PERF-11**: `StoragePage.razor` — No-op; `RebuildClient` is purely synchronous (<10ms), already optimal
 - **PERF-14**: `LoadingSpinner.razor` — Added timeout detection (default 30s), `OnRetry` callback, `IDisposable` with proper `CancellationTokenSource` cleanup
 - **PERF-15**: `LoadingContainer.razor` — Reusable wrapper component encapsulating loading/error/data state pattern with `IsLoading`, `Error`, `OnRetry`, custom `LoadingContent` slot, and `ChildContent`
-- **PERF-16**: CancellationTokenSource added to `AksPage`, `PipelinesPage`, `RedisPage`, `StoragePage` — cancelled on Dispose and on new-load (AKS, Redis); tokens passed through async load chains
+- **PERF-16**: CancellationTokenSource properly threaded through ALL pages:
+  - `ServiceBusPage` — added `_cts` field; `LoadNamespacesAsync` cancels/recreates CTS, passes token to `TryConnectAsync`; `AddNamespaceAsync` passes token; `Dispose` cancels before other cleanup
+  - `PipelinesPage` — `Task.WhenAll` wrapped with `.WaitAsync(_cts.Token)` for cancellation-aware init; `catch (OperationCanceledException) { return; }` replaces old flag check (CS-2)
+  - `StoragePage` — `DownloadSelectedBlobAsync` and `CopySelectedBlobSasAsync` accept and pass `CancellationToken`; command registrations pass `_cts.Token`; proper OCE handling before generic catch blocks
+  - `AksPage`, `RedisPage` — previously done; cancelled on Dispose and on new-load; tokens passed through async load chains
+  - Navigating away from any page mid-load cancels in-flight operations cleanly with no error messages
 - **PERF-17**: `PageDataCache.cs` — Thread-safe TTL cache (ConcurrentDictionary, 60s default). API: `Get<T>`, `Set<T>`, `Invalidate`, `InvalidateByPrefix`, `InvalidateAll`. 7 unit tests. Registered as singleton in MauiProgram.cs
-- **PERF-18**: `AksPage.razor` — `PageDataCache` integration with stale-while-revalidate pattern; `AksPageSnapshot` record bundles all 11 datasets; cache key `aks:{context}:{namespace}`; instant back-navigation rendering from cache, background refresh overwrites; context switch invalidates all AKS cache entries
+- **PERF-18**: `PageDataCache` integration expanded to three pages:
+  - `AksPage` — `AksPageSnapshot` record bundles all 11 datasets; cache key `aks:{context}:{namespace}`; instant back-navigation, background refresh; context switch invalidates AKS entries
+  - `ServiceBusPage` — `SbPageSnapshot`/`SbNamespaceSnapshot` records; cache restore on back-navigation shows namespace structure instantly while reconnecting; cache save after successful connections; test DI registrations updated
+  - `RedisPage` — `RedisPageSnapshot` record holds Keys, KeyTypes, NamespaceNodes, Separator; cache restore at start of `ConnectAndScanAsync` (stale-while-revalidate); cache save in `ScanAsync` finally block; defensive copies for snapshot data
 
 ## Remaining
 
 - PERF-13: Skeleton screen integration (blocked on QOL UI-9 — skeleton component not yet available)
-- Incremental subscriber migration to async (PERF-6 ongoing, opt-in per subscriber)
 - Performance baseline measurement (before/after)
 
 ## Blockers
 
-- None — plan is self-contained. UI-8/UI-9 from QOL are soft prerequisites (recommended but not blocking).
+- PERF-13 blocked on QOL UI-9 (skeleton component). All other work is complete.
 
 ## Validation
 

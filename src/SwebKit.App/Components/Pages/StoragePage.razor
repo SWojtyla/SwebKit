@@ -111,7 +111,7 @@
             Category = "Storage",
             AreaScope = "storage",
             IsAvailable = () => _selectedBlob is not null && _storageClient is not null,
-            Execute = () => DownloadSelectedBlobAsync()
+            Execute = () => DownloadSelectedBlobAsync(_cts.Token)
         });
         Commands.Register(new AppCommand
         {
@@ -120,7 +120,7 @@
             Category = "Storage",
             AreaScope = "storage",
             IsAvailable = () => _selectedBlob is not null && _storageClient is not null,
-            Execute = () => CopySelectedBlobSasAsync()
+            Execute = () => CopySelectedBlobSasAsync(_cts.Token)
         });
     }
 
@@ -191,7 +191,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task DownloadSelectedBlobAsync()
+    private async Task DownloadSelectedBlobAsync(CancellationToken ct = default)
     {
         if (_storageClient is null || _selectedBlob is null || _selectedContainer is null) return;
         try
@@ -202,24 +202,26 @@
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
                 "Downloads", fileName);
             await using var fs = System.IO.File.OpenWrite(destPath);
-            await _storageClient.DownloadBlobAsync(_selectedContainer, _selectedBlob.Name, fs);
+            await _storageClient.DownloadBlobAsync(_selectedContainer, _selectedBlob.Name, fs, ct);
             Notifications.ShowSuccess("Blob downloaded", fileName);
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             Notifications.ShowError("Download failed", ex: ex);
         }
     }
 
-    private async Task CopySelectedBlobSasAsync()
+    private async Task CopySelectedBlobSasAsync(CancellationToken ct = default)
     {
         if (_storageClient is null || _selectedBlob is null || _selectedContainer is null) return;
         try
         {
-            var url = await _storageClient.GetBlobSasUrlAsync(_selectedContainer, _selectedBlob.Name, TimeSpan.FromHours(24));
+            var url = await _storageClient.GetBlobSasUrlAsync(_selectedContainer, _selectedBlob.Name, TimeSpan.FromHours(24), ct);
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
             Notifications.ShowSuccess("SAS URL copied", "Expires in 24 hours");
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             Notifications.ShowError("Failed to copy SAS URL", ex: ex);

@@ -301,16 +301,16 @@ protected override async Task OnInitializedAsync()
 
 ## Tasks
 
-- [ ] **PERF-7** AKS page incremental rendering `[blazor-expert]`
-- [ ] **PERF-8** ServiceBus page progressive namespace connection `[blazor-expert]`
-- [ ] **PERF-9** PipelinesPage parallel initialization `[blazor-expert]`
-- [ ] **PERF-10** Redis page guarded async lifecycle `[blazor-expert]`
-- [ ] **PERF-11** Storage page async initialization `[blazor-expert]`
-- [ ] **PERF-12** Document Observability page as reference pattern `[manual]`
+- [x] **PERF-7** AKS page incremental rendering `[blazor-expert]`
+- [x] **PERF-8** ServiceBus page progressive namespace connection `[blazor-expert]`
+- [x] **PERF-9** PipelinesPage parallel initialization `[blazor-expert]`
+- [x] **PERF-10** Redis page guarded async lifecycle `[blazor-expert]`
+- [x] **PERF-11** Storage page async initialization `[blazor-expert]`
+- [x] **PERF-12** Document Observability page as reference pattern `[manual]`
 - [ ] **PERF-13** Skeleton screen integration (depends on QOL UI-9) `[blazor-expert]`
-- [ ] **PERF-14** LoadingSpinner timeout detection `[blazor-expert]`
-- [ ] **PERF-15** LoadingContainer wrapper component `[blazor-expert]`
-- [ ] **PERF-16** Cancel support across all pages `[blazor-expert]`
+- [x] **PERF-14** LoadingSpinner timeout detection `[blazor-expert]`
+- [x] **PERF-15** LoadingContainer wrapper component `[blazor-expert]`
+- [x] **PERF-16** Cancel support across all pages — CTS threaded through ServiceBusPage, PipelinesPage, StoragePage, AksPage, RedisPage; PageDataCache expanded to ServiceBus + Redis `[blazor-expert]`
 
 ## Validation
 

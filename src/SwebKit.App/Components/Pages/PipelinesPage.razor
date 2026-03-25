@@ -220,13 +220,17 @@
     protected override async Task OnInitializedAsync()
     {
         // PERF-9: Load AppState and release repo in parallel
-        await Task.WhenAll(
+        var loadTask = Task.WhenAll(
             AppState.WhenInitializedAsync(),
             ReleaseRepo.LoadAsync()
         );
 
-        // PERF-16: Bail out if disposed during init
-        if (_cts.IsCancellationRequested) return;
+        // PERF-16: Stop waiting if the component is disposed (user navigated away)
+        try
+        {
+            await loadTask.WaitAsync(_cts.Token);
+        }
+        catch (OperationCanceledException) { return; } // CS-2
 
         if (!AppState.UseDemoData && IsConfigured)
         {
