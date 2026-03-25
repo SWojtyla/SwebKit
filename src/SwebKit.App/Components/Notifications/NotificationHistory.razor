@@ -1,8 +1,9 @@
 @implements IDisposable
 @inject INotificationService Notifications
+@inject UiStateRepository UiState
 
 <div
-    style="background:#2D2D44; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.5); width:360px; max-height:400px; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.1);">
+    style="background:#2D2D44; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.5); width:360px; max-height:480px; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.1);">
     <div
         style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0;">
         <span style="color:white; font-size:13px; font-weight:600;">Notifications</span>
@@ -13,7 +14,7 @@
     </div>
 
     <div style="overflow-y:auto; flex:1;">
-        @if (Notifications.All.Count == 0)
+        @if (Notifications.All.Count == 0 && UiState.State.NotificationHistory.Count == 0)
         {
             <div style="color:rgba(255,255,255,0.4); font-size:12px; text-align:center; padding:24px 12px;">
                 No notifications yet.
@@ -21,30 +22,66 @@
         }
         else
         {
-            @foreach (var n in Notifications.All.Reverse())
+            @if (Notifications.All.Count > 0)
             {
-                <div
-                    style="display:flex; gap:8px; align-items:flex-start; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
-                    <span
-                    style="color:@GetAccentColor(n.Severity); font-size:13px; flex-shrink:0; padding-top:1px;">@GetIcon(n.Severity)</span>
-                    <div style="flex:1; min-width:0;">
-                        <div
-                            style="color:white; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            @n.Message</div>
-                            @if (!string.IsNullOrEmpty(n.Detail))
-                            {
-                                <div
-                                    style="color:rgba(255,255,255,0.5); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                    @n.Detail</div>
-                                }
+                @foreach (var n in Notifications.All.Reverse())
+                {
+                    <div
+                        style="display:flex; gap:8px; align-items:flex-start; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <span
+                        style="color:@GetAccentColor(n.Severity); font-size:13px; flex-shrink:0; padding-top:1px;">@GetIcon(n.Severity)</span>
+                        <div style="flex:1; min-width:0;">
+                            <div
+                                style="color:white; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                @n.Message</div>
+                                @if (!string.IsNullOrEmpty(n.Detail))
+                                {
+                                    <div
+                                        style="color:rgba(255,255,255,0.5); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                        @n.Detail</div>
+                                    }
+                                </div>
+                                <span
+                                style="color:rgba(255,255,255,0.35); font-size:10px; flex-shrink:0; padding-top:2px;">@n.Timestamp.ToString("HH:mm:ss")</span>
                             </div>
-                            <span
-                            style="color:rgba(255,255,255,0.35); font-size:10px; flex-shrink:0; padding-top:2px;">@n.Timestamp.ToString("HH:mm:ss")</span>
-                        </div>
+                        }
                     }
-                }
-            </div>
-        </div>
+
+                    @if (UiState.State.NotificationHistory.Count > 0)
+                    {
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-top:1px solid rgba(255,255,255,0.1); border-bottom:1px solid rgba(255,255,255,0.06);">
+                            <span style="color:rgba(255,255,255,0.5); font-size:11px; font-weight:600;">History</span>
+                            <button @onclick="ClearHistoryAsync"
+                                    style="background:transparent; border:none; color:rgba(255,255,255,0.4); font-size:10px; cursor:pointer; padding:0;">
+                                Clear history
+                            </button>
+                        </div>
+                        @foreach (var h in UiState.State.NotificationHistory)
+                        {
+                            <div
+                                style="display:flex; gap:8px; align-items:flex-start; padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.04); opacity:0.7;">
+                                <span
+                                style="color:@GetHistoryAccentColor(h.Severity); font-size:13px; flex-shrink:0; padding-top:1px;">@GetHistoryIcon(h.Severity)</span>
+                                <div style="flex:1; min-width:0;">
+                                    <div
+                                        style="color:rgba(255,255,255,0.8); font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                        @h.Message</div>
+                                        @if (!string.IsNullOrEmpty(h.Detail))
+                                        {
+                                            <div
+                                                style="color:rgba(255,255,255,0.4); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                                @h.Detail</div>
+                                            }
+                                        </div>
+                                        <span
+                                        style="color:rgba(255,255,255,0.3); font-size:10px; flex-shrink:0; padding-top:2px; white-space:nowrap;">@FormatHistoryTimestamp(h.Timestamp)</span>
+                                    </div>
+                                }
+                            }
+                        }
+                    </div>
+                </div>
 
 @code {
     protected override void OnInitialized()
@@ -53,6 +90,22 @@
     }
 
     private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ClearHistoryAsync()
+    {
+        UiState.State.NotificationHistory.Clear();
+        await UiState.SaveAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatHistoryTimestamp(DateTimeOffset ts)
+    {
+        var age = DateTimeOffset.UtcNow - ts;
+        if (age.TotalMinutes < 1) return "just now";
+        if (age.TotalHours < 1) return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalDays < 1) return $"{(int)age.TotalHours}h ago";
+        return ts.LocalDateTime.ToString("MMM d HH:mm");
+    }
 
     private static string GetAccentColor(NotificationSeverity severity) => severity switch
     {
@@ -67,6 +120,22 @@
         NotificationSeverity.Success => "✓",
         NotificationSeverity.Warning => "⚠",
         NotificationSeverity.Error => "✕",
+        _ => "ℹ",
+    };
+
+    private static string GetHistoryAccentColor(string severity) => severity switch
+    {
+        "Success" => "#22C55E",
+        "Warning" => "#F59E0B",
+        "Error" => "#EF4444",
+        _ => "#3B82F6",
+    };
+
+    private static string GetHistoryIcon(string severity) => severity switch
+    {
+        "Success" => "✓",
+        "Warning" => "⚠",
+        "Error" => "✕",
         _ => "ℹ",
     };
 

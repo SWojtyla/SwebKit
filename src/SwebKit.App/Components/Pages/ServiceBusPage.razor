@@ -54,9 +54,18 @@
                     <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection
                         string:
                     </div>
-                    <textarea @bind="_addConnStr" rows="3"
-                              placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                              style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
+                    @if (_showConnStr)
+                    {
+                        <textarea @bind="_addConnStr" rows="3"
+                                  placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                  style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
+                    }
+                    else
+                    {
+                        <input type="password" @bind="_addConnStr"
+                               placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                               style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                    }
                     @if (!string.IsNullOrWhiteSpace(_addError))
                     {
                         <div style="font-size:11px; color:var(--color-error); margin-top:4px;">@_addError</div>
@@ -66,150 +75,138 @@
                         style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
                         @onclick="AddNamespaceAsync">Add</button>
                         <button
-                        style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
-                        @onclick="CancelAdd">Cancel</button>
-                    </div>
-                </div>
-            }
-
-            <!-- Namespace list -->
-            <div style="flex:1; overflow-y:auto;">
-                @if (!_namespaceStates.Any())
-                {
-                    <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
-                        No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
-                    </div>
-                }
-
-                @foreach (var ns in _namespaceStates)
-                {
-                    <!-- Namespace header row -->
-                    <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
-                         @onclick="() => ToggleNamespace(ns.Namespace.Id)">
-                        <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
-                        <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                              title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
-                        @if (ns.IsConnecting)
-                        {
-                            <span style="font-size:10px; color:var(--color-text-muted);">...</span>
-                        }
-                        else if (ns.Client is not null)
-                        {
-                            <span style="color:var(--color-success); display:inline-flex; align-items:center;">
-                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                            </span>
-                        }
-                        else
-                        {
-                            <span style="color:var(--color-error); display:inline-flex; align-items:center;"
-                                  title="@ns.ConnectionError">
-                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                            </span>
-                        }
-                        <button
-                            style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 3px; display:inline-flex; align-items:center;"
-                            title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
-                            @onclick="() => OpenScheduledTab(ns)">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
-                        </button>
-                        <button
-                            style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 2px; display:inline-flex; align-items:center;"
-                            title="Remove namespace" @onclick:stopPropagation="true"
-                            @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
-                        </button>
-                    </div>
-
-                    @if (ns.IsExpanded)
-                    {
-                        @if (ns.ConnectionError is not null && ns.Client is null)
-                        {
-                            <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
-                        }
-                        else
-                        {
-                            <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="CurrentLinkedEntities"
-                                        OnEntitySelected="entity => OpenEntityTab(ns, entity)"
-                                        OnEntityModeSelected="selection => OpenEntityTab(ns, selection.Entity, selection.IsDlq)"
-                                        OnEntityLinkToggled="link => ToggleEntityLinkAsync(link)" />
-                        }
-                    }
-                }
-            </div>
-        </div>
-    </div>
-
-    <!-- Right: tabbed content -->
-    <div class="service-bus-right-pane" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-        @if (!_openTabs.Any())
-        {
-            <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
-                Select a queue or topic from a namespace to open it.
-            </div>
-        }
-        else
-        {
-            <!-- Tab bar -->
-            <div class="tab-bar sb-tab-bar">
-                @foreach (var tab in _openTabs)
-                {
-                    <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
-                        @if (tab.IsDlq)
-                        {
-                            <span style="color:var(--color-error); display:inline-flex; align-items:center;">
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
-                            </span>
-                        }
-                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
-                            <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias / </span>@tab.Title
-                        </span>
-                        <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
-                    </div>
-                }
-            </div>
-            <!-- Active tab content -->
-            @if (_activeTab is not null)
-            {
-                @if (_activeTab.IsScheduled)
-                {
-                    <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
-                                       EntityPath="@_activeTab.EntityPath" />
-                }
-                else if (_activeTab.IsDlq)
-                {
-                    <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
-                }
-                else
-                {
-                    <div @key="_activeTab.Id" class="sb-active-workspace">
-                        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
-                            <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
-                                             NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
-                                             IsDetailPaneOpen="IsDetailPaneOpen" OnMessageSelected="OnMessageSelectedAsync"
-                                             OnCloseDetails="CloseDetailPane" />
+                            style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
+                            @onclick="() => _showConnStr = !_showConnStr"
+                            title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
+                                                 "🙈" : "👁️")</button>
+                            <button
+                            style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
+                            @onclick="CancelAdd">Cancel</button>
                         </div>
-                        @if (IsDetailPaneOpen)
-                        {
-                            if (_isDetailDrawerOverlay)
+                    </div>
+                }
+
+                <!-- Namespace list -->
+                <div style="flex:1; overflow-y:auto;">
+                    @if (!_namespaceStates.Any())
+                    {
+                        <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
+                            No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
+                        </div>
+                    }
+
+                    @foreach (var ns in _namespaceStates)
+                    {
+                        <!-- Namespace header row -->
+                        <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
+                             @onclick="() => ToggleNamespace(ns.Namespace.Id)">
+                            <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
+                            <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                  title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
+                            @if (ns.IsConnecting)
                             {
-                                <div class="sb-detail-drawer overlay">
-                                    <div class="sb-detail-drawer-header">
-                                        <span>Message details</span>
-                                        <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                @onclick="CloseDetailPane">×</button>
-                                    </div>
-                                    <div style="flex:1; overflow:hidden;">
-                                        <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                           OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                           OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                           OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
-                                    </div>
-                                </div>
+                                <span style="font-size:10px; color:var(--color-text-muted);">...</span>
+                            }
+                            else if (ns.Client is not null)
+                            {
+                                <span style="color:var(--color-success); display:inline-flex; align-items:center;">
+                                    <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                </span>
                             }
                             else
                             {
-                                <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
-                                    <div class="sb-detail-drawer">
+                                <span style="color:var(--color-error); display:inline-flex; align-items:center;"
+                                      title="@ns.ConnectionError">
+                                    <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                </span>
+                            }
+                            <button
+                                style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 3px; display:inline-flex; align-items:center;"
+                                title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
+                                @onclick="() => OpenScheduledTab(ns)">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
+                            </button>
+                            <button
+                                style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 2px; display:inline-flex; align-items:center;"
+                                title="Remove namespace" @onclick:stopPropagation="true"
+                                @onclick="() => RemoveNamespaceAsync(ns.Namespace.Id)">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                            </button>
+                        </div>
+
+                        @if (ns.IsExpanded)
+                        {
+                            @if (ns.ConnectionError is not null && ns.Client is null)
+                            {
+                                <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
+                            }
+                            else
+                            {
+                                <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="CurrentLinkedEntities"
+                                            OnEntitySelected="entity => OpenEntityTab(ns, entity)"
+                                            OnEntityModeSelected="selection => OpenEntityTab(ns, selection.Entity, selection.IsDlq)"
+                                            OnEntityLinkToggled="link => ToggleEntityLinkAsync(link)" />
+                            }
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: tabbed content -->
+        <div class="service-bus-right-pane" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+            @if (!_openTabs.Any())
+            {
+                <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
+                    Select a queue or topic from a namespace to open it.
+                </div>
+            }
+            else
+            {
+                <!-- Tab bar -->
+                <div class="tab-bar sb-tab-bar">
+                    @foreach (var tab in _openTabs)
+                    {
+                        <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                            @if (tab.IsDlq)
+                            {
+                                <span style="color:var(--color-error); display:inline-flex; align-items:center;">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+                                </span>
+                            }
+                            <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
+                                <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias / </span>@tab.Title
+                            </span>
+                            <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
+                        </div>
+                    }
+                </div>
+                <!-- Active tab content -->
+                @if (_activeTab is not null)
+                {
+                    @if (_activeTab.IsScheduled)
+                    {
+                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
+                                           EntityPath="@_activeTab.EntityPath" />
+                    }
+                    else if (_activeTab.IsDlq)
+                    {
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
+                    }
+                    else
+                    {
+                        <div @key="_activeTab.Id" class="sb-active-workspace">
+                            <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
+                                <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                                 NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
+                                                 IsDetailPaneOpen="IsDetailPaneOpen" OnMessageSelected="OnMessageSelectedAsync"
+                                                 OnCloseDetails="CloseDetailPane" />
+                            </div>
+                            @if (IsDetailPaneOpen)
+                            {
+                                if (_isDetailDrawerOverlay)
+                                {
+                                    <div class="sb-detail-drawer overlay">
                                         <div class="sb-detail-drawer-header">
                                             <span>Message details</span>
                                             <button type="button" class="sb-detail-close-btn" title="Close details"
@@ -222,26 +219,43 @@
                                                                OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
                                         </div>
                                     </div>
-                                </ResizablePanel>
+                                }
+                                else
+                                {
+                                    <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
+                                        <div class="sb-detail-drawer">
+                                            <div class="sb-detail-drawer-header">
+                                                <span>Message details</span>
+                                                <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                        @onclick="CloseDetailPane">×</button>
+                                            </div>
+                                            <div style="flex:1; overflow:hidden;">
+                                                <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                                   OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                                   OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                            </div>
+                                        </div>
+                                    </ResizablePanel>
+                                }
                             }
-                        }
-                    </div>
+                        </div>
+                    }
                 }
             }
-        }
+        </div>
     </div>
-</div>
 
-<!-- Modal composer (Edit / Replay / Schedule) -->
-<Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
-    @if (_composerMessage is not null && _activeTab is not null)
-    {
-        <MessageComposer Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" IsProduction="false"
-                         Mode="_composerMode" PrefillMessage="_composerMessage" AvailableNamespaces="@AvailableNamespaceOptions"
-                         OwnerNamespaceId="_activeTab.NamespaceId" ScheduledRepo="ScheduledRepo" OnSent="OnComposerSent"
-                         OnClose="CloseComposer" />
-    }
-</Modal>
+    <!-- Modal composer (Edit / Replay / Schedule) -->
+    <Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
+        @if (_composerMessage is not null && _activeTab is not null)
+        {
+            <MessageComposer Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" IsProduction="false"
+                             Mode="_composerMode" PrefillMessage="_composerMessage" AvailableNamespaces="@AvailableNamespaceOptions"
+                             OwnerNamespaceId="_activeTab.NamespaceId" ScheduledRepo="ScheduledRepo" OnSent="OnComposerSent"
+                             OnClose="CloseComposer" />
+        }
+    </Modal>
 
 @code {
     private List<NsState> _namespaceStates = [];
@@ -251,6 +265,7 @@
     private bool _isNamespacePaneCollapsed;
     private string _addConnStr = string.Empty;
     private string? _addError;
+    private bool _showConnStr;
     private bool _isDetailDrawerOverlay;
     private CancellationTokenSource _cts = new();
 
@@ -457,7 +472,8 @@
         }
     }
 
-    private async Task<IServiceBusClient?> TryConnectAsync(ServiceBusNamespace ns, NsState state, CancellationToken ct = default)
+    private async Task<IServiceBusClient?> TryConnectAsync(ServiceBusNamespace ns, NsState state, CancellationToken ct =
+default)
     {
         try
         {
@@ -499,6 +515,7 @@
         _showAddForm = !_showAddForm;
         _addConnStr = string.Empty;
         _addError = null;
+        _showConnStr = false;
     }
 
     private void CancelAdd()
@@ -506,6 +523,7 @@
         _showAddForm = false;
         _addConnStr = string.Empty;
         _addError = null;
+        _showConnStr = false;
     }
 
     private async Task SetNamespacePaneCollapsedAsync(bool isCollapsed)
@@ -570,6 +588,7 @@
         _namespaceStates.Add(state);
         _showAddForm = false;
         _addConnStr = string.Empty;
+        _showConnStr = false;
         StateHasChanged();
 
         state.Client = await TryConnectAsync(ns, state, _cts.Token);

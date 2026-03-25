@@ -263,7 +263,7 @@ public class ComponentTests : TestContext
         Services.AddSingleton(appState);
         Services.AddSingleton<IAppEventBus>(bus);
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
-        Services.AddSingleton<INotificationService>(new NotificationService());
+        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
 
         var cut = RenderComponent<TopBar>();
         cut.Find("button.cmd-palette-btn").Click();

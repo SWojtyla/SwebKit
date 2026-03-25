@@ -37,11 +37,20 @@
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Redis Connection String</label>
-        <input type="text" @bind="ConnectionString" @bind:event="oninput" class="@FieldClass(FieldConnectionString)"
-               aria-invalid="@HasError(FieldConnectionString)" aria-describedby="@ErrorId(FieldConnectionString)"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="localhost:6379,password=***,abortConnect=false"
-               @onfocusin="() => ClearError(FieldConnectionString)" />
+        <div style="display:flex; gap:4px; align-items:stretch;">
+            <input type="@(_showConnectionString ? "text" : "password")" @bind="ConnectionString" @bind:event="oninput"
+                   class="@FieldClass(FieldConnectionString)" aria-invalid="@HasError(FieldConnectionString)"
+                   aria-describedby="@ErrorId(FieldConnectionString)"
+                   style="flex:1; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
+                   placeholder="localhost:6379,password=***,abortConnect=false"
+                   @onfocusin="() => ClearError(FieldConnectionString)" />
+            <button type="button" @onclick="() => _showConnectionString = !_showConnectionString"
+                    title="@(_showConnectionString ? "Hide" : "Show") connection string"
+                    aria-label="@(_showConnectionString ? "Hide" : "Show") connection string"
+                    style="padding:4px 8px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; cursor:pointer; font-size:14px; line-height:1;">
+                @(_showConnectionString ? "🙈" : "👁")
+            </button>
+        </div>
         @if (_errors.TryGetValue(FieldConnectionString, out var csErr))
         {
             <span id="err-conn-str" class="field-error-msg" role="alert">@csErr</span>
@@ -84,6 +93,7 @@
     private string DisplayName = string.Empty;
     private string ConnectionString = string.Empty;
     private int Database;
+    private bool _showConnectionString;
     private Dictionary<string, string> _errors = new();
 
     private const string FieldDisplayName = "DisplayName";

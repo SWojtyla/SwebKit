@@ -261,3 +261,11 @@ window.SwebKit.restoreFocus = function (element) {
     element.focus();
   }
 };
+
+/**
+ * Scrolls an element to the bottom.
+ * @param {HTMLElement} element
+ */
+window.SwebKit.scrollToBottom = function (element) {
+  if (element) element.scrollTop = element.scrollHeight;
+};

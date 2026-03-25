@@ -1,4 +1,6 @@
 @inject IAppEventBus Events
+@inject IJSRuntime JS
+@inject INotificationService Notify
 @implements IAsyncDisposable
 
 <div class="log-viewer">
@@ -8,10 +10,15 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
-        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…"
-               class="log-filter-input" />
+        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…" class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportLogsAsync" Disabled="@(FilteredLines.Count == 0)"
+                      Title="Export logs as text file">Export</FluentButton>
+        <label class="log-live-toggle" style="margin-left:auto;">
+            <input type="checkbox" @bind="_tailEnabled" />
+            ↓ Tail
+        </label>
     </div>
 
     <div class="log-output" @ref="_logContainer">
@@ -47,6 +54,7 @@
     private CancellationTokenSource? _cts;
     private ElementReference _logContainer;
     private Task? _streamTask;
+    private bool _tailEnabled = true;
 
     private IReadOnlyList<string> FilteredLines => string.IsNullOrEmpty(TextFilter)
         ? Lines.TakeLast(500).ToList()
@@ -89,22 +97,49 @@
             Lines.Add(line);
             if (Lines.Count > 10_000) Lines.RemoveAt(0);
             lineCount++;
-            if (lineCount % 20 == 0)  // Render every 20 lines
+            if (lineCount % 20 == 0) // Render every 20 lines
             {
                 await InvokeAsync(StateHasChanged);
+                if (_tailEnabled)
+                    await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
             }
         }
         await InvokeAsync(StateHasChanged); // Final render
+        if (_tailEnabled)
+            await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
         await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
     }
 
     private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
 
+    private async Task ExportLogsAsync()
+    {
+        var lines = FilteredLines;
+        if (lines.Count == 0) return;
+
+        var content = string.Join('\n', lines);
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var podSlug = (PodName ?? "pod").Replace('/', '-');
+        var fileName = $"{podSlug}-{ts}.log";
+
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content);
+            Notify.ShowSuccess($"Exported {lines.Count} lines to {fileName}");
+        }
+        catch (Exception ex)
+        {
+            Notify.ShowError("Export failed", ex.Message);
+        }
+    }
+
     private static string GetLineClass(string line)
     {
-        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
+        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR",
+StringComparison.OrdinalIgnoreCase))
             return "error";
-        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN", StringComparison.OrdinalIgnoreCase))
+        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN",
+StringComparison.OrdinalIgnoreCase))
             return "warn";
         if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
             return "debug";

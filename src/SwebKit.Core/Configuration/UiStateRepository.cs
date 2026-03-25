@@ -74,6 +74,8 @@ public class UiState
     public Dictionary<string, List<SavedFilter>> SavedFilters { get; set; } = [];
     /// <summary>Most-recently-used command IDs (newest first, max 5).</summary>
     public List<string> RecentCommandIds { get; set; } = [];
+    /// <summary>Persisted notification history (newest-first, max 50).</summary>
+    public List<PersistedNotification> NotificationHistory { get; set; } = [];
 }
 
 public class SavedFilter
@@ -89,4 +91,12 @@ public class OpenTab
     public required string Area { get; set; }
     public string? EntityPath { get; set; }
     public bool IsPinned { get; set; }
+}
+
+public record PersistedNotification
+{
+    public required string Severity { get; init; }
+    public required string Message { get; init; }
+    public string? Detail { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
 }

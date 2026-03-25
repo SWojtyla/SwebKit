@@ -5,7 +5,7 @@
 
 ## Current state
 
-UI Shell Waves 0–4 implemented. Area-specific items progressing across SB, Redis, Observability.
+Waves 0–5 implemented (29 items). Cross-cutting improvements across UI Shell, Service Bus, AKS, Redis, Observability.
 
 ## Implementation documents
 
@@ -51,6 +51,10 @@ UI Shell Waves 0–4 implemented. Area-specific items progressing across SB, Red
 - [x] **SB-16** — CSV escaping hardening (added `\r`, `\t`, and Unicode control character quoting)
 - [x] **UI-14** — Action progress percentage in status bar (progress/total + progress bar for running tasks)
 - [x] **UI-16** — Form validation field highlighting (`.field-invalid` / `.field-error-msg` CSS + `RedisConfigForm` validation)
+- [x] **RDS-10** — Connection string masking (password toggle with 👁/🙈 on `RedisConfigForm`)
+- [x] **SB-17** — Service Bus connection string masking (password/textarea toggle on `ServiceBusPage` add-namespace form)
+- [x] **AKS-2** — Log scroll-to-bottom (Tail toggle + JS `scrollToBottom` helper in `PodLogView`)
+- [x] **UI-13** — Persistent notification history (FIFO 50 in `UiState` + history section in `NotificationHistory`)
 
 ## Promoted items
 
