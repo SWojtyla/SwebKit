@@ -1,4 +1,6 @@
 @inject IPortForwardSessionService SessionService
+@inject IJSRuntime JS
+@inject INotificationService Notifications
 @implements IDisposable
 
 @{
@@ -50,6 +52,10 @@
                         <span class="pf-col-actions">
                             @if (session.Status == PortForwardStatus.Active)
                             {
+                                <button class="pf-btn-open" title="Copy localhost:@session.LocalPort to clipboard"
+                                        @onclick="() => CopyUrlAsync(session)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Copy())" Width="13px" />
+                                </button>
                                 <button class="pf-btn-open" title="Open @session.LocalUrl in browser"
                                         @onclick="() => OpenInBrowser(session.LocalUrl)">
                                     <FluentIcon Value="@(new Icons.Regular.Size16.Open())" Width="13px" />
@@ -255,6 +261,16 @@
 
     private Task OnStop(PortForwardSession session)
         => OnStopSession.InvokeAsync(session);
+
+    private async Task CopyUrlAsync(PortForwardSession session)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", session.LocalUrl);
+            Notifications.ShowSuccess("Copied!", $"localhost:{session.LocalPort}");
+        }
+        catch { /* clipboard unavailable */ }
+    }
 
     private static async Task OpenInBrowser(string url)
     {

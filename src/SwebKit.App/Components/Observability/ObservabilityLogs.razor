@@ -46,6 +46,8 @@
                     @if (_result is not null)
                     {
                         <button class="obs-copy-btn" @onclick="CopyCsvAsync">📋 Copy CSV</button>
+                        <button class="obs-copy-btn" @onclick="DownloadCsvAsync">⬇ CSV</button>
+                        <button class="obs-copy-btn" @onclick="DownloadJsonAsync">⬇ JSON</button>
                     }
                 </div>
             </div>
@@ -189,9 +191,9 @@
             await RunQueryAsync();
     }
 
-    private async Task CopyCsvAsync()
+    private string BuildCsvContent()
     {
-        if (_result is null) return;
+        if (_result is null) return "";
         var lines = new List<string> { string.Join(",", _result.ColumnNames) };
         lines.AddRange(_result.Rows.Select(r =>
             string.Join(",", _result.ColumnNames.Select(c =>
@@ -199,8 +201,34 @@
                 var v = GetCell(r, c);
                 return v.Contains(',') || v.Contains('"') ? $"\"{v.Replace("\"", "\"\"")}\"" : v;
             }))));
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join("\n", lines));
+        return string.Join("\n", lines);
+    }
+
+    private async Task CopyCsvAsync()
+    {
+        if (_result is null) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", BuildCsvContent());
         Notifications.ShowSuccess("Copied!");
+    }
+
+    private async Task DownloadCsvAsync()
+    {
+        if (_result is null) return;
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        await JS.InvokeVoidAsync("SwebKit.downloadText", $"query-{ts}.csv", "text/csv", BuildCsvContent());
+        Notifications.ShowSuccess($"Exported CSV");
+    }
+
+    private async Task DownloadJsonAsync()
+    {
+        if (_result is null) return;
+        var rows = _result.Rows.Select(r =>
+            _result.ColumnNames.ToDictionary(c => c, c => (object)GetCell(r, c))).ToList();
+        var json = System.Text.Json.JsonSerializer.Serialize(rows,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        await JS.InvokeVoidAsync("SwebKit.downloadText", $"query-{ts}.json", "application/json", json);
+        Notifications.ShowSuccess($"Exported {rows.Count} rows");
     }
 
     private void SaveCurrentQuery()

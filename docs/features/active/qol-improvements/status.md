@@ -5,7 +5,7 @@
 
 ## Current state
 
-Waves 0–5 implemented (29 items). Cross-cutting improvements across UI Shell, Service Bus, AKS, Redis, Observability.
+Waves 0–6 implemented (33 items). Cross-cutting improvements across UI Shell, Service Bus, AKS, Redis, Observability, Storage.
 
 ## Implementation documents
 
@@ -55,6 +55,10 @@ Waves 0–5 implemented (29 items). Cross-cutting improvements across UI Shell, 
 - [x] **SB-17** — Service Bus connection string masking (password/textarea toggle on `ServiceBusPage` add-namespace form)
 - [x] **AKS-2** — Log scroll-to-bottom (Tail toggle + JS `scrollToBottom` helper in `PodLogView`)
 - [x] **UI-13** — Persistent notification history (FIFO 50 in `UiState` + history section in `NotificationHistory`)
+- [x] **STG-5** — Copy blob relative path (context menu item copies `item.Name` to clipboard)
+- [x] **STG-10** — Search/filter blobs (client-side filter input with match count in `StorageBlobList`)
+- [x] **AKS-14** — Copy localhost URL button (clipboard copy in `PortForwardSessionsPanel` session rows)
+- [x] **OBS-4** — Export query results to file (Download CSV + Download JSON buttons in `ObservabilityLogs`)
 
 ## Promoted items
 
