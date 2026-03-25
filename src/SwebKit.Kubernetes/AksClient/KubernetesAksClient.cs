@@ -292,9 +292,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
     {
-        var args = $"get manifest {releaseName} --namespace {ns}";
-        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
-            args += $" --kubeconfig \"{_kubeconfigPath}\"";
+        var args = $"get manifest {releaseName} --namespace {ns}{BuildKubeconfigArgs()}";
 
         var psi = new ProcessStartInfo("helm")
         {
@@ -353,7 +351,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = $"port-forward {resourceName} {localPort}:{remotePort} -n {ns}",
+            Arguments = $"port-forward {resourceName} {localPort}:{remotePort} -n {ns}{BuildKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -429,7 +427,8 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
     {
-        var args = $"exec -it {podName} -n {ns} -c {container} -- /bin/sh";
+        var kubeconfigArgs = BuildKubeconfigArgs();
+        var args = $"exec -it {podName} -n {ns} -c {container}{kubeconfigArgs} -- /bin/sh";
         try
         {
             Process.Start(new ProcessStartInfo("wt.exe", $"kubectl {args}") { UseShellExecute = true });
@@ -574,7 +573,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     {
         var psi = new ProcessStartInfo("helm")
         {
-            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait",
+            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -599,30 +598,121 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         await File.WriteAllTextAsync(tempFile, yaml, ct);
         try
         {
-            var psi = new ProcessStartInfo("kubectl")
+            var (exitCode, stderr) = await RunKubectlApplyAsync(tempFile, ns, ct);
+
+            if (exitCode != 0)
             {
-                Arguments = $"apply -f \"{tempFile}\" --namespace {ns}",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
-
-            await process.WaitForExitAsync(ct);
-
-            if (process.ExitCode != 0)
-            {
-                var stderr = await process.StandardError.ReadToEndAsync(ct);
-                throw new InvalidOperationException($"kubectl apply failed (exit {process.ExitCode}): {stderr}");
+                if (IsForbiddenError(stderr))
+                {
+                    var token = TryAcquireFreshAzureToken();
+                    if (token is not null)
+                    {
+                        var (retryExit, retryStderr) = await RunKubectlApplyWithTokenAsync(tempFile, ns, token, ct);
+                        if (retryExit != 0)
+                            throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {retryStderr}");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                }
             }
         }
         finally
         {
             try { File.Delete(tempFile); } catch { /* best-effort cleanup */ }
         }
+    }
+
+    private async Task<(int ExitCode, string Stderr)> RunKubectlApplyAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("kubectl")
+        {
+            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        await process.WaitForExitAsync(ct);
+
+        var stderr = process.ExitCode != 0
+            ? await process.StandardError.ReadToEndAsync(ct)
+            : string.Empty;
+
+        return (process.ExitCode, stderr);
+    }
+
+    private static bool IsForbiddenError(string stderr)
+        => stderr.Contains("Forbidden", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildKubeconfigArgs()
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
+            sb.Append($" --kubeconfig \"{_kubeconfigPath}\"");
+        if (!string.IsNullOrWhiteSpace(_kubeconfigContext))
+            sb.Append($" --context {_kubeconfigContext}");
+        return sb.ToString();
+    }
+
+    private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("kubectl")
+        {
+            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        await process.WaitForExitAsync(ct);
+
+        var stderr = process.ExitCode != 0
+            ? await process.StandardError.ReadToEndAsync(ct)
+            : string.Empty;
+
+        return (process.ExitCode, stderr);
+    }
+
+    private string? TryAcquireFreshAzureToken()
+    {
+        string? serverId = null;
+        var effectiveKubeconfigPath = string.IsNullOrWhiteSpace(_kubeconfigPath)
+            ? KubernetesClientConfiguration.KubeConfigDefaultLocation
+            : _kubeconfigPath;
+
+        if (!string.IsNullOrWhiteSpace(effectiveKubeconfigPath) && File.Exists(effectiveKubeconfigPath))
+        {
+            var kubeconfigContent = File.ReadAllText(effectiveKubeconfigPath);
+            serverId = AksAzureAuthHelpers.TryExtractServerIdFromKubeconfig(kubeconfigContent);
+        }
+
+        foreach (var scope in AksAzureAuthHelpers.BuildAksTokenScopes(serverId ?? DefaultAksServerAppId))
+        {
+            try
+            {
+                var credential = new DefaultAzureCredential();
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), default);
+                if (!string.IsNullOrWhiteSpace(accessToken.Token))
+                    return accessToken.Token;
+            }
+            catch { }
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<Core.Models.PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
