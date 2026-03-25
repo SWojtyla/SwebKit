@@ -18,12 +18,24 @@ namespace SwebKit.Kubernetes.AksClient;
 public class KubernetesAksClient : IAksClient, IAsyncDisposable
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
+
+    private static readonly DefaultAzureCredentialOptions AzureCredentialOptions = new()
+    {
+        ExcludeEnvironmentCredential = true,
+        ExcludeWorkloadIdentityCredential = true,
+        ExcludeManagedIdentityCredential = true,
+        ExcludeAzureDeveloperCliCredential = true,
+        ExcludeInteractiveBrowserCredential = true,
+    };
+
     private k8s.Kubernetes _client;
     private readonly string? _kubeconfigPath;
     private readonly string? _kubeconfigContext;
 
     private readonly Dictionary<Guid, Process> _portForwardProcesses = [];
     private readonly Lock _portForwardLock = new();
+    private readonly Lock _rebuildLock = new();
+    private DateTime _lastRebuild = DateTime.MinValue;
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
@@ -40,9 +52,16 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private void RebuildClient()
     {
-        var config = BuildClientConfiguration(_kubeconfigContext, _kubeconfigPath);
-        TryApplyAzureCredentialFallback(config, _kubeconfigPath);
-        _client = new k8s.Kubernetes(config);
+        lock (_rebuildLock)
+        {
+            if ((DateTime.UtcNow - _lastRebuild).TotalSeconds < 30)
+                return;
+
+            var config = BuildClientConfiguration(_kubeconfigContext, _kubeconfigPath);
+            TryApplyAzureCredentialFallback(config, _kubeconfigPath);
+            _client = new k8s.Kubernetes(config);
+            _lastRebuild = DateTime.UtcNow;
+        }
     }
 
     private async Task<T> WithAuthRetryAsync<T>(Func<Task<T>> action)
@@ -104,8 +123,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential();
-                var accessToken = credential.GetToken(new TokenRequestContext([scope]), default);
+                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
                 {
                     config.AccessToken = accessToken.Token;
@@ -829,8 +849,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential();
-                var accessToken = credential.GetToken(new TokenRequestContext([scope]), default);
+                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
                     return accessToken.Token;
             }
