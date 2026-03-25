@@ -5,7 +5,7 @@
 
 ## Current state
 
-UI Shell Waves 0–3 implemented. Area-specific plans progressing (RDS-5, OBS-5, OBS-14 done).
+UI Shell Waves 0–4 implemented. Area-specific items progressing across SB, Redis, Observability.
 
 ## Implementation documents
 
@@ -47,6 +47,10 @@ UI Shell Waves 0–3 implemented. Area-specific plans progressing (RDS-5, OBS-5,
 - [x] **UI-15** — Unsaved changes detection + navigation guard (snapshot-based dirty tracking on `SettingsPage`)
 - [x] **RDS-5** — Copy key name button (📋 icon in `RedisKeyDetail` header with clipboard + toast)
 - [x] **OBS-5** — MaxRowsPerQuery in Settings UI (already present in `SettingsPage` observability section — verified)
+- [x] **SB-8** — Production safeguard (`AppConfig.IsProduction` wired to DLQ confirm dialogs + Settings toggle)
+- [x] **SB-16** — CSV escaping hardening (added `\r`, `\t`, and Unicode control character quoting)
+- [x] **UI-14** — Action progress percentage in status bar (progress/total + progress bar for running tasks)
+- [x] **UI-16** — Form validation field highlighting (`.field-invalid` / `.field-error-msg` CSS + `RedisConfigForm` validation)
 
 ## Promoted items
 

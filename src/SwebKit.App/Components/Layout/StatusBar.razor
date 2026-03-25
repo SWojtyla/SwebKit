@@ -66,13 +66,25 @@
         <span class="status-section status-task" title="@running[0].Title">
             <FluentProgressRing Width="12px" />
             @running[0].Title
+            @if (running[0].Total is > 0)
+            {
+                <span class="status-progress">@running[0].Progress / @running[0].Total</span>
+                <progress value="@running[0].Progress" max="@running[0].Total"
+                          style="width:60px; height:6px; margin-left:4px;" />
+            }
         </span>
     }
     else if (running.Count > 1)
     {
+        var totalDone = running.Sum(t => t.Progress ?? 0);
+        var totalWork = running.Sum(t => t.Total ?? 0);
         <span class="status-section status-task">
             <FluentProgressRing Width="12px" />
             @running.Count tasks running
+            @if (totalWork > 0)
+            {
+                <span class="status-progress">@totalDone / @totalWork</span>
+            }
         </span>
     }
 
@@ -160,6 +172,30 @@
 
         .status-bar-btn:hover {
             text-decoration: underline;
+        }
+
+    .status-progress {
+        font-size: 10px;
+        color: var(--color-text-muted);
+        margin-left: 4px;
+    }
+
+    progress {
+        appearance: none;
+        border: none;
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--color-surface-3);
+    }
+
+        progress::-webkit-progress-bar {
+            background: var(--color-surface-3);
+            border-radius: 3px;
+        }
+
+        progress::-webkit-progress-value {
+            background: var(--color-accent);
+            border-radius: 3px;
         }
 </style>
 

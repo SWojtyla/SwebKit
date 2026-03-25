@@ -161,7 +161,7 @@
                 <TemplateColumn Title="Correlation ID" Width="180px"
                                 SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
                     <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                                        "-")</span>
+                                                                                "-")</span>
                     </TemplateColumn>
                     <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
                         <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
@@ -189,7 +189,7 @@
                     {
                         <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
                             <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                                           "-")</span>
+                                                                                                           "-")</span>
                             </TemplateColumn>
                         }
                     </FluentDataGrid>
@@ -586,9 +586,17 @@
     private static string CsvEscape(string? value)
     {
         if (value is null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        return value;
+        bool needsQuoting = false;
+        foreach (var c in value)
+        {
+            if (c is ',' or '"' or '\n' or '\r' or '\t' || char.IsControl(c))
+            {
+                needsQuoting = true;
+                break;
+            }
+        }
+        if (!needsQuoting) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     public async ValueTask DisposeAsync()

@@ -12,7 +12,7 @@
     <div style="display:flex; flex:1; overflow:hidden;">
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
-                             MultiSelect="true"                             SelectedMessage="SelectedMessage"
+                             MultiSelect="true" SelectedMessage="SelectedMessage"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
@@ -54,8 +54,9 @@
     </div>
 </div>
 
-<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"               IsProduction="false"
-               ConfirmLabel="Proceed"               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
+               IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
+               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }

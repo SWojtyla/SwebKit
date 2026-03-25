@@ -2091,3 +2091,16 @@ button:active { transform: scale(0.97); }
 .notification-toggle:hover {
     color: rgba(255,255,255,0.7);
 }
+
+/* ── UI-16: Form validation ── */
+.field-invalid {
+    border-color: var(--color-error) !important;
+    outline: 1px solid var(--color-error);
+}
+
+.field-error-msg {
+    display: block;
+    color: var(--color-error);
+    font-size: 11px;
+    margin-top: 2px;
+}

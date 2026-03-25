@@ -58,6 +58,18 @@
             case "appearance":
                 <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Appearance</h3>
                 <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
+
+                <div class="settings-field-group" style="margin-top:var(--spacing-xl);">
+                    <label class="settings-label">Production environment</label>
+                    <p class="settings-hint">
+                        Mark this environment as production. Destructive operations (e.g. DLQ resubmit/delete) will show
+                        an extra confirmation step requiring you to type CONFIRM.
+                    </p>
+                    <FluentCheckbox Value="@AppState.Config.IsProduction"
+                                    ValueChanged="@(async (bool v) => { AppState.Config.IsProduction = v; await SaveAsync(); })">
+                        This is a production environment
+                    </FluentCheckbox>
+                </div>
                 break;
 
             case "servicebus":
