@@ -34,7 +34,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
         // Run summary and trend queries in parallel
         var summaryTask = QuerySingleRowAsync(
-            "requests\n| summarize RequestCount=count(), FailedCount=countif(success==false), P50=percentile(duration,50), P95=percentile(duration,95) by ''",
+            "requests\n| summarize RequestCount=count(), FailedCount=countif(success==false), P50=percentile(duration,50), P95=percentile(duration,95)",
             qr, ct);
 
         var exCountTask = QuerySingleValueAsync<long>(
@@ -50,14 +50,14 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
             qr, ct);
 
         var failureTrendTask = QuerySeriesAsync(
-            "requests | summarize Value=todouble(countif(success==false))/max(1,count()) by bin(timestamp,1h) | order by timestamp asc",
+            "requests | summarize _fail=countif(success==false), _total=count() by bin(timestamp,1h) | extend Value=todouble(_fail)/todouble(max_of(1, _total)) | order by timestamp asc",
             qr, ct);
 
         await Task.WhenAll(summaryTask, exCountTask, availTask, requestTrendTask, failureTrendTask);
 
         var summary = summaryTask.Result;
         long requestCount = summary is not null ? GetLong(summary, "RequestCount") : 0;
-        long failedCount  = summary is not null ? GetLong(summary, "FailedCount")  : 0;
+        long failedCount = summary is not null ? GetLong(summary, "FailedCount") : 0;
         double p50 = summary is not null ? GetDouble(summary, "P50") : 0;
         double p95 = summary is not null ? GetDouble(summary, "P95") : 0;
         double failureRate = requestCount > 0 ? (double)failedCount / requestCount : 0;
@@ -233,7 +233,7 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
             .Select(row =>
             {
                 var ts = row.TryGetValue("timestamp", out var t) ? t : null;
-                var v  = row.TryGetValue("Value",     out var val) ? val : null;
+                var v = row.TryGetValue("Value", out var val) ? val : null;
                 if (ts is null || v is null) return null;
                 var time = ts is DateTimeOffset dto ? dto : DateTimeOffset.Parse(ts.ToString()!);
                 var value = Convert.ToDouble(v);
