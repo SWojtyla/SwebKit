@@ -43,6 +43,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\EmptyState.razor" Link="Components\Shared\EmptyState.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Modal.razor" Link="Components\Shared\Modal.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Dropdown.razor" Link="Components\Shared\Dropdown.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PasswordField.razor" Link="Components\Shared\PasswordField.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\AutoRefreshController.cs" Link="Components\Shared\AutoRefreshController.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\PageDataCache.cs" Link="Services\PageDataCache.cs" />

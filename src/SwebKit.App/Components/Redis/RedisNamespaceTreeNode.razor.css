@@ -88,3 +88,9 @@
 .t-zset { background: rgba(200, 0, 42, 0.24); }
 .t-stream { background: rgba(0, 183, 195, 0.24); }
 .t-unknown { background: rgba(127, 127, 127, 0.24); }
+
+.ns-checkbox {
+    margin-right: 4px;
+    cursor: pointer;
+    accent-color: var(--color-accent, #40aaff);
+}

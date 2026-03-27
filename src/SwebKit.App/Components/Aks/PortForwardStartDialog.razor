@@ -26,6 +26,10 @@
             {
                 <p style="color:var(--color-error, #f44); font-size:12px; margin:0 0 12px;">@_error</p>
             }
+            @if (_portWarning is not null)
+            {
+                <p style="color:var(--color-warning, #ff9800); font-size:12px; margin:0 0 12px;">⚠ @_portWarning</p>
+            }
 
             <div style="display:flex; gap:8px; justify-content:flex-end;">
                 <button @onclick="Cancel" style="padding:6px 16px; cursor:pointer;">Cancel</button>
@@ -48,6 +52,7 @@
 
     private int LocalPort;
     private string? _error;
+    private string? _portWarning;
 
     private bool IsValid => LocalPort is >= 1024 and <= 65535;
 
@@ -56,11 +61,41 @@
         // Pre-fill local port with remote port each time the dialog opens
         if (Visible) LocalPort = RemotePort;
         _error = null;
+        _portWarning = null;
     }
 
     private async Task Start()
     {
         if (!IsValid) { _error = "Local port must be between 1024 and 65535."; return; }
+
+        // AKS-15: Check if local port is free
+        _portWarning = null;
+        try
+        {
+            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, LocalPort);
+            listener.Start();
+            listener.Stop();
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            _portWarning = $"Port {LocalPort} appears to be in use.";
+            // Suggest next available port
+            for (int p = LocalPort + 1; p <= Math.Min(LocalPort + 10, 65535); p++)
+            {
+                try
+                {
+                    using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, p);
+                    probe.Start();
+                    probe.Stop();
+                    _portWarning += $" Try port {p} instead.";
+                    break;
+                }
+                catch (System.Net.Sockets.SocketException) { }
+            }
+            StateHasChanged();
+            return;
+        }
+
         await OnStart.InvokeAsync(LocalPort);
     }
 

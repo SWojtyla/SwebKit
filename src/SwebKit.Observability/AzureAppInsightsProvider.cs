@@ -184,6 +184,45 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
     public IReadOnlyList<QueryPreset> GetPresets() => KqlPresets.All;
 
+    // ── Latency trend ─────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<LatencyDataPoint>> GetOperationLatencyTrendAsync(
+        string operationName, TimeRange range, CancellationToken ct = default)
+    {
+        var binSize = DeriveBinSize(range);
+        var escapedName = operationName.Replace("'", "\\'");
+        var kql = $"requests\n| where name == '{escapedName}'\n| summarize P50=percentile(duration, 50), P95=percentile(duration, 95), P99=percentile(duration, 99) by bin(timestamp, {binSize})\n| order by timestamp asc";
+
+        try
+        {
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            return rows.Select(row => new LatencyDataPoint(
+                Timestamp: GetDateTimeOffset(row, "timestamp"),
+                P50Ms: GetDouble(row, "P50"),
+                P95Ms: GetDouble(row, "P95"),
+                P99Ms: GetDouble(row, "P99")
+            )).ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            throw new InvalidOperationException($"Latency trend query failed ({ex.Status}): {ex.Message}", ex);
+        }
+    }
+
+    private static string DeriveBinSize(TimeRange range)
+    {
+        var span = range.End - range.Start;
+        return span.TotalHours switch
+        {
+            <= 2 => "5m",
+            <= 12 => "15m",
+            <= 48 => "1h",
+            <= 168 => "4h",
+            _ => "1d"
+        };
+    }
+
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     private static Azure.Monitor.Query.QueryTimeRange QueryTimeRange(TimeRange r) =>

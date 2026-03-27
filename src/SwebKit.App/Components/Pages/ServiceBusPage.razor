@@ -62,9 +62,10 @@
                     }
                     else
                     {
-                        <input type="password" @bind="_addConnStr"
-                               placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                               style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
+                        <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
+                                       Label="Connection string"
+                                       Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                       InputStyle="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
                     }
                     @if (!string.IsNullOrWhiteSpace(_addError))
                     {

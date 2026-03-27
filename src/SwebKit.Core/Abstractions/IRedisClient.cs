@@ -26,4 +26,9 @@ public interface IRedisClient : IDisposable
     Task FlushDatabaseAsync(CancellationToken ct = default);
 
     Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default);
+
+    Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default);
+    Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default);
+    Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default);
+    Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default);
 }

@@ -1,5 +1,8 @@
 <div class="nav-item @(CurrentArea == Area ? "active" : "")"
      data-area="@Area"
+     role="button"
+     aria-label="@Label"
+     aria-current="@(CurrentArea == Area ? "page" : null)"
      @onclick="Navigate"
      title="@(IsExpanded ? "" : Label)">
     <FluentIcon Value="@NavIcon" Width="20px" />

@@ -28,6 +28,9 @@ public interface IObservabilityProvider
 
     Task<IReadOnlyList<AvailabilityResult>> GetAvailabilityAsync(TimeRange range, CancellationToken ct = default);
 
+    Task<IReadOnlyList<LatencyDataPoint>> GetOperationLatencyTrendAsync(
+        string operationName, TimeRange range, CancellationToken ct = default);
+
     /// <summary>Returns provider-specific preset queries shown in the Logs tab sidebar.</summary>
     IReadOnlyList<QueryPreset> GetPresets();
 }

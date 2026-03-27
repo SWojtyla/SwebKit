@@ -4,6 +4,11 @@
     @if (Node.IsKey)
     {
         <button class="ns-row @(IsActive ? "active" : "")" @onclick="SelectKey" title="@Node.FullKey">
+            @if (MultiSelectMode)
+            {
+                <input type="checkbox" checked="@(SelectedKeys.Contains(Node.FullKey ?? ""))" @onclick="ToggleSelection"
+                       @onclick:stopPropagation="true" class="ns-checkbox" />
+            }
             <span class="ns-toggle-placeholder"></span>
             <span class="ns-name">@Node.Name</span>
             @if (KeyType is not null)
@@ -25,7 +30,8 @@
             }
             <span class="ns-name">@Node.Name</span>
             <span class="ns-count">@Node.KeyCount</span>
-            <button class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true" title="Filter by this prefix">&#x229e;</button>
+            <button class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true"
+                    title="Filter by this prefix">&#x229e;</button>
         </button>
     }
 
@@ -33,12 +39,9 @@
     {
         @foreach (var child in Node.Children)
         {
-            <RedisNamespaceTreeNode Node="@child"
-                                    OnPrefixSelected="OnPrefixSelected"
-                                    OnKeySelected="OnKeySelected"
-                                    SelectedKey="@SelectedKey"
-                                    KeyTypes="@KeyTypes"
-                                    Depth="@(Depth + 1)" />
+            <RedisNamespaceTreeNode Node="@child" OnPrefixSelected="OnPrefixSelected" OnKeySelected="OnKeySelected"
+                                    SelectedKey="@SelectedKey" KeyTypes="@KeyTypes" MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys"
+                                    OnKeyToggled="OnKeyToggled" Depth="@(Depth + 1)" />
         }
     }
 </div>
@@ -49,6 +52,9 @@
     [Parameter] public EventCallback<string> OnKeySelected { get; set; }
     [Parameter] public string? SelectedKey { get; set; }
     [Parameter] public Dictionary<string, string> KeyTypes { get; set; } = new();
+    [Parameter] public bool MultiSelectMode { get; set; }
+    [Parameter] public HashSet<string> SelectedKeys { get; set; } = new();
+    [Parameter] public EventCallback<string> OnKeyToggled { get; set; }
     [Parameter] public int Depth { get; set; }
 
     private bool IsExpanded;
@@ -69,5 +75,10 @@
     private Task FilterPrefix()
     {
         return OnPrefixSelected.InvokeAsync(Node.FullPrefix);
+    }
+
+    private Task ToggleSelection()
+    {
+        return Node.FullKey is not null ? OnKeyToggled.InvokeAsync(Node.FullKey) : Task.CompletedTask;
     }
 }

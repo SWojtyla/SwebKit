@@ -1829,6 +1829,7 @@ button:active { transform: scale(0.97); }
 .resource-item-name   { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); font-weight: 500; }
 .resource-item-meta   { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .resource-item-badge  { font-size: var(--font-size-xs); background: rgba(0,120,212,0.2); color: var(--color-accent); border-radius: var(--radius-sm); padding: 1px 5px; margin-left: 4px; }
+.resource-type-badge  { font-size: var(--font-size-xs); background: var(--color-surface-3); color: var(--color-text-muted); border-radius: var(--radius-sm); padding: 1px 5px; margin-left: 4px; border: 1px solid var(--color-border); }
 .resource-selector-error { padding: var(--spacing-sm) var(--spacing-md); color: var(--color-error); font-size: var(--font-size-sm); }
 
 /* Time range picker */
@@ -1837,6 +1838,40 @@ button:active { transform: scale(0.97); }
 
 /* Selected row in data grids (shared across features, harmless) */
 .selected-row { background: rgba(0, 120, 212, 0.12) !important; }
+
+/* OBS-1: Monaco editor wrapper */
+.obs-monaco-wrapper {
+    height: 140px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden;
+}
+
+/* OBS-2: Query validation error */
+.obs-query-error {
+    font-size: var(--font-size-sm); color: #e08000; background: rgba(184,106,0,0.08);
+    border-left: 3px solid #e08000; padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* OBS-3: Saved query folders */
+.obs-folder-header {
+    font-size: var(--font-size-xs); color: var(--color-text-muted); padding: 4px var(--spacing-sm);
+    margin-top: var(--spacing-xs);
+}
+.obs-folder-item { padding-left: var(--spacing-md); }
+
+/* OBS-7: Auto-refresh */
+.obs-auto-refresh { display: flex; align-items: center; gap: var(--spacing-xs); }
+.obs-auto-refresh-interval {
+    background: var(--color-surface-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    color: var(--color-text); font-size: var(--font-size-xs); padding: 2px 4px;
+}
+.obs-last-updated { font-size: var(--font-size-xs); color: var(--color-text-faint); }
+
+/* OBS-9: Settings threshold grid */
+.settings-threshold-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-sm); }
+.settings-label-sm { font-size: var(--font-size-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
+
+/* OBS-15: Heatmap inline */
+.obs-loading-inline { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); color: var(--color-text-muted); padding: var(--spacing-sm) 0; }
 
 /* ═══════════════════════════════════════════════════════════
    Pipelines — shared utilities (global, used across isolated components)

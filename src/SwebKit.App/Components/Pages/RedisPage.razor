@@ -57,6 +57,18 @@
             <FluentButton @onclick="DeleteSelectedKeyAsync" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
             </FluentButton>
             <FluentButton @onclick="PurgeAllAsync" Disabled="@IsLoading">Purge All</FluentButton>
+            <FluentButton @onclick="ToggleMultiSelectMode"
+                          Appearance="@(_multiSelectMode ? Appearance.Accent : Appearance.Neutral)">
+                @(_multiSelectMode ? "Cancel Select" : "Select")
+            </FluentButton>
+            @if (_multiSelectMode && _selectedKeys.Count > 0)
+            {
+                <FluentButton @onclick="DeleteSelectedKeysAsync" Appearance="Appearance.Accent">
+                    Delete @_selectedKeys.Count key(s)
+                </FluentButton>
+            }
+            <FluentButton @onclick="ExportKeysToJsonAsync" Disabled="@(IsLoading || Keys.Count == 0)">Export JSON
+            </FluentButton>
             <AutoRefreshToggle OnRefresh="() => ScanAsync(_cts.Token)" Paused="@IsLoading" />
 
             <span class="connection">@ConnectionLabel</span>
@@ -79,7 +91,16 @@
                          @onkeydown:preventDefault="@_preventKeyListKey">
                         <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
                                             KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
-                                            OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync" />
+                                            OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
+                                            MultiSelectMode="@_multiSelectMode" SelectedKeys="@_selectedKeys"
+                                            OnKeyToggled="ToggleKeySelection" />
+                        @if (_hasMoreKeys)
+                        {
+                            <div class="load-more-bar">
+                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more (@Keys.Count loaded)
+                                </FluentButton>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -89,7 +110,9 @@
                                         HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
                                         OnRefresh="RefreshSelectedAsync" OnDelete="DeleteSelectedKeyAsync" OnSetTtl="SetTtlAsync"
                                         OnRemoveTtl="RemoveTtlAsync" OnSetStringValue="SetStringValueAsync"
-                                        OnSetHashField="SetHashFieldAsync" />
+                                        OnSetHashField="SetHashFieldAsync" OnUpdateSortedSetScore="UpdateSortedSetScoreAsync"
+                                        OnRenameKey="RenameSelectedKeyAsync" OnDeleteHashField="DeleteHashFieldAsync"
+                                        HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
                     </div>
 
                     <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
@@ -118,6 +141,21 @@
 
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
+
+    // RDS-1: Key scan pagination
+    private long _scanCursor;
+    private bool _hasMoreKeys;
+    private const int ScanPageSize = 1000;
+
+    // RDS-4: Item pagination
+    private long _itemsOffset;
+    private long _setItemsCursor;
+    private bool _hasMoreItems;
+    private const int ItemPageSize = 100;
+
+    // RDS-9: Multi-key delete
+    private bool _multiSelectMode;
+    private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
 
     private string? SelectedKey;
     private RedisKeyInfo? SelectedInfo;
@@ -163,7 +201,7 @@
 
     private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c =>
 !string.IsNullOrWhiteSpace(c.ConnectionString));
-    private bool IsProduction => false;
+    private bool IsProduction => AppState.Config.IsProduction;
 
     private string ConnectionLabel
     {
@@ -348,19 +386,31 @@
         try
         {
             var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
-            long cursor = 0;
+            _scanCursor = 0;
+            _hasMoreKeys = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
+            var loaded = 0;
 
             do
             {
                 ct.ThrowIfCancellationRequested();
-                var result = await Client.ScanKeysAsync(pattern, cursor, 500);
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
                 var newKeys = result.Keys.Where(k => seen.Add(k)).ToList();
                 Keys.AddRange(newKeys);
-                cursor = result.Cursor;
+                loaded += newKeys.Count;
+                _scanCursor = result.Cursor;
 
-                if (result.IsComplete || cursor == 0)
+                if (result.IsComplete || _scanCursor == 0)
+                {
+                    _hasMoreKeys = false;
                     break;
+                }
+
+                if (loaded >= ScanPageSize)
+                {
+                    _hasMoreKeys = true;
+                    break;
+                }
             } while (true);
 
             ct.ThrowIfCancellationRequested();
@@ -433,6 +483,7 @@
             SelectedHashFields = [];
             SelectedItems = [];
             SelectedSortedSetItems = [];
+            _hasMoreItems = false;
 
             switch (SelectedInfo.Type)
             {
@@ -443,13 +494,20 @@
                     SelectedHashFields = (await Client.GetHashFieldsAsync(SelectedKey)).ToList();
                     break;
                 case "list":
-                    SelectedItems = (await Client.GetListItemsAsync(SelectedKey, 0, 100)).ToList();
+                    _itemsOffset = ItemPageSize;
+                    SelectedItems = (await Client.GetListItemsAsync(SelectedKey, 0, ItemPageSize - 1)).ToList();
+                    _hasMoreItems = SelectedItems.Count >= ItemPageSize;
                     break;
                 case "set":
-                    SelectedItems = (await Client.GetSetMembersAsync(SelectedKey)).ToList();
+                    var setPage = await Client.GetSetMembersPageAsync(SelectedKey, 0, ItemPageSize);
+                    SelectedItems = setPage.Members.ToList();
+                    _setItemsCursor = setPage.Cursor;
+                    _hasMoreItems = !setPage.IsComplete;
                     break;
                 case "zset":
-                    SelectedSortedSetItems = (await Client.GetSortedSetMembersAsync(SelectedKey, 0, 100)).ToList();
+                    _itemsOffset = ItemPageSize;
+                    SelectedSortedSetItems = (await Client.GetSortedSetMembersAsync(SelectedKey, 0, ItemPageSize - 1)).ToList();
+                    _hasMoreItems = SelectedSortedSetItems.Count >= ItemPageSize;
                     break;
             }
         }
@@ -591,6 +649,275 @@
         }
     }
 
+    // ── RDS-1: Load more keys ──
+
+    private async Task LoadMoreKeysAsync()
+    {
+        if (Client is null || !_hasMoreKeys) return;
+
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
+            var existing = new HashSet<string>(Keys, StringComparer.Ordinal);
+            var loaded = 0;
+
+            do
+            {
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
+                var newKeys = result.Keys.Where(k => existing.Add(k)).ToList();
+                Keys.AddRange(newKeys);
+                loaded += newKeys.Count;
+                _scanCursor = result.Cursor;
+
+                if (result.IsComplete || _scanCursor == 0)
+                {
+                    _hasMoreKeys = false;
+                    break;
+                }
+
+                if (loaded >= ScanPageSize)
+                {
+                    _hasMoreKeys = true;
+                    break;
+                }
+            } while (true);
+
+            await LoadVisibleKeyTypesAsync(Keys.Skip(Keys.Count - loaded).ToList());
+            RebuildNamespaceTree();
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-4: Load more items ──
+
+    private async Task LoadMoreItemsAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey) || !_hasMoreItems) return;
+
+        try
+        {
+            switch (SelectedInfo?.Type)
+            {
+                case "list":
+                    var listPage = (await Client.GetListItemsAsync(SelectedKey, _itemsOffset, _itemsOffset + ItemPageSize - 1)).ToList();
+                    SelectedItems.AddRange(listPage);
+                    _itemsOffset += listPage.Count;
+                    _hasMoreItems = listPage.Count >= ItemPageSize;
+                    break;
+                case "set":
+                    var setPage = await Client.GetSetMembersPageAsync(SelectedKey, _setItemsCursor, ItemPageSize);
+                    SelectedItems.AddRange(setPage.Members);
+                    _setItemsCursor = setPage.Cursor;
+                    _hasMoreItems = !setPage.IsComplete;
+                    break;
+                case "zset":
+                    var zsetPage = (await Client.GetSortedSetMembersAsync(SelectedKey, _itemsOffset, _itemsOffset + ItemPageSize -
+1)).ToList();
+                    SelectedSortedSetItems.AddRange(zsetPage);
+                    _itemsOffset += zsetPage.Count;
+                    _hasMoreItems = zsetPage.Count >= ItemPageSize;
+                    break;
+            }
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── RDS-3: Update sorted set score ──
+
+    private async Task UpdateSortedSetScoreAsync((string Member, double Score) entry)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        try
+        {
+            await Client.UpdateSortedSetScoreAsync(SelectedKey, entry.Member, entry.Score);
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Score updated", $"{entry.Member} = {entry.Score}");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to update score", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-6: Rename key ──
+
+    private async Task RenameSelectedKeyAsync(string newKey)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        var oldKey = SelectedKey;
+        try
+        {
+            await Client.RenameKeyAsync(oldKey, newKey);
+            var idx = Keys.IndexOf(oldKey);
+            if (idx >= 0)
+                Keys[idx] = newKey;
+            if (KeyTypes.Remove(oldKey, out var type))
+                KeyTypes[newKey] = type;
+            SelectedKey = newKey;
+            Selection.SetSelection("redis", newKey);
+            RebuildNamespaceTree();
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Key renamed", $"'{oldKey}' → '{newKey}'");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Rename failed", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-9: Multi-key delete ──
+
+    private void ToggleMultiSelectMode()
+    {
+        _multiSelectMode = !_multiSelectMode;
+        if (!_multiSelectMode)
+            _selectedKeys.Clear();
+    }
+
+    private void ToggleKeySelection(string key)
+    {
+        if (!_selectedKeys.Remove(key))
+            _selectedKeys.Add(key);
+    }
+
+    private Task DeleteSelectedKeysAsync()
+    {
+        if (_selectedKeys.Count == 0) return Task.CompletedTask;
+
+        var keyList = _selectedKeys.ToList();
+        return ShowConfirmationAsync(
+            title: "Delete Keys",
+            message: $"Delete {keyList.Count} selected key(s)?",
+            label: "Delete",
+            action: async () =>
+            {
+                if (Client is null) return;
+
+                await Client.DeleteKeysAsync(keyList);
+                foreach (var key in keyList)
+                {
+                    Keys.Remove(key);
+                    KeyTypes.Remove(key);
+                }
+                _selectedKeys.Clear();
+                _multiSelectMode = false;
+
+                if (keyList.Contains(SelectedKey ?? ""))
+                {
+                    SelectedKey = null;
+                    SelectedInfo = null;
+                    SelectedStringValue = null;
+                    SelectedHashFields = [];
+                    SelectedItems = [];
+                    SelectedSortedSetItems = [];
+                }
+
+                RebuildNamespaceTree();
+                Notifications.ShowSuccess("Keys deleted", $"{keyList.Count} key(s) removed.");
+            });
+    }
+
+    // ── RDS-11: Delete hash field ──
+
+    private async Task DeleteHashFieldAsync(string field)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        try
+        {
+            await Client.DeleteHashFieldAsync(SelectedKey, field);
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Field deleted", $"{field} from '{SelectedKey}'");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to delete field", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-12: Export keys to JSON ──
+
+    private async Task ExportKeysToJsonAsync()
+    {
+        if (Client is null || Keys.Count == 0) return;
+
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var data = new Dictionary<string, object?>();
+            foreach (var key in Keys)
+            {
+                try
+                {
+                    var info = await Client.GetKeyInfoAsync(key);
+                    object? value = info.Type switch
+                    {
+                        "string" => await Client.GetKeyValueAsync(key),
+                        "hash" => (await Client.GetHashFieldsAsync(key)).ToDictionary(f => f.Field, f => f.Value),
+                        "list" => await Client.GetListItemsAsync(key),
+                        "set" => await Client.GetSetMembersAsync(key),
+                        "zset" => (await Client.GetSortedSetMembersAsync(key))
+                                    .Select(e => new { e.Member, e.Score }).ToList() as object,
+                        _ => null
+                    };
+                    data[key] = value;
+                }
+                catch
+                {
+                    data[key] = "<error reading key>";
+                }
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(data,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var fileName = $"redis-export-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var filePath = Path.Combine(downloads, fileName);
+            await File.WriteAllTextAsync(filePath, json);
+            Notifications.ShowSuccess("Export complete", filePath);
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Export failed", ex: ex);
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     // ── Cache switching ──
 
     private async Task OnCacheChangedAsync()
@@ -628,6 +955,7 @@
             await AppState.SaveConfigAsync();
         }
 
+        // RDS-7 invariant: Do NOT call RefreshSelectedAsync here — preserve TTL countdown across separator changes
         RebuildNamespaceTree();
         await InvokeAsync(StateHasChanged);
     }

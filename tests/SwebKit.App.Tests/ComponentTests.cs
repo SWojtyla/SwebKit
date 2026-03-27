@@ -27,6 +27,10 @@ public class ComponentTests : TestContext
         {
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
         }
+
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
+        Services.AddSingleton<IAppEventBus>(events);
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
     }
 
     [Fact]

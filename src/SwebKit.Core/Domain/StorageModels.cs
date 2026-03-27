@@ -47,3 +47,9 @@ public sealed record StorageBlobContent(
     long TotalSizeBytes,
     bool WasTruncated,
     bool IsBinary);
+
+public sealed record BlobVersionItem(
+    string VersionId,
+    DateTimeOffset? CreatedOn,
+    long? ContentLength,
+    bool IsCurrentVersion);

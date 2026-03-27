@@ -63,8 +63,12 @@
                             }
                             @if (session.Status is PortForwardStatus.Error)
                             {
-                                <button class="pf-btn-stop" title="@session.LastError" @onclick="() => OnStop(session)">
+                                <button class="pf-btn-stop" title="Dismiss" @onclick="() => OnStop(session)">
                                     Dismiss
+                                </button>
+                                <button class="pf-btn-open" title="@(_expandedErrors.Contains(session.SessionId) ? "Hide details" : "Show details")"
+                                        @onclick="() => ToggleErrorExpand(session.SessionId)">
+                                    @(_expandedErrors.Contains(session.SessionId) ? "▲" : "▼")
                                 </button>
                             }
                             else
@@ -78,7 +82,8 @@
                         </span>
                     </div>
 
-                    @if (session.Status == PortForwardStatus.Error && session.LastError is not null)
+                    @if (session.Status == PortForwardStatus.Error && session.LastError is not null
+                         && _expandedErrors.Contains(session.SessionId))
                     {
                         <div class="pf-error-detail">@session.LastError</div>
                     }
@@ -244,6 +249,8 @@
     [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
     [Parameter] public EventCallback<PortForwardSession> OnStopSession { get; set; }
 
+    private readonly HashSet<Guid> _expandedErrors = [];
+
     protected override void OnInitialized()
         => SessionService.SessionsChanged += OnSessionsChanged;
 
@@ -257,6 +264,13 @@
     {
         Expanded = !Expanded;
         ExpandedChanged.InvokeAsync(Expanded);
+    }
+
+    private void ToggleErrorExpand(Guid sessionId)
+    {
+        if (!_expandedErrors.Add(sessionId))
+            _expandedErrors.Remove(sessionId);
+        StateHasChanged();
     }
 
     private Task OnStop(PortForwardSession session)

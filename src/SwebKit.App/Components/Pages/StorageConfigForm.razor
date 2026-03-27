@@ -8,7 +8,8 @@
         <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">Configured Accounts</div>
         @foreach (var acc in Environment.StorageAccounts.ToList())
         {
-            <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
+            <div
+                style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
                 <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@acc.DisplayName</span>
                 <span style="font-size:11px; color:var(--color-text-muted);">@(acc.UseAad ? "AAD" : "ConnStr") ·
                     @acc.AccountName</span>
@@ -53,9 +54,9 @@
             <div style="display:grid; gap:4px;">
                 <label style="font-size:12px; color:var(--color-text-muted);">Credential ref key (Windows Credential
                     Manager)</label>
-                    <input type="text" @bind="_connectionStringRef" @bind:event="oninput"
-                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid @(_connRefError is not null ? "var(--color-error)" : "var(--color-border)"); border-radius:4px;"
-                           placeholder="storage-myaccount-connstr" />
+                <PasswordField Value="@_connectionStringRef" ValueChanged="@(v => _connectionStringRef = v ?? string.Empty)"
+                               Label="Credential ref key"
+                               Placeholder="storage-myaccount-connstr" />
                     @if (_connRefError is not null)
                     {
                         <span style="font-size:11px; color:var(--color-error);">@_connRefError</span>

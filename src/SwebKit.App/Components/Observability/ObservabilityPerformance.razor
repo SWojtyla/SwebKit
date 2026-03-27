@@ -1,10 +1,13 @@
+@using ApexCharts
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
 
 <div class="obs-performance">
     @if (_isLoading && !_ops.Any())
     {
-        <div class="obs-loading"><FluentProgressRing /> Loading performance data…</div>
+        <div class="obs-loading">
+            <FluentProgressRing /> Loading performance data…
+        </div>
     }
     else if (_error is not null)
     {
@@ -21,7 +24,7 @@
 
                 <FluentDataGrid Items="FilteredOps" TGridItem="OperationPerformance"
                                 RowClass="@(op => op.OperationName == _selected?.OperationName ? "selected-row" : "")"
-                                OnRowClick="@(r => { _selected = r.Item; StateHasChanged(); })">
+                                OnRowClick="@(r => SelectOperationAsync(r.Item))">
                     <TemplateColumn Title="Operation" Sortable="true">
                         <span class="obs-op-name" title="@context.OperationName">@context.OperationName</span>
                     </TemplateColumn>
@@ -54,21 +57,49 @@
                     </div>
 
                     <div class="obs-perf-stats">
-                        <div class="obs-stat"><span class="obs-stat-label">Requests</span><span class="obs-stat-val">@_selected.RequestCount.ToString("N0")</span></div>
-                        <div class="obs-stat"><span class="obs-stat-label">Failure Rate</span><span class="obs-stat-val @FailClass(_selected.FailureRate)">@FmtPct(_selected.FailureRate)</span></div>
-                        <div class="obs-stat"><span class="obs-stat-label">P50</span><span class="obs-stat-val">@($"{_selected.P50Ms:F0}ms")</span></div>
-                        <div class="obs-stat"><span class="obs-stat-label">P95</span><span class="obs-stat-val @P95Class(_selected.P95Ms)">@($"{_selected.P95Ms:F0}ms")</span></div>
-                        <div class="obs-stat"><span class="obs-stat-label">P99</span><span class="obs-stat-val @P95Class(_selected.P99Ms)">@($"{_selected.P99Ms:F0}ms")</span></div>
-                    </div>
-                }
-            </div>
-        </div>
-    }
-</div>
+                        <div class="obs-stat"><span class="obs-stat-label">Requests</span><span
+                            class="obs-stat-val">@_selected.RequestCount.ToString("N0")</span></div>
+                            <div class="obs-stat"><span class="obs-stat-label">Failure Rate</span><span
+                                class="obs-stat-val @FailClass(_selected.FailureRate)">@FmtPct(_selected.FailureRate)</span>
+                            </div>
+                            <div class="obs-stat"><span class="obs-stat-label">P50</span><span
+                                class="obs-stat-val">@($"{_selected.P50Ms:F0}ms")</span></div>
+                                <div class="obs-stat"><span class="obs-stat-label">P95</span><span
+                                    class="obs-stat-val @P95Class(_selected.P95Ms)">@($"{_selected.P95Ms:F0}ms")</span></div>
+                                    <div class="obs-stat"><span class="obs-stat-label">P99</span><span
+                                        class="obs-stat-val @P95Class(_selected.P99Ms)">@($"{_selected.P99Ms:F0}ms")</span></div>
+                                    </div>
+
+                                    @if (_trendLoading)
+                                    {
+                                        <div class="obs-loading-inline">
+                                            <FluentProgressRing Style="width:14px;height:14px" /> Loading trend…
+                                        </div>
+                                    }
+                                    else if (_trend.Count > 0)
+                                    {
+                                        <div class="obs-chart-panel" style="margin-top:var(--spacing-md)">
+                                            <div class="obs-chart-title">Latency Trend</div>
+                                            <ApexChart TItem="LatencyDataPoint" Options="_trendChartOptions">
+                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P50"
+                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P50Ms)" />
+                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P95"
+                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P95Ms)" />
+                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P99"
+                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P99Ms)" />
+                                            </ApexChart>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public ObservabilityConfig? Config { get; set; }
 
     private readonly List<OperationPerformance> _ops = [];
     private OperationPerformance? _selected;
@@ -78,6 +109,29 @@
     private CancellationTokenSource _cts = new();
 
     private double _maxP95 = 1;
+
+    // Trend chart state
+    private List<LatencyDataPoint> _trend = [];
+    private bool _trendLoading;
+    private CancellationTokenSource? _trendDebounce;
+
+    private ApexChartOptions<LatencyDataPoint> _trendChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Type = ChartType.Line,
+            Height = 220,
+            Toolbar = new Toolbar { Show = false },
+            Animations = new Animations { Enabled = false },
+        },
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = new List<double> { 2, 2, 2 } },
+        Colors = new List<string> { "#0078d4", "#e08000", "#c8002a" },
+        Xaxis = new XAxis { Type = XAxisType.Datetime },
+        Yaxis = new List<YAxis> { new() { Labels = new YAxisLabels { MinWidth = 40 }, Title = new AxisTitle { Text = "ms" } } },
+        Tooltip = new Tooltip { X = new TooltipX { Format = "dd MMM HH:mm" } },
+        Grid = new Grid { BorderColor = "#333", StrokeDashArray = 3 },
+        Legend = new Legend { Position = LegendPosition.Bottom },
+    };
 
     private IQueryable<OperationPerformance> FilteredOps =>
         (string.IsNullOrWhiteSpace(_filter)
@@ -106,12 +160,55 @@
             _ops.AddRange(ops);
             _maxP95 = _ops.Count > 0 ? Math.Max(1, _ops.Max(op => op.P95Ms)) : 1;
             _selected = null;
+            _trend = [];
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SelectOperationAsync(OperationPerformance? op)
+    {
+        if (op is null) return;
+        _selected = op;
+        _trend = [];
+        await InvokeAsync(StateHasChanged);
+
+        // Debounce 300ms before loading trend
+        _trendDebounce?.Cancel();
+        _trendDebounce = new CancellationTokenSource();
+        var token = _trendDebounce.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (OperationCanceledException) { return; }
+
+        await LoadTrendAsync(op.OperationName, token);
+    }
+
+    private async Task LoadTrendAsync(string operationName, CancellationToken ct)
+    {
+        if (Provider is null) return;
+
+        _trendLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var points = await Provider.GetOperationLatencyTrendAsync(operationName, Range, ct);
+            _trend = points.ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { /* non-critical */ }
+        finally
+        {
+            _trendLoading = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -121,17 +218,21 @@
     private static string FmtPct(double rate) => $"{rate * 100:F1}%";
     private static string FmtMs(double ms) => $"{ms:F0}ms";
 
-    private static string FailClass(double rate)
+    private string FailClass(double rate)
     {
-        if (rate > 0.05) return "obs-red";
-        if (rate > 0.01) return "obs-amber";
+        var red = Config?.FailureRateRedThreshold ?? 0.05;
+        var amber = Config?.FailureRateAmberThreshold ?? 0.01;
+        if (rate > red) return "obs-red";
+        if (rate > amber) return "obs-amber";
         return "obs-green";
     }
 
-    private static string P95Class(double ms)
+    private string P95Class(double ms)
     {
-        if (ms > 2000) return "obs-red";
-        if (ms > 500)  return "obs-amber";
+        var red = Config?.LatencyRedThresholdMs ?? 2000;
+        var amber = Config?.LatencyAmberThresholdMs ?? 500;
+        if (ms > red) return "obs-red";
+        if (ms > amber) return "obs-amber";
         return "obs-green";
     }
 }

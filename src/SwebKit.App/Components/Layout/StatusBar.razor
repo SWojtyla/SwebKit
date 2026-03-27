@@ -21,7 +21,7 @@
                 var tooltip = s.State == ConnectionState.Error && s.ErrorMessage is not null
                     ? $"{label}: {s.ErrorMessage}"
                     : $"{label}: {s.State}";
-                <span class="connection-indicator" title="@tooltip">
+                <span class="connection-indicator" title="@tooltip" role="status" aria-label="@tooltip">
                     <span class="connection-dot @css">@(s.State switch
                     {
                         ConnectionState.Connected => "✓",
@@ -51,7 +51,7 @@
     }
     @if (pfActive > 0)
     {
-        <button class="status-bar-btn" title="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
+        <button class="status-bar-btn" title="Open port-forward sessions panel" aria-label="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
             <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
             @pfActive pf
         </button>

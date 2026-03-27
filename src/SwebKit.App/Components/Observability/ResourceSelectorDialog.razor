@@ -15,7 +15,7 @@
     else if (!FilteredResources.Any())
     {
         <div class="resource-selector-empty">
-            @(_isLoading ? "Scanning…" : "No Application Insights resources found.")
+            @(_isLoading ? $"Scanning… {_scanProgress}" : "No Application Insights resources found.")
         </div>
     }
     else
@@ -29,12 +29,18 @@
                     @foreach (var r in group)
                     {
                         var isSelected = r.ResourceId == SelectedResourceId;
-                        <div class="resource-item @(isSelected ? "selected" : "")"
-                             @onclick="() => SelectAsync(r)">
+                        <div class="resource-item @(isSelected ? "selected" : "")" @onclick="() => SelectAsync(r)">
                             <div class="resource-item-name">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.DataTrending())" />
                                 @r.Name
-                                @if (isSelected) { <span class="resource-item-badge">active</span> }
+                                @if (r.WorkspaceType is not null)
+                                {
+                                    <span class="resource-type-badge">@r.WorkspaceType</span>
+                                }
+                                @if (isSelected)
+                                {
+                                    <span class="resource-item-badge">active</span>
+                                }
                             </div>
                             <div class="resource-item-meta">@r.ResourceGroup · @r.Location</div>
                         </div>
@@ -45,7 +51,7 @@
             @if (_isLoading)
             {
                 <div class="resource-selector-scanning">
-                    <FluentProgressRing Style="width:14px;height:14px" /> Scanning more subscriptions…
+                    <FluentProgressRing Style="width:14px;height:14px" /> @_scanProgress
                 </div>
             }
         </div>
@@ -66,6 +72,7 @@
     private bool _isLoading;
     private string? _scanError;
     private string _filter = string.Empty;
+    private string _scanProgress = "Scanning…";
     private CancellationTokenSource? _cts;
 
     protected override async Task OnInitializedAsync()
@@ -99,6 +106,7 @@
             await foreach (var r in Discovery.DiscoverResourcesAsync(_cts.Token))
             {
                 _resources.Add(r);
+                _scanProgress = $"Found {_resources.Count} resources…";
                 await InvokeAsync(StateHasChanged);
             }
         }

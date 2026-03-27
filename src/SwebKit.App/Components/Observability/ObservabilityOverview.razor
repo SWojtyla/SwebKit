@@ -4,7 +4,9 @@
 
 @if (_isLoading)
 {
-    <div class="obs-loading"><FluentProgressRing /> Loading overview…</div>
+    <div class="obs-loading">
+        <FluentProgressRing /> Loading overview…
+    </div>
 }
 else if (_error is not null)
 {
@@ -44,22 +46,16 @@ else if (_metrics is not null)
             <div class="obs-chart-panel">
                 <div class="obs-chart-title">Request Volume</div>
                 <ApexChart TItem="TimeSeriesPoint" Options="_requestChartOptions">
-                    <ApexPointSeries TItem="TimeSeriesPoint"
-                                     Items="_metrics.RequestTrend"
-                                     SeriesType="SeriesType.Area"
-                                     Name="Requests"
-                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
+                    <ApexPointSeries TItem="TimeSeriesPoint" Items="_metrics.RequestTrend" SeriesType="SeriesType.Area"
+                                     Name="Requests" XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
                                      YValue="@(p => (decimal)p.Value)" />
                 </ApexChart>
             </div>
             <div class="obs-chart-panel">
                 <div class="obs-chart-title">Failure Rate (%)</div>
                 <ApexChart TItem="TimeSeriesPoint" Options="_failureChartOptions">
-                    <ApexPointSeries TItem="TimeSeriesPoint"
-                                     Items="_metrics.FailureTrend"
-                                     SeriesType="SeriesType.Area"
-                                     Name="Failure Rate"
-                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
+                    <ApexPointSeries TItem="TimeSeriesPoint" Items="_metrics.FailureTrend" SeriesType="SeriesType.Area"
+                                     Name="Failure Rate" XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())"
                                      YValue="@(p => (decimal)(p.Value * 100))" />
                 </ApexChart>
             </div>
@@ -70,6 +66,7 @@ else if (_metrics is not null)
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public ObservabilityConfig? Config { get; set; }
 
     private OverviewMetrics? _metrics;
     private bool _isLoading;
@@ -97,7 +94,7 @@ else if (_metrics is not null)
         {
             _metrics = await Provider.GetOverviewAsync(Range, _cts.Token);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
@@ -106,20 +103,23 @@ else if (_metrics is not null)
         }
     }
 
-    // Use methods instead of properties with relational patterns to avoid Razor parser issues
     private string FailureRateClass()
     {
         if (_metrics is null) return string.Empty;
-        if (_metrics.FailureRate > 0.05) return "obs-card-red";
-        if (_metrics.FailureRate > 0.01) return "obs-card-amber";
+        var red = Config?.FailureRateRedThreshold ?? 0.05;
+        var amber = Config?.FailureRateAmberThreshold ?? 0.01;
+        if (_metrics.FailureRate > red) return "obs-card-red";
+        if (_metrics.FailureRate > amber) return "obs-card-amber";
         return string.Empty;
     }
 
     private string P95Class()
     {
         if (_metrics is null) return string.Empty;
-        if (_metrics.P95ResponseTimeMs > 2000) return "obs-card-red";
-        if (_metrics.P95ResponseTimeMs > 500)  return "obs-card-amber";
+        var red = Config?.LatencyRedThresholdMs ?? 2000;
+        var amber = Config?.LatencyAmberThresholdMs ?? 500;
+        if (_metrics.P95ResponseTimeMs > red) return "obs-card-red";
+        if (_metrics.P95ResponseTimeMs > amber) return "obs-card-amber";
         return string.Empty;
     }
 

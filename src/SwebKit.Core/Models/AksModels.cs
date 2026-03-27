@@ -145,6 +145,7 @@ public class AggregatedLogLine
     public required string PodName { get; set; }
     public required string Line { get; set; }
     public DateTimeOffset ReceivedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? Timestamp { get; set; }
 }
 
 // ── Feature 2: StatefulSets ───────────────────────────────────────────────────

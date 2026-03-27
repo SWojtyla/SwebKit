@@ -3,6 +3,13 @@
 <div class="aks-yaml-content">
     <div class="aks-hpa-detail">
 
+        @* ── Refresh button ── *@
+        <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="OnRefreshRequested" Title="Refresh HPA data">
+                ↻ Refresh
+            </FluentButton>
+        </div>
+
         @* ── Target ── *@
         <div class="aks-hpa-row">
             <span class="aks-hpa-label">Target</span>
@@ -97,4 +104,5 @@
 
 @code {
     [Parameter, EditorRequired] public HpaInfo Hpa { get; set; } = default!;
+    [Parameter] public EventCallback OnRefreshRequested { get; set; }
 }

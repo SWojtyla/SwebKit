@@ -2,11 +2,11 @@ namespace SwebKit.Core.Models;
 
 public record TimeRange(DateTimeOffset Start, DateTimeOffset End)
 {
-    public static TimeRange LastHour    => new(DateTimeOffset.UtcNow.AddHours(-1),  DateTimeOffset.UtcNow);
-    public static TimeRange Last6Hours  => new(DateTimeOffset.UtcNow.AddHours(-6),  DateTimeOffset.UtcNow);
+    public static TimeRange LastHour => new(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow);
+    public static TimeRange Last6Hours => new(DateTimeOffset.UtcNow.AddHours(-6), DateTimeOffset.UtcNow);
     public static TimeRange Last24Hours => new(DateTimeOffset.UtcNow.AddHours(-24), DateTimeOffset.UtcNow);
-    public static TimeRange Last7Days   => new(DateTimeOffset.UtcNow.AddDays(-7),   DateTimeOffset.UtcNow);
-    public static TimeRange Last30Days  => new(DateTimeOffset.UtcNow.AddDays(-30),  DateTimeOffset.UtcNow);
+    public static TimeRange Last7Days => new(DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow);
+    public static TimeRange Last30Days => new(DateTimeOffset.UtcNow.AddDays(-30), DateTimeOffset.UtcNow);
 
     public static readonly (string Label, Func<TimeRange> Factory)[] Presets =
     [
@@ -36,7 +36,8 @@ public record ExceptionGroup(
     long Count,
     DateTimeOffset LastSeen,
     string? SampleMessage,
-    string? SampleStackTrace);
+    string? SampleStackTrace,
+    string? SampleOperationId = null);
 
 public record LogRow(IReadOnlyDictionary<string, object?> Columns);
 
@@ -68,7 +69,10 @@ public record ObservabilityResourceInfo(
     string SubscriptionId,
     string SubscriptionName,
     string ResourceGroup,
-    string Location);
+    string Location,
+    string? WorkspaceType = null);
+
+public record LatencyDataPoint(DateTimeOffset Timestamp, double P50Ms, double P95Ms, double P99Ms);
 
 public record QueryPreset(
     string Id,

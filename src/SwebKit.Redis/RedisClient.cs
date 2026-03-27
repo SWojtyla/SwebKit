@@ -233,6 +233,44 @@ public sealed class RedisClient : IRedisClient
         return Task.FromResult(info);
     }
 
+    public async Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.SortedSetAddAsync(key, member, score, SortedSetWhen.Exists);
+    }
+
+    public async Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.KeyRenameAsync(oldKey, newKey);
+    }
+
+    public async Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.HashDeleteAsync(key, field);
+    }
+
+    public async Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var members = new List<string>();
+        long nextCursor = cursor;
+
+        await foreach (var entry in _db.SetScanAsync(key, cursor: cursor, pageSize: pageSize))
+        {
+            ct.ThrowIfCancellationRequested();
+            members.Add(entry.ToString());
+            if (members.Count >= pageSize) break;
+        }
+
+        // SetScanAsync abstracts cursor; if we got fewer than pageSize we're done
+        var isComplete = members.Count < pageSize;
+        nextCursor = isComplete ? 0 : cursor + members.Count;
+
+        return new SetScanResult(members, nextCursor, isComplete);
+    }
+
     public void Dispose()
     {
         _mux.Dispose();

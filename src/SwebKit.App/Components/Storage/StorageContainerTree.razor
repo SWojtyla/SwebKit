@@ -1,9 +1,12 @@
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
 
     @* ── Header ── *@
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
-        <span style="font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Containers</span>
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="RefreshAsync" Disabled="@_loading" title="Refresh">↻</FluentButton>
+    <div
+        style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+        <span
+        style="font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Containers</span>
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="RefreshAsync" Disabled="@_loading" title="Refresh">↻
+        </FluentButton>
     </div>
 
     @* ── Body ── *@
@@ -28,15 +31,71 @@
             {
                 var isSelected = container.Name == SelectedContainer;
                 <div style="display:flex; align-items:center; gap:8px; padding:7px 12px; cursor:pointer; background:@(isSelected ? "var(--color-accent)" : "transparent"); color:@(isSelected ? "white" : "var(--color-text)"); border-bottom:1px solid var(--color-border);"
-                     @onclick="() => SelectContainerAsync(container.Name)">
+                     @onclick="() => SelectContainerAsync(container.Name)"
+                     @oncontextmenu="e => OnContainerContextMenu(e, container)" @oncontextmenu:preventDefault="true"
+                     title="@GetContainerTooltip(container)">
                     <span style="font-size:14px;">📦</span>
-                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@container.Name">@container.Name</span>
+                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;"
+                          title="@container.Name">@container.Name</span>
+                    @if (container.PublicAccess is not null)
+                    {
+                        <span
+                        style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(255,193,7,0.2); color:@(isSelected ? "white" : "var(--color-text-muted)");"
+                        title="Public access: @container.PublicAccess">Public</span>
+                    }
+                    @if (string.Equals(container.LeaseStatus, "locked", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span
+                        style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(0,120,212,0.15); color:@(isSelected ? "white" : "var(--color-text-muted)");"
+                        title="Lease is locked">Leased</span>
+                    }
+                    <button
+                    style="background:none; border:none; cursor:pointer; font-size:14px; padding:0 2px; color:@(isSelected ? "white" : "var(--color-text-muted)");"
+                    @onclick:stopPropagation="true" @onclick="e => OnContainerMenuButtonClick(e, container)"
+                    title="Container actions">⋮</button>
                 </div>
             }
         </div>
     }
 
-</div>
+    <ContextMenu @ref="_ctxMenu">
+        <button class="ctx-item" @onclick="() => CopyContainerSasAsync(TimeSpan.FromHours(1))"><span
+            class="ctx-item-icon">🔑</span> Copy container SAS (1 h)</button>
+            <button class="ctx-item" @onclick="() => CopyContainerSasAsync(TimeSpan.FromHours(24))"><span
+                class="ctx-item-icon">🔑</span> Copy container SAS (24 h)</button>
+                <button class="ctx-item" @onclick="() => CopyContainerSasAsync(TimeSpan.FromDays(7))"><span
+                    class="ctx-item-icon">🔑</span> Copy container SAS (7 d)</button>
+                    <button class="ctx-item" @onclick="() => ShowCustomContainerSasDialog()"><span class="ctx-item-icon">🔑</span>
+                        Copy container SAS (custom…)</button>
+                    </ContextMenu>
+
+                    @* ── Custom SAS dialog ── *@
+                    @if (_showCustomSasDialog)
+                    {
+                        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.3); z-index:1000; display:flex; align-items:center; justify-content:center;"
+                             @onclick="() => _showCustomSasDialog = false">
+                            <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; padding:16px; min-width:260px;"
+                                 @onclick:stopPropagation="true">
+                                <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Custom container SAS expiry</div>
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                                    <input type="number" min="1" max="8760" @bind="_customSasHours"
+                                           style="width:80px; padding:4px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                    <span style="font-size:12px;">hours</span>
+                                </div>
+                                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _showCustomSasDialog = false">Cancel
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Accent" @onclick="ApplyCustomContainerSasAsync">Copy SAS
+                                    </FluentButton>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                </div>
+
+@inject IJSRuntime JS
+@inject INotificationService Notifications
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -47,6 +106,12 @@
     private bool _loading;
     private string? _errorMessage;
     private IStorageClient? _loadedClient;
+
+    // STG-12: Container SAS
+    private ContextMenu _ctxMenu = default!;
+    private StorageContainerItem? _ctxContainer;
+    private bool _showCustomSasDialog;
+    private int _customSasHours = 1;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -67,6 +132,7 @@
         {
             _containers = await Client.ListContainersAsync();
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _errorMessage = ex.Message;
@@ -84,4 +150,61 @@
 
     private async Task SelectContainerAsync(string name)
         => await SelectedContainerChanged.InvokeAsync(name);
+
+    // STG-8: Container tooltip with LastModified info
+    private static string GetContainerTooltip(StorageContainerItem c)
+    {
+        var parts = new List<string> { c.Name };
+        if (c.LastModified.HasValue)
+            parts.Add($"Last modified: {c.LastModified.Value:yyyy-MM-dd HH:mm}");
+        if (c.PublicAccess is not null)
+            parts.Add($"Public access: {c.PublicAccess}");
+        if (string.Equals(c.LeaseStatus, "locked", StringComparison.OrdinalIgnoreCase))
+            parts.Add("Lease: locked");
+        return string.Join("\n", parts);
+    }
+
+    // STG-12: Container context menu + SAS
+    private void OnContainerContextMenu(MouseEventArgs e, StorageContainerItem container)
+    {
+        _ctxContainer = container;
+        _ctxMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private void OnContainerMenuButtonClick(MouseEventArgs e, StorageContainerItem container)
+    {
+        _ctxContainer = container;
+        _ctxMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private async Task CopyContainerSasAsync(TimeSpan expiry)
+    {
+        if (_ctxContainer is null) return;
+        try
+        {
+            var url = await Client.GetContainerSasUrlAsync(_ctxContainer.Name, expiry);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            var label = expiry.TotalHours < 24 ? $"{(int)expiry.TotalHours} hour(s)" : $"{(int)expiry.TotalDays} day(s)";
+            Notifications.ShowSuccess("Container SAS copied", $"Expires in {label}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to copy container SAS", ex: ex);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ShowCustomContainerSasDialog()
+    {
+        _customSasHours = 1;
+        _showCustomSasDialog = true;
+    }
+
+    private async Task ApplyCustomContainerSasAsync()
+    {
+        _showCustomSasDialog = false;
+        if (_customSasHours > 0)
+            await CopyContainerSasAsync(TimeSpan.FromHours(_customSasHours));
+    }
 }

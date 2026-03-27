@@ -36,8 +36,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.DoesNotContain("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
         });
 
         cut.Find("button[aria-label='Collapse namespace panel']").Click();
@@ -45,8 +45,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.Contains("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.Contains("collapsed", panel.ClassName, StringComparison.Ordinal);
             Assert.NotNull(cut.Find(".service-bus-right-pane"));
         });
 
@@ -55,8 +55,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.DoesNotContain("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
         });
     }
 

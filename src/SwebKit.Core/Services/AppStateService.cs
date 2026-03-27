@@ -87,4 +87,31 @@ public class AppStateService
         _profiles.DeleteMessageTemplate(id);
         await _profiles.SaveAsync();
     }
+
+    public IReadOnlyList<AppConfig> Environments => _profiles.Environments;
+    public string? ActiveEnvironmentName => _profiles.ActiveEnvironmentName;
+
+    public async Task CloneEnvironmentAsync(string newName)
+    {
+        _profiles.CloneEnvironment(newName);
+        await _profiles.SaveAsync();
+    }
+
+    public async Task SwitchEnvironmentAsync(string name)
+    {
+        _profiles.SwitchEnvironment(name);
+        await _profiles.SaveAsync();
+        Initialized?.Invoke(); // notify UI to re-render with new config
+    }
+
+    public async Task RemoveEnvironmentAsync(string name)
+    {
+        _profiles.RemoveEnvironment(name);
+        await _profiles.SaveAsync();
+        Initialized?.Invoke();
+    }
+
+    public ProfileData GetProfileData() => _profiles.GetProfileData();
+
+    public void ReplaceProfileData(ProfileData data) => _profiles.ReplaceProfileData(data);
 }

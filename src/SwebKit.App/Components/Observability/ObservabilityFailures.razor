@@ -83,10 +83,18 @@
                         <div class="obs-samples">
                             @foreach (var row in _samples)
                             {
+                                var opId = GetCol(row, "operationId");
                                 <div class="obs-sample-row">
                                     <span class="obs-sample-time">@FormatTimestamp(row)</span>
                                     <span class="obs-sample-op">@GetCol(row, "operationName")</span>
-                                    <span class="obs-sample-id">@GetCol(row, "operationId")</span>
+                                    <span class="obs-sample-id">@opId</span>
+                                    @if (!string.IsNullOrEmpty(opId))
+                                    {
+                                        <button class="obs-drill-link" style="margin:0;font-size:var(--font-size-xs);"
+                                                @onclick="() => DrillToTrace(opId)" title="View full trace">
+                                            → Trace
+                                        </button>
+                                    }
                                 </div>
                             }
                         </div>
@@ -108,6 +116,7 @@
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
     [Parameter] public EventCallback<string> OnDrillToLogs { get; set; }
+    [Parameter] public int TzOffsetMinutes { get; set; }
 
     private readonly List<ExceptionGroup> _exceptions = [];
     private ExceptionGroup? _selected;
@@ -149,7 +158,7 @@
             _selected = null;
             _samples = [];
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
@@ -192,6 +201,12 @@
         await OnDrillToLogs.InvokeAsync(kql);
     }
 
+    private async Task DrillToTrace(string operationId)
+    {
+        var kql = SwebKit.Observability.KqlPresets.TraceByOperationId(operationId);
+        await OnDrillToLogs.InvokeAsync(kql);
+    }
+
     private static string ShortType(string fullType)
     {
         var parts = fullType.Split('.');
@@ -207,10 +222,15 @@
             : $"{(int)age.TotalDays}d ago";
     }
 
-    private static string FormatTimestamp(LogRow row)
+    private string FormatTimestamp(LogRow row)
     {
         var ts = GetCol(row, "timestamp");
-        return DateTimeOffset.TryParse(ts, out var dto) ? dto.ToLocalTime().ToString("HH:mm:ss") : ts;
+        if (DateTimeOffset.TryParse(ts, out var dto))
+        {
+            var local = dto.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes));
+            return local.ToString("HH:mm:ss");
+        }
+        return ts;
     }
 
     private static string GetCol(LogRow row, string col) =>

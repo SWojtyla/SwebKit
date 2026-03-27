@@ -127,10 +127,10 @@ All implementable items complete. Build passes, 74/74 tests pass. Cross-cutting 
 
 ## Deferred / Out of scope
 
-| Item           | Reason                                               |
-| -------------- | ---------------------------------------------------- |
-| REL-1 – REL-6  | Deferred — `ReleasesPage` does not exist yet         |
-| SB items       | Superseded by `service-bus-ui-revamp` active feature |
-| AKS-10         | Skipped — low priority diff view                     |
-| STG-1 (upload) | Explicitly out of scope                              |
-| STG-2 (delete) | Explicitly out of scope                              |
+| Item | Reason |
+| ---- | ------ |
+| REL-1 – REL-6 | Deferred — `ReleasesPage` does not exist yet |
+| SB items | Superseded by `service-bus-ui-revamp` active feature |
+| AKS-10 | Skipped — low priority diff view |
+| STG-1 (upload) | Explicitly out of scope |
+| STG-2 (delete) | Explicitly out of scope |

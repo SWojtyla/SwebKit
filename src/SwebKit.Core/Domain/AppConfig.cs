@@ -2,6 +2,7 @@ namespace SwebKit.Core.Domain;
 
 public class AppConfig
 {
+    public string Name { get; set; } = "Default";
     public bool IsProduction { get; set; }
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public AksConfig? AksConfig { get; set; }

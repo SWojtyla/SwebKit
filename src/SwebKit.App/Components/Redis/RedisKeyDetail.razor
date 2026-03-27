@@ -18,10 +18,21 @@
     {
         <div class="meta">
             <div class="key-name-row">
-                <div class="key-name">@KeyInfo.Key</div>
-                <button class="copy-btn" title="Copy key name" @onclick="CopyKeyNameAsync">
-                    📋
-                </button>
+                @if (_isRenaming)
+                {
+                    <input class="rename-input" type="text" @bind="_renameValue" @onkeydown="HandleRenameKeyDown"
+                           @onkeydown:preventDefault="@(_renamePrevent)" />
+                    <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmRenameAsync">✓</FluentButton>
+                    <FluentButton @onclick="CancelRename">✕</FluentButton>
+                }
+                else
+                {
+                    <div class="key-name">@KeyInfo.Key</div>
+                    <button class="copy-btn" title="Copy key name" @onclick="CopyKeyNameAsync">
+                        📋
+                    </button>
+                    <button class="copy-btn" title="Rename key" @onclick="BeginRename">✏️</button>
+                }
             </div>
             <div class="kv">Type: @KeyInfo.Type</div>
             <div class="kv @GetTtlClass()">TTL: @TtlFormatter.FormatHuman(_displayedTtl)</div>
@@ -66,7 +77,14 @@
             }
             else
             {
-                <pre class="blob">@DisplayStringValue</pre>
+                @if (RedisValueHelpers.IsBinaryContent(StringValue))
+                {
+                    <div class="binary-badge">Binary content — cannot display</div>
+                }
+                else
+                {
+                    <pre class="blob">@DisplayStringValue</pre>
+                }
             }
         }
         else if (KeyInfo.Type == "hash")
@@ -76,6 +94,8 @@
                     <tr>
                         <th>Field</th>
                         <th>Value</th>
+                        <th></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -104,8 +124,20 @@
                                     <FluentButton @onclick="() => BeginHashFieldEdit(field.Field, field.Value)">Edit</FluentButton>
                                 }
                             </td>
+                            <td>
+                                <FluentButton @onclick="() => OnDeleteHashField.InvokeAsync(field.Field)" title="Delete field">−
+                                </FluentButton>
+                            </td>
                         </tr>
                     }
+                    <tr class="add-field-row">
+                        <td><input type="text" class="hash-editor" placeholder="Field name" @bind="_newHashFieldName" /></td>
+                        <td><input type="text" class="hash-editor" placeholder="Value" @bind="_newHashFieldValue" /></td>
+                        <td colspan="2">
+                            <FluentButton @onclick="AddHashFieldAsync"
+                                          Disabled="@(string.IsNullOrWhiteSpace(_newHashFieldName))">+</FluentButton>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         }
@@ -117,6 +149,10 @@
                     <li>@item</li>
                 }
             </ul>
+            @if (HasMoreItems)
+            {
+                <FluentButton @onclick="OnLoadMoreItems" class="load-more-btn">Load more (@Items.Count loaded)</FluentButton>
+            }
         }
         else if (KeyInfo.Type == "zset")
         {
@@ -132,11 +168,26 @@
                     {
                         <tr>
                             <td>@item.Member</td>
-                            <td>@item.Score</td>
+                            <td @onclick="() => BeginZsetScoreEdit(item.Member, item.Score)" class="zset-score-cell">
+                                @if (_editingZsetMember == item.Member)
+                                {
+                                    <input type="number" step="any" class="zset-score-editor" @bind="_zsetScoreEditor"
+                                           @onkeydown="HandleZsetScoreKeyDown" @onkeydown:preventDefault="@(_zsetKeyPrevent)" />
+                                }
+                                else
+                                {
+                                    @item.Score
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
             </table>
+            @if (HasMoreItems)
+            {
+                <FluentButton @onclick="OnLoadMoreItems" class="load-more-btn">Load more (@SortedSetItems.Count loaded)
+                </FluentButton>
+            }
         }
     }
 </div>
@@ -156,6 +207,11 @@
     [Parameter] public EventCallback<string> OnSetStringValue { get; set; }
     [Parameter] public EventCallback<(string Field, string Value)> OnSetHashField { get; set; }
     [Parameter] public int StartEditRequestId { get; set; }
+    [Parameter] public EventCallback<(string Member, double Score)> OnUpdateSortedSetScore { get; set; }
+    [Parameter] public EventCallback<string> OnRenameKey { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteHashField { get; set; }
+    [Parameter] public bool HasMoreItems { get; set; }
+    [Parameter] public EventCallback OnLoadMoreItems { get; set; }
 
     private int TtlSeconds = 300;
     private bool IsEditingString;
@@ -165,6 +221,20 @@
     private string HashEditorValue = string.Empty;
     private int LastStartEditRequestId;
     private string DisplayStringValue => RedisValueHelpers.TruncateValue(RedisValueHelpers.FormatJsonIfValid(StringValue));
+
+    // RDS-3: Sorted set score editing
+    private string? _editingZsetMember;
+    private string _zsetScoreEditor = string.Empty;
+    private bool _zsetKeyPrevent;
+
+    // RDS-6: Key rename
+    private bool _isRenaming;
+    private string _renameValue = string.Empty;
+    private bool _renamePrevent;
+
+    // RDS-11: Hash field add
+    private string _newHashFieldName = string.Empty;
+    private string _newHashFieldValue = string.Empty;
 
     // TTL visualisation state
     private string? _originalKey;
@@ -200,6 +270,18 @@
                 _originalKey = SelectedKey;
                 _originalTtl = KeyInfo?.Ttl;
                 _displayedTtl = KeyInfo?.Ttl;
+
+                // RDS-8: Pre-populate TTL input from current key TTL
+                TtlSeconds = KeyInfo?.Ttl is { } ttl && ttl > TimeSpan.Zero
+                    ? (int)Math.Ceiling(ttl.TotalSeconds)
+                    : 300;
+
+                // Reset edit states for new key
+                _isRenaming = false;
+                _editingZsetMember = null;
+                _newHashFieldName = string.Empty;
+                _newHashFieldValue = string.Empty;
+
                 RestartCountdown();
             }
             else if (KeyInfo is not null)
@@ -319,6 +401,70 @@
         if (string.IsNullOrEmpty(KeyInfo?.Key)) return;
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", KeyInfo.Key);
         Notifications.ShowSuccess("Copied!");
+    }
+
+    // RDS-3: ZSet score editing
+    private void BeginZsetScoreEdit(string member, double score)
+    {
+        _editingZsetMember = member;
+        _zsetScoreEditor = score.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private async Task HandleZsetScoreKeyDown(KeyboardEventArgs e)
+    {
+        _zsetKeyPrevent = e.Key is "Enter" or "Escape";
+        if (e.Key == "Enter") await SaveZsetScoreAsync();
+        else if (e.Key == "Escape") _editingZsetMember = null;
+    }
+
+    private async Task SaveZsetScoreAsync()
+    {
+        if (_editingZsetMember is null) return;
+        if (double.TryParse(_zsetScoreEditor, NumberStyles.Float, CultureInfo.InvariantCulture, out var score))
+        {
+            await OnUpdateSortedSetScore.InvokeAsync((_editingZsetMember, score));
+            _editingZsetMember = null;
+        }
+    }
+
+    // RDS-6: Key rename
+    private void BeginRename()
+    {
+        _isRenaming = true;
+        _renameValue = KeyInfo?.Key ?? string.Empty;
+    }
+
+    private void CancelRename()
+    {
+        _isRenaming = false;
+        _renameValue = string.Empty;
+    }
+
+    private async Task HandleRenameKeyDown(KeyboardEventArgs e)
+    {
+        _renamePrevent = e.Key is "Enter" or "Escape";
+        if (e.Key == "Enter") await ConfirmRenameAsync();
+        else if (e.Key == "Escape") CancelRename();
+    }
+
+    private async Task ConfirmRenameAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_renameValue) || _renameValue == KeyInfo?.Key)
+        {
+            CancelRename();
+            return;
+        }
+        await OnRenameKey.InvokeAsync(_renameValue.Trim());
+        _isRenaming = false;
+    }
+
+    // RDS-11: Add hash field
+    private async Task AddHashFieldAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newHashFieldName)) return;
+        await OnSetHashField.InvokeAsync((_newHashFieldName.Trim(), _newHashFieldValue));
+        _newHashFieldName = string.Empty;
+        _newHashFieldValue = string.Empty;
     }
 
     public void Dispose()

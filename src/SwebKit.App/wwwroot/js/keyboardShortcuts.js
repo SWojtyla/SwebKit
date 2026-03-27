@@ -232,6 +232,10 @@ window.SwebKit.getSystemTheme = function () {
     : 'light';
 };
 
+window.SwebKit.getBrowserTimezoneOffset = function () {
+  return -new Date().getTimezoneOffset();
+};
+
 window.SwebKit.downloadText = function (filename, mimeType, content) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);

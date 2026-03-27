@@ -1,5 +1,7 @@
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
+@using BlazorMonaco
+@using BlazorMonaco.Editor
 
 <div class="obs-logs">
     <div class="obs-logs-layout">
@@ -17,14 +19,21 @@
             @if (_savedQueries.Any())
             {
                 <div class="obs-sidebar-section-title" style="margin-top:12px">Saved Queries</div>
-                @foreach (var sq in _savedQueries)
+                @foreach (var group in GroupedSavedQueries)
                 {
-                    <div class="obs-saved-query-row">
-                        <button class="obs-preset-item" @onclick="() => LoadSaved(sq)" title="@sq.Query">
-                            @sq.Name
-                        </button>
-                        <button class="obs-saved-query-delete" @onclick="() => DeleteSaved(sq)" title="Delete">✕</button>
-                    </div>
+                    @if (group.Key is not null)
+                    {
+                        <div class="obs-folder-header">📁 @group.Key</div>
+                    }
+                    @foreach (var sq in group)
+                    {
+                        <div class="obs-saved-query-row @(group.Key is not null ? "obs-folder-item" : "")">
+                            <button class="obs-preset-item" @onclick="() => LoadSaved(sq)" title="@sq.Query">
+                                @DisplayName(sq.Name)
+                            </button>
+                            <button class="obs-saved-query-delete" @onclick="() => DeleteSaved(sq)" title="Delete">✕</button>
+                        </div>
+                    }
                 }
             }
 
@@ -37,8 +46,10 @@
         <!-- Right: editor + results -->
         <div class="obs-logs-main">
             <div class="obs-query-toolbar">
-                <textarea class="obs-query-editor" @bind="_query" @bind:event="oninput" rows="5"
-                          placeholder="Enter KQL query… (Ctrl+Enter to run)" @onkeydown="OnEditorKeyDown" />
+                <div class="obs-monaco-wrapper">
+                    <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorConstructionOptions"
+                                          OnDidInit="OnEditorInitAsync" />
+                </div>
                 <div class="obs-query-actions">
                     <FluentButton Appearance="Appearance.Accent" @onclick="RunQueryAsync" Disabled="_isRunning">
                         ▶ Run
@@ -51,6 +62,11 @@
                     }
                 </div>
             </div>
+
+            @if (_queryError is not null)
+            {
+                <div class="obs-query-error">⚠ @_queryError</div>
+            }
 
             @if (_isRunning)
             {
@@ -100,7 +116,8 @@
     <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
         <FluentDialogHeader>Save Query</FluentDialogHeader>
         <FluentDialogBody>
-            <FluentTextField @bind-Value="_saveQueryName" Label="Query Name" Autofocus="true" />
+            <FluentTextField @bind-Value="_saveQueryName" Label="Query Name"
+                             Placeholder="folder/query-name (use / for folders)" Autofocus="true" />
         </FluentDialogBody>
         <FluentDialogFooter>
             <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
@@ -123,15 +140,59 @@
     private LogQueryResult? _result;
     private bool _isRunning;
     private string? _error;
+    private string? _queryError;
     private string? _activePresetId;
     private IReadOnlyList<QueryPreset> _presets = [];
     private List<SwebKit.Core.Domain.SavedQuery> _savedQueries = [];
     private CancellationTokenSource _cts = new();
+    private StandaloneCodeEditor? _editor;
 
     // Save dialog
     private bool _saveDialogOpen;
     private bool _saveDialogHidden = true;
     private string _saveQueryName = string.Empty;
+
+    // Saved query folder grouping
+    private IEnumerable<IGrouping<string?, SwebKit.Core.Domain.SavedQuery>> GroupedSavedQueries =>
+        _savedQueries.GroupBy(sq =>
+        {
+            var idx = sq.Name.IndexOf('/');
+            return idx > 0 ? sq.Name[..idx] : (string?)null;
+        }).OrderBy(g => g.Key ?? "zzz"); // ungrouped queries last
+
+    private static string DisplayName(string name)
+    {
+        var idx = name.IndexOf('/');
+        return idx > 0 ? name[(idx + 1)..] : name;
+    }
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor) => new()
+    {
+        Language = "sql",
+        Theme = "vs-dark",
+        Value = _query,
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "off",
+        RenderLineHighlight = "none",
+        OverviewRulerLanes = 0,
+        Folding = false,
+        GlyphMargin = false,
+        Dimension = new Dimension { Height = 140 },
+    };
+
+    private async Task OnEditorInitAsync()
+    {
+        if (_editor is null) return;
+
+        // Ctrl+Enter → Run query
+        await _editor.AddAction("run-query", "Run Query",
+            [(int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter],
+            null, null, "navigation", 1.0,
+            async (_, _) => await RunQueryAsync());
+    }
 
     protected override void OnParametersSet()
     {
@@ -144,31 +205,44 @@
     {
         _query = kql;
         _activePresetId = null;
+        if (_editor is not null)
+            await _editor.SetValue(kql);
         await RunQueryAsync();
     }
 
-    private void ApplyPreset(QueryPreset preset)
+    private async Task ApplyPreset(QueryPreset preset)
     {
         _query = preset.Query;
         _activePresetId = preset.Id;
+        if (_editor is not null)
+            await _editor.SetValue(preset.Query);
         _ = RunQueryAsync();
     }
 
-    private void LoadSaved(SwebKit.Core.Domain.SavedQuery sq)
+    private async Task LoadSaved(SwebKit.Core.Domain.SavedQuery sq)
     {
         _query = sq.Query;
         _activePresetId = null;
+        if (_editor is not null)
+            await _editor.SetValue(sq.Query);
         _ = RunQueryAsync();
     }
 
     private async Task RunQueryAsync()
     {
-        if (Provider is null || string.IsNullOrWhiteSpace(_query)) return;
+        if (Provider is null) return;
+
+        // Sync query from editor
+        if (_editor is not null)
+            _query = await _editor.GetValue();
+
+        if (string.IsNullOrWhiteSpace(_query)) return;
 
         _cts.Cancel();
         _cts = new CancellationTokenSource();
         _isRunning = true;
         _error = null;
+        _queryError = null;
         _result = null;
         await InvokeAsync(StateHasChanged);
 
@@ -176,19 +250,17 @@
         {
             _result = await Provider.RunQueryAsync(_query, Range, MaxRows, _cts.Token);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
+        catch (global::Azure.RequestFailedException rfe) when (rfe.ErrorCode == "BadArgumentError")
+        {
+            _queryError = rfe.Message;
+        }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _isRunning = false;
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    private async Task OnEditorKeyDown(KeyboardEventArgs e)
-    {
-        if (e.CtrlKey && e.Key == "Enter")
-            await RunQueryAsync();
     }
 
     private string BuildCsvContent()
@@ -241,6 +313,10 @@
     private async Task ConfirmSaveAsync()
     {
         if (string.IsNullOrWhiteSpace(_saveQueryName)) return;
+
+        // Sync query from editor before saving
+        if (_editor is not null)
+            _query = await _editor.GetValue();
 
         var sq = new SwebKit.Core.Domain.SavedQuery
         {

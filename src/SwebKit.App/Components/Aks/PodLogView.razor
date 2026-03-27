@@ -10,11 +10,26 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
+        @if (Containers.Count > 1)
+        {
+            <select class="log-container-select" value="@_selectedContainer" @onchange="OnContainerChanged">
+                @foreach (var c in Containers)
+                {
+                    <option value="@c" selected="@(c == _selectedContainer)">@c</option>
+                }
+            </select>
+        }
         <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…" class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ExportLogsAsync" Disabled="@(FilteredLines.Count == 0)"
                       Title="Export logs as text file">Export</FluentButton>
+        @if (IsLive && IsLoading)
+        {
+            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause" Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                @(_paused ? "▶ Resume" : "⏸ Pause")
+            </FluentButton>
+        }
         <label class="log-live-toggle" style="margin-left:auto;">
             <input type="checkbox" @bind="_tailEnabled" />
             ↓ Tail
@@ -46,6 +61,8 @@
     [Parameter] public IAksClient? Client { get; set; }
     [Parameter] public string? Namespace { get; set; }
     [Parameter] public string? PodName { get; set; }
+    [Parameter] public IReadOnlyList<string> Containers { get; set; } = [];
+    [Parameter] public int BufferSize { get; set; } = 10_000;
 
     private List<string> Lines = [];
     private bool IsLive = true;
@@ -55,6 +72,8 @@
     private ElementReference _logContainer;
     private Task? _streamTask;
     private bool _tailEnabled = true;
+    private string _selectedContainer = string.Empty;
+    private bool _paused;
 
     private IReadOnlyList<string> FilteredLines => string.IsNullOrEmpty(TextFilter)
         ? Lines.TakeLast(500).ToList()
@@ -63,13 +82,30 @@
     protected override async Task OnParametersSetAsync()
     {
         if (Client is not null && PodName is not null && Namespace is not null && IsLive)
+        {
+            if (string.IsNullOrEmpty(_selectedContainer) && Containers.Count > 0)
+                _selectedContainer = Containers[0];
             await StartTailingAsync();
+        }
     }
 
     private async Task OnLiveToggle()
     {
         if (IsLive) await StartTailingAsync();
-        else { _cts?.Cancel(); IsLoading = false; }
+        else { _cts?.Cancel(); IsLoading = false; _paused = false; }
+    }
+
+    private async Task OnContainerChanged(ChangeEventArgs e)
+    {
+        _selectedContainer = e.Value?.ToString() ?? string.Empty;
+        await StartTailingAsync();
+    }
+
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        if (!_paused)
+            InvokeAsync(StateHasChanged);
     }
 
     private async Task StartTailingAsync()
@@ -77,6 +113,7 @@
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
         IsLoading = true;
+        _paused = false;
         Lines.Clear();
         StateHasChanged();
 
@@ -90,24 +127,27 @@
     private async Task StreamLogsAsync()
     {
         var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
-        var container = string.Empty;
+        var container = _selectedContainer;
         int lineCount = 0;
         await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, _cts!.Token))
         {
             Lines.Add(line);
-            if (Lines.Count > 10_000) Lines.RemoveAt(0);
+            if (Lines.Count > BufferSize) Lines.RemoveAt(0);
             lineCount++;
-            if (lineCount % 20 == 0) // Render every 20 lines
+            if (!_paused && lineCount % 20 == 0)
             {
                 await InvokeAsync(StateHasChanged);
                 if (_tailEnabled)
                     await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
             }
         }
-        await InvokeAsync(StateHasChanged); // Final render
-        if (_tailEnabled)
-            await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
-        await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
+        if (!_paused)
+        {
+            await InvokeAsync(StateHasChanged);
+            if (_tailEnabled)
+                await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
+        }
+        await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
     }
 
     private void ClearLogs() { Lines.Clear(); StateHasChanged(); }

@@ -1,10 +1,13 @@
+@using ApexCharts
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
 
 <div class="obs-availability">
     @if (_isLoading && !_results.Any())
     {
-        <div class="obs-loading"><FluentProgressRing /> Loading availability data…</div>
+        <div class="obs-loading">
+            <FluentProgressRing /> Loading availability data…
+        </div>
     }
     else if (_error is not null)
     {
@@ -16,70 +19,128 @@
             Overall: <strong class="@OverallClass()">@OverallFmt()</strong>
             &nbsp;·&nbsp;
             @PassCount passes, @FailCount failures
+            <span style="margin-left:auto;">
+                <FluentButton Appearance="Appearance.Lightweight"
+                              @onclick="() => { _heatmapView = !_heatmapView; StateHasChanged(); }">
+                    @(_heatmapView ? "📋 List" : "🗓 Heatmap")
+                </FluentButton>
+            </span>
         </div>
 
-        <div class="obs-split-layout">
-            <div class="obs-list-panel">
-                <FluentDataGrid Items="_results.AsQueryable()" TGridItem="AvailabilityResult"
-                                RowClass="@(r => r == _selected ? "selected-row" : "")"
-                                OnRowClick="@(r => { _selected = r.Item; StateHasChanged(); })">
-                    <TemplateColumn Title="Test">@context.TestName</TemplateColumn>
-                    <TemplateColumn Title="Location">@context.Location</TemplateColumn>
-                    <TemplateColumn Title="Result">
-                        <span class="@(context.Success ? "obs-avail-pass" : "obs-avail-fail")">
-                            @(context.Success ? "✓ Pass" : "✗ Fail")
-                        </span>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Duration">@FormatMs(context.DurationMs)</TemplateColumn>
-                    <TemplateColumn Title="Time">@FormatAge(context.Timestamp)</TemplateColumn>
-                </FluentDataGrid>
-            </div>
-
-            <div class="obs-detail-panel">
-                @if (_selected is null)
-                {
-                    <div class="obs-detail-empty">Select a test result to view details.</div>
-                }
-                else
-                {
-                    <div class="obs-detail-header">
-                        <div class="obs-detail-title">@_selected.TestName</div>
-                        <div class="obs-detail-meta">@_selected.Location · @_selected.Timestamp.ToLocalTime().ToString("g")</div>
-                    </div>
-
-                    <div class="obs-perf-stats">
-                        <div class="obs-stat">
-                            <span class="obs-stat-label">Result</span>
-                            <span class="obs-stat-val @(_selected.Success ? "obs-green" : "obs-red")">
-                                @(_selected.Success ? "Pass" : "Fail")
-                            </span>
-                        </div>
-                        <div class="obs-stat">
-                            <span class="obs-stat-label">Duration</span>
-                            <span class="obs-stat-val">@FormatMs(_selected.DurationMs)</span>
-                        </div>
-                    </div>
-
-                    @if (!_selected.Success && _selected.FailureMessage is not null)
+        @if (_heatmapView)
+        {
+            <div class="obs-chart-panel">
+                <div class="obs-chart-title">Availability Heatmap (% per hour)</div>
+                <ApexChart TItem="HeatmapCell" Options="_heatmapOptions">
+                    @foreach (var series in _heatmapData)
                     {
-                        <div class="obs-detail-section-title">Failure Message</div>
-                        <div class="obs-detail-message obs-red">@_selected.FailureMessage</div>
+                        <ApexPointSeries TItem="HeatmapCell" Items="series.Data" SeriesType="SeriesType.Heatmap" Name="@series.Name"
+                                         XValue="@(c => c.Hour)" YValue="@(c => (decimal)c.AvailabilityPct)" />
                     }
-                }
+                </ApexChart>
             </div>
-        </div>
+        }
+        else
+        {
+            <div class="obs-split-layout">
+                <div class="obs-list-panel">
+                    <FluentDataGrid Items="_results.AsQueryable()" TGridItem="AvailabilityResult"
+                                    RowClass="@(r => r == _selected ? "selected-row" : "")"
+                                    OnRowClick="@(r => { _selected = r.Item; StateHasChanged(); })">
+                        <TemplateColumn Title="Test">@context.TestName</TemplateColumn>
+                        <TemplateColumn Title="Location">@context.Location</TemplateColumn>
+                        <TemplateColumn Title="Result">
+                            <span class="@(context.Success ? "obs-avail-pass" : "obs-avail-fail")">
+                                @(context.Success ? "✓ Pass" : "✗ Fail")
+                            </span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Duration">@FormatMs(context.DurationMs)</TemplateColumn>
+                        <TemplateColumn Title="Time">@FormatAge(context.Timestamp)</TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+
+                <div class="obs-detail-panel">
+                    @if (_selected is null)
+                    {
+                        <div class="obs-detail-empty">Select a test result to view details.</div>
+                    }
+                    else
+                    {
+                        <div class="obs-detail-header">
+                            <div class="obs-detail-title">@_selected.TestName</div>
+                            <div class="obs-detail-meta">@_selected.Location · @_selected.Timestamp.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes)).ToString("g")
+                            </div>
+                        </div>
+
+                        <div class="obs-perf-stats">
+                            <div class="obs-stat">
+                                <span class="obs-stat-label">Result</span>
+                                <span class="obs-stat-val @(_selected.Success ? "obs-green" : "obs-red")">
+                                    @(_selected.Success ? "Pass" : "Fail")
+                                </span>
+                            </div>
+                            <div class="obs-stat">
+                                <span class="obs-stat-label">Duration</span>
+                                <span class="obs-stat-val">@FormatMs(_selected.DurationMs)</span>
+                            </div>
+                        </div>
+
+                        @if (!_selected.Success && _selected.FailureMessage is not null)
+                        {
+                            <div class="obs-detail-section-title">Failure Message</div>
+                            <div class="obs-detail-message obs-red">@_selected.FailureMessage</div>
+                        }
+                    }
+                </div>
+            </div>
+        }
     }
 </div>
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
+    [Parameter] public int TzOffsetMinutes { get; set; }
 
     private readonly List<AvailabilityResult> _results = [];
     private AvailabilityResult? _selected;
     private bool _isLoading;
     private string? _error;
+    private bool _heatmapView;
     private CancellationTokenSource _cts = new();
+
+    // Heatmap data
+    private List<HeatmapSeries> _heatmapData = [];
+
+    private record HeatmapCell(string Hour, double AvailabilityPct);
+    private record HeatmapSeries(string Name, List<HeatmapCell> Data);
+
+    private ApexChartOptions<HeatmapCell> _heatmapOptions = new()
+    {
+        Chart = new Chart
+        {
+            Type = ChartType.Heatmap,
+            Height = 280,
+            Toolbar = new Toolbar { Show = false },
+            Animations = new Animations { Enabled = false },
+        },
+        PlotOptions = new PlotOptions
+        {
+            Heatmap = new PlotOptionsHeatmap
+            {
+                ColorScale = new PlotOptionsHeatmapColorScale
+                {
+                    Ranges = new List<PlotOptionsHeatmapColorScaleRange>
+                    {
+                        new() { From = 0, To = 90, Color = "#c8002a", Name = "< 90%" },
+                        new() { From = 90, To = 99, Color = "#e08000", Name = "90–99%" },
+                        new() { From = 99, To = 100, Color = "#22c55e", Name = "≥ 99%" },
+                    }
+                }
+            }
+        },
+        Legend = new Legend { Show = false },
+    };
 
     private double OverallAvailability =>
         _results.Count == 0 ? 100 :
@@ -88,7 +149,6 @@
     private int PassCount => _results.Count(r => r.Success);
     private int FailCount => _results.Count(r => !r.Success);
 
-    // Use methods to avoid Razor parser issues with relational patterns in expressions
     private string OverallClass()
     {
         var pct = OverallAvailability;
@@ -119,14 +179,31 @@
             _results.Clear();
             _results.AddRange(data);
             _selected = null;
+            RebuildHeatmapData();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private void RebuildHeatmapData()
+    {
+        // Group by test name, then bucket by hour
+        _heatmapData = _results
+            .GroupBy(r => r.TestName)
+            .Select(g => new HeatmapSeries(
+                g.Key,
+                g.GroupBy(r => r.Timestamp.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes)).ToString("MM/dd HH:00"))
+                 .OrderBy(b => b.Key)
+                 .Select(b => new HeatmapCell(
+                     b.Key,
+                     b.Count(r => r.Success) * 100.0 / b.Count()))
+                 .ToList()))
+            .ToList();
     }
 
     private static string FormatMs(double ms) =>
@@ -136,8 +213,8 @@
     {
         var age = DateTimeOffset.UtcNow - dt;
         if (age.TotalMinutes < 1) return "just now";
-        if (age.TotalHours < 1)   return $"{(int)age.TotalMinutes}m ago";
-        if (age.TotalDays < 1)    return $"{(int)age.TotalHours}h ago";
+        if (age.TotalHours < 1) return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalDays < 1) return $"{(int)age.TotalHours}h ago";
         return $"{(int)age.TotalDays}d ago";
     }
 }
