@@ -13,8 +13,7 @@
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Personal Access Token (PAT)</label>
-        <PasswordField Value="@Pat" ValueChanged="@(v => Pat = v ?? string.Empty)"
-                       Label="Personal Access Token"
+        <PasswordField Value="@Pat" ValueChanged="@(v => Pat = v ?? string.Empty)" Label="Personal Access Token"
                        Placeholder="Enter PAT (stored securely in Windows Credential Manager)" />
     </div>
 
@@ -24,7 +23,8 @@
 
         @if (StatusMessage is not null)
         {
-            <span style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
+            <span
+            style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
         }
     </div>
 </div>

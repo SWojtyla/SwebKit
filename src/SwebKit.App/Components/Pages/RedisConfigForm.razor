@@ -37,9 +37,9 @@
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Redis Connection String</label>
-        <PasswordField Value="@ConnectionString" ValueChanged="@(v => { ConnectionString = v ?? ""; ClearError(FieldConnectionString); })"
-                       Label="Redis Connection String"
-                       Placeholder="localhost:6379,password=***,abortConnect=false"
+        <PasswordField Value="@ConnectionString"
+                       ValueChanged="@(v => { ConnectionString = v ?? ""; ClearError(FieldConnectionString); })"
+                       Label="Redis Connection String" Placeholder="localhost:6379,password=***,abortConnect=false"
                        InputClass="@FieldClass(FieldConnectionString)" />
         @if (_errors.TryGetValue(FieldConnectionString, out var csErr))
         {

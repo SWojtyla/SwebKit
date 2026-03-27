@@ -54,9 +54,8 @@
             <div style="display:grid; gap:4px;">
                 <label style="font-size:12px; color:var(--color-text-muted);">Credential ref key (Windows Credential
                     Manager)</label>
-                <PasswordField Value="@_connectionStringRef" ValueChanged="@(v => _connectionStringRef = v ?? string.Empty)"
-                               Label="Credential ref key"
-                               Placeholder="storage-myaccount-connstr" />
+                    <PasswordField Value="@_connectionStringRef" ValueChanged="@(v => _connectionStringRef = v ?? string.Empty)"
+                                   Label="Credential ref key" Placeholder="storage-myaccount-connstr" />
                     @if (_connRefError is not null)
                     {
                         <span style="font-size:11px; color:var(--color-error);">@_connRefError</span>

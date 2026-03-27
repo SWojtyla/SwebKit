@@ -236,7 +236,7 @@
                         <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                    or "Ingresses" or "Pods" or "CronJobs")
+                                                                                                        or "Ingresses" or "Pods" or "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -313,7 +313,7 @@
                                         @if (!string.IsNullOrEmpty(_yamlSearch))
                                         {
                                             <span class="aks-yaml-search-count">@_yamlSearchCount match@(_yamlSearchCount != 1 ? "es" :
-                                                                                                                                                                                                                            "")</span>
+                                                                                                                                                                                                                                                                            "")</span>
                                                 <button class="aks-yaml-search-clear" @onclick="ClearYamlSearch" title="Clear">
                                                     <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                                                 </button>
@@ -473,8 +473,8 @@
                                                             @onclick="() => ScaleReplicas = Math.Min(100, ScaleReplicas + 1)">+</button>
                                                 </div>
                                                 <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet ? (StatefulSets.FirstOrDefault(s
-                                                                                                                                                                                                                                => s.Name == ScaleTarget)?.Replicas ?? 0) : (Deployments.FirstOrDefault(d => d.Name ==
-                                                                                                                                                                                                                                ScaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                    => s.Name == ScaleTarget)?.Replicas ?? 0) : (Deployments.FirstOrDefault(d => d.Name ==
+                                                                                                                                                                                                                                                                                    ScaleTarget)?.Replicas ?? 0)) replicas</div>
                                                     <div class="aks-scale-actions">
                                                         <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                                         <button class="confirm-btn confirm-no" @onclick="OnScaleCancel">Cancel</button>
@@ -514,7 +514,7 @@
 
                                         @* ── Container details ── *@
                                         @if (ContainerDetailPodName is not null && YamlTarget is null && LogPodName is null && LogDeploymentName
-                                                                                                                                                                    is null)
+                                                                                                                                                                                                            is null)
                                         {
                                             <div class="aks-panel-pane">
                                                 <div class="aks-section-header">
@@ -584,7 +584,7 @@
                                                     {
                                                         <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                                             <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e =>
-                                                                                                                                                                                                                                                                e.Type == "Warning")
+                                                                                                                                                                                                                                                                                                                            e.Type == "Warning")
                                                         </span>
                                                     }
                                                     <span class="aks-toolbar-spacer"></span>

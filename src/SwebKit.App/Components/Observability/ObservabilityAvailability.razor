@@ -68,7 +68,8 @@
                     {
                         <div class="obs-detail-header">
                             <div class="obs-detail-title">@_selected.TestName</div>
-                            <div class="obs-detail-meta">@_selected.Location · @_selected.Timestamp.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes)).ToString("g")
+                            <div class="obs-detail-meta">@_selected.Location ·
+                                @_selected.Timestamp.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes)).ToString("g")
                             </div>
                         </div>
 

@@ -9,6 +9,12 @@
         </FluentButton>
     </div>
 
+    @* ── Filter ── *@
+    <div style="padding:4px 8px; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+        <input type="text" @bind="_containerFilter" @bind:event="oninput" placeholder="Filter containers…"
+               style="width:100%; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; box-sizing:border-box;" />
+    </div>
+
     @* ── Body ── *@
     @if (_loading)
     {
@@ -27,7 +33,7 @@
     else
     {
         <div style="overflow-y:auto; flex:1;">
-            @foreach (var container in _containers)
+            @foreach (var container in FilteredContainers)
             {
                 var isSelected = container.Name == SelectedContainer;
                 <div style="display:flex; align-items:center; gap:8px; padding:7px 12px; cursor:pointer; background:@(isSelected ? "var(--color-accent)" : "transparent"); color:@(isSelected ? "white" : "var(--color-text)"); border-bottom:1px solid var(--color-border);"
@@ -106,6 +112,11 @@
     private bool _loading;
     private string? _errorMessage;
     private IStorageClient? _loadedClient;
+    private string _containerFilter = "";
+
+    private IReadOnlyList<StorageContainerItem> FilteredContainers => string.IsNullOrEmpty(_containerFilter)
+        ? _containers
+        : _containers.Where(c => c.Name.Contains(_containerFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
     // STG-12: Container SAS
     private ContextMenu _ctxMenu = default!;

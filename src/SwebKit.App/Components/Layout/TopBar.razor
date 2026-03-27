@@ -5,7 +5,8 @@
 @implements IDisposable
 
 <div class="top-bar">
-    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation" aria-label="Toggle sidebar">&#9776;</button>
+    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
+            aria-label="Toggle sidebar">&#9776;</button>
     <span class="app-logo-text" style="margin-right:8px;">SwebKit</span>
 
     <div style="display:flex; align-items:center; flex:1;"></div>
@@ -13,7 +14,8 @@
     @if (!AppState.UseDemoData)
     {
         <div style="position:relative; margin-right:8px;">
-            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode" aria-label="Enable demo mode">Demo</button>
+            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
+                    aria-label="Enable demo mode">Demo</button>
             @if (_showDemoConfirm)
             {
                 <div class="demo-confirm-popover">
