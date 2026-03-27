@@ -79,7 +79,7 @@
                             style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
                             @onclick="() => _showConnStr = !_showConnStr"
                             title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
-                                                                             "🙈" : "👁️")</button>
+                                                                                                         "🙈" : "👁️")</button>
                             <button
                             style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
                             @onclick="CancelAdd">Cancel</button>
@@ -539,7 +539,7 @@ default)
     {
         await SetNamespacePaneCollapsedAsync(false);
         ns.IsExpanded = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task AddNamespaceAsync()
@@ -593,7 +593,7 @@ default)
         StateHasChanged();
 
         state.Client = await TryConnectAsync(ns, state, _cts.Token);
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RemoveNamespaceAsync(Guid namespaceId)
@@ -615,7 +615,7 @@ default)
 
         _namespaceStates.Remove(state);
         await AppState.RemoveServiceBusNamespaceAsync(namespaceId);
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void ToggleNamespace(Guid id)
@@ -681,7 +681,7 @@ default)
             AppState.Config.ServiceBusEntityLinks.Add(link);
 
         await AppState.SaveConfigAsync();
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private Task SetActive(SbTab tab)

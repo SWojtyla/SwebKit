@@ -8,16 +8,18 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
-        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…" class="log-filter-input" />
+        <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
+               class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
         <label class="log-live-toggle" title="Sort interleaved lines by timestamp">
-            <input type="checkbox" @bind="_mergeSort" />
+            <input type="checkbox" @bind="_mergeSort" @bind:after="InvalidateFilter" />
             ⇅ Merge
         </label>
         @if (IsLive && IsLoading)
         {
-            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause" Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
+                          Title="@(_paused ? "Resume tailing" : "Pause tailing")">
                 @(_paused ? "▶ Resume" : "⏸ Pause")
             </FluentButton>
         }
@@ -44,14 +46,12 @@
         }
         else
         {
-            @foreach (var item in FilteredLines)
-            {
-                var colorIdx = _podColorIndex.TryGetValue(item.PodName, out var c) ? c : 0;
-                <div class="log-line mplog-pod-@colorIdx">
-                    <span class="mplog-pod-tag">@TruncatePodSuffix(item.PodName)</span>
-                    @item.Line
+            <Virtualize Items="@FilteredLines" Context="entry" ItemSize="22">
+                <div class="log-line mplog-pod-@entry.ColorIndex">
+                    <span class="mplog-pod-tag">@entry.PodTag</span>
+                    @entry.Line
                 </div>
-            }
+            </Virtualize>
             @if (IsLive && IsLoading)
             {
                 <div class="log-tailing">
@@ -68,36 +68,68 @@
     [Parameter] public string? DeploymentName { get; set; }
     [Parameter] public int BufferSize { get; set; } = 10_000;
 
+    // PERF2-3: Precomputed display record for Virtualize
+    private readonly record struct MultiLogEntry(string PodName, string PodTag, int ColorIndex, string Line);
+
     private List<AggregatedLogLine> Lines = [];
     private bool IsLive = true;
     private bool IsLoading;
     private string TextFilter = "";
     private CancellationTokenSource? _cts;
     private ElementReference _logContainer;
+    private Task? _streamTask;
     private readonly Dictionary<string, int> _podColorIndex = [];
     private int _nextColorIdx;
     private bool _mergeSort;
     private bool _paused;
 
+    // PERF2-3: Cached filtered lines — recomputed only when dirty
+    private List<MultiLogEntry> _filteredLinesCache = [];
+    private bool _filterDirty = true;
+    private int _lastFilteredLineCount;
+    private string _lastFilterText = "";
+    private bool _lastMergeSort;
+
+    // PERF2-2: Render-batching timer state
+    private PeriodicTimer? _renderTimer;
+    private Task? _renderTimerTask;
+    private volatile bool _linesDirty;
+
     private static readonly System.Text.RegularExpressions.Regex TimestampRegex = new(
         @"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s",
         System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private IReadOnlyList<AggregatedLogLine> FilteredLines
+    private List<MultiLogEntry> FilteredLines
     {
         get
         {
-            IEnumerable<AggregatedLogLine> source = string.IsNullOrEmpty(TextFilter)
-                ? Lines
-                : Lines.Where(l => l.Line.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
-                    || l.PodName.Contains(TextFilter, StringComparison.OrdinalIgnoreCase));
+            if (_filterDirty || Lines.Count != _lastFilteredLineCount || TextFilter != _lastFilterText || _mergeSort !=
+_lastMergeSort)
+            {
+                _lastFilteredLineCount = Lines.Count;
+                _lastFilterText = TextFilter;
+                _lastMergeSort = _mergeSort;
+                _filterDirty = false;
 
-            if (_mergeSort)
-                source = source.OrderBy(l => l.Timestamp ?? l.ReceivedAt);
+                IEnumerable<AggregatedLogLine> source = string.IsNullOrEmpty(TextFilter)
+                    ? Lines
+                    : Lines.Where(l => l.Line.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
+                        || l.PodName.Contains(TextFilter, StringComparison.OrdinalIgnoreCase));
 
-            return source.TakeLast(500).ToList();
+                if (_mergeSort)
+                    source = source.OrderBy(l => l.Timestamp ?? l.ReceivedAt);
+
+                _filteredLinesCache = source.TakeLast(500).Select(l =>
+                {
+                    var colorIdx = _podColorIndex.TryGetValue(l.PodName, out var c) ? c : 0;
+                    return new MultiLogEntry(l.PodName, TruncatePodSuffix(l.PodName), colorIdx, l.Line);
+                }).ToList();
+            }
+            return _filteredLinesCache;
         }
     }
+
+    private void InvalidateFilter() => _filterDirty = true;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -108,7 +140,7 @@
     private async Task OnLiveToggle()
     {
         if (IsLive) await StartTailingAsync();
-        else { _cts?.Cancel(); IsLoading = false; _paused = false; }
+        else { StopTailing(); IsLoading = false; _paused = false; }
     }
 
     private void TogglePause()
@@ -120,48 +152,107 @@
 
     private async Task StartTailingAsync()
     {
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
+        // PERF2-4: Interlocked swap for thread-safe CTS lifecycle
+        var newCts = new CancellationTokenSource();
+        var oldCts = Interlocked.Exchange(ref _cts, newCts);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        var token = newCts.Token;
+
         IsLoading = true;
         _paused = false;
         Lines.Clear();
         _podColorIndex.Clear();
         _nextColorIdx = 0;
+        _filterDirty = true;
         StateHasChanged();
 
+        StopRenderTimer();
+        StartRenderTimer(token);
+
+        _streamTask = Task.Run(() => StreamLogsAsync(token));
+    }
+
+    private void StopTailing()
+    {
+        var oldCts = Interlocked.Exchange(ref _cts, null);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        StopRenderTimer();
+    }
+
+    // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
+    private void StartRenderTimer(CancellationToken token)
+    {
+        _renderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        _renderTimerTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _renderTimer.WaitForNextTickAsync(token))
+                {
+                    if (_paused || !_linesDirty) continue;
+                    _linesDirty = false;
+                    _filterDirty = true;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void StopRenderTimer()
+    {
+        _renderTimer?.Dispose();
+        _renderTimer = null;
+    }
+
+    private async Task StreamLogsAsync(CancellationToken token)
+    {
         try
         {
             var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
-            _ = Task.Run(async () =>
+            await foreach (var line in Client!.StreamDeploymentLogsAsync(Namespace!, DeploymentName!, opts, token))
             {
-                await foreach (var line in Client!.StreamDeploymentLogsAsync(Namespace!, DeploymentName!, opts, _cts.Token))
+                if (!_podColorIndex.ContainsKey(line.PodName))
+                    _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
+
+                // Parse timestamp from log line for merge sort
+                if (line.Timestamp is null)
                 {
-                    if (!_podColorIndex.ContainsKey(line.PodName))
-                        _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
-
-                    // Parse timestamp from log line for merge sort
-                    if (line.Timestamp is null)
-                    {
-                        var match = TimestampRegex.Match(line.Line);
-                        if (match.Success && DateTimeOffset.TryParse(match.Groups[1].Value, out var ts))
-                            line.Timestamp = ts;
-                    }
-
-                    Lines.Add(line);
-                    if (Lines.Count > BufferSize) Lines.RemoveAt(0);
-                    if (!_paused)
-                    {
-                        await InvokeAsync(StateHasChanged);
-                        await Task.Delay(50);
-                    }
+                    var match = TimestampRegex.Match(line.Line);
+                    if (match.Success && DateTimeOffset.TryParse(match.Groups[1].Value, out var ts))
+                        line.Timestamp = ts;
                 }
-                await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
-            });
+
+                Lines.Add(line);
+                if (Lines.Count > BufferSize)
+                {
+                    var removed = Lines[0];
+                    Lines.RemoveAt(0);
+                    // PERF2-15: Clean stale pod entries when buffer rotates
+                    if (!Lines.Any(l => l.PodName == removed.PodName))
+                        _podColorIndex.Remove(removed.PodName);
+                }
+                _linesDirty = true;
+            }
         }
-        catch (Exception) { IsLoading = false; StateHasChanged(); }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            // Final flush after stream ends
+            _linesDirty = false;
+            _filterDirty = true;
+            StopRenderTimer();
+            await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+        }
     }
 
-    private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
+    private void ClearLogs()
+    {
+        Lines.Clear(); _podColorIndex.Clear(); _nextColorIdx = 0; _filterDirty = true;
+        StateHasChanged();
+    }
 
     // Extract the last two hash segments from a standard pod name, e.g. order-api-7d9f-xk2jp → 7d9f-xk2jp
     private static string TruncatePodSuffix(string name)
@@ -174,8 +265,18 @@
 
     public async ValueTask DisposeAsync()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        await Task.CompletedTask;
+        // PERF2-4: Thread-safe CTS teardown
+        var cts = Interlocked.Exchange(ref _cts, null);
+        cts?.Cancel();
+        cts?.Dispose();
+
+        StopRenderTimer();
+
+        if (_streamTask is not null)
+        {
+            try { await _streamTask.WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch (OperationCanceledException) { }
+            catch (TimeoutException) { }
+        }
     }
 }

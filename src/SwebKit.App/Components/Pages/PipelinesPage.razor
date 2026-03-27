@@ -269,7 +269,7 @@
             Label = "Refresh Releases",
             Category = "Releases",
             AreaScope = "releases",
-            Execute = async () => { await ReleaseRepo.LoadAsync(); StateHasChanged(); }
+            Execute = async () => { await ReleaseRepo.LoadAsync(); await InvokeAsync(StateHasChanged); }
         });
         Commands.Register(new AppCommand
         {
@@ -340,7 +340,7 @@
         if (_selectedRelease is null) return;
         await ReleaseRepo.RemoveReleaseAsync(_selectedRelease.Id);
         _selectedRelease = ReleaseRepo.AllReleases.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnReleaseSaved(ReleaseRecord release)

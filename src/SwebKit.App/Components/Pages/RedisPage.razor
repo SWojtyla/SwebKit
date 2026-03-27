@@ -930,7 +930,7 @@
         await ScanAsync();
     }
 
-    private async void OnCacheNameChanged(ChangeEventArgs e)
+    private async Task OnCacheNameChanged(ChangeEventArgs e)
     {
         var entry = ActiveCacheEntry;
         if (entry is null) return;

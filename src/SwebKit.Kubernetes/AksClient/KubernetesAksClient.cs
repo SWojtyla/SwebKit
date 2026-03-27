@@ -938,23 +938,39 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var channel = Channel.CreateUnbounded<AggregatedLogLine>();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var fanOutTasks = pods.Select(pod => Task.Run(async () =>
-        {
-            try
-            {
-                var container = pod.Containers.FirstOrDefault() ?? string.Empty;
-                await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
-                {
-                    await channel.Writer.WriteAsync(
-                        new AggregatedLogLine { PodName = pod.Name, Line = line },
-                        linkedCts.Token);
-                }
-            }
-            catch (OperationCanceledException) { }
-            catch { /* per-pod error — don't break other streams */ }
-        }, linkedCts.Token)).ToList();
+        int remainingCount = pods.Count;
 
-        _ = Task.WhenAll(fanOutTasks).ContinueWith(_ => channel.Writer.TryComplete(), CancellationToken.None);
+        foreach (var pod in pods)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var container = pod.Containers.FirstOrDefault() ?? string.Empty;
+                    await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
+                    {
+                        await channel.Writer.WriteAsync(
+                            new AggregatedLogLine { PodName = pod.Name, Line = line },
+                            linkedCts.Token);
+                    }
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // Pod-specific stream ended (e.g. pod restarted) — not overall cancellation.
+                    // Let the countdown handle completion.
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[StreamDeploymentLogs] Pod '{pod.Name}' stream failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                finally
+                {
+                    if (Interlocked.Decrement(ref remainingCount) == 0)
+                        channel.Writer.TryComplete();
+                }
+            }, linkedCts.Token);
+        }
 
         await foreach (var item in channel.Reader.ReadAllAsync(ct))
             yield return item;

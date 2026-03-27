@@ -236,7 +236,7 @@
                         <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                        or "Ingresses" or "Pods" or "CronJobs")
+                                                                                                                                                or "Ingresses" or "Pods" or "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -313,7 +313,7 @@
                                         @if (!string.IsNullOrEmpty(_yamlSearch))
                                         {
                                             <span class="aks-yaml-search-count">@_yamlSearchCount match@(_yamlSearchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                            "")</span>
+                                                                                                                                                                                                                                                                                                                                                                            "")</span>
                                                 <button class="aks-yaml-search-clear" @onclick="ClearYamlSearch" title="Clear">
                                                     <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                                                 </button>
@@ -473,8 +473,8 @@
                                                             @onclick="() => ScaleReplicas = Math.Min(100, ScaleReplicas + 1)">+</button>
                                                 </div>
                                                 <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet ? (StatefulSets.FirstOrDefault(s
-                                                                                                                                                                                                                                                                                    => s.Name == ScaleTarget)?.Replicas ?? 0) : (Deployments.FirstOrDefault(d => d.Name ==
-                                                                                                                                                                                                                                                                                    ScaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                                                                                            => s.Name == ScaleTarget)?.Replicas ?? 0) : (Deployments.FirstOrDefault(d => d.Name ==
+                                                                                                                                                                                                                                                                                                                                                                                            ScaleTarget)?.Replicas ?? 0)) replicas</div>
                                                     <div class="aks-scale-actions">
                                                         <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                                         <button class="confirm-btn confirm-no" @onclick="OnScaleCancel">Cancel</button>
@@ -514,7 +514,7 @@
 
                                         @* ── Container details ── *@
                                         @if (ContainerDetailPodName is not null && YamlTarget is null && LogPodName is null && LogDeploymentName
-                                                                                                                                                                                                            is null)
+                                                                                                                                                                                                                                                                                            is null)
                                         {
                                             <div class="aks-panel-pane">
                                                 <div class="aks-section-header">
@@ -584,7 +584,7 @@
                                                     {
                                                         <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                                             <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e =>
-                                                                                                                                                                                                                                                                                                                            e.Type == "Warning")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    e.Type == "Warning")
                                                         </span>
                                                     }
                                                     <span class="aks-toolbar-spacer"></span>
@@ -1256,15 +1256,19 @@ OnCtxRestartDeployment();
         }
 
         // PERF-16: Cancel any in-flight load before starting a new one
-        _cts.Cancel();
-        _cts.Dispose();
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var newCts = new CancellationTokenSource();
+        var oldCts = Interlocked.Exchange(ref _cts, newCts);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        var ct = newCts.Token;
 
         IsLoading = cached is null; ErrorMessage = null; StateHasChanged();
         try
         {
             // PERF-7: Incremental rendering — each dataset renders as it completes
+            // PERF2-8: Batch StateHasChanged via dirty flag + debounced flush loop
+            bool datasetDirty = false;
+
             async Task LoadDataset<T>(Func<Task<IReadOnlyList<T>>> fetch, Action<List<T>> assign)
             {
                 ct.ThrowIfCancellationRequested();
@@ -1273,7 +1277,7 @@ OnCtxRestartDeployment();
                     var result = await fetch();
                     ct.ThrowIfCancellationRequested();
                     assign(result.ToList());
-                    await InvokeAsync(StateHasChanged); // BL-2
+                    datasetDirty = true;
                 }
                 catch (OperationCanceledException) { throw; } // CS-2
                 catch (Exception ex)
@@ -1303,7 +1307,32 @@ OnCtxRestartDeployment();
                     LoadDataset(() => Client.GetStatefulSetsAsync(allNs), r => StatefulSets = r),
                 };
 
+                // PERF2-8: Render flush loop — batch renders at ~150ms intervals
+                var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var flushTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!flushCts.Token.IsCancellationRequested)
+                        {
+                            await Task.Delay(150, flushCts.Token);
+                            if (datasetDirty)
+                            {
+                                datasetDirty = false;
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
                 await Task.WhenAll(tasks);
+                flushCts.Cancel();
+                flushCts.Dispose();
+
+                // Final flush — render any remaining dirty state
+                datasetDirty = false;
+                await InvokeAsync(StateHasChanged);
             }
             else
             {
@@ -1325,7 +1354,32 @@ OnCtxRestartDeployment();
                     LoadDataset(() => Client.GetCronJobsAsync(ns), r => CronJobs = r),
                 };
 
+                // PERF2-8: Render flush loop — batch renders at ~150ms intervals
+                var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var flushTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!flushCts.Token.IsCancellationRequested)
+                        {
+                            await Task.Delay(150, flushCts.Token);
+                            if (datasetDirty)
+                            {
+                                datasetDirty = false;
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
                 await Task.WhenAll(tasks);
+                flushCts.Cancel();
+                flushCts.Dispose();
+
+                // Final flush — render any remaining dirty state
+                datasetDirty = false;
+                await InvokeAsync(StateHasChanged);
             }
         }
         catch (OperationCanceledException) { return; } // CS-2: cancelled — new load takes over
@@ -2341,8 +2395,9 @@ OnCtxRestartDeployment();
 
     public void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        var cts = Interlocked.Exchange(ref _cts, null!);
+        cts?.Cancel();
+        cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })

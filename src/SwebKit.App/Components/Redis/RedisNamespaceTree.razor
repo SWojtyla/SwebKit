@@ -22,9 +22,9 @@
         <div class="ns-nodes">
             @foreach (var node in Nodes)
             {
-                <RedisNamespaceTreeNode Node="@node" OnPrefixSelected="OnPrefixSelected" OnKeySelected="OnKeySelected"
-                                        SelectedKey="@SelectedKey" KeyTypes="@KeyTypes" MultiSelectMode="@MultiSelectMode"
-                                        SelectedKeys="@SelectedKeys" OnKeyToggled="OnKeyToggled" />
+                <RedisNamespaceTreeNode @key="node.FullPrefix" Node="@node" OnPrefixSelected="OnPrefixSelected"
+                                        OnKeySelected="OnKeySelected" SelectedKey="@SelectedKey" KeyTypes="@KeyTypes"
+                                        MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys" OnKeyToggled="OnKeyToggled" />
             }
         </div>
     }

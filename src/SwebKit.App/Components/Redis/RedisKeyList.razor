@@ -20,31 +20,34 @@
         </div>
 
         <div class="rows">
-        @foreach (var key in Keys)
-        {
-            var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
-            <button @onclick="() => OnSelectKey.InvokeAsync(key)"                    @oncontextmenu="e => ShowContextMenu(e, key)"                    @oncontextmenu:preventDefault="true"
-                    class="key-row @(SelectedKey == key ? "active" : "")">
-                <input type="checkbox"                       checked="@isSelected"                       @onclick:stopPropagation="true"
-                       @onchange="e => OnToggleSelection(key, e)" />
-                <span class="key-name">@key</span>
-                <span class="type-badge @(GetTypeClass(key))">@GetTypeLabel(key)</span>
-            </button>
-        }
+            @foreach (var key in Keys)
+            {
+                var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
+                <button @key="key" @onclick="() => OnSelectKey.InvokeAsync(key)" @oncontextmenu="e => ShowContextMenu(e, key)"
+                        @oncontextmenu:preventDefault="true" class="key-row @(SelectedKey == key ? "active" : "")">
+                    <input type="checkbox" checked="@isSelected" @onclick:stopPropagation="true"
+                           @onchange="e => OnToggleSelection(key, e)" />
+                    <span class="key-name">@key</span>
+                    <span class="type-badge @(GetTypeClass(key))">@GetTypeLabel(key)</span>
+                </button>
+            }
         </div>
 
         <ContextMenu @ref="_ctxMenu">
-            <button class="ctx-item" @onclick='() => InvokeContextActionAsync("open")'><span class="ctx-item-icon">&#9654;</span> Open</button>
-            <button class="ctx-item" @onclick='() => InvokeContextActionAsync("edit")'><span class="ctx-item-icon">&#9998;</span> Edit</button>
-            <div class="ctx-separator"></div>
-            <button class="ctx-item destructive" @onclick='() => InvokeContextActionAsync("delete")'><span class="ctx-item-icon">&#10005;</span> Delete</button>
-        </ContextMenu>
-    }
+            <button class="ctx-item" @onclick='() => InvokeContextActionAsync("open")'><span
+                class="ctx-item-icon">&#9654;</span> Open</button>
+                <button class="ctx-item" @onclick='() => InvokeContextActionAsync("edit")'><span
+                    class="ctx-item-icon">&#9998;</span> Edit</button>
+                    <div class="ctx-separator"></div>
+                    <button class="ctx-item destructive" @onclick='() => InvokeContextActionAsync("delete")'><span
+                        class="ctx-item-icon">&#10005;</span> Delete</button>
+                    </ContextMenu>
+                }
 
-    <div class="footer">
-        <FluentButton Disabled="@(IsLoading || IsComplete)" @onclick="OnLoadMore">Load More</FluentButton>
-    </div>
-</div>
+                <div class="footer">
+                    <FluentButton Disabled="@(IsLoading || IsComplete)" @onclick="OnLoadMore">Load More</FluentButton>
+                </div>
+            </div>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<string> Keys { get; set; } = [];
