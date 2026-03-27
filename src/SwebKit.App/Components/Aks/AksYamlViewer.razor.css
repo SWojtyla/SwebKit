@@ -1,0 +1,223 @@
+/* ═══════════════════════════════════════════════
+   AksYamlViewer — YAML viewer / editor component
+   ═══════════════════════════════════════════════ */
+
+/* Structural classes (duplicated from AksPage for CSS isolation) */
+.aks-panel-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.aks-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.aks-section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Search toggle ── */
+.aks-search-toggle-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1;
+}
+
+.aks-search-toggle-btn:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-search-toggle-btn.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(var(--color-accent-rgb, 64, 156, 255), 0.08);
+}
+
+/* ── YAML search bar ── */
+.aks-yaml-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+}
+
+.aks-yaml-search-input {
+    flex: 1;
+    padding: 3px var(--spacing-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: var(--font-size-sm);
+    outline: none;
+}
+
+.aks-yaml-search-input:focus {
+    border-color: var(--color-accent);
+}
+
+.aks-yaml-search-count {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.aks-yaml-search-clear {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    padding: 1px var(--spacing-xs);
+    border-radius: 3px;
+}
+
+.aks-yaml-search-clear:hover {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+}
+
+.aks-yaml-replace-btn {
+    padding: 3px 10px;
+    font-size: var(--font-size-sm);
+    background: var(--color-accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.aks-yaml-replace-btn:hover {
+    opacity: 0.85;
+}
+
+.aks-yaml-validation-error {
+    padding: 6px 10px;
+    background: rgba(255, 170, 0, 0.12);
+    color: var(--color-warning, #e5a100);
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+/* ── YAML search highlights ── */
+::deep .yml-search-match {
+    background: rgba(255, 214, 0, 0.35);
+    border-radius: 2px;
+    outline: 1px solid rgba(255, 180, 0, 0.5);
+}
+
+/* ── YAML content area ── */
+.aks-yaml-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    padding: 0;
+}
+
+.aks-yaml-pre {
+    margin: 0;
+    padding: var(--spacing-md);
+    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    color: var(--color-text);
+    white-space: pre;
+    tab-size: 2;
+}
+
+.aks-yaml-error {
+    padding: var(--spacing-lg);
+    color: var(--color-error);
+    font-size: 12px;
+}
+
+/* ── YAML edit overlay (textarea + highlighted pre stacked) ── */
+.aks-yaml-edit-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 200px;
+    overflow: hidden;
+}
+
+/* Highlighted pre sits behind the textarea */
+.aks-yaml-edit-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Transparent textarea sits on top — captures input, caret is visible */
+.aks-yaml-edit {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    padding: var(--spacing-md);
+    background: transparent;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    caret-color: rgba(255, 255, 255, 0.75);
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    tab-size: 2;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow: auto;
+    box-sizing: border-box;
+}
+
+.aks-yaml-edit::selection {
+    background: rgba(100, 149, 237, 0.35);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ── YAML syntax highlight tokens ──
+   ::deep is required because the <span> elements are injected at runtime via
+   MarkupString and do not receive Blazor's CSS isolation scope attribute. */
+.aks-yaml-pre ::deep .yml-key        { color: var(--color-code-key); }
+.aks-yaml-pre ::deep .yml-colon      { color: var(--color-text-muted); }
+.aks-yaml-pre ::deep .yml-string     { color: var(--color-code-string); }
+.aks-yaml-pre ::deep .yml-bool       { color: var(--color-code-keyword); }
+.aks-yaml-pre ::deep .yml-null       { color: var(--color-code-keyword); }
+.aks-yaml-pre ::deep .yml-number     { color: var(--color-code-number); }
+.aks-yaml-pre ::deep .yml-comment    { color: var(--color-code-comment); font-style: italic; }
+.aks-yaml-pre ::deep .yml-doc-marker { color: var(--color-text-faint); }
+.aks-yaml-pre ::deep .yml-directive  { color: var(--color-text-faint); }
+.aks-yaml-pre ::deep .yml-dash       { color: var(--color-code-special2); font-weight: 600; }
+.aks-yaml-pre ::deep .yml-value      { color: var(--color-text); }
+.aks-yaml-pre ::deep .yml-anchor     { color: var(--color-code-special); }
+.aks-yaml-pre ::deep .yml-scalar     { color: var(--color-code-special); }

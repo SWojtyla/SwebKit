@@ -1,0 +1,166 @@
+@* ── Toolbar ── *@
+<div class="aks-toolbar">
+
+    @* ── Row 1: connection + actions ── *@
+    <div class="aks-toolbar-row">
+        <span class="connection-dot @(IsConnected ? "dot-ok" : "dot-unknown")"></span>
+
+        @* ── Context dropdown ── *@
+        <label class="aks-ns-label">Context</label>
+        <select class="aks-ns-select" value="@ActiveContext" @onchange="HandleContextChanged">
+            @if (Contexts.Count == 0)
+            {
+                <option value="">@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</option>
+            }
+            @foreach (var ctx in Contexts)
+            {
+                <option value="@ctx.Name" selected="@(ctx.Name == ActiveContext)">
+                    @ctx.Name @(ctx.IsCurrent ? "(current)" : "")
+                </option>
+            }
+        </select>
+
+        <span class="aks-toolbar-divider"></span>
+
+        @* ── Namespace searchable picker ── *@
+        @if (_nsDropOpen)
+        {
+            <div class="aks-ns-backdrop" @onclick="CloseNsDrop"></div>
+        }
+        <label class="aks-ns-label">Namespace</label>
+        <div class="aks-ns-picker">
+            <input class="aks-ns-select aks-ns-search" value="@(_nsDropOpen? _nsSearchText : CurrentNamespace)"
+                   placeholder="@(_nsDropOpen ? "Filter…" : CurrentNamespace)" @onfocus="OpenNsDrop"
+                   @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" />
+            @if (_nsDropOpen)
+            {
+                <div class="aks-ns-dropdown">
+                    @foreach (var ns in NsFiltered)
+                    {
+                        var nsLocal = ns;
+                        <div class="aks-ns-option @(nsLocal == CurrentNamespace ? "current" : "")"
+                             @onclick="() => SelectNs(nsLocal)">
+                            @nsLocal
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <span class="aks-toolbar-spacer"></span>
+
+        <button class="aks-events-toggle @(ShowEvents ? "active" : "")" @onclick="HandleToggleEvents"
+                title="Toggle events panel">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
+            @(EventWarningCount > 0 ? $" {EventWarningCount}" : " Events")
+        </button>
+
+        <button class="aks-events-toggle @(ShowPortForwardSessions ? "active" : "")"
+                @onclick="HandleTogglePortForwardSessions" title="Toggle port-forward sessions panel">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="14px"
+                        style="vertical-align:middle;" />
+            @(ActivePortForwardCount > 0 ? $" {ActivePortForwardCount} pf" : " Sessions")
+        </button>
+
+        <AutoRefreshToggle OnRefresh="OnRefresh" Paused="@AutoRefreshPaused" />
+
+        <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="OnRefresh" Title="Refresh (F5)">
+            @(IsLoading ? "Loading…" : "↻ Refresh")
+        </FluentButton>
+    </div>
+
+    @* ── Row 2: resource type tabs ── *@
+    <div class="aks-tab-bar">
+        @foreach (var rt in ResourceTypes)
+        {
+            <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
+                    @onclick="() => OnResourceTypeChanged.InvokeAsync(rt)">
+                @rt
+            </button>
+        }
+    </div>
+
+</div>
+
+@code {
+    private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
+        "Ingresses", "Helm", "CronJobs"];
+
+    [Parameter] public List<KubeContextInfo> Contexts { get; set; } = [];
+    [Parameter] public string ActiveContext { get; set; } = "";
+    [Parameter] public List<string> Namespaces { get; set; } = [];
+    [Parameter] public string CurrentNamespace { get; set; } = "default";
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool IsConnected { get; set; }
+    [Parameter] public string ActiveResourceType { get; set; } = "Deployments";
+    [Parameter] public bool ShowEvents { get; set; }
+    [Parameter] public bool ShowPortForwardSessions { get; set; }
+    [Parameter] public int EventWarningCount { get; set; }
+    [Parameter] public int ActivePortForwardCount { get; set; }
+    [Parameter] public bool AutoRefreshPaused { get; set; }
+
+    [Parameter] public EventCallback<string> OnContextChanged { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceChanged { get; set; }
+    [Parameter] public EventCallback<string> OnResourceTypeChanged { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleEvents { get; set; }
+    [Parameter] public EventCallback<bool> OnTogglePortForwardSessions { get; set; }
+
+    // ── Namespace picker internal state ──
+    private bool _nsDropOpen;
+    private string _nsSearchText = string.Empty;
+
+    private IEnumerable<string> NsFiltered
+    {
+        get
+        {
+            var all = Enumerable.Repeat("*", 1).Concat(Namespaces);
+            return string.IsNullOrWhiteSpace(_nsSearchText)
+                ? all
+                : all.Where(n => n.Contains(_nsSearchText, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void OpenNsDrop()
+    {
+        _nsSearchText = string.Empty;
+        _nsDropOpen = true;
+        StateHasChanged();
+    }
+
+    private void CloseNsDrop()
+    {
+        _nsDropOpen = false;
+        _nsSearchText = string.Empty;
+        StateHasChanged();
+    }
+
+    private void OnNsSearchInput(ChangeEventArgs e)
+    {
+        _nsSearchText = e.Value?.ToString() ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task SelectNs(string ns)
+    {
+        _nsDropOpen = false;
+        _nsSearchText = string.Empty;
+        await OnNamespaceChanged.InvokeAsync(ns);
+    }
+
+    private async Task HandleContextChanged(ChangeEventArgs e)
+    {
+        var newContext = e.Value?.ToString() ?? "";
+        await OnContextChanged.InvokeAsync(newContext);
+    }
+
+    private async Task HandleToggleEvents()
+    {
+        await OnToggleEvents.InvokeAsync(!ShowEvents);
+    }
+
+    private async Task HandleTogglePortForwardSessions()
+    {
+        await OnTogglePortForwardSessions.InvokeAsync(!ShowPortForwardSessions);
+    }
+}

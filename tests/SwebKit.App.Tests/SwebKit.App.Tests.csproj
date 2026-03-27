@@ -57,5 +57,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ScheduledMessages.razor" Link="Components\ServiceBus\ScheduledMessages.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\ServiceBus\NsState.cs" Link="Components\ServiceBus\NsState.cs" />
     </ItemGroup>
 </Project>

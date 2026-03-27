@@ -104,3 +104,73 @@ Each page becomes an **orchestrator** component:
 
 - **Shared state service per page:** Rejected — adds invisible coupling; harder to test; violates the existing CascadingValue convention (app-wide singletons only)
 - **Cascading parameters from page:** Rejected — creates tight coupling to parent type; breaks component reusability; harder to unit test
+
+---
+
+## Decision 004 — Revised AksPage line target
+
+**Status:** Accepted
+
+**Date:** 2026-03-28
+
+### Context
+
+The original plan targeted AksPage under 300 lines. After implementation, AksPage reached 1,342 lines (down from 2,415 — a 44% reduction) with 4 extracted components:
+
+| Component        | Lines | What moved                                                                                      |
+| ---------------- | ----- | ----------------------------------------------------------------------------------------------- |
+| AksYamlViewer    | 309   | YAML view/edit/search overlay, JS interop                                                       |
+| AksHelmPanel     | 218   | Helm history, values, rollback UI                                                               |
+| AksConnectionBar | 145   | Context picker, namespace picker, resource type tabs                                            |
+| AksDetailPanels  | 376   | Scale panel, logs, container/configmap/secret/HPA details, events, hosts YamlViewer + HelmPanel |
+
+The remaining 1,342 lines consist of legitimate orchestration code that belongs in the page:
+
+- 8 resource type grids with per-type columns (~120 lines markup)
+- 8 context menus with per-resource-type actions (~110 lines markup)
+- Data loading with incremental rendering + flush loops (~153 lines)
+- Per-resource-type filter state and computed IQueryable properties (~80 lines)
+- Keyboard navigation across 8 resource types (~130 lines)
+- Context menu action handlers that delegate to child components (~185 lines)
+- Command registration for 6 keyboard shortcuts (~57 lines)
+
+Pushing below 1,000 would require either: (a) extracting data loading into a service (but it owns CTS lifecycle and StateHasChanged), (b) splitting context menu actions into per-resource services (creates 8 tiny classes for 3-5 line methods), or (c) moving grids+menus into a mega ResourcePanel component (just shifts code, no real simplification).
+
+### Decision
+
+Accept 1,342 as the Phase 1 result for AksPage. The remaining code is genuine orchestration — further extraction would add indirection without reducing complexity.
+
+### Consequences
+
+- 44% reduction achieved; each extracted component has clear single-responsibility
+- The page is now a true orchestrator: it loads data and routes it to children
+- Future maintenance targets specific components (YAML, Helm, connection, details) instead of a monolith
+- If new resource types are added, the per-type switch blocks grow linearly — consider a registry pattern at that point
+
+---
+
+## Decision 005 — Revised RedisPage and ServiceBusPage targets
+
+**Status:** Accepted
+
+**Date:** 2026-03-28
+
+### Context
+
+The original plan targeted RedisPage <400 lines and ServiceBusPage <500 lines. After extraction:
+
+- RedisPage: 1,071 → 892 (2 components extracted: RedisConnectionBar, RedisToolbar)
+- ServiceBusPage: 792 → 535 (1 component extracted: ServiceBusNamespacePanel + NsState.cs)
+
+### Decision
+
+Accept current results. The remaining code is genuine orchestration logic:
+
+- **RedisPage (892):** Complex data loading with SCAN pagination, per-type detail fetching, memory analysis, export, namespace tree management. Already well-delegated to RedisKeyDetail, RedisNamespaceTree, RedisPrefixMemory.
+- **ServiceBusPage (535):** Tab management, multi-namespace connection lifecycle, message composer coordination, entity link tracking. Already well-delegated to EntityTree, MessageListView, DlqView, MessageComposer.
+
+### Consequences
+
+- Total reduction across all 3 pages: 4,278 → 2,769 lines (35% overall)
+- 7 new components created, each with clear single-responsibility
+- AksPage had the most impactful decomposition (44%) as expected from D-001

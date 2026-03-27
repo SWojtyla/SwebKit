@@ -9,29 +9,9 @@
 @inject PageDataCache Cache
 
 <div class="redis-page">
-    <div class="page-header">
-        @if (ActiveCacheEntry is not null)
-        {
-            <h2 class="cache-title">
-                <input class="cache-name-input" type="text" value="@ActiveCacheEntry.DisplayName"
-                       @onchange="OnCacheNameChanged" />
-            </h2>
-        }
-        else
-        {
-            <h2>Redis</h2>
-        }
-
-        @if (CacheEntries.Count > 1)
-        {
-            <select class="cache-selector" @bind="SelectedCacheId" @bind:after="OnCacheChangedAsync">
-                @foreach (var cache in CacheEntries)
-                {
-                    <option value="@cache.Id">@cache.DisplayName</option>
-                }
-            </select>
-        }
-    </div>
+    <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
+                        SelectedCacheId="@SelectedCacheId" IsConnected="@(Client is not null)" ConnectionLabel="@ConnectionLabel"
+                        OnCacheChanged="HandleCacheChanged" OnCacheNameChanged="HandleCacheNameChanged" />
 
     @if (!AppState.UseDemoData && !IsConfigured)
     {
@@ -41,42 +21,11 @@
     }
     else
     {
-        <div class="toolbar">
-            <div class="field">
-                <label>Pattern</label>
-                <input @bind="Pattern" placeholder="*" />
-                <div class="pattern-help">
-                    Examples: <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
-                </div>
-            </div>
-
-            <FluentButton Appearance="Appearance.Accent" @onclick="() => ScanAsync(_cts.Token)" Disabled="@IsLoading">Scan
-            </FluentButton>
-            <FluentButton @onclick="RefreshSelectedAsync" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
-            </FluentButton>
-            <FluentButton @onclick="DeleteSelectedKeyAsync" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
-            </FluentButton>
-            <FluentButton @onclick="PurgeAllAsync" Disabled="@IsLoading">Purge All</FluentButton>
-            <FluentButton @onclick="ToggleMultiSelectMode"
-                          Appearance="@(_multiSelectMode ? Appearance.Accent : Appearance.Neutral)">
-                @(_multiSelectMode ? "Cancel Select" : "Select")
-            </FluentButton>
-            @if (_multiSelectMode && _selectedKeys.Count > 0)
-            {
-                <FluentButton @onclick="DeleteSelectedKeysAsync" Appearance="Appearance.Accent">
-                    Delete @_selectedKeys.Count key(s)
-                </FluentButton>
-                @if (_batchProgressMessage is not null)
-                {
-                    <span style="font-size:12px; color:var(--color-text-muted);">@_batchProgressMessage</span>
-                }
-            }
-            <FluentButton @onclick="ExportKeysToJsonAsync" Disabled="@(IsLoading || Keys.Count == 0)">Export JSON
-            </FluentButton>
-            <AutoRefreshToggle OnRefresh="() => ScanAsync(_cts.Token)" Paused="@IsLoading" />
-
-            <span class="connection">@ConnectionLabel</span>
-        </div>
+        <RedisToolbar @ref="_toolbar" IsLoading="@IsLoading" SelectedKey="@SelectedKey" KeyCount="@Keys.Count"
+                      HasMoreKeys="@_hasMoreKeys" IsProduction="@IsProduction" HasAnyPanel="@(SelectedInfo is not null)"
+                      BatchProgressMessage="@_batchProgressMessage" OnScan="HandleScan" OnRefreshKey="RefreshSelectedAsync"
+                      OnDeleteKey="DeleteSelectedKeyAsync" OnPurgeAll="PurgeAllAsync" OnExportJson="ExportKeysToJsonAsync"
+                      OnBatchDelete="DeleteSelectedKeysAsync" />
 
         @if (ErrorMessage is not null)
         {
@@ -96,8 +45,8 @@
                         <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
                                             KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
                                             OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
-                                            MultiSelectMode="@_multiSelectMode" SelectedKeys="@_selectedKeys"
-                                            OnKeyToggled="ToggleKeySelection" />
+                                            MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
+                                            SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled" />
                         @if (_hasMoreKeys)
                         {
                             <div class="load-more-bar">
@@ -132,7 +81,8 @@
 
 @code {
     private IRedisClient? Client;
-    private string Pattern = "*";
+    private RedisToolbar? _toolbar;
+    private static readonly HashSet<string> _emptySelectedKeys = [];
     private bool IsLoading;
     private string? ErrorMessage;
     private CancellationTokenSource _cts = new();
@@ -158,8 +108,6 @@
     private const int ItemPageSize = 100;
 
     // RDS-9: Multi-key delete
-    private bool _multiSelectMode;
-    private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
     private string? _batchProgressMessage;
 
     private string? SelectedKey;
@@ -390,7 +338,8 @@
 
         try
         {
-            var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
+            var pattern = _toolbar?.Pattern ?? "*";
+            if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
             _scanCursor = 0;
             _hasMoreKeys = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -665,7 +614,8 @@
 
         try
         {
-            var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
+            var pattern = _toolbar?.Pattern ?? "*";
+            if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
             var existing = new HashSet<string>(Keys, StringComparer.Ordinal);
             var loaded = 0;
 
@@ -796,24 +746,16 @@
 
     // ── RDS-9: Multi-key delete ──
 
-    private void ToggleMultiSelectMode()
+    private void HandleKeyToggled(string key)
     {
-        _multiSelectMode = !_multiSelectMode;
-        if (!_multiSelectMode)
-            _selectedKeys.Clear();
-    }
-
-    private void ToggleKeySelection(string key)
-    {
-        if (!_selectedKeys.Remove(key))
-            _selectedKeys.Add(key);
+        _toolbar?.ToggleKeySelection(key);
     }
 
     private Task DeleteSelectedKeysAsync()
     {
-        if (_selectedKeys.Count == 0) return Task.CompletedTask;
+        if (_toolbar is null || _toolbar.SelectedKeys.Count == 0) return Task.CompletedTask;
 
-        var keyList = _selectedKeys.ToList();
+        var keyList = _toolbar.SelectedKeys.ToList();
         return ShowConfirmationAsync(
             title: "Delete Keys",
             message: $"Delete {keyList.Count} selected key(s)?",
@@ -838,8 +780,7 @@
                         Keys.Remove(key);
                         KeyTypes.Remove(key);
                     }
-                    _selectedKeys.Clear();
-                    _multiSelectMode = false;
+                    _toolbar.ClearMultiSelect();
 
                     if (keyList.Contains(SelectedKey ?? ""))
                     {
@@ -940,8 +881,9 @@
 
     // ── Cache switching ──
 
-    private async Task OnCacheChangedAsync()
+    private async Task HandleCacheChanged(string newCacheId)
     {
+        SelectedCacheId = newCacheId;
         var config = CurrentRedisConfig;
         if (config is not null)
             config.ActiveCacheId = SelectedCacheId;
@@ -950,13 +892,15 @@
         await ScanAsync();
     }
 
-    private async Task OnCacheNameChanged(ChangeEventArgs e)
+    private async Task HandleCacheNameChanged(string name)
     {
         var entry = ActiveCacheEntry;
         if (entry is null) return;
-        entry.DisplayName = e.Value?.ToString()?.Trim() ?? "Cache";
+        entry.DisplayName = name;
         await InvokeAsync(StateHasChanged);
     }
+
+    private Task HandleScan(string _) => ScanAsync(_cts.Token);
 
     // ── Namespace tree ──
 
@@ -982,8 +926,8 @@
 
     private async Task OnPrefixSelectedAsync(string prefix)
     {
-        Pattern = $"{prefix}{CurrentSeparator}*";
-        await ScanAsync();
+        if (_toolbar is not null) _toolbar.Pattern = $"{prefix}{CurrentSeparator}*";
+        await ScanAsync(_cts.Token);
     }
 
     // ── Prefix memory analysis ──

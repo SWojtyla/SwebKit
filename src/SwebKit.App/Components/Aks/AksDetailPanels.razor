@@ -1,0 +1,416 @@
+@* ── AksDetailPanels: Hosts all right-side detail panels for the AKS page ── *@
+
+@if (HasOpenPanel)
+{
+    <ResizablePanel DefaultWidth="420" MinWidth="280" MaxWidth="900">
+        <div class="aks-panels-col">
+
+            @* ── YAML viewer / editor ── *@
+            <AksYamlViewer @ref="_yamlViewer" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
+                           Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
+                           OnYamlApplied="OnDataChanged" />
+
+            @* ── Helm History / Values / Rollback ── *@
+            <AksHelmPanel @ref="_helmPanel" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
+                          Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
+                          OnDataChanged="OnDataChanged" />
+
+            @* ── Scale ── *@
+            @if (_scaleTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null)
+            {
+                <div class="aks-panel-pane">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title" title="@_scaleTarget">Scale: @_scaleTarget</span>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="CancelScale" Title="Cancel">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                        </FluentButton>
+                    </div>
+                    <div class="aks-scale-panel">
+                        <div class="aks-scale-label">Desired replicas</div>
+                        <div class="aks-scale-stepper">
+                            <button class="aks-scale-step-btn"
+                                    @onclick="() => _scaleReplicas = Math.Max(0, _scaleReplicas - 1)">−</button>
+                            <input type="number" class="aks-scale-input" min="0" max="100" @bind="_scaleReplicas"
+                                   @bind:event="oninput" />
+                            <button class="aks-scale-step-btn"
+                                    @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
+                        </div>
+                        <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
+                                                        ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                        : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                            <div class="aks-scale-actions">
+                                <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
+                                <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* ── Pod logs ── *@
+                @if (_logPodName is not null && _yamlViewer?.IsOpen != true)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header aks-log-header">
+                            <span class="aks-section-title" title="@_logPodName">Logs: @TruncatePodName(_logPodName)</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseLogs" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" />
+                    </div>
+                }
+
+                @* ── Multi-pod logs ── *@
+                @if (_logDeploymentName is not null && _logPodName is null && _yamlViewer?.IsOpen != true)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header aks-log-header">
+                            <span class="aks-section-title">All-pod logs: @_logDeploymentName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseDeploymentLogs" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <MultiPodLogView Client="Client" Namespace="@Namespace" DeploymentName="@_logDeploymentName" />
+                    </div>
+                }
+
+                @* ── Container details ── *@
+                @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                        _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Containers: @TruncatePodName(_containerDetailPodName)</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseContainerDetail" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <ContainerDetailPanel Client="Client" Namespace="@Namespace" PodName="@_containerDetailPodName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── ConfigMap detail ── *@
+                @if (_configMapDetailTarget is not null && _yamlViewer?.IsOpen != true)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">ConfigMap: @_configMapDetailTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseConfigMapDetail" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <ConfigMapDetailPanel ConfigMap="_configMapDetailTarget" />
+                    </div>
+                }
+
+                @* ── Secret detail ── *@
+                @if (_secretDetailTarget is not null && _yamlViewer?.IsOpen != true)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Secret: @_secretDetailTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseSecretDetail" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <SecretDetailPanel Client="Client" Namespace="@Namespace" Secret="_secretDetailTarget" />
+                    </div>
+                }
+
+                @* ── HPA detail ── *@
+                @if (_hpaDetailTarget is not null && _yamlViewer?.IsOpen != true)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">HPA: @_hpaDetailTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHpaDetail" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <HpaPanel Hpa="_hpaDetailTarget" />
+                    </div>
+                }
+
+                @* ── Events panel ── *@
+                @if (ShowEvents)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Events</span>
+                            <span class="aks-section-count">@Events.Count</span>
+                            @if (Events.Any(e => e.Type == "Warning"))
+                            {
+                                <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
+                                                        == "Warning")
+                                </span>
+                            }
+                            <span class="aks-toolbar-spacer"></span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-events-list">
+                            @if (Events.Count == 0)
+                            {
+                                <div class="aks-events-empty">No recent events</div>
+                            }
+                            else
+                            {
+                                @foreach (var evt in Events)
+                                {
+                                    <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
+                                        <div class="aks-event-header">
+                                            @if (evt.Type == "Warning")
+                                            {
+                                                <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
+                                                    <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                                </span>
+                                            }
+                                            <span class="aks-event-reason">@evt.Reason</span>
+                                            @if (evt.Count > 1)
+                                            {
+                                                <span class="aks-event-count">×@evt.Count</span>
+                                            }
+                                            <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
+                                        </div>
+                                        <div class="aks-event-detail">
+                                            <span class="aks-event-object">@evt.InvolvedObjectName</span>
+                                            @evt.Message
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </ResizablePanel>
+    }
+
+@code {
+    // ── Parameters ──
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public bool IsProduction { get; set; }
+    [Parameter] public INotificationService Notifications { get; set; } = default!;
+    [Parameter] public AksConfirmBar Confirm { get; set; } = default!;
+    [Parameter] public List<KubernetesEvent> Events { get; set; } = [];
+    [Parameter] public List<DeploymentInfo> Deployments { get; set; } = [];
+    [Parameter] public List<StatefulSetInfo> StatefulSets { get; set; } = [];
+    [Parameter] public bool ShowEvents { get; set; }
+    [Parameter] public EventCallback OnShowEventsChanged { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+    [Parameter] public EventCallback OnPanelStateChanged { get; set; }
+
+    // ── Child refs ──
+    private AksYamlViewer _yamlViewer = default!;
+    private AksHelmPanel _helmPanel = default!;
+
+    // ── Internal state ──
+    private string? _logPodName;
+    private string? _logDeploymentName;
+    private string? _containerDetailPodName;
+    private ConfigMapInfo? _configMapDetailTarget;
+    private SecretInfo? _secretDetailTarget;
+    private HpaInfo? _hpaDetailTarget;
+    private string? _scaleTarget;
+    private int _scaleReplicas;
+    private bool _scaleIsStatefulSet;
+
+    // ── Public state ──
+    public bool IsOpen => HasOpenPanel;
+    public bool IsYamlOpen => _yamlViewer?.IsOpen == true;
+    public bool IsYamlEditing => _yamlViewer?.IsEditing == true;
+
+    private bool HasOpenPanel =>
+        _logPodName is not null ||
+        _logDeploymentName is not null ||
+        _yamlViewer?.IsOpen == true ||
+        _scaleTarget is not null ||
+        _helmPanel?.IsOpen == true ||
+        _configMapDetailTarget is not null ||
+        _secretDetailTarget is not null ||
+        _containerDetailPodName is not null ||
+        _hpaDetailTarget is not null ||
+        _yamlViewer?.IsEditing == true ||
+        ShowEvents;
+
+    // ── Public methods (called by parent via @ref) ──
+
+    // YAML
+    public Task OpenYamlAsync(string kind, string name, bool editMode = false)
+        => _yamlViewer.OpenAsync(kind, name, startInEditMode: editMode);
+
+    public void CloseYaml() => _yamlViewer?.Close();
+
+    // Helm
+    public Task ShowHelmHistoryAsync(string releaseName) => _helmPanel.ShowHistoryAsync(releaseName);
+    public Task ShowHelmValuesAsync(string releaseName) => _helmPanel.ShowValuesAsync(releaseName);
+    public Task ShowHelmRollbackAsync(string releaseName) => _helmPanel.ShowRollbackAsync(releaseName);
+
+    // Scale
+    public void ShowScale(string targetName, int currentReplicas, bool isStatefulSet)
+    {
+        _yamlViewer?.Close();
+        CloseLogs();
+        _scaleIsStatefulSet = isStatefulSet;
+        _scaleTarget = targetName;
+        _scaleReplicas = currentReplicas;
+        NotifyPanelStateChanged();
+    }
+
+    public void CancelScale()
+    {
+        _scaleTarget = null;
+        _scaleReplicas = 0;
+        NotifyPanelStateChanged();
+    }
+
+    // Pod logs
+    public void ShowPodLogs(string podName)
+    {
+        _yamlViewer?.Close();
+        _logPodName = podName;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowDeploymentLogs(string deploymentName)
+    {
+        _logPodName = null;
+        _logDeploymentName = deploymentName;
+        NotifyPanelStateChanged();
+    }
+
+    public void CloseLogs()
+    {
+        _logPodName = null;
+        _logDeploymentName = null;
+        NotifyPanelStateChanged();
+    }
+
+    // Container / detail panels
+    public void ShowContainerDetails(string podName)
+    {
+        _containerDetailPodName = podName;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowConfigMapDetail(ConfigMapInfo? cm)
+    {
+        _configMapDetailTarget = cm;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowSecretDetail(SecretInfo? secret)
+    {
+        _secretDetailTarget = secret;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowHpaDetail(HpaInfo? hpa)
+    {
+        _hpaDetailTarget = hpa;
+        NotifyPanelStateChanged();
+    }
+
+    // ── Internal handlers ──
+
+    private async Task OnScaleConfirm()
+    {
+        if (_scaleTarget is null || Client is null) return;
+        var name = _scaleTarget;
+        var replicas = _scaleReplicas;
+        var isStatefulSet = _scaleIsStatefulSet;
+        _scaleTarget = null;
+        StateHasChanged();
+
+        if (IsProduction)
+        {
+            var confirmed = await Confirm.ShowAsync(
+                $"Scale \"{name}\" to {replicas} replicas in production?",
+                name,
+                requireTypedName: true);
+            if (!confirmed) return;
+        }
+
+        try
+        {
+            if (isStatefulSet)
+                await Client.ScaleStatefulSetAsync(Namespace, name, replicas);
+            else
+                await Client.ScaleDeploymentAsync(Namespace, name, replicas);
+            await OnDataChanged.InvokeAsync();
+            Notifications.ShowSuccess("Scaled", $"{name} → {replicas} replica{(replicas == 1 ? "" : "s")}");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            Notifications.ShowError("Failed to scale", ex: ex);
+        }
+        await InvokeAsync(StateHasChanged); // BL-2
+        await OnPanelStateChanged.InvokeAsync();
+    }
+
+    private void CloseDeploymentLogs()
+    {
+        _logDeploymentName = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseContainerDetail()
+    {
+        _containerDetailPodName = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseConfigMapDetail()
+    {
+        _configMapDetailTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseSecretDetail()
+    {
+        _secretDetailTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseHpaDetail()
+    {
+        _hpaDetailTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private async Task CloseEvents()
+    {
+        await OnShowEventsChanged.InvokeAsync();
+        await OnPanelStateChanged.InvokeAsync();
+    }
+
+    private async Task OnChildPanelClosed()
+    {
+        await InvokeAsync(StateHasChanged); // BL-2
+        await OnPanelStateChanged.InvokeAsync();
+    }
+
+    private void NotifyPanelStateChanged()
+    {
+        StateHasChanged();
+        _ = OnPanelStateChanged.InvokeAsync();
+    }
+
+    private static string TruncatePodName(string name)
+        => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
+}

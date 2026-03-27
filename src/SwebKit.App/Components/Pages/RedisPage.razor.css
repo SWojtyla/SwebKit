@@ -6,100 +6,12 @@
     gap: var(--spacing-md);
 }
 
-.redis-page h2 {
-    margin: 0;
-    font-size: 18px;
-}
-
-.page-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-}
-
-.cache-title {
-    display: flex;
-    align-items: center;
-}
-
-.cache-name-input {
-    font-size: 18px;
-    font-weight: 600;
-    background: transparent;
-    color: var(--color-text);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 2px 6px;
-    width: 200px;
-}
-
-.cache-name-input:hover,
-.cache-name-input:focus {
-    border-color: var(--color-border);
-    background: var(--color-surface);
-    outline: none;
-}
-
-.cache-selector {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 12px;
-}
-
 .not-configured {
     padding: var(--spacing-md);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     background: var(--color-surface);
     color: var(--color-text-muted);
-}
-
-.toolbar {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: end;
-    flex-wrap: wrap;
-}
-
-.field {
-    display: grid;
-    gap: var(--spacing-xs);
-}
-
-.field label {
-    font-size: 12px;
-    color: var(--color-text-muted);
-}
-
-.field input {
-    width: 220px;
-    padding: 6px var(--spacing-sm);
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-}
-
-.pattern-help {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin-top: 2px;
-}
-
-.pattern-help code {
-    background: rgba(127, 127, 127, 0.15);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 10px;
-}
-
-.connection {
-    font-size: 12px;
-    color: var(--color-text-muted);
-    margin-left: var(--spacing-sm);
 }
 
 .content-grid {

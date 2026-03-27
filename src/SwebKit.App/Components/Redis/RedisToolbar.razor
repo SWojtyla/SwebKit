@@ -1,0 +1,80 @@
+<div class="toolbar">
+    <div class="field">
+        <label>Pattern</label>
+        <input @bind="_pattern" placeholder="*" />
+        <div class="pattern-help">
+            Examples: <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
+        </div>
+    </div>
+
+    <FluentButton Appearance="Appearance.Accent" @onclick="HandleScan" Disabled="@IsLoading">Scan
+    </FluentButton>
+    <FluentButton @onclick="OnRefreshKey" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
+    </FluentButton>
+    <FluentButton @onclick="OnDeleteKey" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
+    </FluentButton>
+    <FluentButton @onclick="OnPurgeAll" Disabled="@IsLoading">Purge All</FluentButton>
+    <FluentButton @onclick="ToggleMultiSelectMode"
+                  Appearance="@(_multiSelectMode ? Appearance.Accent : Appearance.Neutral)">
+        @(_multiSelectMode ? "Cancel Select" : "Select")
+    </FluentButton>
+    @if (_multiSelectMode && _selectedKeys.Count > 0)
+    {
+        <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent">
+            Delete @_selectedKeys.Count key(s)
+        </FluentButton>
+        @if (BatchProgressMessage is not null)
+        {
+            <span style="font-size:12px; color:var(--color-text-muted);">@BatchProgressMessage</span>
+        }
+    }
+    <FluentButton @onclick="OnExportJson" Disabled="@(IsLoading || KeyCount == 0)">Export JSON
+    </FluentButton>
+    <AutoRefreshToggle OnRefresh="HandleScan" Paused="@IsLoading" />
+</div>
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? SelectedKey { get; set; }
+    [Parameter] public int KeyCount { get; set; }
+    [Parameter] public bool HasMoreKeys { get; set; }
+    [Parameter] public bool IsProduction { get; set; }
+    [Parameter] public bool HasAnyPanel { get; set; }
+    [Parameter] public string? BatchProgressMessage { get; set; }
+    [Parameter] public EventCallback<string> OnScan { get; set; }
+    [Parameter] public EventCallback OnRefreshKey { get; set; }
+    [Parameter] public EventCallback OnDeleteKey { get; set; }
+    [Parameter] public EventCallback OnPurgeAll { get; set; }
+    [Parameter] public EventCallback OnExportJson { get; set; }
+    [Parameter] public EventCallback OnBatchDelete { get; set; }
+
+    private string _pattern = "*";
+    private bool _multiSelectMode;
+    private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
+
+    public string Pattern { get => _pattern; set => _pattern = value; }
+    public bool MultiSelectMode => _multiSelectMode;
+    public HashSet<string> SelectedKeys => _selectedKeys;
+
+    public void ClearMultiSelect()
+    {
+        _selectedKeys.Clear();
+        _multiSelectMode = false;
+        StateHasChanged();
+    }
+
+    public void ToggleKeySelection(string key)
+    {
+        if (!_selectedKeys.Remove(key))
+            _selectedKeys.Add(key);
+    }
+
+    private Task HandleScan() => OnScan.InvokeAsync(_pattern);
+
+    private void ToggleMultiSelectMode()
+    {
+        _multiSelectMode = !_multiSelectMode;
+        if (!_multiSelectMode)
+            _selectedKeys.Clear();
+    }
+}

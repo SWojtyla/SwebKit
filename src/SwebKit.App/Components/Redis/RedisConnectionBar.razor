@@ -1,0 +1,53 @@
+<div class="page-header">
+    @if (ActiveCacheEntry is not null)
+    {
+        <h2 class="cache-title">
+            <input class="cache-name-input" type="text" value="@ActiveCacheEntry.DisplayName"
+                   @onchange="HandleNameChanged" />
+        </h2>
+    }
+    else
+    {
+        <h2>Redis</h2>
+    }
+
+    @if (CacheEntries.Count > 1)
+    {
+        <select class="cache-selector" @bind="_selectedCacheId" @bind:after="HandleCacheChangedAsync">
+            @foreach (var cache in CacheEntries)
+            {
+                <option value="@cache.Id">@cache.DisplayName</option>
+            }
+        </select>
+    }
+
+    @if (IsConnected)
+    {
+        <span class="connection">@ConnectionLabel</span>
+    }
+</div>
+
+@code {
+    [Parameter] public List<RedisCacheEntry> CacheEntries { get; set; } = [];
+    [Parameter] public RedisCacheEntry? ActiveCacheEntry { get; set; }
+    [Parameter] public string SelectedCacheId { get; set; } = "";
+    [Parameter] public bool IsConnected { get; set; }
+    [Parameter] public string ConnectionLabel { get; set; } = "";
+    [Parameter] public EventCallback<string> OnCacheChanged { get; set; }
+    [Parameter] public EventCallback<string> OnCacheNameChanged { get; set; }
+
+    private string _selectedCacheId = "";
+
+    protected override void OnParametersSet()
+    {
+        _selectedCacheId = SelectedCacheId;
+    }
+
+    private Task HandleCacheChangedAsync() => OnCacheChanged.InvokeAsync(_selectedCacheId);
+
+    private Task HandleNameChanged(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString()?.Trim() ?? "Cache";
+        return OnCacheNameChanged.InvokeAsync(name);
+    }
+}
