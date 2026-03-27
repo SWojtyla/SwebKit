@@ -16,7 +16,8 @@
 
 <div class="obs-page">
     <!-- Top toolbar: resource selector + time range + refresh -->
-    <div class="obs-toolbar">
+    <PageToolbar>
+        <LeadingContent>
         <div class="obs-resource-selector">
             <FluentButton @onclick="ToggleResourceSelector" IconStart="@(new Icons.Regular.Size16.DataTrending())"
                           title="Select Application Insights resource">
@@ -31,9 +32,12 @@
                 </div>
             }
         </div>
-
+        </LeadingContent>
+        <CenterContent>
         <TimeRangePicker Value="_range" ValueChanged="OnRangeChangedAsync" />
+        </CenterContent>
 
+        <TrailingContent>
         <FluentButton @onclick="RefreshAsync" title="Refresh (F5)" Disabled="@(_provider is null)"
                       IconStart="@(new Icons.Regular.Size16.ArrowClockwise())">
             Refresh
@@ -67,7 +71,8 @@
         {
             <span class="obs-provider-badge">@_provider.ProviderType</span>
         }
-    </div>
+        </TrailingContent>
+    </PageToolbar>
 
     @if (_provider is null)
     {

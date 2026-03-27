@@ -95,11 +95,14 @@ public class DemoAksClient : IAksClient
                 var suffix = Guid.NewGuid().ToString("N")[..8];
                 var isReady = i < d.Ready;
                 var restarts = isReady ? 0 : Rng.Next(1, 10);
+                var phase = isReady ? "Running" : (d.Status == "Unavailable" ? "Pending" : "Pending");
+                var status = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "ImagePullBackOff");
                 pods.Add(new PodInfo
                 {
                     Name = $"{d.Name}-{suffix[..5]}-{suffix[5..]}",
                     Namespace = ns,
-                    Phase = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "Pending"),
+                    Phase = phase,
+                    Status = status,
                     Ready = isReady,
                     ReadyContainers = isReady ? 2 : (d.Status == "Unavailable" ? 0 : 1),
                     TotalContainers = 2,

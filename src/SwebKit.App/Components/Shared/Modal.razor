@@ -1,5 +1,6 @@
 @* Full-screen backdrop modal. Click backdrop to close; click content area does not close. *@
 @inject IJSRuntime JS
+@inject ILogger<Modal> Logger
 @implements IAsyncDisposable
 
 @if (IsOpen)
@@ -31,7 +32,7 @@
             _savedFocusRef = await JS.InvokeAsync<IJSObjectReference>("SwebKit.saveFocus");
             await JS.InvokeVoidAsync("SwebKit.trapFocus", _containerRef);
         }
-        catch { }
+        catch (Exception ex) { Logger.LogDebug(ex, "JS interop failed: {Method}", "SwebKit.trapFocus"); }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -46,7 +47,7 @@
             if (_savedFocusRef is not null)
             {
                 try { await JS.InvokeVoidAsync("SwebKit.restoreFocus", _savedFocusRef); }
-                catch { }
+                catch (Exception ex) { Logger.LogDebug(ex, "JS interop failed: {Method}", "SwebKit.restoreFocus"); }
                 try { await _savedFocusRef.DisposeAsync(); }
                 catch { }
                 _savedFocusRef = null;
@@ -61,7 +62,7 @@
     public async ValueTask DisposeAsync()
     {
         try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _containerRef); }
-        catch { }
+        catch (Exception ex) { Logger.LogDebug(ex, "JS interop failed: {Method}", "SwebKit.releaseTrap"); }
         if (_savedFocusRef is not null)
         {
             try { await _savedFocusRef.DisposeAsync(); }

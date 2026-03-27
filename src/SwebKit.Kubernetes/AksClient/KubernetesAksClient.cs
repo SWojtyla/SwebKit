@@ -175,6 +175,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     Name = p.Metadata.Name,
                     Namespace = p.Metadata.NamespaceProperty ?? ns,
                     Phase = p.Status?.Phase ?? "Unknown",
+                    Status = DeriveDisplayStatus(p),
                     Ready = containerStatuses?.All(c => c.Ready) ?? false,
                     ReadyContainers = containerStatuses?.Count(c => c.Ready) ?? 0,
                     TotalContainers = p.Spec?.Containers?.Count ?? 0,
@@ -189,6 +190,54 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 };
             }).ToList();
         });
+    }
+
+    /// <summary>
+    /// Derives the display status matching kubectl output from container states.
+    /// Priority: DeletionTimestamp → init container waiting reason → container waiting reason →
+    /// container terminated reason → pod phase.
+    /// </summary>
+    private static string DeriveDisplayStatus(V1Pod pod)
+    {
+        if (pod.Metadata?.DeletionTimestamp is not null)
+            return "Terminating";
+
+        var phase = pod.Status?.Phase ?? "Unknown";
+
+        if (pod.Status?.InitContainerStatuses is { } initStatuses)
+        {
+            foreach (var cs in initStatuses)
+            {
+                if (cs.State?.Waiting?.Reason is { } initWaitReason)
+                    return $"Init:{initWaitReason}";
+                if (cs.State?.Terminated is { } initTerm && initTerm.ExitCode != 0)
+                    return initTerm.Reason ?? $"Init:ExitCode:{initTerm.ExitCode}";
+            }
+        }
+
+        if (pod.Status?.ContainerStatuses is { } statuses)
+        {
+            foreach (var cs in statuses)
+            {
+                if (cs.State?.Waiting?.Reason is { } waitReason)
+                    return waitReason;
+            }
+
+            foreach (var cs in statuses)
+            {
+                if (cs.State?.Terminated is { } term)
+                {
+                    if (term.Reason is { Length: > 0 } reason)
+                        return reason;
+                    if (term.Signal is not null and not 0)
+                        return $"Signal:{term.Signal}";
+                    if (term.ExitCode != 0)
+                        return $"ExitCode:{term.ExitCode}";
+                }
+            }
+        }
+
+        return phase;
     }
 
     public async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null, CancellationToken ct = default)

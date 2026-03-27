@@ -10,7 +10,7 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 
-<div class="service-bus-page-shell" style="display:flex; height:100%; overflow:hidden; position:relative;">
+<div class="service-bus-page-shell">
     <!-- Left: namespace list + entity trees -->
     <div class="sb-entity-panel @(_isNamespacePaneCollapsed ? "collapsed" : string.Empty)">
         <div class="sb-entity-panel-icon-strip">
@@ -30,11 +30,9 @@
 
         <div class="sb-entity-panel-body" style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
             <!-- Namespace panel header -->
-            <div
-                style="padding:8px 12px; font-size:11px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between;">
-                <span
-                style="color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">Namespaces</span>
-                <div style="display:flex; gap:4px; align-items:center;">
+            <div class="sb-ns-panel-header">
+                <span class="sb-ns-panel-label">Namespaces</span>
+                <div class="sb-ns-header-actions">
                     <button
                     style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
                     @onclick="ToggleAddForm">+ Add</button>
@@ -49,8 +47,7 @@
             <!-- Add namespace form -->
             @if (_showAddForm)
             {
-                <div
-                    style="padding:10px 12px; border-bottom:1px solid var(--color-border); background:var(--color-surface);">
+                <div class="sb-add-form">
                     <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection
                         string:
                     </div>
@@ -75,23 +72,19 @@
                         <button
                         style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
                         @onclick="AddNamespaceAsync">Add</button>
-                        <button
-                            style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
-                            @onclick="() => _showConnStr = !_showConnStr"
-                            title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
-                                                                                                         "🙈" : "👁️")</button>
-                            <button
-                            style="padding:4px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;"
-                            @onclick="CancelAdd">Cancel</button>
+                        <button class="sb-btn-secondary-sm" @onclick="() => _showConnStr = !_showConnStr"
+                                title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
+                                                                                                                                     "🙈" : "👁️")</button>
+                            <button class="sb-btn-secondary-sm" @onclick="CancelAdd">Cancel</button>
                         </div>
                     </div>
                 }
 
                 <!-- Namespace list -->
-                <div style="flex:1; overflow-y:auto;">
+                <div class="sb-ns-list">
                     @if (!_namespaceStates.Any())
                     {
-                        <div style="padding:16px 12px; font-size:12px; color:var(--color-text-muted);">
+                        <div class="sb-empty-hint">
                             No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
                         </div>
                     }
@@ -99,8 +92,7 @@
                     @foreach (var ns in _namespaceStates)
                     {
                         <!-- Namespace header row -->
-                        <div style="display:flex; align-items:center; padding:6px 12px; border-bottom:1px solid var(--color-border); cursor:pointer; background:var(--color-surface);"
-                             @onclick="() => ToggleNamespace(ns.Namespace.Id)">
+                        <div class="sb-ns-row" @onclick="() => ToggleNamespace(ns.Namespace.Id)">
                             <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
                             <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                                   title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
@@ -110,14 +102,13 @@
                             }
                             else if (ns.Client is not null)
                             {
-                                <span style="color:var(--color-success); display:inline-flex; align-items:center;">
+                                <span class="sb-status-success">
                                     <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
                                 </span>
                             }
                             else
                             {
-                                <span style="color:var(--color-error); display:inline-flex; align-items:center;"
-                                      title="@ns.ConnectionError">
+                                <span class="sb-status-error" title="@ns.ConnectionError">
                                     <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
                                 </span>
                             }
@@ -155,7 +146,7 @@
         </div>
 
         <!-- Right: tabbed content -->
-        <div class="service-bus-right-pane" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        <div class="service-bus-right-pane">
             @if (!_openTabs.Any())
             {
                 <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
@@ -171,7 +162,7 @@
                         <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
                             @if (tab.IsDlq)
                             {
-                                <span style="color:var(--color-error); display:inline-flex; align-items:center;">
+                                <span class="sb-status-error">
                                     <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
                                 </span>
                             }

@@ -1,0 +1,133 @@
+/* FQ-20 – CSS isolation: structural and repeated inline styles extracted from NotificationHistory.razor */
+
+.nh-container {
+    background: #2D2D44;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    width: 360px;
+    max-height: 480px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nh-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.nh-clear-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 8px;
+}
+
+.nh-scroll {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.nh-empty {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    text-align: center;
+    padding: 24px 12px;
+}
+
+/* Active notification row */
+.nh-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Shared icon sizing for active and history rows; color stays inline (dynamic) */
+.nh-row-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+    padding-top: 1px;
+}
+
+.nh-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.nh-title {
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nh-detail {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nh-timestamp {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 10px;
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+/* History section */
+.nh-history-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nh-history-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    opacity: 0.7;
+}
+
+.nh-history-title {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nh-history-detail {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nh-history-timestamp {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 10px;
+    flex-shrink: 0;
+    padding-top: 2px;
+    white-space: nowrap;
+}

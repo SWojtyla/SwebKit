@@ -59,7 +59,7 @@
                         }
                         else
                         {
-                            <div style="flex:1; display:flex; height:100%; overflow:hidden;">
+                            <div class="storage-blob-split">
                                 <div
                                     style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
                                     <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
@@ -67,7 +67,7 @@
                                 </div>
                                 @if (_selectedBlob is not null)
                                 {
-                                    <div style="width:480px; flex-shrink:0; height:100%; overflow:hidden;">
+                                    <div class="storage-detail-pane">
                                         <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
                                     </div>
                                 }

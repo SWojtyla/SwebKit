@@ -66,6 +66,10 @@
                 <FluentButton @onclick="DeleteSelectedKeysAsync" Appearance="Appearance.Accent">
                     Delete @_selectedKeys.Count key(s)
                 </FluentButton>
+                @if (_batchProgressMessage is not null)
+                {
+                    <span style="font-size:12px; color:var(--color-text-muted);">@_batchProgressMessage</span>
+                }
             }
             <FluentButton @onclick="ExportKeysToJsonAsync" Disabled="@(IsLoading || Keys.Count == 0)">Export JSON
             </FluentButton>
@@ -156,6 +160,7 @@
     // RDS-9: Multi-key delete
     private bool _multiSelectMode;
     private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
+    private string? _batchProgressMessage;
 
     private string? SelectedKey;
     private RedisKeyInfo? SelectedInfo;
@@ -817,27 +822,42 @@
             {
                 if (Client is null) return;
 
-                await Client.DeleteKeysAsync(keyList);
-                foreach (var key in keyList)
+                try
                 {
-                    Keys.Remove(key);
-                    KeyTypes.Remove(key);
-                }
-                _selectedKeys.Clear();
-                _multiSelectMode = false;
+                    var chunks = keyList.Chunk(10).ToList();
+                    int done = 0;
+                    foreach (var chunk in chunks)
+                    {
+                        await Client.DeleteKeysAsync(chunk);
+                        done += chunk.Length;
+                        _batchProgressMessage = $"Deleting key {done} of {keyList.Count}\u2026";
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    foreach (var key in keyList)
+                    {
+                        Keys.Remove(key);
+                        KeyTypes.Remove(key);
+                    }
+                    _selectedKeys.Clear();
+                    _multiSelectMode = false;
 
-                if (keyList.Contains(SelectedKey ?? ""))
+                    if (keyList.Contains(SelectedKey ?? ""))
+                    {
+                        SelectedKey = null;
+                        SelectedInfo = null;
+                        SelectedStringValue = null;
+                        SelectedHashFields = [];
+                        SelectedItems = [];
+                        SelectedSortedSetItems = [];
+                    }
+
+                    RebuildNamespaceTree();
+                    Notifications.ShowSuccess("Keys deleted", $"{keyList.Count} key(s) removed.");
+                }
+                finally
                 {
-                    SelectedKey = null;
-                    SelectedInfo = null;
-                    SelectedStringValue = null;
-                    SelectedHashFields = [];
-                    SelectedItems = [];
-                    SelectedSortedSetItems = [];
+                    _batchProgressMessage = null;
                 }
-
-                RebuildNamespaceTree();
-                Notifications.ShowSuccess("Keys deleted", $"{keyList.Count} key(s) removed.");
             });
     }
 

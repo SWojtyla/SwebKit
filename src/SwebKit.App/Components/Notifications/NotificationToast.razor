@@ -3,19 +3,17 @@
 
 @if (Notifications.All.Count > 0)
 {
-    <div style="position:fixed; top:56px; right:16px; z-index:9000; pointer-events:none;">
+    <div class="nt-container">
         @foreach (var n in Notifications.All.TakeLast(4))
         {
-            <div
-                style="pointer-events:auto; width:320px; margin-bottom:8px; background:#2D2D44; border-radius:6px; border-left:3px solid @GetAccentColor(n.Severity); padding:10px 12px; box-shadow:0 4px 12px rgba(0,0,0,0.4); position:relative; animation:slideInRight 0.25s ease-out;">
-                <button @onclick="() => Notifications.Dismiss(n.Id)"
-                        style="position:absolute; top:6px; right:8px; background:transparent; border:none; color:rgba(255,255,255,0.5); font-size:16px; cursor:pointer; line-height:1; padding:0;">
+            <div class="nt-toast" style="border-left-color:@GetAccentColor(n.Severity);">
+                <button @onclick="() => Notifications.Dismiss(n.Id)" class="nt-dismiss-btn">
                     ×
                 </button>
-                <div style="display:flex; align-items:baseline; gap:6px; margin-right:20px;">
-                    <span
-                    style="color:@GetAccentColor(n.Severity); font-size:14px; font-weight:700;">@GetIcon(n.Severity)</span>
-                    <span style="color:white; font-size:13px; font-weight:600;">@n.Message</span>
+                <div class="nt-content">
+                    <span class="nt-icon"
+                    style="color:@GetAccentColor(n.Severity);">@GetIcon(n.Severity)</span>
+                    <span class="nt-label">@n.Message</span>
                 </div>
                 @if (!string.IsNullOrEmpty(n.Detail))
                 {
@@ -29,20 +27,6 @@
             }
         </div>
     }
-
-    <style>
-        @@keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(40px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-    </style>
 
 @code {
     private readonly Dictionary<Guid, System.Timers.Timer> _timers = new();

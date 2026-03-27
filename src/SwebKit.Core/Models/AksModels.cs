@@ -42,6 +42,11 @@ public class PodInfo
     public required string Name { get; set; }
     public required string Namespace { get; set; }
     public string Phase { get; set; } = "Unknown";
+    /// <summary>
+    /// Detailed status matching kubectl output. Derived from container states
+    /// (e.g. ImagePullBackOff, CrashLoopBackOff, OOMKilled) or falls back to Phase.
+    /// </summary>
+    public string Status { get; set; } = "Unknown";
     public bool Ready { get; set; }
     public int ReadyContainers { get; set; }
     public int TotalContainers { get; set; }

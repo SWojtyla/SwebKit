@@ -20,17 +20,19 @@
         </div>
 
         <div class="rows">
-            @foreach (var key in Keys)
-            {
-                var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
-                <button @key="key" @onclick="() => OnSelectKey.InvokeAsync(key)" @oncontextmenu="e => ShowContextMenu(e, key)"
-                        @oncontextmenu:preventDefault="true" class="key-row @(SelectedKey == key ? "active" : "")">
+            <Virtualize TItem="string" Items="@Keys.ToList()" Context="key" ItemSize="36" OverscanCount="5">
+                @{
+                    var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
+                }
+                <button @key="key" @onclick="() => OnSelectKey.InvokeAsync(key)"
+                        @oncontextmenu="e => ShowContextMenu(e, key)" @oncontextmenu:preventDefault="true"
+                        class="key-row @(SelectedKey == key ? "active" : "")">
                     <input type="checkbox" checked="@isSelected" @onclick:stopPropagation="true"
                            @onchange="e => OnToggleSelection(key, e)" />
                     <span class="key-name">@key</span>
                     <span class="type-badge @(GetTypeClass(key))">@GetTypeLabel(key)</span>
                 </button>
-            }
+            </Virtualize>
         </div>
 
         <ContextMenu @ref="_ctxMenu">
@@ -66,6 +68,15 @@ HashSet<string>(StringComparer.Ordinal);
 
     private ContextMenu _ctxMenu = default!;
     private string? ContextMenuKey;
+    private int _lastRenderHash;
+
+    protected override bool ShouldRender()
+    {
+        var hash = HashCode.Combine(Keys.Count, SelectedKeys.Count, SelectedKey, IsLoading, IsComplete);
+        if (hash == _lastRenderHash) return false;
+        _lastRenderHash = hash;
+        return true;
+    }
 
     private bool AllVisibleSelected => Keys.Count > 0 && Keys.All(k => SelectedKeys.Contains(k, StringComparer.Ordinal));
 

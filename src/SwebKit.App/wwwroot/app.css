@@ -1205,13 +1205,25 @@ html, body {
     letter-spacing: 0.4px;
 }
 
-.pod-status-badge--running  { background: rgba(67, 160, 71, 0.15);  color: var(--color-success); }
-.pod-status-badge--pending  { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
-.pod-status-badge--failed   { background: rgba(229, 57, 53, 0.15);  color: var(--color-error); }
-.pod-status-badge--unknown  { background: var(--color-surface-2);   color: var(--color-text-muted); }
-.pod-status-badge--succeeded{ background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
-.pod-status-badge--completed{ background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
-.pod-status-badge--crashloopbackoff { background: rgba(229, 57, 53, 0.2); color: var(--color-error); }
+.pod-status-badge--running       { background: rgba(67, 160, 71, 0.15);  color: var(--color-success); }
+.pod-status-badge--pending       { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
+.pod-status-badge--failed        { background: rgba(229, 57, 53, 0.15);  color: var(--color-error); }
+.pod-status-badge--unknown       { background: var(--color-surface-2);   color: var(--color-text-muted); }
+.pod-status-badge--succeeded     { background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
+.pod-status-badge--completed     { background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
+.pod-status-badge--terminating   { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
+/* Error states — container waiting/terminated reasons */
+.pod-status-badge--crashloopbackoff     { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--imagepullbackoff     { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--errimagepull         { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--oomkilled            { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--error                { background: rgba(229, 57, 53, 0.15); color: var(--color-error); }
+.pod-status-badge--createcontainerconfigerror { background: rgba(229, 57, 53, 0.2); color: var(--color-error); }
+.pod-status-badge--invalidimgname       { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+/* Transient / in-progress states */
+.pod-status-badge--containercreating    { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
+.pod-status-badge--podinitiializing     { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
+.pod-status-badge--podinitializing      { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
 
 /* ═══════════════════════════════════════════════════════════
    Redis key type badges

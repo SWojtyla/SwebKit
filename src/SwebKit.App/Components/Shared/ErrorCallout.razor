@@ -1,5 +1,23 @@
 <div class="error-callout">
-    <strong>Error:</strong> @Message
+    @if (Title is not null)
+    {
+        <strong>@Title</strong>
+    }
+    else
+    {
+        <strong>Error:</strong>
+    }
+    @Message
+    @if (OnDismiss.HasDelegate)
+    {
+        <button class="error-callout-dismiss" aria-label="Dismiss error" @onclick="() => OnDismiss.InvokeAsync()">×</button>
+    }
+    @if (Details is not null)
+    {
+        <details>
+            <summary>Show details</summary>@Details
+        </details>
+    }
     @if (OnRetry.HasDelegate)
     {
         <button class="error-callout-retry" disabled="@_retrying" @onclick="RetryAsync">
@@ -21,7 +39,10 @@
 
 @code {
     [Parameter] public string Message { get; set; } = "An error occurred.";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Details { get; set; }
     [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
 
     private bool _retrying;
     private int _attemptCount;

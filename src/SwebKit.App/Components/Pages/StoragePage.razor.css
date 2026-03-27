@@ -1,0 +1,15 @@
+/* FQ-19 – CSS isolation: structural styles extracted from StoragePage.razor */
+
+.storage-blob-split {
+    flex: 1;
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+.storage-detail-pane {
+    width: 480px;
+    flex-shrink: 0;
+    height: 100%;
+    overflow: hidden;
+}

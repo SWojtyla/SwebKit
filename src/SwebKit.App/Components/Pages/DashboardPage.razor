@@ -40,7 +40,7 @@
                 <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
             </span>
             <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                        "—")</span>
+                                                        "—")</span>
                 <span class="hero-stat-label">Redis</span>
             </div>
             <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -48,7 +48,7 @@
                     <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                 </span>
                 <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                         "—")</span>
+                                                                 "—")</span>
                     <span class="hero-stat-label">Pipelines</span>
                 </div>
             </div>
@@ -259,7 +259,7 @@
                     aksConfig.KubeconfigPath);
 
             var pods = await client.GetPodsAsync(ns, null, ct);
-            var unhealthy = pods.Count(p => p.Phase is not ("Running" or "Succeeded" or "Completed"));
+            var unhealthy = pods.Count(p => p.Status is not ("Running" or "Succeeded" or "Completed"));
             _aksData = new HealthTileData(unhealthy, "unhealthy pods", DateTimeOffset.Now);
             _aksError = null;
         }

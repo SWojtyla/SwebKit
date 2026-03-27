@@ -3,7 +3,7 @@
 <div class="entity-tree">
     @if (IsLoading)
     {
-        <LoadingSpinner Message="Loading entities..." />
+        <SkeletonRows Count="5" />
     }
     else if (ErrorMessage is not null)
     {
@@ -67,7 +67,7 @@
                                                 var t = row.Entity!;
                                                 <div @key="t.EntityPath" class="entity-tree-item entity-tree-topic" @onclick="() => ToggleTopic(t.Name)">
                                                     <span class="entity-tree-glyph" style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "▼" :
-                                                              "▶")</span>
+                                                                                                                      "▶")</span>
                                                         <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@t.Name</span>
                                                     </div>
                                                     break;
@@ -119,6 +119,14 @@
     private HashSet<string> ExpandedTopics = [];
     private IServiceBusClient? _loadedClient;
     private List<TreeRow> _flatRows = [];
+    private bool _needsRender = true;
+
+    protected override bool ShouldRender()
+    {
+        if (!_needsRender) return false;
+        _needsRender = false;
+        return true;
+    }
 
     enum TreeRowKind { QueueHeader, Queue, TopicHeader, Topic, Subscription }
 
@@ -134,6 +142,7 @@
             ExpandedTopics = [];
             _flatRows = [];
             _loadedClient = null;
+            _needsRender = true;
             return;
         }
 
@@ -172,15 +181,26 @@
     {
         if (Client is null) return;
         IsLoading = true; ErrorMessage = null;
+        Subscriptions.Clear();
+        ExpandedTopics.Clear();
+        Queues = [];
+        Topics = [];
+        _flatRows = [];
+        _needsRender = true;
         await InvokeAsync(StateHasChanged);
         try
         {
-            Subscriptions.Clear();
-            ExpandedTopics.Clear();
+            // Load queues first — show them immediately
             Queues = (await Client.ListQueuesAsync()).ToList();
+            RebuildFlatRows();
+            _needsRender = true;
+            await InvokeAsync(StateHasChanged); // BL-2: progressive update — queues visible before topics load
+
+            // Then load topics
             Topics = (await Client.ListTopicsAsync()).ToList();
             RebuildFlatRows();
         }
+        catch (OperationCanceledException) { throw; } // CS-2
         catch (Exception ex)
         {
             var hint = ex.Message.Contains("401") || ex.Message.Contains("403") || ex.Message.Contains("Unauthorized") ||
@@ -192,18 +212,24 @@ ex.Message.Contains("Forbidden")
         finally
         {
             IsLoading = false;
-            await InvokeAsync(StateHasChanged);
+            _needsRender = true;
+            await InvokeAsync(StateHasChanged); // BL-2
         }
     }
 
     private async Task ToggleTopic(string name)
     {
-        if (ExpandedTopics.Contains(name)) { ExpandedTopics.Remove(name); RebuildFlatRows(); return; }
+        if (ExpandedTopics.Contains(name))
+        {
+            ExpandedTopics.Remove(name); RebuildFlatRows(); _needsRender = true;
+            StateHasChanged(); return;
+        }
         ExpandedTopics.Add(name);
         if (!Subscriptions.ContainsKey(name) && Client is not null)
             Subscriptions[name] = (await Client.ListSubscriptionsAsync(name)).ToList();
         RebuildFlatRows();
-        StateHasChanged();
+        _needsRender = true;
+        await InvokeAsync(StateHasChanged); // BL-2: use InvokeAsync after await
     }
 
     private async Task OpenEntity(SbEntityInfo entity, bool isDlq = false)

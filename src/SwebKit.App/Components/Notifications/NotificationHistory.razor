@@ -2,21 +2,18 @@
 @inject INotificationService Notifications
 @inject UiStateRepository UiState
 
-<div
-    style="background:#2D2D44; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.5); width:360px; max-height:480px; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.1);">
-    <div
-        style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0;">
+<div class="nh-container">
+    <div class="nh-header">
         <span style="color:white; font-size:13px; font-weight:600;">Notifications</span>
-        <button @onclick="Notifications.ClearAll"
-                style="background:transparent; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:rgba(255,255,255,0.7); font-size:11px; cursor:pointer; padding:2px 8px;">
+        <button @onclick="Notifications.ClearAll" class="nh-clear-btn">
             Clear all
         </button>
     </div>
 
-    <div style="overflow-y:auto; flex:1;">
+    <div class="nh-scroll">
         @if (Notifications.All.Count == 0 && UiState.State.NotificationHistory.Count == 0)
         {
-            <div style="color:rgba(255,255,255,0.4); font-size:12px; text-align:center; padding:24px 12px;">
+            <div class="nh-empty">
                 No notifications yet.
             </div>
         }
@@ -26,31 +23,26 @@
             {
                 @foreach (var n in Notifications.All.Reverse())
                 {
-                    <div
-                        style="display:flex; gap:8px; align-items:flex-start; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
-                        <span
-                        style="color:@GetAccentColor(n.Severity); font-size:13px; flex-shrink:0; padding-top:1px;">@GetIcon(n.Severity)</span>
-                        <div style="flex:1; min-width:0;">
-                            <div
-                                style="color:white; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    <div class="nh-row">
+                        <span class="nh-row-icon"
+                        style="color:@GetAccentColor(n.Severity);">@GetIcon(n.Severity)</span>
+                        <div class="nh-body">
+                            <div class="nh-title">
                                 @n.Message</div>
                                 @if (!string.IsNullOrEmpty(n.Detail))
                                 {
-                                    <div
-                                        style="color:rgba(255,255,255,0.5); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    <div class="nh-detail">
                                         @n.Detail</div>
                                     }
                                 </div>
-                                <span
-                                style="color:rgba(255,255,255,0.35); font-size:10px; flex-shrink:0; padding-top:2px;">@n.Timestamp.ToString("HH:mm:ss")</span>
+                                <span class="nh-timestamp">@n.Timestamp.ToString("HH:mm:ss")</span>
                             </div>
                         }
                     }
 
                     @if (UiState.State.NotificationHistory.Count > 0)
                     {
-                        <div
-                            style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-top:1px solid rgba(255,255,255,0.1); border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <div class="nh-history-label-row">
                             <span style="color:rgba(255,255,255,0.5); font-size:11px; font-weight:600;">History</span>
                             <button @onclick="ClearHistoryAsync"
                                     style="background:transparent; border:none; color:rgba(255,255,255,0.4); font-size:10px; cursor:pointer; padding:0;">
@@ -59,23 +51,19 @@
                         </div>
                         @foreach (var h in UiState.State.NotificationHistory)
                         {
-                            <div
-                                style="display:flex; gap:8px; align-items:flex-start; padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.04); opacity:0.7;">
-                                <span
-                                style="color:@GetHistoryAccentColor(h.Severity); font-size:13px; flex-shrink:0; padding-top:1px;">@GetHistoryIcon(h.Severity)</span>
-                                <div style="flex:1; min-width:0;">
-                                    <div
-                                        style="color:rgba(255,255,255,0.8); font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            <div class="nh-history-row">
+                                <span class="nh-row-icon"
+                                style="color:@GetHistoryAccentColor(h.Severity);">@GetHistoryIcon(h.Severity)</span>
+                                <div class="nh-body">
+                                    <div class="nh-history-title">
                                         @h.Message</div>
                                         @if (!string.IsNullOrEmpty(h.Detail))
                                         {
-                                            <div
-                                                style="color:rgba(255,255,255,0.4); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                            <div class="nh-history-detail">
                                                 @h.Detail</div>
                                             }
                                         </div>
-                                        <span
-                                        style="color:rgba(255,255,255,0.3); font-size:10px; flex-shrink:0; padding-top:2px; white-space:nowrap;">@FormatHistoryTimestamp(h.Timestamp)</span>
+                                        <span class="nh-history-timestamp">@FormatHistoryTimestamp(h.Timestamp)</span>
                                     </div>
                                 }
                             }

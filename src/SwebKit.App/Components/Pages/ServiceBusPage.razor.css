@@ -1,0 +1,84 @@
+/* FQ-19 – CSS isolation: structural styles extracted from ServiceBusPage.razor */
+
+.service-bus-page-shell {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.sb-ns-panel-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sb-ns-panel-label {
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sb-ns-header-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.sb-add-form {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.sb-btn-secondary-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+}
+
+.sb-ns-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.sb-empty-hint {
+    padding: 16px 12px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.sb-ns-row {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    background: var(--color-surface);
+}
+
+.service-bus-right-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sb-status-success {
+    color: var(--color-success);
+    display: inline-flex;
+    align-items: center;
+}
+
+.sb-status-error {
+    color: var(--color-error);
+    display: inline-flex;
+    align-items: center;
+}

@@ -14,7 +14,7 @@ public class AppEventBus : IAppEventBus
         _logger = logger;
     }
 
-    public void Subscribe<T>(Action<T> handler)
+    public IDisposable Subscribe<T>(Action<T> handler)
     {
         lock (_lock)
         {
@@ -25,9 +25,10 @@ public class AppEventBus : IAppEventBus
             }
             list.Add(handler);
         }
+        return new EventSubscription(() => Unsubscribe(handler));
     }
 
-    public void Subscribe<T>(Func<T, Task> asyncHandler)
+    public IDisposable Subscribe<T>(Func<T, Task> asyncHandler)
     {
         lock (_lock)
         {
@@ -38,6 +39,7 @@ public class AppEventBus : IAppEventBus
             }
             list.Add(asyncHandler);
         }
+        return new EventSubscription(() => Unsubscribe(asyncHandler));
     }
 
     public void Unsubscribe<T>(Action<T> handler)
@@ -133,6 +135,16 @@ public class AppEventBus : IAppEventBus
         catch (Exception ex)
         {
             _logger.LogError(ex, "Async event handler threw for event type {EventType}", typeof(T).Name);
+        }
+    }
+
+    private sealed class EventSubscription(Action unsubscribe) : IDisposable
+    {
+        private int _disposed;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                unsubscribe();
         }
     }
 }
