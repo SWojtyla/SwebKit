@@ -47,7 +47,7 @@
 }
 
 .approval-card__pipeline-name {
-    font-size: 14px;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--color-text);
 }
@@ -61,7 +61,7 @@
 }
 
 .approval-prod-badge {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     padding: 2px 6px;
     background: rgba(200, 0, 42, 0.2);
     color: var(--color-error);
@@ -79,7 +79,7 @@
 
 .approval-ado-link {
     padding: 5px 12px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-accent);
     text-decoration: none;
     border: 1px solid var(--color-border);
@@ -93,7 +93,7 @@
     }
 
 .approval-card__info {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
 }
 
@@ -135,13 +135,13 @@
     color: white;
     padding: 6px 12px;
     border-radius: var(--radius-sm);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
 }
 
 .approval-dialog__title {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
 }
 
 .approval-dialog__subtitle {
@@ -157,13 +157,13 @@
 }
 
 .approval-dialog__confirm-prompt {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin: 0;
     color: var(--color-text-muted);
 }
 
 .approval-dialog__error {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-error);
 }
 

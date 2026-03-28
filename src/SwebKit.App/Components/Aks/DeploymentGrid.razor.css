@@ -86,7 +86,7 @@
 }
 
 .aks-hpa-badge .hpa-icon {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1;
     opacity: 0.75;
 }

@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
         <PackageReference Include="bunit.web" Version="1.29.5" />
         <PackageReference Include="coverlet.collector" Version="6.0.4" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.0" />
@@ -29,6 +30,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\SwebKit.Core\SwebKit.Core.csproj" />
         <ProjectReference Include="..\..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
+        <ProjectReference Include="..\..\src\SwebKit.Observability\SwebKit.Observability.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -67,6 +69,8 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConfirmBar.razor" Link="Components\Aks\AksConfirmBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AutoRefreshToggle.razor" Link="Components\Aks\AutoRefreshToggle.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\ResizablePanel.razor" Link="Components\Aks\ResizablePanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityFailures.razor" Link="Components\Observability\ObservabilityFailures.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityPerformance.razor" Link="Components\Observability\ObservabilityPerformance.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
     </ItemGroup>

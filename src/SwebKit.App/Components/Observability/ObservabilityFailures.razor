@@ -1,7 +1,30 @@
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
+@implements IDisposable
 
 <div class="obs-failures">
+    <div class="obs-pane-header">
+        <div class="obs-pane-heading-group">
+            <div class="obs-pane-eyebrow">Failure Hotspots</div>
+            <div class="obs-pane-title">Exceptions by impact</div>
+            <div class="obs-pane-subtitle">Scan high-volume failures first, then drill into samples and traces.</div>
+        </div>
+        <div class="obs-kpi-strip">
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Exception types</span>
+                <span class="obs-kpi-value">@_exceptions.Count.ToString("N0")</span>
+            </div>
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Total occurrences</span>
+                <span class="obs-kpi-value">@TotalExceptionCount.ToString("N0")</span>
+            </div>
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Most recent</span>
+                <span class="obs-kpi-value">@MostRecentLabel</span>
+            </div>
+        </div>
+    </div>
+
     @if (_isLoading && !_exceptions.Any())
     {
         <div class="obs-loading">
@@ -10,104 +33,186 @@
     }
     else if (_error is not null)
     {
-        <ErrorCallout Message="@_error" />
+        <div class="obs-callout-shell">
+            <ErrorCallout Message="@_error" />
+        </div>
     }
     else
     {
+        var filteredExceptions = FilteredExceptionList;
+
         <div class="obs-split-layout">
             <!-- Left: exception list -->
-            <div class="obs-list-panel">
-                <div class="obs-list-toolbar">
-                    <FluentSearch Placeholder="Filter exceptions…" @bind-Value="_filter" Immediate="true" />
-                    <FluentButton @onclick="LoadAsync" Disabled="_isLoading" title="Refresh">↻</FluentButton>
+            <section class="obs-list-panel obs-surface-card" aria-label="Exception groups">
+                <div class="obs-panel-header">
+                    <div>
+                        <div class="obs-panel-title">Exception groups</div>
+                        <div class="obs-panel-subtitle">@BuildFilteredSummary(filteredExceptions.Count)</div>
+                    </div>
+                    <div class="obs-list-toolbar">
+                        <FluentSearch Placeholder="Filter exceptions…" @bind-Value="_filter" Immediate="true" />
+                        <FluentButton @onclick="RefreshAsync" Disabled="_isLoading" title="Refresh failures">Refresh
+                        </FluentButton>
+                    </div>
                 </div>
 
-                <FluentDataGrid Items="FilteredExceptions" TGridItem="ExceptionGroup"
-                                RowClass="@(e => e.ProblemId == _selected?.ProblemId ? "selected-row" : "")"
-                                OnRowClick="@(r => SelectException(r.Item))">
-                    <TemplateColumn Title="Exception Type" Sortable="true">
-                        <div class="obs-exception-name" title="@context.ExceptionType">
-                            @ShortType(context.ExceptionType)
-                        </div>
-                    </TemplateColumn>
-                    <PropertyColumn Property="@(e => e.Count)" Title="Count" Sortable="true" />
-                    <TemplateColumn Title="Last seen">
-                        @FormatAge(context.LastSeen)
-                    </TemplateColumn>
-                </FluentDataGrid>
-            </div>
+                @if (!_exceptions.Any())
+                {
+                    <div class="obs-list-empty">
+                        <div class="obs-list-empty-title">No exceptions in this range</div>
+                        <div class="obs-panel-subtitle">Try broadening the time range or refreshing.</div>
+                    </div>
+                }
+                else if (!filteredExceptions.Any())
+                {
+                    <div class="obs-list-empty">
+                        <div class="obs-list-empty-title">No matches for "@_filter"</div>
+                        <div class="obs-panel-subtitle">Clear the filter to see all exception groups.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="obs-grid-shell">
+                        <FluentDataGrid Items="filteredExceptions.AsQueryable()" TGridItem="ExceptionGroup" ItemSize="36"
+                                        RowClass="@(e => (e.ProblemId == _selected?.ProblemId ? "selected-row " : string.Empty) + ExcRowClass(e.Count))"
+                                        OnRowClick="@(r => SelectException(r.Item))">
+                            <TemplateColumn Title="Exception Type" Sortable="true"
+                                            SortBy="@(GridSort<ExceptionGroup>.ByDescending(e => e.Count))">
+                                <div class="obs-exception-name" title="@context.ExceptionType">
+                                    @ShortType(context.ExceptionType)
+                                </div>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Count" Sortable="true"
+                                            SortBy="@(GridSort<ExceptionGroup>.ByDescending(e => e.Count))">
+                                <span
+                                class="obs-count-badge @CountSeverityClass(context.Count)">@context.Count.ToString("N0")</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Last seen" Sortable="true"
+                                            SortBy="@(GridSort<ExceptionGroup>.ByDescending(e => e.LastSeen))">
+                                @FormatAge(context.LastSeen)
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </div>
+                }
+            </section>
 
             <!-- Right: detail pane -->
-            <div class="obs-detail-panel">
+            <section class="obs-detail-panel obs-surface-card" aria-label="Exception details">
                 @if (_selected is null)
                 {
-                    <div class="obs-detail-empty">Select an exception to view details.</div>
+                    <div class="obs-detail-empty">
+                        <div class="obs-detail-empty-title">Select an exception group</div>
+                        <div class="obs-detail-empty-subtitle">Details, stack traces, and sample traces appear here.</div>
+                    </div>
                 }
                 else
                 {
                     <div class="obs-detail-header">
+                        <div class="obs-detail-eyebrow">Selected exception</div>
                         <div class="obs-detail-title" title="@_selected.ExceptionType">
                             @ShortType(_selected.ExceptionType)
                         </div>
                         <div class="obs-detail-meta">
-                            Count: <strong>@_selected.Count.ToString("N0")</strong>
-                            &nbsp;·&nbsp;
-                            Last seen: <strong>@FormatAge(_selected.LastSeen)</strong>
+                            Problem ID: <strong>@_selected.ProblemId</strong>
                         </div>
                     </div>
 
-                    @if (_selected.SampleMessage is not null)
-                    {
-                        <div class="obs-detail-section-title">Message</div>
-                        <div class="obs-detail-message">@_selected.SampleMessage</div>
-                    }
-
-                    @if (_selected.SampleStackTrace is not null)
-                    {
-                        <div class="obs-detail-section-title">
-                            Stack Trace
-                            <button class="obs-copy-btn" @onclick="CopyStackAsync" title="Copy stack trace">📋 Copy</button>
+                    <div class="obs-detail-actions">
+                        <button class="obs-drill-link obs-drill-link-primary" @onclick="DrillToLogs"
+                                title="Open focused query in Logs tab">
+                            View in Logs
+                        </button>
+                        @if (_selected.SampleStackTrace is not null)
+                        {
+                            <button class="obs-copy-btn" @onclick="CopyStackAsync" title="Copy stack trace">Copy stack
+                                trace</button>
+                            }
                         </div>
-                        <pre class="obs-stack-trace">@_selected.SampleStackTrace</pre>
-                    }
 
-                    <div class="obs-detail-section-title">Recent Occurrences</div>
-                    @if (_samplesLoading)
-                    {
-                        <div class="obs-loading-inline">
-                            <FluentProgressRing Style="width:14px;height:14px" />
+                        <div class="obs-detail-metric-grid">
+                            <div class="obs-detail-metric">
+                                <span class="obs-detail-metric-label">Occurrences</span>
+                                <span class="obs-detail-metric-value">@_selected.Count.ToString("N0")</span>
+                            </div>
+                            <div class="obs-detail-metric">
+                                <span class="obs-detail-metric-label">Last seen</span>
+                                <span class="obs-detail-metric-value">@FormatAge(_selected.LastSeen)</span>
+                            </div>
+                            <div class="obs-detail-metric">
+                                <span class="obs-detail-metric-label">Severity</span>
+                                <span
+                                class="obs-detail-metric-value @CountSeverityClass(_selected.Count)">@SeverityLabel(_selected.Count)</span>
+                            </div>
                         </div>
-                    }
-                    else
-                    {
-                        <div class="obs-samples">
-                            @foreach (var row in _samples)
+
+                        @if (_selected.SampleMessage is not null)
+                        {
+                            <section class="obs-detail-section">
+                                <div class="obs-detail-section-title">Message</div>
+                                <div class="obs-detail-message">@_selected.SampleMessage</div>
+                            </section>
+                        }
+
+                        @if (_selected.SampleStackTrace is not null)
+                        {
+                            <section class="obs-detail-section">
+                                <div class="obs-detail-section-title">Stack trace</div>
+                                <pre class="obs-stack-trace">@_selected.SampleStackTrace</pre>
+                            </section>
+                        }
+
+                        <section class="obs-detail-section">
+                            <div class="obs-detail-section-title">Recent occurrences</div>
+                            <div class="obs-detail-section-subtitle">Latest sample events for this exception type.</div>
+
+                            @if (_samplesLoading)
                             {
-                                var opId = GetCol(row, "operationId");
-                                <div class="obs-sample-row">
-                                    <span class="obs-sample-time">@FormatTimestamp(row)</span>
-                                    <span class="obs-sample-op">@GetCol(row, "operationName")</span>
-                                    <span class="obs-sample-id">@opId</span>
-                                    @if (!string.IsNullOrEmpty(opId))
+                                <div class="obs-loading-inline">
+                                    <FluentProgressRing Style="width:14px;height:14px" /> Loading samples…
+                                </div>
+                            }
+                            else if (_samplesError is not null)
+                            {
+                                <div class="obs-panel-inline-error">@_samplesError</div>
+                            }
+                            else if (_samples.Count == 0)
+                            {
+                                <div class="obs-detail-empty-subtitle">No sample rows found for this exception in the selected range.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="obs-samples">
+                                    @foreach (var row in _samples)
                                     {
-                                        <button class="obs-drill-link" style="margin:0;font-size:var(--font-size-xs);"
-                                                @onclick="() => DrillToTrace(opId)" title="View full trace">
-                                            → Trace
-                                        </button>
+                                        var opId = GetCol(row, "operationId");
+                                        var operationName = GetCol(row, "operationName");
+
+                                        <div class="obs-sample-row">
+                                            <div class="obs-sample-main">
+                                                <span class="obs-sample-time">@FormatTimestamp(row)</span>
+                                                <span class="obs-sample-op" title="@operationName">@operationName</span>
+                                            </div>
+                                            <div class="obs-sample-actions">
+                                                @if (!string.IsNullOrWhiteSpace(opId))
+                                                {
+                                                    <span class="obs-sample-id" title="@opId">@ShortOperationId(opId)</span>
+                                                    <button class="obs-drill-link obs-drill-link-subtle" @onclick="() => DrillToTrace(opId)"
+                                                            title="View full trace">
+                                                        Trace
+                                                    </button>
+                                                }
+                                            </div>
+                                        </div>
                                     }
                                 </div>
                             }
-                        </div>
+                        </section>
                     }
-
-                    <button class="obs-drill-link" @onclick="DrillToLogs">
-                        → View in Logs tab
-                    </button>
-                }
+                </section>
             </div>
-        </div>
-    }
-</div>
+        }
+    </div>
 
 @inject IJSRuntime JS
 @inject INotificationService Notifications
@@ -123,18 +228,55 @@
     private bool _isLoading;
     private bool _samplesLoading;
     private string? _error;
+    private string? _samplesError;
     private string _filter = string.Empty;
     private IReadOnlyList<LogRow> _samples = [];
     private CancellationTokenSource _cts = new();
+    private IObservabilityProvider? _loadedProvider;
+    private TimeRange? _loadedRange;
+    private bool _disposed;
 
-    private IQueryable<ExceptionGroup> FilteredExceptions =>
+    private static readonly TimeSpan[] RelativePresetDurations =
+    [
+        TimeSpan.FromHours(1),
+        TimeSpan.FromHours(6),
+        TimeSpan.FromHours(24),
+        TimeSpan.FromDays(7),
+        TimeSpan.FromDays(30),
+    ];
+
+    private static readonly TimeSpan RelativePresetDurationTolerance = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RelativePresetNowTolerance = TimeSpan.FromMinutes(2);
+
+    private List<ExceptionGroup> FilteredExceptionList =>
         (string.IsNullOrWhiteSpace(_filter)
             ? _exceptions
             : _exceptions.Where(e => e.ExceptionType.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
-        .AsQueryable();
+        .OrderByDescending(e => e.Count)
+        .ThenByDescending(e => e.LastSeen)
+        .ToList();
+
+    private long TotalExceptionCount => _exceptions.Sum(e => e.Count);
+
+    private string MostRecentLabel =>
+        _exceptions.Count == 0
+            ? "n/a"
+            : FormatAge(_exceptions.Max(e => e.LastSeen));
 
     protected override async Task OnParametersSetAsync()
     {
+        if (Provider is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_loadedProvider, Provider) &&
+            _loadedRange is not null &&
+            IsSameEffectiveRange(_loadedRange, Range))
+        {
+            return;
+        }
+
         await LoadAsync();
     }
 
@@ -142,56 +284,107 @@
 
     private async Task LoadAsync()
     {
-        if (Provider is null) return;
+        if (Provider is null)
+        {
+            return;
+        }
 
-        _cts.Cancel();
-        _cts = new CancellationTokenSource();
+        _loadedProvider = Provider;
+        _loadedRange = Range;
+
+        var loadCts = BeginLoadCycle();
         _isLoading = true;
         _error = null;
+        _samplesError = null;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            var groups = await Provider.GetTopExceptionsAsync(Range, ct: _cts.Token);
+            var groups = await Provider.GetTopExceptionsAsync(Range, ct: loadCts.Token);
             _exceptions.Clear();
             _exceptions.AddRange(groups);
             _selected = null;
             _samples = [];
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (OperationCanceledException) when (loadCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
         finally
         {
             _isLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
     private async Task SelectException(ExceptionGroup? e)
     {
-        if (e is null) return;
+        if (Provider is null || e is null)
+        {
+            return;
+        }
+
         _selected = e;
         _samples = [];
+        _samplesError = null;
         _samplesLoading = true;
         await InvokeAsync(StateHasChanged);
 
+        var token = _cts.Token;
+
         try
         {
-            _samples = await Provider!.GetExceptionSamplesAsync(e.ExceptionType, Range, _cts.Token);
+            _samples = await Provider.GetExceptionSamplesAsync(e.ExceptionType, Range, token);
         }
-        catch { /* non-critical */ }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _samplesError = ex.Message;
+        }
         finally
         {
             _samplesLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
     private async Task CopyStackAsync()
     {
-        if (_selected?.SampleStackTrace is null) return;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selected.SampleStackTrace);
-        Notifications.ShowSuccess("Copied!");
+        if (_selected?.SampleStackTrace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selected.SampleStackTrace);
+            Notifications.ShowSuccess("Stack trace copied.");
+        }
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Unable to copy stack trace.", ex: ex);
+        }
     }
 
     private async Task DrillToLogs()
@@ -205,6 +398,36 @@
     {
         var kql = SwebKit.Observability.KqlPresets.TraceByOperationId(operationId);
         await OnDrillToLogs.InvokeAsync(kql);
+    }
+
+    private static string CountSeverityClass(long count) =>
+        count > 100 ? "obs-count-high" :
+        count > 20 ? "obs-count-med" :
+                      "obs-count-low";
+
+    private static string ExcRowClass(long count) =>
+        count > 100 ? "obs-exc-high" :
+        count > 20 ? "obs-exc-med" :
+                      "";
+
+    private static string SeverityLabel(long count) =>
+        count > 100 ? "High" :
+        count > 20 ? "Medium" :
+                      "Low";
+
+    private string BuildFilteredSummary(int filteredCount)
+    {
+        if (_exceptions.Count == 0)
+        {
+            return "No exceptions loaded.";
+        }
+
+        if (string.IsNullOrWhiteSpace(_filter))
+        {
+            return $"Showing {_exceptions.Count:N0} groups.";
+        }
+
+        return $"Showing {filteredCount:N0} of {_exceptions.Count:N0} groups.";
     }
 
     private static string ShortType(string fullType)
@@ -235,4 +458,65 @@
 
     private static string GetCol(LogRow row, string col) =>
         row.Columns.TryGetValue(col, out var v) ? v?.ToString() ?? string.Empty : string.Empty;
+
+    private static string ShortOperationId(string operationId)
+    {
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length <= 12)
+        {
+            return operationId;
+        }
+
+        return $"{operationId[..6]}…{operationId[^4..]}";
+    }
+
+    private static bool IsSameEffectiveRange(TimeRange previous, TimeRange current)
+    {
+        if (previous == current)
+        {
+            return true;
+        }
+
+        return TryGetRelativePresetKey(previous, out var previousPreset) &&
+               TryGetRelativePresetKey(current, out var currentPreset) &&
+               previousPreset == currentPreset;
+    }
+
+    private static bool TryGetRelativePresetKey(TimeRange range, out long presetMinutes)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if ((now - range.End).Duration() > RelativePresetNowTolerance)
+        {
+            presetMinutes = 0;
+            return false;
+        }
+
+        var duration = range.End - range.Start;
+        foreach (var preset in RelativePresetDurations)
+        {
+            if ((duration - preset).Duration() <= RelativePresetDurationTolerance)
+            {
+                presetMinutes = (long)preset.TotalMinutes;
+                return true;
+            }
+        }
+
+        presetMinutes = 0;
+        return false;
+    }
+
+    private CancellationTokenSource BeginLoadCycle()
+    {
+        var previous = _cts;
+        _cts = new CancellationTokenSource();
+        previous.Cancel();
+        previous.Dispose();
+        return _cts;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

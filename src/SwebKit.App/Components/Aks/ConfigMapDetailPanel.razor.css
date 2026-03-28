@@ -24,7 +24,7 @@
 .cm-empty {
     padding: var(--spacing-md) 10px;
     color: var(--color-text-muted);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 .cm-table {

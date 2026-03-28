@@ -6,7 +6,7 @@
 
 h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
 }
 
 .cache-title {
@@ -15,7 +15,7 @@ h2 {
 }
 
 .cache-name-input {
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
     background: transparent;
     color: var(--color-text);
@@ -38,11 +38,11 @@ h2 {
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 .connection {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
     margin-left: var(--spacing-sm);
 }

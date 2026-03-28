@@ -254,6 +254,70 @@
     vertical-align: middle;
 }
 
+/* ── Monitored namespace chips ── */
+
+.ph-ns-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+}
+
+.ph-ns-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 9px;
+    background: rgba(255, 165, 0, 0.07);
+    border: 1px solid rgba(255, 165, 0, 0.25);
+    border-radius: 999px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text);
+}
+
+.ph-ns-chip-label {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    white-space: nowrap;
+}
+
+.ph-ns-chip-remove {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0 1px;
+    font-size: 10px;
+    line-height: 1;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+}
+
+.ph-ns-chip-remove:hover {
+    color: var(--color-error);
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.ph-ns-stop-all {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    margin-left: var(--spacing-xs);
+}
+
+.ph-ns-stop-all:hover {
+    border-color: var(--color-error);
+    color: var(--color-error);
+}
+
 .ph-alert-list {
     display: flex;
     flex-direction: column;

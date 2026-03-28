@@ -99,7 +99,7 @@
 
 /* ── Severity icon ── */
 .alert-history-icon {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 700;
     flex-shrink: 0;
     width: 16px;
@@ -212,7 +212,7 @@
     color: var(--color-text-muted);
     border: 1px solid transparent;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.1s;

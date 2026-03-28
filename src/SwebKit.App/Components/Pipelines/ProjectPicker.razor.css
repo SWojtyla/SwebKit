@@ -14,7 +14,7 @@
 
 .project-picker__title {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
     color: var(--color-text);
 }
@@ -41,12 +41,12 @@
 
 .project-picker__count {
     flex: 1;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-muted);
 }
 
 .project-picker__action-btn {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-accent);
     background: none;
     border: none;

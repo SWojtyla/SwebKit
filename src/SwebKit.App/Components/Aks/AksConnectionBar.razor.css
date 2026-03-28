@@ -29,7 +29,7 @@
 }
 
 .aks-context-label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text);
 }
 
@@ -58,7 +58,7 @@
     color: var(--color-text);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     outline: none;
     min-width: 120px;
     cursor: pointer;
@@ -105,7 +105,7 @@
 
 .aks-ns-option {
     padding: 6px var(--spacing-md);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text);
     cursor: pointer;
     white-space: nowrap;
@@ -129,7 +129,7 @@
     color: var(--color-text-muted);
     border: 1px solid transparent;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.1s;
@@ -153,7 +153,7 @@
     color: var(--color-text-muted);
     border: 1px solid transparent;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;

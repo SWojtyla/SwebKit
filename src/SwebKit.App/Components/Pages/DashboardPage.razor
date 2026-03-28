@@ -41,7 +41,7 @@
                 <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
             </span>
             <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                        "—")</span>
+                                                                        "—")</span>
                 <span class="hero-stat-label">Redis</span>
             </div>
             <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -49,7 +49,7 @@
                     <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                 </span>
                 <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                 "—")</span>
+                                                                                     "—")</span>
                     <span class="hero-stat-label">Pipelines</span>
                 </div>
             </div>
@@ -85,9 +85,31 @@
                         Pod Health
                         @if (Monitor.IsMonitoring)
                         {
-                            <span class="ph-monitoring-badge">monitoring @Monitor.MonitoredNamespaces.Count ns</span>
+                            <span class="ph-monitoring-badge">monitoring</span>
                         }
                     </h2>
+
+                    @* ── Monitored namespaces row ── *@
+                    @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
+                    {
+                        <div class="ph-ns-row">
+                            @foreach (var ns in Monitor.MonitoredNamespaces)
+                            {
+                                <span class="ph-ns-chip">
+                                    <span class="ph-ns-chip-label">@ns</span>
+                                    <button class="ph-ns-chip-remove" title="Stop monitoring @ns" aria-label="Stop monitoring @ns"
+                                            @onclick="() => StopMonitoringNamespaceAsync(ns)">✕</button>
+                                </span>
+                            }
+                            @if (Monitor.MonitoredNamespaces.Count > 1)
+                            {
+                                <button class="ph-ns-stop-all" @onclick="StopAllMonitoringAsync" title="Stop all pod health monitoring">
+                                    Stop all
+                                </button>
+                            }
+                        </div>
+                    }
+
                     @if (_monitorAlerts.Count == 0)
                     {
                         <p class="dashboard-empty">No pod health events detected.</p>
@@ -232,6 +254,18 @@
     }
 
     private Task RefreshAll() => LoadHealthDataAsync(_cts.Token);
+
+    private async Task StopMonitoringNamespaceAsync(string ns)
+    {
+        await Monitor.RemoveNamespaceAsync(ns);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StopAllMonitoringAsync()
+    {
+        await Monitor.StopAsync();
+        await InvokeAsync(StateHasChanged);
+    }
 
     private async Task LoadHealthDataAsync(CancellationToken ct)
     {

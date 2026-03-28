@@ -37,7 +37,7 @@
     border: 1px solid transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     padding: 2px 6px;
     border-radius: 3px;
     line-height: 1;
@@ -156,7 +156,7 @@
 .aks-yaml-error {
     padding: var(--spacing-lg);
     color: var(--color-error);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 /* ── YAML edit overlay (textarea + highlighted pre stacked) ── */

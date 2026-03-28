@@ -5,6 +5,7 @@
 - Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
 - Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (KQL query editor + preset library + saved queries), **Availability** (test results)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
+- Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
 - Drill-to-Logs: clicking "View in Logs" from any tab pre-populates the KQL editor and switches tab
 - Saved queries persisted to `profiles.json`
 - Full demo mode with realistic in-memory data (no Azure connection required)
@@ -52,28 +53,28 @@ User opens Observability page
 
 ## Key Code Locations
 
-| What | Where |
-|---|---|
-| Provider interface | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` |
-| Discovery interface | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` |
-| Domain models | `src/SwebKit.Core/Models/ObservabilityModels.cs` |
-| Config model | `src/SwebKit.Core/Domain/ObservabilityConfig.cs` |
-| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs` |
-| Azure implementation | `src/SwebKit.Observability/AzureAppInsightsProvider.cs` |
-| ARM discovery | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
-| Built-in KQL presets | `src/SwebKit.Observability/KqlPresets.cs` |
-| Page + sub-components | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor` |
-| Sub-components | `src/SwebKit.App/Components/Observability/` |
-| CSS | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page") |
-| DI registration | `src/SwebKit.App/MauiProgram.cs` |
+| What                      | Where                                                             |
+| ------------------------- | ----------------------------------------------------------------- |
+| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`         |
+| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`         |
+| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                  |
+| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                  |
+| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`          |
+| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`           |
+| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`        |
+| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                         |
+| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`        |
+| Sub-components            | `src/SwebKit.App/Components/Observability/`                       |
+| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page") |
+| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                  |
 
 ## NuGet Packages (SwebKit.Observability)
 
-| Package | Version | Purpose |
-|---|---|---|
-| `Azure.Identity` | 1.18.0 | `DefaultAzureCredential` |
-| `Azure.Monitor.Query` | 1.5.0 | `LogsQueryClient` for KQL queries |
-| `Azure.ResourceManager` | 1.13.2 | ARM base client |
+| Package                                     | Version      | Purpose                            |
+| ------------------------------------------- | ------------ | ---------------------------------- |
+| `Azure.Identity`                            | 1.18.0       | `DefaultAzureCredential`           |
+| `Azure.Monitor.Query`                       | 1.5.0        | `LogsQueryClient` for KQL queries  |
+| `Azure.ResourceManager`                     | 1.13.2       | ARM base client                    |
 | `Azure.ResourceManager.ApplicationInsights` | 1.1.0-beta.1 | App Insights ARM extension methods |
 
 ## Important Constraints

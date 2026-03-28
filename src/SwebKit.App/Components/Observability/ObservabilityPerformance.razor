@@ -1,8 +1,31 @@
 @using ApexCharts
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
+@implements IDisposable
 
 <div class="obs-performance">
+    <div class="obs-pane-header">
+        <div class="obs-pane-heading-group">
+            <div class="obs-pane-eyebrow">Performance Overview</div>
+            <div class="obs-pane-title">Operation latency and reliability</div>
+            <div class="obs-pane-subtitle">Compare failure rates and tail latency before drilling into trend data.</div>
+        </div>
+        <div class="obs-kpi-strip">
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Operations</span>
+                <span class="obs-kpi-value">@_ops.Count.ToString("N0")</span>
+            </div>
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Degraded</span>
+                <span class="obs-kpi-value">@DegradedOperationCount.ToString("N0")</span>
+            </div>
+            <div class="obs-kpi-card">
+                <span class="obs-kpi-label">Busiest</span>
+                <span class="obs-kpi-value" title="@BusiestOperation">@BusiestOperation</span>
+            </div>
+        </div>
+    </div>
+
     @if (_isLoading && !_ops.Any())
     {
         <div class="obs-loading">
@@ -11,90 +34,162 @@
     }
     else if (_error is not null)
     {
-        <ErrorCallout Message="@_error" />
+        <div class="obs-callout-shell">
+            <ErrorCallout Message="@_error" />
+        </div>
     }
     else
     {
+        var filteredOps = FilteredOperationList;
+
         <div class="obs-split-layout">
-            <div class="obs-list-panel">
-                <div class="obs-list-toolbar">
-                    <FluentSearch Placeholder="Filter operations…" @bind-Value="_filter" Immediate="true" />
-                    <FluentButton @onclick="LoadAsync" Disabled="_isLoading" title="Refresh">↻</FluentButton>
+            <section class="obs-list-panel obs-surface-card" aria-label="Operation performance list">
+                <div class="obs-panel-header">
+                    <div>
+                        <div class="obs-panel-title">Operations</div>
+                        <div class="obs-panel-subtitle">@BuildOperationSummary(filteredOps.Count)</div>
+                    </div>
+                    <div class="obs-list-toolbar">
+                        <FluentSearch Placeholder="Filter operations…" @bind-Value="_filter" Immediate="true" />
+                        <FluentButton @onclick="RefreshAsync" Disabled="_isLoading" title="Refresh performance data">Refresh
+                        </FluentButton>
+                    </div>
                 </div>
 
-                <FluentDataGrid Items="FilteredOps" TGridItem="OperationPerformance"
-                                RowClass="@(op => op.OperationName == _selected?.OperationName ? "selected-row" : "")"
-                                OnRowClick="@(r => SelectOperationAsync(r.Item))">
-                    <TemplateColumn Title="Operation" Sortable="true">
-                        <span class="obs-op-name" title="@context.OperationName">@context.OperationName</span>
-                    </TemplateColumn>
-                    <PropertyColumn Property="@(op => op.RequestCount)" Title="Req/h" Sortable="true" />
-                    <TemplateColumn Title="Failure %" Sortable="true">
-                        <span class="@FailClass(context.FailureRate)">@FmtPct(context.FailureRate)</span>
-                    </TemplateColumn>
-                    <PropertyColumn Property="@(op => FmtMs(op.P50Ms))" Title="P50" />
-                    <TemplateColumn Title="P95">
-                        <div class="obs-p95-bar-cell">
-                            <span class="@P95Class(context.P95Ms)">@($"{context.P95Ms:F0}ms")</span>
-                            <div class="obs-p95-bar-track">
-                                <div class="obs-p95-bar-fill @P95Class(context.P95Ms)"
-                                     style="width:@BarWidth(context.P95Ms)%"></div>
-                            </div>
-                        </div>
-                    </TemplateColumn>
-                </FluentDataGrid>
-            </div>
+                @if (!_ops.Any())
+                {
+                    <div class="obs-list-empty">
+                        <div class="obs-list-empty-title">No operation data in this range</div>
+                        <div class="obs-panel-subtitle">Try broadening the selected time window.</div>
+                    </div>
+                }
+                else if (!filteredOps.Any())
+                {
+                    <div class="obs-list-empty">
+                        <div class="obs-list-empty-title">No matches for "@_filter"</div>
+                        <div class="obs-panel-subtitle">Clear the filter to compare all operations.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="obs-grid-shell">
+                        <FluentDataGrid Items="filteredOps.AsQueryable()" TGridItem="OperationPerformance" ItemSize="36"
+                                        RowClass="@(op => (op.OperationName == _selected?.OperationName ? "selected-row " : string.Empty) + PerfRowClass(op))"
+                                        OnRowClick="@(r => SelectOperationAsync(r.Item))">
+                            <TemplateColumn Title="Operation" Sortable="true"
+                                            SortBy="@(GridSort<OperationPerformance>.ByDescending(op => op.RequestCount))">
+                                <div class="obs-op-cell">
+                                    <span class="obs-op-name" title="@context.OperationName">@context.OperationName</span>
+                                    <span class="obs-op-hint">@context.RequestCount.ToString("N0") req</span>
+                                </div>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Failure %" Sortable="true"
+                                            SortBy="@(GridSort<OperationPerformance>.ByDescending(op => op.FailureRate))">
+                                <span
+                                class="obs-metric-pill @FailClass(context.FailureRate)">@FmtPct(context.FailureRate)</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="P50" Sortable="true"
+                                            SortBy="@(GridSort<OperationPerformance>.ByDescending(op => op.P50Ms))">
+                                <span class="obs-latency-text">@FmtMs(context.P50Ms)</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="P95" Sortable="true"
+                                            SortBy="@(GridSort<OperationPerformance>.ByDescending(op => op.P95Ms))">
+                                <div class="obs-p95-bar-cell">
+                                    <span class="obs-latency-text @P95Class(context.P95Ms)">@FmtMs(context.P95Ms)</span>
+                                    <div class="obs-p95-bar-track">
+                                        <div class="obs-p95-bar-fill @P95Class(context.P95Ms)"
+                                             style="width:@BarWidth(context.P95Ms)%"></div>
+                                    </div>
+                                </div>
+                            </TemplateColumn>
+                            <TemplateColumn Title="P99" Sortable="true"
+                                            SortBy="@(GridSort<OperationPerformance>.ByDescending(op => op.P99Ms))">
+                                <span class="obs-latency-text @P95Class(context.P99Ms)">@FmtMs(context.P99Ms)</span>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </div>
+                }
+            </section>
 
-            <div class="obs-detail-panel">
+            <section class="obs-detail-panel obs-surface-card" aria-label="Operation performance details">
                 @if (_selected is null)
                 {
-                    <div class="obs-detail-empty">Select an operation to view details.</div>
+                    <div class="obs-detail-empty">
+                        <div class="obs-detail-empty-title">Select an operation</div>
+                        <div class="obs-detail-empty-subtitle">Detailed latency and trend insights appear here.</div>
+                    </div>
                 }
                 else
                 {
                     <div class="obs-detail-header">
+                        <div class="obs-detail-eyebrow">Selected operation</div>
                         <div class="obs-detail-title" title="@_selected.OperationName">@_selected.OperationName</div>
+                        <div class="obs-detail-meta">
+                            Health: <span class="obs-metric-pill @PerfHealthClass(_selected)">@PerfHealthLabel(_selected)</span>
+                        </div>
                     </div>
 
                     <div class="obs-perf-stats">
-                        <div class="obs-stat"><span class="obs-stat-label">Requests</span><span
-                            class="obs-stat-val">@_selected.RequestCount.ToString("N0")</span></div>
-                            <div class="obs-stat"><span class="obs-stat-label">Failure Rate</span><span
-                                class="obs-stat-val @FailClass(_selected.FailureRate)">@FmtPct(_selected.FailureRate)</span>
-                            </div>
-                            <div class="obs-stat"><span class="obs-stat-label">P50</span><span
-                                class="obs-stat-val">@($"{_selected.P50Ms:F0}ms")</span></div>
-                                <div class="obs-stat"><span class="obs-stat-label">P95</span><span
-                                    class="obs-stat-val @P95Class(_selected.P95Ms)">@($"{_selected.P95Ms:F0}ms")</span></div>
-                                    <div class="obs-stat"><span class="obs-stat-label">P99</span><span
-                                        class="obs-stat-val @P95Class(_selected.P99Ms)">@($"{_selected.P99Ms:F0}ms")</span></div>
-                                    </div>
-
-                                    @if (_trendLoading)
-                                    {
-                                        <div class="obs-loading-inline">
-                                            <FluentProgressRing Style="width:14px;height:14px" /> Loading trend…
-                                        </div>
-                                    }
-                                    else if (_trend.Count > 0)
-                                    {
-                                        <div class="obs-chart-panel" style="margin-top:var(--spacing-md)">
-                                            <div class="obs-chart-title">Latency Trend</div>
-                                            <ApexChart TItem="LatencyDataPoint" Options="_trendChartOptions">
-                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P50"
-                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P50Ms)" />
-                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P95"
-                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P95Ms)" />
-                                                <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P99"
-                                                                 XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P99Ms)" />
-                                            </ApexChart>
-                                        </div>
-                                    }
-                                }
-                            </div>
+                        <div class="obs-stat">
+                            <span class="obs-stat-label">Requests</span>
+                            <span class="obs-stat-val">@_selected.RequestCount.ToString("N0")</span>
                         </div>
-                    }
-                </div>
+                        <div class="obs-stat @FailClass(_selected.FailureRate)">
+                            <span class="obs-stat-label">Failure Rate</span>
+                            <span class="obs-stat-val @FailClass(_selected.FailureRate)">@FmtPct(_selected.FailureRate)</span>
+                        </div>
+                        <div class="obs-stat">
+                            <span class="obs-stat-label">P50</span>
+                            <span class="obs-stat-val">@($"{_selected.P50Ms:F0}ms")</span>
+                        </div>
+                        <div class="obs-stat @P95Class(_selected.P95Ms)">
+                            <span class="obs-stat-label">P95</span>
+                            <span class="obs-stat-val @P95Class(_selected.P95Ms)">@($"{_selected.P95Ms:F0}ms")</span>
+                        </div>
+                        <div class="obs-stat @P95Class(_selected.P99Ms)">
+                            <span class="obs-stat-label">P99</span>
+                            <span class="obs-stat-val @P95Class(_selected.P99Ms)">@($"{_selected.P99Ms:F0}ms")</span>
+                        </div>
+                    </div>
+
+                    <section class="obs-detail-section">
+                        <div class="obs-detail-section-title">Latency trend</div>
+                        <div class="obs-detail-section-subtitle">P50, P95, and P99 over the selected time range.</div>
+
+                        @if (_trendLoading)
+                        {
+                            <div class="obs-loading-inline">
+                                <FluentProgressRing Style="width:14px;height:14px" /> Loading trend…
+                            </div>
+                        }
+                        else if (_trendError is not null)
+                        {
+                            <div class="obs-panel-inline-error">@_trendError</div>
+                        }
+                        else if (_trend.Count > 0)
+                        {
+                            <div class="obs-chart-panel" style="margin-top:var(--spacing-md)">
+                                <div class="obs-chart-title">Latency trend</div>
+                                <ApexChart TItem="LatencyDataPoint" Options="_trendChartOptions">
+                                    <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P50"
+                                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P50Ms)" />
+                                    <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P95"
+                                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P95Ms)" />
+                                    <ApexPointSeries TItem="LatencyDataPoint" Items="_trend" SeriesType="SeriesType.Line" Name="P99"
+                                                     XValue="@(p => p.Timestamp.ToUnixTimeMilliseconds())" YValue="@(p => (decimal)p.P99Ms)" />
+                                </ApexChart>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="obs-detail-empty-subtitle">No trend points were returned for this operation.</div>
+                        }
+                    </section>
+                }
+            </section>
+        </div>
+    }
+</div>
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
@@ -107,12 +202,28 @@
     private string? _error;
     private string _filter = string.Empty;
     private CancellationTokenSource _cts = new();
+    private IObservabilityProvider? _loadedProvider;
+    private TimeRange? _loadedRange;
+    private bool _disposed;
+
+    private static readonly TimeSpan[] RelativePresetDurations =
+    [
+        TimeSpan.FromHours(1),
+        TimeSpan.FromHours(6),
+        TimeSpan.FromHours(24),
+        TimeSpan.FromDays(7),
+        TimeSpan.FromDays(30),
+    ];
+
+    private static readonly TimeSpan RelativePresetDurationTolerance = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RelativePresetNowTolerance = TimeSpan.FromMinutes(2);
 
     private double _maxP95 = 1;
 
     // Trend chart state
     private List<LatencyDataPoint> _trend = [];
     private bool _trendLoading;
+    private string? _trendError;
     private CancellationTokenSource? _trendDebounce;
 
     private ApexChartOptions<LatencyDataPoint> _trendChartOptions = new()
@@ -133,83 +244,161 @@
         Legend = new Legend { Position = LegendPosition.Bottom },
     };
 
-    private IQueryable<OperationPerformance> FilteredOps =>
+    private List<OperationPerformance> FilteredOperationList =>
         (string.IsNullOrWhiteSpace(_filter)
             ? _ops
             : _ops.Where(op => op.OperationName.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
-        .AsQueryable();
+        .OrderByDescending(op => op.RequestCount)
+        .ThenByDescending(op => op.P95Ms)
+        .ToList();
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    private int DegradedOperationCount => _ops.Count(IsDegraded);
+
+    private string BusiestOperation =>
+        _ops.OrderByDescending(op => op.RequestCount).FirstOrDefault()?.OperationName ?? "n/a";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Provider is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_loadedProvider, Provider) &&
+            _loadedRange is not null &&
+            IsSameEffectiveRange(_loadedRange, Range))
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
 
     public async Task RefreshAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
-        if (Provider is null) return;
+        if (Provider is null)
+        {
+            return;
+        }
 
-        _cts.Cancel();
-        _cts = new CancellationTokenSource();
+        _loadedProvider = Provider;
+        _loadedRange = Range;
+
+        var loadCts = BeginLoadCycle();
         _isLoading = true;
         _error = null;
+        _trendError = null;
+        _trendDebounce?.Cancel();
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            var ops = await Provider.GetOperationPerformanceAsync(Range, _cts.Token);
+            var ops = await Provider.GetOperationPerformanceAsync(Range, loadCts.Token);
             _ops.Clear();
             _ops.AddRange(ops);
             _maxP95 = _ops.Count > 0 ? Math.Max(1, _ops.Max(op => op.P95Ms)) : 1;
             _selected = null;
             _trend = [];
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (OperationCanceledException) when (loadCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
         finally
         {
             _isLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
     private async Task SelectOperationAsync(OperationPerformance? op)
     {
-        if (op is null) return;
+        if (Provider is null || op is null)
+        {
+            return;
+        }
+
         _selected = op;
         _trend = [];
+        _trendError = null;
         await InvokeAsync(StateHasChanged);
 
-        // Debounce 300ms before loading trend
+        // Debounce before loading trend to avoid bursts while users move across rows.
         _trendDebounce?.Cancel();
+        _trendDebounce?.Dispose();
         _trendDebounce = new CancellationTokenSource();
         var token = _trendDebounce.Token;
 
         try
         {
-            await Task.Delay(300, token);
+            await Task.Delay(220, token);
         }
-        catch (OperationCanceledException) { return; }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
 
         await LoadTrendAsync(op.OperationName, token);
     }
 
     private async Task LoadTrendAsync(string operationName, CancellationToken ct)
     {
-        if (Provider is null) return;
+        if (Provider is null)
+        {
+            return;
+        }
 
         _trendLoading = true;
+        _trendError = null;
         await InvokeAsync(StateHasChanged);
 
         try
         {
             var points = await Provider.GetOperationLatencyTrendAsync(operationName, Range, ct);
-            _trend = points.ToList();
+            _trend = points.OrderBy(p => p.Timestamp).ToList();
         }
-        catch (OperationCanceledException) { throw; }
-        catch { /* non-critical */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _trendError = ex.Message;
+            _trend = [];
+        }
         finally
         {
             _trendLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -217,6 +406,21 @@
 
     private static string FmtPct(double rate) => $"{rate * 100:F1}%";
     private static string FmtMs(double ms) => $"{ms:F0}ms";
+
+    private string BuildOperationSummary(int filteredCount)
+    {
+        if (_ops.Count == 0)
+        {
+            return "No operations loaded.";
+        }
+
+        if (string.IsNullOrWhiteSpace(_filter))
+        {
+            return $"Showing {_ops.Count:N0} operations.";
+        }
+
+        return $"Showing {filteredCount:N0} of {_ops.Count:N0} operations.";
+    }
 
     private string FailClass(double rate)
     {
@@ -227,6 +431,59 @@
         return "obs-green";
     }
 
+    private bool IsFailing(double rate) => rate > (Config?.FailureRateRedThreshold ?? 0.05);
+
+    private bool IsSlow(double p95Ms) => p95Ms > (Config?.LatencyRedThresholdMs ?? 2000);
+
+    private bool IsDegraded(OperationPerformance op) =>
+        op.FailureRate > (Config?.FailureRateAmberThreshold ?? 0.01) ||
+        op.P95Ms > (Config?.LatencyAmberThresholdMs ?? 500);
+
+    private string PerfRowClass(OperationPerformance op)
+    {
+        if (IsFailing(op.FailureRate) || IsSlow(op.P95Ms))
+        {
+            return "obs-perf-high";
+        }
+
+        if (IsDegraded(op))
+        {
+            return "obs-perf-med";
+        }
+
+        return string.Empty;
+    }
+
+    private string PerfHealthClass(OperationPerformance op)
+    {
+        if (IsFailing(op.FailureRate) || IsSlow(op.P95Ms))
+        {
+            return "obs-red";
+        }
+
+        if (IsDegraded(op))
+        {
+            return "obs-amber";
+        }
+
+        return "obs-green";
+    }
+
+    private string PerfHealthLabel(OperationPerformance op)
+    {
+        if (IsFailing(op.FailureRate) || IsSlow(op.P95Ms))
+        {
+            return "High";
+        }
+
+        if (IsDegraded(op))
+        {
+            return "Medium";
+        }
+
+        return "Low";
+    }
+
     private string P95Class(double ms)
     {
         var red = Config?.LatencyRedThresholdMs ?? 2000;
@@ -234,5 +491,58 @@
         if (ms > red) return "obs-red";
         if (ms > amber) return "obs-amber";
         return "obs-green";
+    }
+
+    private static bool IsSameEffectiveRange(TimeRange previous, TimeRange current)
+    {
+        if (previous == current)
+        {
+            return true;
+        }
+
+        return TryGetRelativePresetKey(previous, out var previousPreset) &&
+               TryGetRelativePresetKey(current, out var currentPreset) &&
+               previousPreset == currentPreset;
+    }
+
+    private static bool TryGetRelativePresetKey(TimeRange range, out long presetMinutes)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if ((now - range.End).Duration() > RelativePresetNowTolerance)
+        {
+            presetMinutes = 0;
+            return false;
+        }
+
+        var duration = range.End - range.Start;
+        foreach (var preset in RelativePresetDurations)
+        {
+            if ((duration - preset).Duration() <= RelativePresetDurationTolerance)
+            {
+                presetMinutes = (long)preset.TotalMinutes;
+                return true;
+            }
+        }
+
+        presetMinutes = 0;
+        return false;
+    }
+
+    private CancellationTokenSource BeginLoadCycle()
+    {
+        var previous = _cts;
+        _cts = new CancellationTokenSource();
+        previous.Cancel();
+        previous.Dispose();
+        return _cts;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _trendDebounce?.Cancel();
+        _trendDebounce?.Dispose();
+        _cts.Cancel();
+        _cts.Dispose();
     }
 }

@@ -58,7 +58,7 @@
 
 /* font properties only; color stays as inline style (dynamic per severity) */
 .nt-icon {
-    font-size: 14px;
+    font-size: var(--font-size-md);
     font-weight: 700;
 }
 
