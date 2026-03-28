@@ -4,7 +4,7 @@
 
 title: "Status — Component Decomposition"
 owner: ""
-state: "Review"
+state: "Done"
 branch: ""
 started: "2026-03-27"
 last_updated: "2026-03-28"
@@ -30,7 +30,7 @@ All three phases complete. bUnit tests written for all 7 extracted components (2
 - [x] bUnit tests for extracted components
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
-- [ ] Manual regression: full AKS page workflow
+- [x] Manual regression: full AKS page workflow
 
 ### Phase 2 — RedisPage decomposition
 
@@ -40,7 +40,7 @@ All three phases complete. bUnit tests written for all 7 extracted components (2
 - [x] bUnit tests for extracted components
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
-- [ ] Manual regression: full Redis page workflow
+- [x] Manual regression: full Redis page workflow
 
 ### Phase 3 — ServiceBusPage cleanup
 
@@ -50,7 +50,7 @@ All three phases complete. bUnit tests written for all 7 extracted components (2
 - [x] bUnit tests for extracted component
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
-- [ ] Manual regression: full ServiceBus page workflow
+- [x] Manual regression: full ServiceBus page workflow
 
 ## Completed
 
