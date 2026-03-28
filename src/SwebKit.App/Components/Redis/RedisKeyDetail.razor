@@ -89,57 +89,44 @@
         }
         else if (KeyInfo.Type == "hash")
         {
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Field</th>
-                        <th>Value</th>
-                        <th></th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var field in HashFields)
+            <FluentDataGrid Items="@(HashFields.AsQueryable())" TGridItem="RedisHashField">
+                <TemplateColumn Title="Field" SortBy="@(GridSort<RedisHashField>.ByAscending(f => f.Field))">
+                    @context.Field
+                </TemplateColumn>
+                <TemplateColumn Title="Value" SortBy="@(GridSort<RedisHashField>.ByAscending(f => f.Value))">
+                    @if (IsEditingHash && EditingHashField == context.Field)
                     {
-                        <tr>
-                            <td>@field.Field</td>
-                            <td>
-                                @if (IsEditingHash && EditingHashField == field.Field)
-                                {
-                                    <input class="hash-editor" type="text" @bind="HashEditorValue" />
-                                }
-                                else
-                                {
-                                    @field.Value
-                                }
-                            </td>
-                            <td class="hash-actions">
-                                @if (IsEditingHash && EditingHashField == field.Field)
-                                {
-                                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
-                                    <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
-                                }
-                                else
-                                {
-                                    <FluentButton @onclick="() => BeginHashFieldEdit(field.Field, field.Value)">Edit</FluentButton>
-                                }
-                            </td>
-                            <td>
-                                <FluentButton @onclick="() => OnDeleteHashField.InvokeAsync(field.Field)" title="Delete field">−
-                                </FluentButton>
-                            </td>
-                        </tr>
+                        <input class="hash-editor" type="text" @bind="HashEditorValue" />
                     }
-                    <tr class="add-field-row">
-                        <td><input type="text" class="hash-editor" placeholder="Field name" @bind="_newHashFieldName" /></td>
-                        <td><input type="text" class="hash-editor" placeholder="Value" @bind="_newHashFieldValue" /></td>
-                        <td colspan="2">
-                            <FluentButton @onclick="AddHashFieldAsync"
-                                          Disabled="@(string.IsNullOrWhiteSpace(_newHashFieldName))">+</FluentButton>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                    else
+                    {
+                        @context.Value
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="" Width="140px">
+                    <div class="hash-actions">
+                        @if (IsEditingHash && EditingHashField == context.Field)
+                        {
+                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveHashFieldAsync">Save</FluentButton>
+                            <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
+                        }
+                        else
+                        {
+                            <FluentButton @onclick="() => BeginHashFieldEdit(context.Field, context.Value)">Edit</FluentButton>
+                        }
+                    </div>
+                </TemplateColumn>
+                <TemplateColumn Title="" Width="50px">
+                    <FluentButton @onclick="() => OnDeleteHashField.InvokeAsync(context.Field)" title="Delete field">−
+                    </FluentButton>
+                </TemplateColumn>
+            </FluentDataGrid>
+            <div class="hash-add-row">
+                <input type="text" class="hash-editor" placeholder="Field name" @bind="_newHashFieldName" />
+                <input type="text" class="hash-editor" placeholder="Value" @bind="_newHashFieldValue" />
+                <FluentButton @onclick="AddHashFieldAsync" Disabled="@(string.IsNullOrWhiteSpace(_newHashFieldName))">+
+                </FluentButton>
+            </div>
         }
         else if (KeyInfo.Type == "list" || KeyInfo.Type == "set")
         {
@@ -156,33 +143,24 @@
         }
         else if (KeyInfo.Type == "zset")
         {
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Member</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in SortedSetItems)
-                    {
-                        <tr>
-                            <td>@item.Member</td>
-                            <td @onclick="() => BeginZsetScoreEdit(item.Member, item.Score)" class="zset-score-cell">
-                                @if (_editingZsetMember == item.Member)
-                                {
-                                    <input type="number" step="any" class="zset-score-editor" @bind="_zsetScoreEditor"
-                                           @onkeydown="HandleZsetScoreKeyDown" @onkeydown:preventDefault="@(_zsetKeyPrevent)" />
-                                }
-                                else
-                                {
-                                    @item.Score
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            <FluentDataGrid Items="@(SortedSetItems.AsQueryable())" TGridItem="RedisSortedSetEntry">
+                <TemplateColumn Title="Member" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Member))">
+                    @context.Member
+                </TemplateColumn>
+                <TemplateColumn Title="Score" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Score))">
+                    <span @onclick="() => BeginZsetScoreEdit(context.Member, context.Score)" class="zset-score-cell">
+                        @if (_editingZsetMember == context.Member)
+                        {
+                            <input type="number" step="any" class="zset-score-editor" @bind="_zsetScoreEditor"
+                                   @onkeydown="HandleZsetScoreKeyDown" @onkeydown:preventDefault="@(_zsetKeyPrevent)" />
+                        }
+                        else
+                        {
+                            @context.Score
+                        }
+                    </span>
+                </TemplateColumn>
+            </FluentDataGrid>
             @if (HasMoreItems)
             {
                 <FluentButton @onclick="OnLoadMoreItems" class="load-more-btn">Load more (@SortedSetItems.Count loaded)

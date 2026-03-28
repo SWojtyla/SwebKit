@@ -3,7 +3,7 @@
 <FluentDataGrid Items="@FilteredItems" TGridItem="ConfigMapInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(cm => cm.Name == SelectedConfigMap?.Name ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
-    <TemplateColumn Title="Name">
+    <TemplateColumn Title="Name" SortBy="@(GridSort<ConfigMapInfo>.ByAscending(cm => cm.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-resource-name">@context.Name</span>
@@ -11,17 +11,17 @@
     </TemplateColumn>
     @if (IsMultiNamespace)
     {
-        <TemplateColumn Title="Namespace" Width="130px">
+        <TemplateColumn Title="Namespace" Width="130px" SortBy="@(GridSort<ConfigMapInfo>.ByAscending(cm => cm.Namespace))">
             <span class="aks-ns-cell">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Keys" Width="70px">
+    <TemplateColumn Title="Keys" Width="70px" SortBy="@(GridSort<ConfigMapInfo>.ByAscending(cm => cm.Data.Count))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-section-count">@context.Data.Count</span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Labels" Width="70px">
+    <TemplateColumn Title="Labels" Width="70px" SortBy="@(GridSort<ConfigMapInfo>.ByAscending(cm => cm.Labels.Count))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-section-count">@context.Labels.Count</span>
@@ -30,7 +30,9 @@
 </FluentDataGrid>
 
 @code {
-    [Parameter] public IQueryable<ConfigMapInfo> FilteredItems { get; set; } = Enumerable.Empty<ConfigMapInfo>().AsQueryable();
+    [Parameter]
+    public IQueryable<ConfigMapInfo> FilteredItems { get; set; } =
+Enumerable.Empty<ConfigMapInfo>().AsQueryable();
     [Parameter] public bool IsMultiNamespace { get; set; }
     [Parameter] public ConfigMapInfo? SelectedConfigMap { get; set; }
     [Parameter] public EventCallback<ConfigMapInfo> OnSelectRow { get; set; }

@@ -3,7 +3,7 @@
 <FluentDataGrid Items="@FilteredItems" TGridItem="StatefulSetInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(s => s.Name == SelectedStatefulSet?.Name ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
-    <TemplateColumn Title="Name">
+    <TemplateColumn Title="Name" SortBy="@(GridSort<StatefulSetInfo>.ByAscending(s => s.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-resource-name">@context.Name</span>
@@ -11,12 +11,12 @@
     </TemplateColumn>
     @if (IsMultiNamespace)
     {
-        <TemplateColumn Title="Namespace" Width="130px">
+        <TemplateColumn Title="Namespace" Width="130px" SortBy="@(GridSort<StatefulSetInfo>.ByAscending(s => s.Namespace))">
             <span class="aks-ns-cell"
                   @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Ready" Width="90px">
+    <TemplateColumn Title="Ready" Width="90px" SortBy="@(GridSort<StatefulSetInfo>.ByAscending(s => s.ReadyReplicas))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-ready-badge @(context.ReadyReplicas == context.Replicas ? "healthy" : "degraded")">
@@ -24,7 +24,8 @@
             </span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Revision" Width="130px">
+    <TemplateColumn Title="Revision" Width="130px"
+                    SortBy="@(GridSort<StatefulSetInfo>.ByAscending(s => s.CurrentRevision ?? ""))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-text-muted">@context.CurrentRevision</span>
@@ -39,8 +40,7 @@
             @if (ssHpa is not null)
             {
                 <button class="aks-hpa-badge @(ssHpa.CurrentReplicas == ssHpa.DesiredReplicas ? "" : "hpa-scaling")"
-                        @onclick="() => OnOpenHpa.InvokeAsync(ssHpa)"
-                        @onclick:stopPropagation>
+                        @onclick="() => OnOpenHpa.InvokeAsync(ssHpa)" @onclick:stopPropagation>
                     <span class="hpa-icon">⇅</span>
                     <span class="hpa-replicas">@ssHpa.CurrentReplicas / @ssHpa.MaxReplicas</span>
                     @if (ssHpa.CurrentCpuUtilizationPercent.HasValue)
@@ -54,7 +54,9 @@
 </FluentDataGrid>
 
 @code {
-    [Parameter] public IQueryable<StatefulSetInfo> FilteredItems { get; set; } = Enumerable.Empty<StatefulSetInfo>().AsQueryable();
+    [Parameter]
+    public IQueryable<StatefulSetInfo> FilteredItems { get; set; } =
+Enumerable.Empty<StatefulSetInfo>().AsQueryable();
     [Parameter] public List<HpaInfo> Hpas { get; set; } = [];
     [Parameter] public bool IsMultiNamespace { get; set; }
     [Parameter] public StatefulSetInfo? SelectedStatefulSet { get; set; }

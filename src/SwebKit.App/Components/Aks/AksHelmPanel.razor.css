@@ -52,6 +52,11 @@
 }
 
 /* ── Helm history table ── */
+.sortable-th {
+    cursor: pointer;
+    user-select: none;
+}
+
 .aks-history-table {
     width: 100%;
     border-collapse: collapse;

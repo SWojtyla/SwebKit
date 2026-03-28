@@ -3,39 +3,42 @@
 <FluentDataGrid Items="@FilteredItems" TGridItem="HelmReleaseInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(h => h.Name == SelectedHelm?.Name ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
-    <TemplateColumn Title="Release">
+    <TemplateColumn Title="Release" SortBy="@(GridSort<HelmReleaseInfo>.ByAscending(h => h.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-resource-name">@context.Name</span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Chart">
+    <TemplateColumn Title="Chart" SortBy="@(GridSort<HelmReleaseInfo>.ByAscending(h => h.Chart ?? ""))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @context.Chart
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="App Version" Width="100px">
+    <TemplateColumn Title="App Version" Width="100px"
+                    SortBy="@(GridSort<HelmReleaseInfo>.ByAscending(h => h.AppVersion ?? ""))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @context.AppVersion
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Rev" Width="60px">
+    <TemplateColumn Title="Rev" Width="60px" SortBy="@(GridSort<HelmReleaseInfo>.ByDescending(h => h.Revision))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-section-count">@context.Revision</span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Status" Width="100px">
+    <TemplateColumn Title="Status" Width="100px" SortBy="@(GridSort<HelmReleaseInfo>.ByAscending(h => h.Status))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            <span class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
+            <span
+                class="aks-status @(context.Status == "deployed" ? "running" : context.Status == "failed" ? "error" : "other")">
                 @context.Status
             </span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Updated" Width="100px">
+    <TemplateColumn Title="Updated" Width="100px"
+                    SortBy="@(GridSort<HelmReleaseInfo>.ByDescending(h => h.Updated ?? DateTimeOffset.MinValue))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @if (context.Updated.HasValue)
@@ -48,7 +51,9 @@
 </FluentDataGrid>
 
 @code {
-    [Parameter] public IQueryable<HelmReleaseInfo> FilteredItems { get; set; } = Enumerable.Empty<HelmReleaseInfo>().AsQueryable();
+    [Parameter]
+    public IQueryable<HelmReleaseInfo> FilteredItems { get; set; } =
+Enumerable.Empty<HelmReleaseInfo>().AsQueryable();
     [Parameter] public HelmReleaseInfo? SelectedHelm { get; set; }
     [Parameter] public EventCallback<HelmReleaseInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, HelmReleaseInfo)> OnContextMenu { get; set; }

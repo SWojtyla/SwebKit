@@ -3,34 +3,35 @@
 <FluentDataGrid Items="@FilteredItems" TGridItem="IngressInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(i => i.Name == SelectedIngress?.Name ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
-    <TemplateColumn Title="Name">
+    <TemplateColumn Title="Name" SortBy="@(GridSort<IngressInfo>.ByAscending(i => i.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-resource-name">@context.Name</span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Class" Width="100px">
+    <TemplateColumn Title="Class" Width="100px"
+                    SortBy="@(GridSort<IngressInfo>.ByAscending(i => i.IngressClass ?? ""))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @context.IngressClass
         </div>
     </TemplateColumn>
     <TemplateColumn Title="Hosts">
-        <div class="aks-row-ctx aks-ingress-hosts-cell"
-             @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+        <div class="aks-row-ctx aks-ingress-hosts-cell" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
             @foreach (var rule in context.Rules.Where(r => r.Host is not null))
             {
                 var host = rule.Host!;
                 var url = BuildIngressUrl(host);
-                <button class="aks-ingress-url-btn" @onclick="() => OnOpenUrl.InvokeAsync(url)"
-                        @onclick:stopPropagation
+                <button class="aks-ingress-url-btn" @onclick="() => OnOpenUrl.InvokeAsync(url)" @onclick:stopPropagation
                         title="Open @url">
                     @host
                 </button>
             }
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Address" Width="140px">
+    <TemplateColumn Title="Address" Width="140px"
+                    SortBy="@(GridSort<IngressInfo>.ByAscending(i => string.Join(",", i.Addresses)))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @string.Join(", ", context.Addresses)

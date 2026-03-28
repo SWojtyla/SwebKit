@@ -177,3 +177,10 @@
 .load-more-btn {
     margin-top: var(--spacing-sm);
 }
+
+.hash-add-row {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    align-items: center;
+}

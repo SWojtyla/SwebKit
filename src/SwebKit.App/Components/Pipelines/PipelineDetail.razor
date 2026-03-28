@@ -64,11 +64,8 @@
             </div>
         </div>
 
-        <ConfirmDialog Visible="@_showTriggerConfirm"
-                       Title="Run Pipeline"
-                       Message="@($"Trigger {Pipeline.Name} on branch '{_branch}'?")"
-                       ConfirmLabel="Run"
-                       OnConfirm="ExecuteTrigger"
+        <ConfirmDialog Visible="@_showTriggerConfirm" Title="Run Pipeline"
+                       Message="@($"Trigger {Pipeline.Name} on branch '{_branch}'?")" ConfirmLabel="Run" OnConfirm="ExecuteTrigger"
                        OnCancel="@(() => _showTriggerConfirm = false)" />
     }
 
@@ -88,80 +85,74 @@
         {
             <div class="pipeline-section">
                 <h4 class="pipeline-section-title">Environments</h4>
-                <div style="overflow-x:auto;">
-                    <table class="env-status-table">
-                        <thead>
-                            <tr>
-                                <th>Environment</th>
-                                <th>Status</th>
-                                <th>Run</th>
-                                <th>When</th>
-                                <th>Triggered by</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var env in _envStatus)
-                            {
-                                <tr>
-                                    <td class="env-name">@env.EnvironmentName</td>
-                                    <td>
-                                        @if (env.WaitingForApproval)
-                                        {
-                                            <span class="pipeline-status waiting">Awaiting Approval</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="pipeline-status @EnvStatusCss(env)">@EnvStatusText(env)</span>
-                                        }
-                                    </td>
-                                    <td class="text-mono text-sm">@(env.RunName ?? $"#{env.LatestRunId}")</td>
-                                    <td class="text-muted text-sm">@(env.FinishedAt.HasValue ? RelativeTime(env.FinishedAt.Value) : "—")</td>
-                                    <td class="text-muted text-sm">@(env.TriggeredBy ?? "—")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                <FluentDataGrid Items="@(_envStatus.AsQueryable())" TGridItem="PipelineEnvironmentStatus">
+                    <TemplateColumn Title="Environment"
+                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByAscending(e => e.EnvironmentName))">
+                        <span class="env-name">@context.EnvironmentName</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status" Width="160px">
+                        @if (context.WaitingForApproval)
+                        {
+                            <span class="pipeline-status waiting">Awaiting Approval</span>
+                        }
+                        else
+                        {
+                            <span class="pipeline-status @EnvStatusCss(context)">@EnvStatusText(context)</span>
+                        }
+                    </TemplateColumn>
+                    <TemplateColumn Title="Run" Width="130px"
+                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByAscending(e => e.RunName ?? $"#{e.LatestRunId}"))">
+                        <span class="text-mono text-sm">@(context.RunName ?? $"#{context.LatestRunId}")</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="When" Width="110px"
+                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByDescending(e => e.FinishedAt ?? DateTimeOffset.MinValue))">
+                        <span class="text-muted text-sm">@(context.FinishedAt.HasValue ? RelativeTime(context.FinishedAt.Value)
+                                            : "—")</span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Triggered by" Width="140px">
+                            <span class="text-muted text-sm">@(context.TriggeredBy ?? "—")</span>
+                        </TemplateColumn>
+                    </FluentDataGrid>
                 </div>
+            }
+
+            @* ── Recent runs ── *@
+            <div class="pipeline-section">
+                <h4 class="pipeline-section-title">Recent Runs</h4>
+                @if (_recentRuns.Count == 0)
+                {
+                    <div class="text-muted text-sm">No runs yet.</div>
+                }
+                else
+                {
+                    <div class="pipeline-runs-list">
+                        @foreach (var run in _recentRuns)
+                        {
+                            <div class="pipeline-run-row">
+                                <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
+                                <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
+                                <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
+                                <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
+                                @if (run.TriggeredBy is not null)
+                                {
+                                    <span class="text-muted text-sm">by @run.TriggeredBy</span>
+                                }
+                                @if (run.FinishedDate.HasValue && run.State == "completed")
+                                {
+                                    var duration = run.FinishedDate.Value - run.CreatedDate;
+                                    <span class="text-muted text-sm">@FormatDuration(duration)</span>
+                                }
+                                @if (run.WebUrl is not null)
+                                {
+                                    <a href="@run.WebUrl" target="_blank" class="btn-link-sm" style="margin-left:auto;">↗</a>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
             </div>
         }
-
-        @* ── Recent runs ── *@
-        <div class="pipeline-section">
-            <h4 class="pipeline-section-title">Recent Runs</h4>
-            @if (_recentRuns.Count == 0)
-            {
-                <div class="text-muted text-sm">No runs yet.</div>
-            }
-            else
-            {
-                <div class="pipeline-runs-list">
-                    @foreach (var run in _recentRuns)
-                    {
-                        <div class="pipeline-run-row">
-                            <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
-                            <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
-                            <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
-                            <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
-                            @if (run.TriggeredBy is not null)
-                            {
-                                <span class="text-muted text-sm">by @run.TriggeredBy</span>
-                            }
-                            @if (run.FinishedDate.HasValue && run.State == "completed")
-                            {
-                                var duration = run.FinishedDate.Value - run.CreatedDate;
-                                <span class="text-muted text-sm">@FormatDuration(duration)</span>
-                            }
-                            @if (run.WebUrl is not null)
-                            {
-                                <a href="@run.WebUrl" target="_blank" class="btn-link-sm" style="margin-left:auto;">↗</a>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-        </div>
-    }
-</div>
+    </div>
 
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
@@ -172,7 +163,6 @@
     private string? _error;
     private List<PipelineEnvironmentStatus> _envStatus = [];
     private List<AdoPipelineRun> _recentRuns = [];
-
     // Trigger state
     private bool _showTrigger;
     private bool _showTriggerConfirm;

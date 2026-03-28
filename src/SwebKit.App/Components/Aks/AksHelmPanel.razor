@@ -25,11 +25,11 @@
                     <table class="aks-history-table">
                         <thead>
                             <tr>
-                                <th>Rev</th>
-                                <th>Status</th>
-                                <th>Chart</th>
-                                <th>App Version</th>
-                                <th>Updated</th>
+                                <th class="sortable-th" @onclick='() => SetSort("rev")'>Rev @SortIndicator("rev")</th>
+                                <th class="sortable-th" @onclick='() => SetSort("status")'>Status @SortIndicator("status")</th>
+                                <th class="sortable-th" @onclick='() => SetSort("chart")'>Chart @SortIndicator("chart")</th>
+                                <th class="sortable-th" @onclick='() => SetSort("appver")'>App Version @SortIndicator("appver")</th>
+                                <th class="sortable-th" @onclick='() => SetSort("updated")'>Updated @SortIndicator("updated")</th>
                                 <th>Description</th>
                                 @if (_rollbackMode)
                                 {
@@ -38,13 +38,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var rev in _history.OrderByDescending(r => r.Revision))
+                            @foreach (var rev in SortedHistory)
                             {
                                 <tr class="@(rev.Status == "deployed" ? "aks-rev-current" : "")">
                                     <td>@rev.Revision</td>
-                                    <td><span
-                                        class="aks-status @(rev.Status == "deployed" ? "running" : rev.Status == "failed" ? "error" : "other")">@rev.Status</span>
-                                    </td>
+                                    <td><span class="aks-status @(rev.Status == "deployed" ? "running" : rev.Status == "failed" ? "error" : "other")">@rev.Status</span></td>
                                     <td>@rev.Chart</td>
                                     <td>@rev.AppVersion</td>
                                     <td>@rev.Updated?.ToString("yyyy-MM-dd HH:mm")</td>
@@ -111,7 +109,27 @@
     private List<HelmRevisionInfo> _history = [];
     private bool _historyLoading;
     private bool _rollbackMode;
+    private string _sortColumn = "rev";
+    private bool _sortAscending = false;
 
+    private IEnumerable<HelmRevisionInfo> SortedHistory =>
+        _sortColumn switch
+        {
+            "status"  => _sortAscending ? _history.OrderBy(r => r.Status)                              : _history.OrderByDescending(r => r.Status),
+            "chart"   => _sortAscending ? _history.OrderBy(r => r.Chart ?? "")                         : _history.OrderByDescending(r => r.Chart ?? ""),
+            "appver"  => _sortAscending ? _history.OrderBy(r => r.AppVersion ?? "")                    : _history.OrderByDescending(r => r.AppVersion ?? ""),
+            "updated" => _sortAscending ? _history.OrderBy(r => r.Updated ?? DateTimeOffset.MinValue)  : _history.OrderByDescending(r => r.Updated ?? DateTimeOffset.MinValue),
+            _         => _sortAscending ? _history.OrderBy(r => r.Revision)                            : _history.OrderByDescending(r => r.Revision),
+        };
+
+    private void SetSort(string column)
+    {
+        if (_sortColumn == column) _sortAscending = !_sortAscending;
+        else { _sortColumn = column; _sortAscending = true; }
+    }
+
+    private string SortIndicator(string column) =>
+        _sortColumn != column ? "" : _sortAscending ? "↑" : "↓";
     // Values state
     private string? _valuesTarget;
     private string? _valuesText;

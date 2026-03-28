@@ -5,7 +5,7 @@
 <FluentDataGrid Items="@FilteredItems" TGridItem="PodInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(p => p.Name == SelectedPod?.Name ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
-    <TemplateColumn Title="Name">
+    <TemplateColumn Title="Name" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="aks-resource-name">@context.Name</span>
@@ -13,12 +13,12 @@
     </TemplateColumn>
     @if (IsMultiNamespace)
     {
-        <TemplateColumn Title="Namespace" Width="130px">
+        <TemplateColumn Title="Namespace" Width="130px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.Namespace))">
             <span class="aks-ns-cell"
                   @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Ready" Width="70px">
+    <TemplateColumn Title="Ready" Width="70px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.ReadyContainers))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span
@@ -27,7 +27,7 @@
             </span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Status" Width="150px">
+    <TemplateColumn Title="Status" Width="150px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.Status))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span class="pod-status-badge pod-status-badge--@StatusCssKey(context)" title="Phase: @context.Phase">
@@ -47,7 +47,7 @@
                 <div class="aks-metric-cell">
                     <span class="aks-metric @CpuClass(cpuMetric.Value)"
                           title="@($"{cpuMetric.Value * 1000:F0}m / ~{CpuCeiling}m")">@($"{cpuMetric.Value *
-                                            1000:F0}m")</span>
+                                                                    1000:F0}m")</span>
                         <div class="aks-metric-bar-track">
                             <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)" style="width:@($"{cpuPct:F0}")%"></div>
                         </div>
@@ -85,7 +85,7 @@
                 }
             </div>
         </TemplateColumn>
-        <TemplateColumn Title="Restarts" Width="80px">
+        <TemplateColumn Title="Restarts" Width="80px" SortBy="@(GridSort<PodInfo>.ByDescending(p => p.RestartCount))">
             <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
                  @oncontextmenu:preventDefault>
                 <span class="aks-restart-count @(context.RestartCount > 0 ? "has-restarts" : "")">
@@ -93,7 +93,8 @@
                 </span>
             </div>
         </TemplateColumn>
-        <TemplateColumn Title="Last Restart" Width="100px">
+        <TemplateColumn Title="Last Restart" Width="100px"
+                        SortBy="@(GridSort<PodInfo>.ByDescending(p => p.LastRestartTime ?? DateTimeOffset.MinValue))">
             <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
                  @oncontextmenu:preventDefault>
                 <span class="aks-restart-info">
@@ -114,13 +115,14 @@
                 <span class="aks-restart-info">@(context.LastRestartReason ?? "-")</span>
             </div>
         </TemplateColumn>
-        <TemplateColumn Title="Pod IP" Width="120px">
+        <TemplateColumn Title="Pod IP" Width="120px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.PodIP ?? ""))">
             <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
                  @oncontextmenu:preventDefault>
                 <span class="aks-pod-ip">@(context.PodIP ?? "—")</span>
             </div>
         </TemplateColumn>
-        <TemplateColumn Title="Age" Width="80px">
+        <TemplateColumn Title="Age" Width="80px"
+                        SortBy="@(GridSort<PodInfo>.ByAscending(p => p.StartTime ?? DateTimeOffset.MaxValue))">
             <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
                  @oncontextmenu:preventDefault>
                 @if (context.StartTime.HasValue)
