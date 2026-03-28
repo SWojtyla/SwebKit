@@ -1,0 +1,158 @@
+/* ════════════════════════════════════════════════
+   Namespace Monitor Selector
+   ════════════════════════════════════════════════ */
+
+.ns-monitor-selector {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    min-width: 180px;
+    overflow-y: auto;
+}
+
+/* ── Status line ── */
+.ns-monitor-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    padding: 2px 0;
+}
+
+.ns-monitor-active-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-success);
+    flex-shrink: 0;
+    box-shadow: 0 0 4px var(--color-success);
+}
+
+.ns-monitor-inactive-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+    opacity: 0.5;
+}
+
+.ns-monitor-status-text {
+    color: var(--color-text-muted);
+}
+
+/* ── Loading & empty ── */
+.ns-monitor-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    padding: var(--spacing-sm) 0;
+}
+
+.ns-monitor-empty {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    padding: var(--spacing-sm) 0;
+    font-style: italic;
+}
+
+/* ── Namespace scrollable list ── */
+.ns-monitor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 4px;
+    background: var(--color-bg);
+}
+
+.ns-monitor-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px var(--spacing-xs);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    user-select: none;
+}
+
+.ns-monitor-item:hover {
+    background: var(--color-surface-2);
+}
+
+.ns-monitor-item input[type="checkbox"] {
+    accent-color: var(--color-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ns-monitor-item-label {
+    flex: 1;
+    color: var(--color-text);
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: var(--font-size-sm);
+}
+
+.ns-monitor-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-success);
+    background: rgba(67, 160, 71, 0.12);
+    border: 1px solid rgba(67, 160, 71, 0.25);
+    padding: 0 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+/* ── Actions ── */
+.ns-monitor-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+/* ── Start / Stop button ── */
+.ns-monitor-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+}
+
+.ns-monitor-btn:hover:not(:disabled) {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+    border-color: var(--color-text-muted);
+}
+
+.ns-monitor-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.ns-monitor-btn.stop {
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+    background: rgba(255, 165, 0, 0.08);
+}
+
+.ns-monitor-btn.stop:hover {
+    background: rgba(255, 165, 0, 0.16);
+}

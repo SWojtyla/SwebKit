@@ -72,4 +72,23 @@
 
 ---
 
+## AW-8 — Subagent produces empty output
+
+**Symptom:** A subagent (e.g. `blazor-expert`, `dotnet-expert`) returns no output at all when called by the orchestrator.
+
+**Causes — two patterns observed:**
+
+1. **"Wait for a decision" deadlock.** The design health check instructs the agent to "wait for a decision" if it finds a design concern. When running as a subagent, there is no input channel to wait on. The agent parks waiting for a reply that never comes and produces no output.
+
+2. **Context window exhaustion from redundant loading.** Both the orchestrator and the expert agents were instructed to load `project-context` (architecture.md, design.md, codebase-guide.md, pitfall files). When the agent is invoked with a large delegation payload *and* tries to re-read the same files, the context window fills before any output is generated.
+
+**Fix:**
+- Expert agents under the orchestrator now skip `project-context` re-loading and use the context already provided in the delegation payload.
+- The design health check now has two branches: **standalone** → wait; **under orchestrator** → include a `Design concern:` note in the response and proceed.
+- The orchestrator delegation payload explicitly requires architecture constraints and pitfalls to be inlined so subagents don't need to reload them.
+
+See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting work".
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

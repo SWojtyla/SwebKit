@@ -49,6 +49,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
 
+        // Pod Health Monitor
+#if WINDOWS
+        builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
+#else
+        builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
+#endif
+        builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
+
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoStorageClient>();
 

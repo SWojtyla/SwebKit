@@ -31,6 +31,8 @@
 @code {
     private readonly Dictionary<Guid, System.Timers.Timer> _timers = new();
     private readonly HashSet<Guid> _expandedIds = new();
+    // _timers is accessed from both Blazor sync-context and ThreadPool timer callbacks.
+    private readonly object _timersLock = new();
 
     protected override void OnInitialized()
     {
@@ -41,28 +43,31 @@
     {
         var currentIds = Notifications.All.Select(n => n.Id).ToHashSet();
 
-        // Dispose timers for notifications that are no longer present
-        foreach (var id in _timers.Keys.Where(k => !currentIds.Contains(k)).ToList())
+        lock (_timersLock)
         {
-            _timers[id].Dispose();
-            _timers.Remove(id);
-        }
-
-        // Start timers for newly added notifications
-        foreach (var n in Notifications.All)
-        {
-            if (_timers.ContainsKey(n.Id)) continue;
-
-            var intervalMs = n.Severity is NotificationSeverity.Success or NotificationSeverity.Info ? 4000 : 8000;
-            var timer = new System.Timers.Timer(intervalMs) { AutoReset = false };
-            var capturedId = n.Id;
-            timer.Elapsed += async (_, _) =>
+            // Dispose timers for notifications that are no longer present
+            foreach (var id in _timers.Keys.Where(k => !currentIds.Contains(k)).ToList())
             {
-                Notifications.Dismiss(capturedId);
-                await InvokeAsync(StateHasChanged);
-            };
-            _timers[capturedId] = timer;
-            timer.Start();
+                if (_timers.Remove(id, out var stale))
+                    stale.Dispose();
+            }
+
+            // Start timers for newly added notifications
+            foreach (var n in Notifications.All)
+            {
+                if (_timers.ContainsKey(n.Id)) continue;
+
+                var intervalMs = n.Severity is NotificationSeverity.Success or NotificationSeverity.Info ? 4000 : 8000;
+                var timer = new System.Timers.Timer(intervalMs) { AutoReset = false };
+                var capturedId = n.Id;
+                timer.Elapsed += async (_, _) =>
+                {
+                    Notifications.Dismiss(capturedId);
+                    await InvokeAsync(StateHasChanged);
+                };
+                _timers[capturedId] = timer;
+                timer.Start();
+            }
         }
 
         InvokeAsync(StateHasChanged);
@@ -92,7 +97,10 @@
     public void Dispose()
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
-        foreach (var timer in _timers.Values) timer.Dispose();
-        _timers.Clear();
+        lock (_timersLock)
+        {
+            foreach (var timer in _timers.Values) timer.Dispose();
+            _timers.Clear();
+        }
     }
 }

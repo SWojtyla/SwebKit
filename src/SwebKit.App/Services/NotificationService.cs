@@ -49,6 +49,8 @@ public class NotificationService : INotificationService
     {
         lock (_lock)
             _notifications.Clear();
+        _uiState.State.NotificationHistory.Clear();
+        _ = _uiState.SaveAsync();
         NotificationsChanged?.Invoke();
     }
 

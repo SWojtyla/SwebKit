@@ -4,39 +4,39 @@
 
 title: "Status — AKS Pod Health Monitor"
 owner: ""
-state: "Planned"
+state: "Review"
 branch: ""
 started: "2026-03-26"
-last_updated: "2026-03-26"
+last_updated: "2026-03-28"
 
 ---
 
 ## Quick summary
 
-Feature planned. All design files created. Ready for implementation.
+All phases complete. Build 0 errors, 8 unit tests passing. UI components integrated into AKS page. Manual validation needed.
 
-**Current focus:** Begin backend implementation — core monitoring service and Windows toast infrastructure.
+**Current focus:** Manual regression — enable monitoring in demo mode, verify alert flow.
 
 ## Progress checklist
 
 - [x] Planning complete
 - [x] Design reviewed
-- [ ] **Phase 1 — Core monitoring service** `[dotnet-expert]`
-  - [ ] PHM-1 — `IPodHealthMonitorService` interface in `SwebKit.Core`
-  - [ ] PHM-2 — `PodHealthState` / `PodHealthEvent` models in `SwebKit.Core`
-  - [ ] PHM-3 — `PodHealthMonitorService` implementation in `SwebKit.App/Services/`
-  - [ ] PHM-4 — Pod state diffing logic (phase transitions, crash detection, container readiness)
-  - [ ] PHM-5 — Notification deduplication / cooldown tracker
-  - [ ] PHM-6 — PeriodicTimer loop with error handling and graceful degradation
-- [ ] **Phase 2 — Windows toast notifications** `[dotnet-expert]`
-  - [ ] PHM-7 — `IWindowsNotificationService` interface in `SwebKit.Core`
-  - [ ] PHM-8 — `WindowsToastNotificationService` in `Platforms/Windows/`
-  - [ ] PHM-9 — Toast XML templates for pod failure alerts
+- [x] **Phase 1 — Core monitoring service** `[dotnet-expert]`
+  - [x] PHM-1 — `IPodHealthMonitorService` interface in `SwebKit.Core`
+  - [x] PHM-2 — `PodHealthEvent` / `PodHealthEventType` models in `SwebKit.Core`
+  - [x] PHM-3 — `PodHealthMonitorService` implementation in `SwebKit.App/Services/`
+  - [x] PHM-4 — `PodHealthDiffer` — pod state diff (phase transitions, crash detection, container readiness)
+  - [x] PHM-5 — Cooldown filtering (in-Diff, keyed by ns/pod/eventType)
+  - [x] PHM-6 — PeriodicTimer loop with error handling and graceful degradation
+- [x] **Phase 2 — Windows toast notifications** `[dotnet-expert]`
+  - [x] PHM-7 — `IWindowsNotificationService` interface in `SwebKit.Core`
+  - [x] PHM-8 — `WindowsToastNotificationService` in `Platforms/Windows/`
+  - [x] PHM-9 — Toast XML template for pod failure alerts
   - [ ] PHM-10 — Toast activation handling (click → navigate to AKS page)
-- [ ] **Phase 3 — Config and persistence** `[dotnet-expert]`
-  - [ ] PHM-11 — `MonitoredNamespaceConfig` model
-  - [ ] PHM-12 — Extend `AksConfig` or `AppConfig` with monitored namespaces
-  - [ ] PHM-13 — Config save/load integration with existing config persistence
+- [x] **Phase 3 — Config and persistence** `[dotnet-expert]`
+  - [x] PHM-11 — `PodSnapshot` / `PodDiffResult` model (in `SwebKit.Core.Services`)
+  - [x] PHM-12 — `AksConfig` extended with `MonitoredNamespaces`, `MonitoringEnabled`, `MonitoringCooldownMinutes`
+  - [x] PHM-13 — Config save/load via existing `AppStateService.SaveConfigAsync()`
 - [ ] **Phase 4 — UI components** `[blazor-expert]`
   - [ ] PHM-14 — Namespace monitoring selector component
   - [ ] PHM-15 — Monitoring status indicator (top bar or AKS page)

@@ -1,0 +1,166 @@
+@implements IDisposable
+
+<div class="alert-history-panel">
+
+    @* ── Header ── *@
+    <div class="alert-history-header">
+        <span class="alert-history-title">Alert History</span>
+        @if (_displayEvents.Count > 0)
+        {
+            <span class="alert-history-count">@_displayEvents.Count</span>
+        }
+        <span class="alert-history-spacer"></span>
+        @if (_displayEvents.Count > 0)
+        {
+            <button class="ah-btn" @onclick="ClearAlerts" title="Clear alert history">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" style="vertical-align:middle;" />
+                Clear
+            </button>
+        }
+    </div>
+
+    @* ── Event list ── *@
+    @if (_displayEvents.Count == 0)
+    {
+        <div class="alert-history-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Width="20px" />
+            <span>No alerts</span>
+        </div>
+    }
+    else
+    {
+        <div class="alert-history-list" role="list">
+            @foreach (var evt in _displayEvents)
+            {
+                <div class="alert-history-item @GetSeverityClass(evt.EventType)" role="listitem">
+                    <span class="alert-history-icon" aria-hidden="true">@GetSeverityIcon(evt.EventType)</span>
+                    <div class="alert-history-body">
+                        <div class="alert-history-row">
+                            <span class="alert-history-podname" title="@evt.PodName">@TruncateName(evt.PodName)</span>
+                            <span class="alert-history-type">@GetTypeLabel(evt.EventType)</span>
+                        </div>
+                        <div class="alert-history-row alert-history-meta">
+                            <span class="alert-history-ns" title="namespace: @evt.Namespace">@evt.Namespace</span>
+                            <span class="alert-history-time"
+                                  title="@evt.DetectedAt.ToString("u")">@FormatTimeAgo(evt.DetectedAt)</span>
+                        </div>
+                        @if (evt.Message is not null)
+                        {
+                            <div class="alert-history-message" title="@evt.Message">@TruncateMessage(evt.Message)</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Inject] private IPodHealthMonitorService Monitor { get; set; } = default!;
+    [Inject] private IAppEventBus EventBus { get; set; } = default!;
+
+    // Local list filled from ring buffer + live events; cleared via ClearAlerts
+    private readonly List<PodHealthEvent> _localEvents = [];
+    private bool _cleared;
+    private DateTimeOffset _clearedAt;
+
+    // Events visible to the user (local list minus anything cleared)
+    private IReadOnlyList<PodHealthEvent> _displayEvents = [];
+
+    private Action<PodHealthEvent>? _busHandler;
+
+    protected override void OnInitialized()
+    {
+        // Populate from the service ring buffer
+        foreach (var evt in Monitor.RecentEvents)
+            _localEvents.Add(evt);
+
+        _displayEvents = BuildDisplay();
+
+        // Subscribe to live bus events (BL-2: dispatch on Blazor thread)
+        _busHandler = OnPodHealthEvent;
+        EventBus.Subscribe(_busHandler);
+    }
+
+    private void OnPodHealthEvent(PodHealthEvent evt)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (_localEvents.Count >= 100)
+                _localEvents.RemoveAt(0);
+
+            _localEvents.Insert(0, evt);
+            _displayEvents = BuildDisplay();
+            StateHasChanged();
+        });
+    }
+
+    private IReadOnlyList<PodHealthEvent> BuildDisplay()
+    {
+        if (!_cleared)
+            return _localEvents.AsReadOnly();
+
+        // After clear, only show events detected after the clear timestamp
+        return _localEvents.Where(e => e.DetectedAt > _clearedAt).ToList().AsReadOnly();
+    }
+
+    private void ClearAlerts()
+    {
+        _cleared = true;
+        _clearedAt = DateTimeOffset.UtcNow;
+        _displayEvents = [];
+    }
+
+    // ── Formatting helpers ──
+
+    private static string GetSeverityClass(PodHealthEventType type) => type switch
+    {
+        PodHealthEventType.PodFailed => "severity-error",
+        PodHealthEventType.PodCrashLoop => "severity-warning",
+        PodHealthEventType.ContainerNotReady => "severity-warning",
+        PodHealthEventType.PodUnknown => "severity-amber",
+        PodHealthEventType.PodTerminated => "severity-muted",
+        _ => ""
+    };
+
+    private static string GetSeverityIcon(PodHealthEventType type) => type switch
+    {
+        PodHealthEventType.PodFailed => "✕",
+        PodHealthEventType.PodCrashLoop => "↺",
+        PodHealthEventType.ContainerNotReady => "⚠",
+        PodHealthEventType.PodUnknown => "?",
+        PodHealthEventType.PodTerminated => "○",
+        _ => "•"
+    };
+
+    private static string GetTypeLabel(PodHealthEventType type) => type switch
+    {
+        PodHealthEventType.PodFailed => "Failed",
+        PodHealthEventType.PodCrashLoop => "CrashLoop",
+        PodHealthEventType.ContainerNotReady => "Not Ready",
+        PodHealthEventType.PodUnknown => "Unknown",
+        PodHealthEventType.PodTerminated => "Terminated",
+        _ => type.ToString()
+    };
+
+    private static string FormatTimeAgo(DateTimeOffset time)
+    {
+        var delta = DateTimeOffset.UtcNow - time;
+        if (delta.TotalSeconds < 60) return "just now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
+        return $"{(int)delta.TotalDays}d ago";
+    }
+
+    private static string TruncateName(string name)
+        => name.Length > 32 ? name[..16] + "…" + name[^12..] : name;
+
+    private static string TruncateMessage(string msg)
+        => msg.Length > 80 ? msg[..77] + "…" : msg;
+
+    public void Dispose()
+    {
+        if (_busHandler is not null)
+            EventBus.Unsubscribe(_busHandler);
+    }
+}

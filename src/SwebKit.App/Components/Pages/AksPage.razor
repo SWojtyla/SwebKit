@@ -10,6 +10,7 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject ILogger<AksPage> Logger
+@inject IPodHealthMonitorService Monitor
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     @* ── Toolbar ── *@
@@ -22,6 +23,19 @@
                       OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
                       OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
                       OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
+
+    @* ── Monitor bar ── *@
+    <div class="aks-monitor-bar">
+        <button class="aks-monitor-btn @(Monitor.IsMonitoring ? "active" : "")" @onclick="ToggleMonitorPanel"
+                title="Pod health monitoring">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Alert())" Width="14px" style="vertical-align:middle;" />
+            @(Monitor.IsMonitoring ? $" Monitor ({Monitor.MonitoredNamespaces.Count})" : " Monitor")
+            @if (_recentAlertCount > 0)
+            {
+                <span class="aks-alert-badge">@_recentAlertCount</span>
+            }
+        </button>
+    </div>
 
     @* ── Error ── *@
     @if (ErrorMessage is not null)
@@ -51,6 +65,15 @@
     }
     else
     {
+        @* ── Monitor panel ── *@
+        @if (_showMonitorPanel)
+        {
+            <div class="aks-monitor-panel">
+                <NamespaceMonitorSelector AksClient="Client" CurrentClusterContext="@ActiveContext" />
+                <AlertHistoryPanel />
+            </div>
+        }
+
         <div class="aks-content @(HasAnyPanel ? "side-open" : "")">
             @* ── Main resource panel ── *@
             <div class="aks-resource-panel">
@@ -155,7 +178,7 @@
                         <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                            or "Ingresses" or "Pods" or "CronJobs")
+                                                                                                                                                                                                                                                    or "Ingresses" or "Pods" or "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -459,6 +482,10 @@
     private PodInfo? _pfDialogPod;
     private int _pfDialogRemotePort;
 
+    // Pod health monitor panel state
+    private bool _showMonitorPanel;
+    private int _recentAlertCount;
+
 
 
     // Context menu refs and targets
@@ -506,7 +533,21 @@
     protected override void OnInitialized()
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        Monitor.PodHealthDetected += OnMonitorPodHealthDetected;
         RegisterAksCommands();
+    }
+
+    private void OnMonitorPodHealthDetected(PodHealthEvent evt)
+    {
+        _recentAlertCount++;
+        _ = InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void ToggleMonitorPanel()
+    {
+        _showMonitorPanel = !_showMonitorPanel;
+        if (_showMonitorPanel)
+            _recentAlertCount = 0; // reset badge when user opens the panel
     }
 
     private void RegisterAksCommands()
@@ -1494,6 +1535,7 @@ s.Name); break;
         cts?.Cancel();
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        Monitor.PodHealthDetected -= OnMonitorPodHealthDetected;
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
             Commands.Unregister(id);

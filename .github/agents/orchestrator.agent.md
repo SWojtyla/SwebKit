@@ -90,7 +90,7 @@ Escalation rules
 Delegation payload (include in every subagent request):
 
 - **Task:** Short, clear description of what to build/implement
-- **Context:** Relevant user intent, repo state, existing files/patterns
+- **Context:** Relevant user intent, repo state, existing files/patterns. **Always include the relevant architecture constraints, pitfall notes, and active feature status directly in this field.** Subagents must NOT re-load project-context when operating under the orchestrator — provide context here so they don't need to.
 - **Constraints:** Hard limits (no DB access, specific tools/frameworks, security rules, etc.)
 - **Dependencies:** What must be completed first and by whom
 - **Expected outcome:** What artifacts/files should be created or modified
@@ -104,9 +104,11 @@ Context & safety:
 
 Failure and retry policy
 
+- **Empty or no-output response** is always a failure. Do NOT fall back to implementing directly. Retry once with a simplified, explicit prompt. If the retry is also empty or fails, surface a clear error to the user, state which agent failed and what was delegated, and stop.
 - If a subagent indicates failure or incomplete work, attempt one retry with clarified requirements or expanded context.
 - If retry fails, escalate to a different agent with complementary skills or surface a clear error to the user.
-- Look for indicators of issues in responses: "unable to", "missing information", "unclear", "open questions", etc.
+- Look for indicators of issues in responses: empty output, "unable to", "missing information", "unclear", "open questions", etc.
+- **NEVER implement code directly as a fallback.** "The subagent returned empty" is never a justification for the orchestrator to write code itself. The orchestrator's only action after a repeated empty response is to report the failure to the user.
 
 Observability and testing
 

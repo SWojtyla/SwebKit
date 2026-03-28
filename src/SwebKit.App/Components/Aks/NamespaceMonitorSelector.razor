@@ -1,0 +1,182 @@
+@implements IDisposable
+
+<div class="ns-monitor-selector">
+
+    @* ── Status line ── *@
+    <div class="ns-monitor-status">
+        @if (Monitor.IsMonitoring)
+        {
+            <span class="ns-monitor-active-dot"></span>
+            <span>Monitoring @Monitor.MonitoredNamespaces.Count namespace@(Monitor.MonitoredNamespaces.Count == 1 ? "" :
+                                        "s")</span>
+            }
+        else
+            {
+                <span class="ns-monitor-inactive-dot"></span>
+                <span class="ns-monitor-status-text">Not monitoring</span>
+            }
+        </div>
+
+        @* ── Namespace list ── *@
+        @if (_loading)
+        {
+            <div class="ns-monitor-loading">
+                <FluentProgressRing Width="16px" />
+                <span>Loading namespaces…</span>
+            </div>
+        }
+        else if (_availableNamespaces.Count == 0)
+        {
+            <div class="ns-monitor-empty">No namespaces available</div>
+        }
+        else
+        {
+            <div class="ns-monitor-list" role="group" aria-label="Namespaces to monitor">
+                @foreach (var ns in _availableNamespaces)
+                {
+                    var nsCapture = ns;
+                    var isChecked = _selectedNamespaces.Contains(nsCapture);
+                    <label class="ns-monitor-item">
+                        <input type="checkbox" checked="@isChecked" @onchange="e => ToggleNamespace(nsCapture, e.Value is true)"
+                               aria-label="@nsCapture" />
+                        <span class="ns-monitor-item-label">@nsCapture</span>
+                        @if (Monitor.MonitoredNamespaces.Contains(nsCapture))
+                        {
+                            <span class="ns-monitor-badge">active</span>
+                        }
+                    </label>
+                }
+            </div>
+        }
+
+        @* ── Actions ── *@
+        <div class="ns-monitor-actions">
+            @if (!Monitor.IsMonitoring)
+            {
+                <button class="ns-monitor-btn" disabled="@(!_selectedNamespaces.Any())" @onclick="StartMonitoringAsync"
+                        title="Start pod health monitoring for selected namespaces">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="14px" style="vertical-align:middle;" />
+                    Start Monitoring
+                </button>
+            }
+            else
+            {
+                <button class="ns-monitor-btn stop" @onclick="StopMonitoringAsync" title="Stop pod health monitoring">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Stop())" Width="14px" style="vertical-align:middle;" />
+                    Stop Monitoring
+                </button>
+            }
+        </div>
+    </div>
+
+@code {
+    [Parameter] public IAksClient? AksClient { get; set; }
+    [Parameter] public string CurrentClusterContext { get; set; } = "";
+
+    [Inject] private IPodHealthMonitorService Monitor { get; set; } = default!;
+    [Inject] private INotificationService Notifications { get; set; } = default!;
+
+    private IAksClient? _loadedClient;
+    private bool _initialized;
+    private List<string> _availableNamespaces = [];
+    private HashSet<string> _selectedNamespaces = [];
+    private bool _loading = true;
+
+    protected override void OnInitialized()
+    {
+        Monitor.PodHealthDetected += OnPodHealthDetected;
+        // Pre-check already monitored namespaces
+        foreach (var ns in Monitor.MonitoredNamespaces)
+            _selectedNamespaces.Add(ns);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_initialized && ReferenceEquals(_loadedClient, AksClient)) return; // BL-5 guard
+        _initialized = true;
+        _loadedClient = AksClient; // BL-3: set guard before await
+        await LoadNamespacesAsync();
+    }
+
+    private void OnPodHealthDetected(PodHealthEvent evt)
+        => _ = InvokeAsync(StateHasChanged); // BL-2
+
+    private async Task LoadNamespacesAsync()
+    {
+        _loading = true;
+        _availableNamespaces = [];
+        await InvokeAsync(StateHasChanged);
+
+        if (AksClient is null)
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            var namespaces = await AksClient.GetNamespacesAsync();
+            _availableNamespaces = namespaces.ToList();
+            // Preserve checked selections that are still valid
+            _selectedNamespaces = _selectedNamespaces.Intersect(_availableNamespaces).ToHashSet();
+            // Pre-check currently monitored namespaces
+            foreach (var ns in Monitor.MonitoredNamespaces)
+                _selectedNamespaces.Add(ns);
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to load namespaces", ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ToggleNamespace(string ns, bool check)
+    {
+        if (check) _selectedNamespaces.Add(ns);
+        else _selectedNamespaces.Remove(ns);
+    }
+
+    private async Task StartMonitoringAsync()
+    {
+        try
+        {
+            foreach (var ns in _selectedNamespaces)
+                await Monitor.AddNamespaceAsync(ns);
+            await Monitor.StartAsync();
+            Notifications.ShowSuccess("Monitoring started",
+                $"Watching {_selectedNamespaces.Count} namespace(s) for pod failures");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to start monitoring", ex.Message);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StopMonitoringAsync()
+    {
+        try
+        {
+            await Monitor.StopAsync();
+            Notifications.ShowSuccess("Monitoring stopped");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to stop monitoring", ex.Message);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Monitor.PodHealthDetected -= OnPodHealthDetected;
+    }
+}

@@ -12,6 +12,29 @@ public class DemoAksClient : IAksClient
 {
     private static readonly Random Rng = new(42);
 
+    // Demo tick counter — increments every call to GetPodsAsync.
+    // Tick 2 returns a "Failed" pod to trigger PodHealthMonitor detection.
+    private static int _demoTick;
+
+    // Stable pod name suffixes so the differ doesn't see all pods as
+    // terminated + replaced on every poll (which would generate a flood
+    // of PodTerminated events). Keyed by "deploymentName/replicaIndex".
+    private static readonly Dictionary<string, string> PodSuffixes = new();
+
+    private static string StableSuffix(string deploymentName, int replicaIndex)
+    {
+        var key = $"{deploymentName}/{replicaIndex}";
+        if (!PodSuffixes.TryGetValue(key, out var s))
+        {
+            // Deterministic hash so suffix is identical across DemoAksClient instances.
+            var hash = System.Security.Cryptography.MD5.HashData(
+                System.Text.Encoding.UTF8.GetBytes(key));
+            s = Convert.ToHexString(hash)[..8].ToLowerInvariant();
+            PodSuffixes[key] = s;
+        }
+        return s;
+    }
+
     private static readonly (string Name, int Replicas, int Ready, string Status)[] DemoDeployments =
     [
         ("order-api", 3, 3, "Available"),
@@ -87,28 +110,36 @@ public class DemoAksClient : IAksClient
     {
         await Task.Delay(200, ct);
 
+        var tick = Interlocked.Increment(ref _demoTick);
         var pods = new List<PodInfo>();
         foreach (var d in DemoDeployments)
         {
             for (var i = 0; i < d.Replicas; i++)
             {
-                var suffix = Guid.NewGuid().ToString("N")[..8];
+                var suffix = StableSuffix(d.Name, i);
                 var isReady = i < d.Ready;
                 var restarts = isReady ? 0 : Rng.Next(1, 10);
                 var phase = isReady ? "Running" : (d.Status == "Unavailable" ? "Pending" : "Pending");
                 var status = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "ImagePullBackOff");
+
+                // Demo scenario: on tick 2, make one search-indexer pod appear "Failed"
+                // so PodHealthMonitorService detects a phase transition from Pending → Failed.
+                var isFailedDemoPod = tick == 2
+                    && d.Name == "search-indexer"
+                    && i == 0;
+
                 pods.Add(new PodInfo
                 {
                     Name = $"{d.Name}-{suffix[..5]}-{suffix[5..]}",
                     Namespace = ns,
-                    Phase = phase,
-                    Status = status,
-                    Ready = isReady,
-                    ReadyContainers = isReady ? 2 : (d.Status == "Unavailable" ? 0 : 1),
+                    Phase = isFailedDemoPod ? "Failed" : phase,
+                    Status = isFailedDemoPod ? "Error" : status,
+                    Ready = isFailedDemoPod ? false : isReady,
+                    ReadyContainers = isFailedDemoPod ? 0 : (isReady ? 2 : (d.Status == "Unavailable" ? 0 : 1)),
                     TotalContainers = 2,
-                    RestartCount = restarts,
-                    LastRestartTime = restarts > 0 ? DateTimeOffset.UtcNow.AddMinutes(-Rng.Next(1, 120)) : null,
-                    LastRestartReason = restarts > 0 ? (Rng.Next(2) == 0 ? "OOMKilled" : "Error") : null,
+                    RestartCount = isFailedDemoPod ? 3 : restarts,
+                    LastRestartTime = (isFailedDemoPod || restarts > 0) ? DateTimeOffset.UtcNow.AddMinutes(-Rng.Next(1, 120)) : null,
+                    LastRestartReason = isFailedDemoPod ? "Error" : (restarts > 0 ? (Rng.Next(2) == 0 ? "OOMKilled" : "Error") : null),
                     PodIP = $"10.16.{Rng.Next(30, 40)}.{Rng.Next(1, 255)}",
                     NodeName = $"aks-nodepool1-{37000000 + Rng.Next(100):D8}-vmss00000{Rng.Next(0, 6)}",
                     StartTime = DateTimeOffset.UtcNow.AddHours(-Rng.Next(1, 72)),
@@ -260,17 +291,7 @@ public class DemoAksClient : IAksClient
 
     public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
-        IReadOnlyList<string> namespaces = new List<string>
-        {
-            "default",
-            "ecommerce",
-            "kube-system",
-            "monitoring",
-            "ingress-nginx",
-            "cert-manager",
-            "istio-system"
-        };
-        return Task.FromResult(namespaces);
+        return Task.FromResult<IReadOnlyList<string>>(["ecommerce", "payments", "infrastructure", "monitoring"]);
     }
 
     public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)

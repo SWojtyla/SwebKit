@@ -110,7 +110,11 @@ Dependencies: backend API contract from dotnet-expert
 
 ### Step 1 — Read the repo conventions
 
-Before creating anything, load the `project-context` skill (covers architecture constraints and pitfalls), then also read:
+**When operating under the orchestrator:** The orchestrator already loaded project-context and included relevant constraints in the delegation payload. Do NOT re-load `project-context` — use the context already provided.
+
+**When operating standalone:** Load the `project-context` skill (covers architecture constraints and pitfalls) before reading anything else.
+
+Then also read:
 
 1. `ai-setup/ways-of-working/ai-workflow.md` — defines feature model, when to split modules, valid status values, and what files a feature needs
 2. `ai-setup/templates/` — canonical templates for `index.md`, `status.md`, `test-plan.md`, `backend.md`, `frontend.md`, `standard-feature.md`, and `archive-summary.md`
