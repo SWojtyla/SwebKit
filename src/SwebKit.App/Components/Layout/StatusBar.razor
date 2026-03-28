@@ -10,27 +10,25 @@
     <span class="status-section status-connections">
         @foreach (var (area, label) in _areas)
         {
-            @if (ConnState.States.TryGetValue(area, out var s))
+            ConnState.States.TryGetValue(area, out var s);
+            var css = s?.State switch
             {
-                var css = s.State switch
+                ConnectionState.Connected => "dot-connected",
+                ConnectionState.Error => "dot-error",
+                _ => "dot-unknown"
+            } ?? "dot-unknown";
+            var tooltip = s?.State == ConnectionState.Error && s.ErrorMessage is not null
+                ? $"{label}: {s.ErrorMessage}"
+                : s is not null ? $"{label}: {s.State}" : $"{label}: Not connected";
+            <span class="connection-indicator" title="@tooltip" role="status" aria-label="@tooltip">
+                <span class="connection-dot @css">@(s?.State switch
                 {
-                    ConnectionState.Connected => "dot-connected",
-                    ConnectionState.Error => "dot-error",
-                    _ => "dot-unknown"
-                };
-                var tooltip = s.State == ConnectionState.Error && s.ErrorMessage is not null
-                    ? $"{label}: {s.ErrorMessage}"
-                    : $"{label}: {s.State}";
-                <span class="connection-indicator" title="@tooltip" role="status" aria-label="@tooltip">
-                    <span class="connection-dot @css">@(s.State switch
-                    {
-                        ConnectionState.Connected => "✓",
-                        ConnectionState.Error => "✗",
-                        _ => "?"
-                    })</span>
-                    <span class="connection-label">@label</span>
-                </span>
-            }
+                    ConnectionState.Connected => "✓",
+                    ConnectionState.Error => "✗",
+                    _ => "·"
+                } ?? "·")</span>
+                <span class="connection-label">@label</span>
+            </span>
         }
     </span>
 

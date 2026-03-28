@@ -76,6 +76,9 @@ public class UiState
     public List<string> RecentCommandIds { get; set; } = [];
     /// <summary>Persisted notification history (newest-first, max 50).</summary>
     public List<PersistedNotification> NotificationHistory { get; set; } = [];
+    /// <summary>Demo-mode pod health monitoring preferences (no AksConfig to fall back on).</summary>
+    public List<string> DemoMonitoredNamespaces { get; set; } = [];
+    public bool DemoMonitoringEnabled { get; set; }
 }
 
 public class SavedFilter

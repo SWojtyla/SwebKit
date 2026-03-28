@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
@@ -20,6 +21,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
     private readonly INotificationService _notifications;
     private readonly IWindowsNotificationService _toastService;
     private readonly IConnectionStateService _connectionState;
+    private readonly UiStateRepository _uiState;
     private readonly ILogger<PodHealthMonitorService> _logger;
 
     // Mutable state — all access must hold _lock.
@@ -58,7 +60,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         INotificationService notifications,
         ILogger<PodHealthMonitorService> logger,
         IWindowsNotificationService toastService,
-        IConnectionStateService connectionState)
+        IConnectionStateService connectionState,
+        UiStateRepository uiState)
     {
         _appState = appState;
         _eventBus = eventBus;
@@ -66,6 +69,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         _logger = logger;
         _toastService = toastService;
         _connectionState = connectionState;
+        _uiState = uiState;
 
         _appState.Initialized += OnAppInitialized;
     }
@@ -99,15 +103,28 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
     private void OnAppInitialized()
     {
         var aksConfig = _appState.Config.AksConfig;
-        // Seed canonical list from saved config on startup.
-        if (aksConfig is not null)
+
+        if (_appState.UseDemoData && aksConfig is null)
         {
-            foreach (var ns in aksConfig.MonitoredNamespaces)
+            // Demo mode: seed namespace list from UiState (no AksConfig to read from).
+            foreach (var ns in _uiState.State.DemoMonitoredNamespaces)
                 if (!_monitoredNamespaces.Contains(ns, StringComparer.Ordinal))
                     _monitoredNamespaces.Add(ns);
+
+            if (_uiState.State.DemoMonitoringEnabled && _monitoredNamespaces.Count > 0)
+                _ = StartAsync();
         }
-        if (aksConfig?.MonitoringEnabled == true && _monitoredNamespaces.Count > 0)
-            _ = StartAsync();
+        else
+        {
+            // Real mode: seed from AksConfig on startup.
+            if (aksConfig is not null)
+                foreach (var ns in aksConfig.MonitoredNamespaces)
+                    if (!_monitoredNamespaces.Contains(ns, StringComparer.Ordinal))
+                        _monitoredNamespaces.Add(ns);
+
+            if (aksConfig?.MonitoringEnabled == true && _monitoredNamespaces.Count > 0)
+                _ = StartAsync();
+        }
     }
 
     public async Task StartAsync(CancellationToken ct = default)
@@ -132,11 +149,19 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         }
 
         // Persist the enabled state so monitoring auto-resumes on next launch.
-        var aksConfig = _appState.Config.AksConfig;
-        if (aksConfig is not null && !aksConfig.MonitoringEnabled)
+        if (_appState.UseDemoData)
         {
-            aksConfig.MonitoringEnabled = true;
-            await _appState.SaveConfigAsync();
+            _uiState.State.DemoMonitoringEnabled = true;
+            _ = _uiState.SaveAsync();
+        }
+        else
+        {
+            var aksConfig = _appState.Config.AksConfig;
+            if (aksConfig is not null && !aksConfig.MonitoringEnabled)
+            {
+                aksConfig.MonitoringEnabled = true;
+                await _appState.SaveConfigAsync();
+            }
         }
 
         _cts = new CancellationTokenSource();
@@ -172,11 +197,19 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         }
 
         // Persist the disabled state so monitoring does not auto-resume on next launch.
-        var aksConfig = _appState.Config.AksConfig;
-        if (aksConfig is not null && aksConfig.MonitoringEnabled)
+        if (_appState.UseDemoData)
         {
-            aksConfig.MonitoringEnabled = false;
-            await _appState.SaveConfigAsync();
+            _uiState.State.DemoMonitoringEnabled = false;
+            _ = _uiState.SaveAsync();
+        }
+        else
+        {
+            var aksConfig = _appState.Config.AksConfig;
+            if (aksConfig is not null && aksConfig.MonitoringEnabled)
+            {
+                aksConfig.MonitoringEnabled = false;
+                await _appState.SaveConfigAsync();
+            }
         }
     }
 
@@ -202,7 +235,14 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             _lock.Release();
         }
 
-        if (_appState.Config.AksConfig is not null)
+        if (_appState.UseDemoData)
+        {
+            // Demo mode: persist to UiState instead of AksConfig.
+            if (!_uiState.State.DemoMonitoredNamespaces.Contains(ns, StringComparer.Ordinal))
+                _uiState.State.DemoMonitoredNamespaces.Add(ns);
+            await _uiState.SaveAsync();
+        }
+        else if (_appState.Config.AksConfig is not null)
             await _appState.SaveConfigAsync();
 
         if (_isMonitoring)
@@ -223,7 +263,12 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             _lock.Release();
         }
 
-        if (_appState.Config.AksConfig is not null)
+        if (_appState.UseDemoData)
+        {
+            _uiState.State.DemoMonitoredNamespaces.Remove(ns);
+            await _uiState.SaveAsync();
+        }
+        else if (_appState.Config.AksConfig is not null)
             await _appState.SaveConfigAsync();
     }
 
