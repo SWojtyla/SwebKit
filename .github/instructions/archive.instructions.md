@@ -20,13 +20,6 @@ Do not use archived files as active requirements unless the user explicitly asks
 
 Each archived feature folder should normally contain a `summary.md` file.
 
-By default, archive folders should contain only:
-
-- `summary.md`
-- `decisions.md` or `outcome.md` when needed
-
-Delete any other active-work files during archiving unless the user explicitly asks to keep them.
-
 Treat `summary.md` as the primary entry point for understanding an archived feature.
 When creating or updating archived feature documentation, use the archive summary template:
 [archive summary template](../../docs/features/_templates/archive-summary.md)

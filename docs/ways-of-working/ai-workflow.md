@@ -14,21 +14,33 @@ The purpose of this workflow is to keep implementation, validation, decisions, a
 - Only create files that the feature actually needs.
 - Prefer a few clear files over many shallow ones.
 
+## Three architecture documents
+
+Three documents cover different moments in the AI's workflow:
+
+| Document | Answers | When to read |
+|----------|---------|---------------|
+| `architecture.md` | What are the major components and how do they connect? | Planning a new feature (big picture) |
+| `design.md` | How is each component internally structured? | Designing a component's internals |
+| `codebase-guide.md` | Where do I start looking in the code? | Starting implementation |
+
+They do not overlap. Keep each one strictly scoped to its mandate.
+
 ## Repository structure
 
 Use this structure as the default model:
 
-- `docs/architecture/` for stable architecture and design context
+- `docs/architecture/` for stable architecture and design context (including `codebase-guide.md`)
 - `docs/architecture/functionalities/` for per-functionality implementation deep dives
 - `docs/ways-of-working/` for process and quality rules
 - `docs/pitfalls/` for recurring AI or implementation mistakes
 - `docs/features/active/<feature-name>/` for active feature work
-- `docs/features/archive/<feature-name>/` for completed feature history
+- `docs/features/archive/<year>/<feature-name>/` for completed feature history
 
 ## Functional architecture maintenance
 
-When behavior changes in a supported app functionality (Service Bus, AKS, Redis,
-Storage, Releases, Observability, Settings), update the matching file under
+When behavior changes in a supported app functionality (for example Projects, Service Bus,
+Observability, AKS, Redis, Settings), update the matching file under
 `docs/architecture/functionalities/` in the same change set.
 
 If a new top-level functionality is added, create a new deep-dive file and add it to
@@ -110,8 +122,9 @@ When working on a feature, follow this sequence:
 1. Understand the request.
 2. Read the stable context:
    - `docs/ways-of-working/definition-of-done.md`
-   - `docs/architecture/architecture.md`
-   - `docs/architecture/design.md`
+   - `docs/architecture/architecture.md` — system-wide component map
+   - `docs/architecture/design.md` — component-level flows
+   - `docs/architecture/codebase-guide.md` — where to touch the code
    - relevant files in `docs/pitfalls/`
 3. Create or update the feature folder under `docs/features/active/<feature-name>/`.
 4. Clarify scope in `index.md`.
