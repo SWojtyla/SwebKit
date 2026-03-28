@@ -19,6 +19,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
     private readonly IAppEventBus _eventBus;
     private readonly INotificationService _notifications;
     private readonly IWindowsNotificationService _toastService;
+    private readonly IConnectionStateService _connectionState;
     private readonly ILogger<PodHealthMonitorService> _logger;
 
     // Mutable state — all access must hold _lock.
@@ -56,13 +57,15 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         IAppEventBus eventBus,
         INotificationService notifications,
         ILogger<PodHealthMonitorService> logger,
-        IWindowsNotificationService toastService)
+        IWindowsNotificationService toastService,
+        IConnectionStateService connectionState)
     {
         _appState = appState;
         _eventBus = eventBus;
         _notifications = notifications;
         _logger = logger;
         _toastService = toastService;
+        _connectionState = connectionState;
 
         _appState.Initialized += OnAppInitialized;
     }
@@ -128,6 +131,14 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
             _lock.Release();
         }
 
+        // Persist the enabled state so monitoring auto-resumes on next launch.
+        var aksConfig = _appState.Config.AksConfig;
+        if (aksConfig is not null && !aksConfig.MonitoringEnabled)
+        {
+            aksConfig.MonitoringEnabled = true;
+            await _appState.SaveConfigAsync();
+        }
+
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(120));
         _loopTask = Task.Run(() => PollingLoopAsync(_cts.Token));
@@ -158,6 +169,14 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         finally
         {
             _lock.Release();
+        }
+
+        // Persist the disabled state so monitoring does not auto-resume on next launch.
+        var aksConfig = _appState.Config.AksConfig;
+        if (aksConfig is not null && aksConfig.MonitoringEnabled)
+        {
+            aksConfig.MonitoringEnabled = false;
+            await _appState.SaveConfigAsync();
         }
     }
 
@@ -280,16 +299,20 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "AKS connection test threw — skipping pod health poll.");
+            _connectionState.SetError("aks", ex.Message);
             await ClearAllSnapshotsAsync(ct);
             return;
         }
 
         if (!connected)
         {
-            _logger.LogWarning("AKS connection test failed — skipping pod health poll.");
+            _logger.LogWarning("AKS connection test failed \u2014 skipping pod health poll.");
+            _connectionState.SetError("aks", "Connection test failed");
             await ClearAllSnapshotsAsync(ct);
             return;
         }
+
+        _connectionState.SetConnected("aks");
 
         foreach (var ns in namespaces)
         {

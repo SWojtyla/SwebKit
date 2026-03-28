@@ -237,6 +237,105 @@
     white-space: nowrap;
 }
 
+/* ── Pod Health widget ── */
+
+.ph-monitoring-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 7px;
+    background: rgba(255, 165, 0, 0.12);
+    border: 1px solid rgba(255, 165, 0, 0.3);
+    border-radius: 8px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: var(--color-warning);
+    text-transform: none;
+    letter-spacing: 0;
+    vertical-align: middle;
+}
+
+.ph-alert-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.ph-alert-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 7px var(--spacing-md);
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-border);
+    border-left: 3px solid transparent;
+    background: var(--color-surface);
+}
+
+.ph-alert-row:last-child {
+    border-bottom: none;
+}
+
+.ph-alert-row.ph-podfailed,
+.ph-alert-row.ph-podcrashloop {
+    border-left-color: var(--color-error);
+}
+
+.ph-alert-row.ph-containernotready,
+.ph-alert-row.ph-podunknown {
+    border-left-color: var(--color-warning);
+}
+
+.ph-alert-row.ph-podterminated {
+    border-left-color: var(--color-text-muted);
+    opacity: 0.75;
+}
+
+.ph-alert-icon {
+    color: var(--color-warning);
+    flex-shrink: 0;
+    font-size: 12px;
+}
+
+.ph-alert-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+.ph-alert-pod {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.ph-alert-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ph-alert-time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.ph-overflow-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: var(--spacing-xs) 0 0;
+    text-align: right;
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 1100px) {
