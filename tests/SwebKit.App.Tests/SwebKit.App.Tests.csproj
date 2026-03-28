@@ -15,6 +15,7 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="xunit" Version="2.9.3" />
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -59,5 +60,14 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ServiceBus\NsState.cs" Link="Components\ServiceBus\NsState.cs" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConnectionBar.razor" Link="Components\Aks\AksConnectionBar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksYamlViewer.razor" Link="Components\Aks\AksYamlViewer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksHelmPanel.razor" Link="Components\Aks\AksHelmPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksDetailPanels.razor" Link="Components\Aks\AksDetailPanels.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConfirmBar.razor" Link="Components\Aks\AksConfirmBar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AutoRefreshToggle.razor" Link="Components\Aks\AutoRefreshToggle.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\ResizablePanel.razor" Link="Components\Aks\ResizablePanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
     </ItemGroup>
 </Project>

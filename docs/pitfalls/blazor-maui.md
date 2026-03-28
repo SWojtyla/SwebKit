@@ -223,4 +223,47 @@ Styles that are used across multiple isolated components (status dots, status ba
 
 ---
 
-_See also: [azure-sdk.md](azure-sdk.md) Â· [dotnet-csharp.md](dotnet-csharp.md)_
+## BL-12 — Calling `OpenAsync` directly on a `@ref` child bypasses parent `@if` re-render
+
+**Symptom:** A panel opens correctly the first time but silently fails to reopen after being closed. No exception; nothing happens when the user triggers the second open.
+
+**Cause:** The parent hosts the child inside `@if (HasOpenPanel)`. After close, `HasOpenPanel = false` and the block collapses. A stale (or Blazor-retained) `@ref` field still points to the child instance. Calling `child.OpenAsync(...)` directly sets internal state on the child and calls `StateHasChanged()` on it — but the parent `HasOpenPanel` is never re-evaluated and no re-render is queued on the parent. The `@if` block stays collapsed, the child updates the DOM it no longer owns, and nothing appears.
+
+**Fix:** Always tell the **parent** to re-render first. Use the pending-open pattern: store the arguments to a nullable field that contributes to the `HasOpenPanel` condition, call `InvokeAsync(StateHasChanged)` on the parent, then drain the pending field in `OnAfterRenderAsync` once the child `@ref` is live.
+
+```csharp
+// Wrong — fast-path that bypasses the parent's @if block
+public async Task OpenYamlAsync(string kind, string name)
+{
+    if (_yamlViewer is not null) { await _yamlViewer.OpenAsync(kind, name); return; }
+    _pendingYamlOpen = (kind, name);
+    await InvokeAsync(StateHasChanged);
+}
+
+// Correct — always go through the parent re-render
+public async Task OpenYamlAsync(string kind, string name)
+{
+    _pendingYamlOpen = (kind, name);
+    await InvokeAsync(StateHasChanged);
+}
+
+private bool HasOpenPanel =>
+    _pendingYamlOpen.HasValue || // ← this is what makes the @if block render
+    _yamlViewer?.IsOpen == true;
+
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (_pendingYamlOpen.HasValue && _yamlViewer is not null)
+    {
+        var (kind, name) = _pendingYamlOpen.Value;
+        _pendingYamlOpen = null;
+        await _yamlViewer.OpenAsync(kind, name);
+    }
+}
+```
+
+**Rule:** never shortcut to a direct child method call when the parent's `@if` condition depends on child state. The parent must always be the one to re-render and expose the child before its public API is called.
+
+---
+
+_See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

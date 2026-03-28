@@ -13,7 +13,7 @@ last_updated: "2026-03-28"
 
 ## Quick summary
 
-All three phases complete. AksPage, RedisPage, and ServiceBusPage decomposed into focused orchestrators with extracted sub-components. All 352 tests green, build clean.
+All three phases complete. bUnit tests written for all 7 extracted components (26 new tests, 378 total passing). Manual regression is the only remaining step.
 
 **Current focus:** Manual regression testing before closing.
 
@@ -27,7 +27,7 @@ All three phases complete. AksPage, RedisPage, and ServiceBusPage decomposed int
 - [x] Extract AksDetailPanels.razor (376 lines — side panel host: scale, logs, details, events)
 - [x] Refactored SelectRelative with generic NavigateInList helper (−49 lines)
 - [x] AksPage reduced to orchestrator (1,342 lines — see D-004)
-- [ ] bUnit tests for extracted components
+- [x] bUnit tests for extracted components
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
 - [ ] Manual regression: full AKS page workflow
@@ -37,7 +37,7 @@ All three phases complete. AksPage, RedisPage, and ServiceBusPage decomposed int
 - [x] Extract RedisConnectionBar.razor (46 lines — cache selector, connection label)
 - [x] Extract RedisToolbar.razor (72 lines — search, scan, delete, purge, export, multi-select)
 - [x] RedisPage reduced to orchestrator (892 lines — see D-005)
-- [ ] bUnit tests for extracted components
+- [x] bUnit tests for extracted components
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
 - [ ] Manual regression: full Redis page workflow
@@ -47,7 +47,7 @@ All three phases complete. AksPage, RedisPage, and ServiceBusPage decomposed int
 - [x] Extract ServiceBusNamespacePanel.razor (228 lines — namespace list, add/remove form)
 - [x] Extract NsState.cs (shared class, 13 lines)
 - [x] ServiceBusPage reduced to orchestrator (535 lines — target was <500, close)
-- [ ] bUnit tests for extracted component
+- [x] bUnit tests for extracted component
 - [x] Build verified: 0 errors
 - [x] All 352 existing tests green
 - [ ] Manual regression: full ServiceBus page workflow
@@ -74,7 +74,7 @@ All three phases complete. AksPage, RedisPage, and ServiceBusPage decomposed int
 ## Validation
 
 - Test plan: [test-plan.md](test-plan.md)
-- Validation status: Not started
+- Validation status: Automated: Passed (100/100 tests, 0 regressions)
 
 ## Notes
 
