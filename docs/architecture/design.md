@@ -1,140 +1,219 @@
-# SwebKit — Design & Implementation Plan
+# SwebKit Design
 
-**Context:** SwebKit is a .NET MAUI Blazor Hybrid desktop utility for .NET developers who
-regularly operate with Azure Service Bus, Application Insights / OpenTelemetry, AKS, and
-related infrastructure. The codebase lives at `d:/Custom Stuff/SwebKit` and contains
-production-focused projects, implementations, and automated tests described below.
+## Mandate
 
----
+**This is the component blueprint.** It answers: _how is each component internally structured, and what are the key flows through it?_
 
-## Table of Contents
+Update this file when control flow, runtime responsibilities, or integration boundaries change inside a component.
 
-1. [Overall Architecture & Domain Model](#1-overall-architecture--domain-model)
-2. [Solution Structure & Tech Stack](#2-solution-structure--tech-stack)
-3. [Information Architecture & Navigation](#3-information-architecture--navigation)
-4. [Layout & Pane System](#4-layout--pane-system)
-5. [Service Bus Feature Design](#5-service-bus-feature-design)
-6. [Observability Feature Design](#6-observability-feature-design)
-7. [AKS Feature Design](#7-aks-feature-design)
-8. [Cross-Cutting UX Decisions](#8-cross-cutting-ux-decisions)
-9. [Implementation Roadmap](#9-implementation-roadmap)
-10. [Risks & Trade-offs](#10-risks--trade-offs)
+## Scope
 
----
+This document expands [architecture.md](architecture.md) for the most important implementation flows:
 
-## 1. Overall Architecture & Domain Model
+- App bootstrap and shell hydration
+- Service Bus namespace connection and message browsing
+- AKS diagnostics and side-panel operations
+- Observability resource selection and query execution
+- Settings persistence and config propagation
 
-### 1.1 Core Concept
+Folder maps and broad navigation conventions are intentionally kept in `codebase-guide.md`.
 
-Each feature area (Service Bus, AKS, Redis, Storage, Releases) is independent. There is
-no global project or environment selection — each feature reads its own config from the
-single global `AppConfig` stored in `profiles.json`.
+## App Bootstrap Flow
 
-### 1.2 Domain Objects (summary)
+### Intent
 
-AppConfig (`SwebKit.Core.Domain.AppConfig`, stored as `profiles.json`)
+Start the MAUI host quickly, hydrate persisted state in the background, and render the shell without blocking initial UI.
 
-- AksConfig?: AksConfig
-- RedisConfig?: RedisConfig
-- StorageAccounts: List<StorageConfig>
-- DevOpsConfig?: DevOpsConfig
-- ServiceBusEntityLinks: List<SbEntityLink>
-- FavoriteEntities: List<FavoriteEntity>
-- LastUsedFilters: Dictionary<string, FilterState>
+### High-Level Sequence
 
-The domain model lives in `SwebKit.Core` and is deliberately small: feature-specific
-implementations are provided by the `SwebKit.*` projects under `src/`.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Maui as MauiProgram
+    participant Layout as MainLayout
+    participant AppState as AppStateService
+    participant Profiles as ProfileRepository
+    participant UiState as UiStateRepository
+    participant Tabs as TabService
 
-### 1.3 Core Services & Runtime
+    User->>Maui: Launch application
+    Maui->>Maui: Register services and build MauiApp
+    Maui->>Layout: Render Blazor shell
+    Layout->>AppState: InitializeEssentialsAsync()
+    Layout->>AppState: InitializeAsync() in background
+    AppState->>Profiles: LoadAsync()
+    AppState->>UiState: LoadAsync()
+    AppState-->>Layout: Initialized event
+    Layout->>Tabs: RestoreTabs(UiState.OpenTabs)
+    Layout-->>User: Fully interactive shell
+```
 
-- `AppStateService` (singleton): exposes `AppConfig` and `ServiceBusNamespaces`, delegates
-  persistence to `ProfileRepository` and `UiStateRepository`. Initialization
-  (`InitializeAsync`) loads profiles and UI state.
-- DI registrations live in `SwebKit.App.MauiProgram` and include `AppStateService`,
-  `ProfileRepository`, `UiStateRepository`, `ScheduledMessageRepository`, `ICredentialStore`,
-  `IAppEventBus`, and UI helpers like `TabService` and `CommandRegistry`.
+### Design Notes
 
-### 1.4 Secrets & Credential Store
+- `MainLayout` uses two-phase startup: immediate shell render, then full state hydration.
+- `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
+- Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
 
-- Secrets are not embedded in profile files. Logical credential references (string keys)
-  are stored in a platform credential store. Windows implements `ICredentialStore` via
-  `WindowsCredentialStore` using `PasswordVault` (save/get/delete/list). The implementation
-  prefixes resources with `SwebKit:` and gracefully returns `null` when a secret is absent.
+## Service Bus Namespace and Message Browse Flow
 
-## 2. Solution Structure & Tech Stack
+### Intent
 
-- Platform: .NET MAUI Blazor Hybrid (Windows primary)
-- UI: Razor components inside `BlazorWebView`, Fluent UI Blazor components
-- Charts: Blazor-ApexCharts (metrics)
-- Editor/Terminal: Monaco (BlazorMonaco) and xterm.js via JSInterop
-- Serialization: `System.Text.Json` (source-gen where useful)
-- Core projects (root `src/`):
-  - `SwebKit.App` — MAUI Blazor app containing all Razor components and platform code
-  - `SwebKit.Core` — domain models, abstractions, repositories
-  - `SwebKit.Azure` — Azure implementations (Service Bus, Observability helpers)
-  - `SwebKit.Kubernetes` — Kubernetes client helpers and AKS features
+Connect each configured namespace independently, then allow queue/topic tab workflows (peek, filter, compose, DLQ actions) with resilient UI behavior.
 
-## 3. Information Architecture & Navigation
+### High-Level Sequence
 
-- Top bar: Project + Environment selector. Environment changes broadcast via `AppStateService`.
-- Left pane: navigation tree of features and namespaces (Service Bus entities, AKS clusters).
-- Center: tabbed panes for lists, charts, editors, and logs.
-- Right: `DetailsPane` (collapsible) used across features for properties and message bodies.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Page as ServiceBusPage
+    participant State as AppStateService
+    participant Secrets as ICredentialStore
+    participant Client as AzureServiceBusClient
+    participant List as MessageListView
+    participant SB as Azure Service Bus
 
-## 4. Layout & Pane System
+    User->>Page: Open Service Bus page
+    Page->>State: Read ServiceBusNamespaces
+    loop Per namespace
+        Page->>Secrets: Get(credentialKey)
+        Page->>Client: new AzureServiceBusClient(connStr)
+        Page->>Client: TestConnectionAsync()
+        Client->>SB: Namespace probe
+        SB-->>Client: OK / error
+    end
+    User->>Page: Open queue/topic tab
+    Page->>List: Activate MessageListView
+    List->>Client: PeekMessagesAsync(entityPath, window)
+    Client->>SB: Peek batch
+    SB-->>Client: Message set
+    List-->>User: Render rows and detail pane
+```
 
-- Tabs are managed by `TabService`. Each pane is a Razor component conforming to a
-  small lifecycle (Open/Close/Refresh). `DataTable.razor` and `DetailsPane.razor` provide
-  consistent selection, loading, and error states across features.
+### Design Notes
 
-## 5. Service Bus Feature Design
+- Namespace connectivity is fan-out and non-atomic; one namespace can fail while others stay usable.
+- Tab state is local (`SbTab`), so each open entity maintains its own selected message and mode.
+- Message-list preferences and filter presets are persisted through `UiStateRepository` scope keys.
+- Mutative operations (delete, purge, DLQ replay/complete) route through shared `IServiceBusClient` contracts and UI confirmations.
 
-- Core abstraction: `IServiceBusClient` implemented by `AzureServiceBusClient` in
-  `SwebKit.Azure`. DI resolves per-environment clients using `ServiceBusConfig` and
-  `ICredentialStore`.
-- `AzureServiceBusClient` supports both connection-string mode and AAD (DefaultAzureCredential).
-  - When a connection string contains a scoped entity path the client will surface only that queue/topic.
-  - When using `ServiceBusConfig` + credential ref the implementation attempts to read the connection
-    string from `ICredentialStore` and falls back to AAD when appropriate.
-- Standard operations: list queues/topics/subscriptions, peek messages, peek DLQ, send, send batch,
-  schedule/cancel scheduled messages, resubmit DLQ messages (reads DLQ via peek-lock, forwards,
-  and completes), and basic connection test via administration client.
+## AKS Diagnostics Flow
 
-## 6. Observability Feature Design
+### Intent
 
-- Abstraction: `IObservabilityProvider` with implementations using `Azure.Monitor.Query` and
-  OTLP where required. Supports Log Queries, Traces, and Metrics.
-- UI: Query editor (Monaco) with saved queries per-environment, results table, and trace waterfall
-  view using a React/JS-based renderer via JSInterop when needed.
+Provide responsive cluster diagnostics (resource lists, logs, YAML, shell, port-forward) while keeping the grid and navigation usable during side operations.
 
-## 7. AKS Feature Design
+### High-Level Sequence
 
-- `IAksClient` provides cluster/namespace listing, pod and deployment introspection, log streaming,
-  port-forwarding, and a remote shell helper.
-- Implementation uses `KubernetesClient` and includes short-lived operations performed through
-  a background task queue to avoid blocking the UI thread.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Page as AksPage
+    participant Client as KubernetesAksClient
+    participant Api as Kubernetes API
+    participant Panels as AksDetailPanels
+    participant Sessions as PortForwardSessionService
 
-## 8. Cross-Cutting UX Decisions
+    User->>Page: Open AKS page
+    Page->>Client: Build client from AKS config/context
+    Page->>Client: GetContextsAsync(), GetNamespacesAsync()
+    Page->>Client: Load active resource list
+    Client->>Api: Query cluster resources
+    Api-->>Client: Deployments/Pods/Ingresses/Helm/etc.
+    User->>Panels: Open logs/YAML/detail action
+    Panels->>Client: StreamLogsAsync / GetResourceYamlAsync / mutations
+    User->>Page: Start port-forward
+    Page->>Sessions: Track session lifecycle
+    Sessions-->>User: Starting/Active/Stopped status
+```
 
-- Keyboard shortcuts and global command palette (`Ctrl+P`).
-- Production safety: a future production indicator may toggle UI warnings and confirmation dialogs for destructive operations.
-- Shared components: `FilterBar.razor`, `DataTable.razor`, and `DetailsPane.razor` to keep behavior uniform.
+### Design Notes
 
-## 9. Implementation Roadmap
+- `KubernetesAksClient` retries on auth failures by rebuilding client config and reapplying Azure token fallback.
+- Auto-refresh is intentionally paused when detail panels are open to avoid disrupting active diagnostic context.
+- Port-forward process tracking is centralized in `IPortForwardSessionService`, and cleanup runs during process exit.
 
-1. Stabilize core `AppStateService` and profile storage. (done)
-2. Harden Service Bus flows: resubmit, DLQ management, batch send.
-3. Observability query UX and trace viewer integration.
-4. AKS live tooling (logs, port-forward, shell).
-5. E2E tests and Playwright smoke tests for major flows.
+## Observability Resource and Query Flow
 
-## 10. Risks & Trade-offs
+### Intent
 
-- Choosing Blazor Hybrid gives web-component flexibility but increases app size and adds JSInterop complexity.
-- DefaultAzureCredential simplifies auth in Azure-hosted dev environments but can surprise users on
-  machines without the expected credential sources; we fall back to connection strings when present.
-- Production safety UX adds friction to fast recovery workflows; opt-in shortcuts for power users may be added later.
+Discover accessible Application Insights resources, bind one provider instance to the selected resource, and execute tab-specific KQL queries.
 
----
+### High-Level Sequence
 
-If you'd like, I can now: (1) restore any specific deleted sections to match the previous version exactly, (2) expand any feature section with code references and file links, or (3) run tests that touch the services to validate behavior. Which should I do next?
+```mermaid
+sequenceDiagram
+    participant User
+    participant Page as ObservabilityPage
+    participant Discovery as AppInsightsDiscoveryService
+    participant ARM as Azure Resource Manager
+    participant Provider as AzureAppInsightsProvider
+    participant Logs as Azure Monitor Logs
+
+    User->>Page: Open Observability page
+    User->>Page: Open resource selector
+    Page->>Discovery: DiscoverResourcesAsync()
+    Discovery->>ARM: Enumerate subscriptions and AI components
+    ARM-->>Discovery: Resource stream
+    User->>Page: Select resource
+    Page->>Provider: new AzureAppInsightsProvider(resourceId)
+    User->>Page: Refresh active tab
+    Page->>Provider: GetOverview / RunQuery / GetFailures / etc.
+    Provider->>Logs: QueryResourceAsync(resourceId, kql)
+    Logs-->>Provider: Result table
+    Provider-->>Page: Typed model(s)
+```
+
+### Design Notes
+
+- Resource discovery is cached in-memory by `AppInsightsDiscoveryService` for session reuse.
+- The selected resource ID/name persists in `AppState.Config.ObservabilityConfig`.
+- Demo mode swaps both discovery and provider implementations without changing page-level flow.
+
+## Settings Save and Config Propagation Flow
+
+### Intent
+
+Allow per-environment configuration updates from UI forms while keeping secrets external to configuration files.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Settings as SettingsPage
+    participant AppState as AppStateService
+    participant Profiles as ProfileRepository
+    participant Json as profiles.json
+    participant Pages as Feature Pages
+
+    User->>Settings: Edit settings form values
+    Settings->>AppState: Mutate AppState.Config
+    User->>Settings: Click Save
+    Settings->>AppState: SaveConfigAsync()
+    AppState->>Profiles: SaveAsync()
+    Profiles->>Json: Write serialized profile data
+    Pages->>AppState: Read updated config on refresh/reload
+```
+
+### Design Notes
+
+- Settings edits are in-memory until explicit save.
+- Credentials are referenced by logical keys; secret material remains in credential store.
+- Environment selection is profile-based (`Environments` and `ActiveEnvironmentName` in `ProfileData`).
+
+## Key Reference Points
+
+| File                                                       | Responsibility                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/SwebKit.App/MauiProgram.cs`                           | DI composition root and infrastructure registration.                                  |
+| `src/SwebKit.App/Components/Layout/MainLayout.razor`       | App shell lifecycle, startup sequencing, and global command registration.             |
+| `src/SwebKit.Core/Services/AppStateService.cs`             | Shared app state, initialization, demo mode toggling, and persistence calls.          |
+| `src/SwebKit.Core/Configuration/ProfileRepository.cs`      | Profile/environment load-save lifecycle for `profiles.json`.                          |
+| `src/SwebKit.Core/Configuration/UiStateRepository.cs`      | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences. |
+| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`    | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.          |
+| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`    | Service Bus SDK implementation and message/entity operations.                         |
+| `src/SwebKit.App/Components/Pages/AksPage.razor`           | AKS page orchestration and resource panel lifecycle.                                  |
+| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`  | Kubernetes operations, auth fallback, and log/port-forward behavior.                  |
+| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor` | Resource selection, tab routing, and provider-driven refresh logic.                   |
+| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`    | KQL execution and typed observability result mapping.                                 |
+| `src/SwebKit.DevOps/DevOpsClient.cs`                       | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                    |
