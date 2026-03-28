@@ -2,7 +2,18 @@
 description: Senior orchestration agent that delegates all work to specialized agents, preserving context and enforcing quality.
 name: orchestrator
 tools:
-  [execute, read, agent, edit, search, web, 'azure-mcp/*', 'pencil/*', 'com.atlassian/atlassian-mcp-server/*', todo]
+  [
+    execute,
+    read,
+    agent,
+    edit,
+    search,
+    web,
+    'azure-mcp/*',
+    'pencil/*',
+    'com.atlassian/atlassian-mcp-server/*',
+    todo,
+  ]
 ---
 
 # Implementation instructions
@@ -52,10 +63,19 @@ Prefer the most specialized match; fall back to a generalist when unclear. Check
 ### Delegation rules
 
 - **Always parallelize independent work**; use sequential delegation only when outputs are dependent.
-- **Plan first for complex requests** by delegating to `plan-expert`, then execute in parallel.
+- **Plan first for complex requests** — invoke the `swebiplan` skill to scaffold the feature folder before delegating implementation. **If a feature folder already exists** under `docs/features/active/`, skip planning and delegate implementation directly using the existing docs as the source of truth. For Jira-driven delivery, use `swebify` instead.
 - **Explicit waits** when dependencies exist; do not proceed until dependency output is available.
 - Each subagent receives a self-contained delegation and returns a single response. Plan delegations to be independently completable.
 - Use targeted peer review when helpful (e.g., `dotnet-expert` validates API constraints affecting UI).
+
+### Delivery paths
+
+Two paths exist — route to the right one:
+
+| Path            | Trigger                                            | Flow                                                                                          |
+| --------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Jira-driven** | User provides a Jira ticket key or says "swebify"  | Invoke `swebify` — autonomous end-to-end                                                      |
+| **General**     | Freeform request, no ticket, or user wants control | `swebiplan` → implement → `pre-ship-review` → `azure-devops` → `swebifix` → `feature-archive` |
 
 Single response contract (all subagents):
 

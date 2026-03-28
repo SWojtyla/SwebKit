@@ -36,7 +36,7 @@
 
 **Symptom:** Archived feature folder has no `summary.md`. Future readers cannot understand what was built or learned without reading every file.
 
-**Cause:** Feature was moved from `active/` to `archive/` without creating an archive summary from the template at `docs/features/_templates/archive-summary.md`.
+**Cause:** Feature was moved from `active/` to `archive/` without creating an archive summary from the template at `ai-setup/templates/archive-summary.md`.
 
 **Fix:** Always create `summary.md` before archiving. A new reader should understand the feature in under 2 minutes.
 
@@ -59,6 +59,16 @@
 **Cause:** The archive procedure moves `summary.md` and then calls `Remove-Item` on the folder in the same chained command. If a file was edited between the move and the delete (e.g. `status.md` was updated to Done just before the move), it can be left behind. Using two separate commands (`Move-Item` then `Remove-Item`) is fragile if the shell reports success on the first even when the item was not fully flushed.
 
 **Fix:** After moving `summary.md`, verify the folder is empty before deleting it — or use a single `Remove-Item -Recurse -Force` on the folder _first_, accepting that `summary.md` was already moved out. Always confirm with `Test-Path` or `Get-ChildItem` that the active folder is gone before declaring the archive complete.
+
+---
+
+## AW-7 — Pitfall files not reviewed before touching a known subsystem
+
+**Symptom:** A known bug is hit again, or an existing pitfall becomes stale and no longer reflects reality.
+
+**Cause:** Pitfall files are only consulted reactively (when something breaks), not proactively at the start of a feature that touches a known subsystem.
+
+**Fix:** At the start of any feature or task that touches Blazor/MAUI, Azure SDK, or general .NET code, explicitly re-read the relevant pitfall file before writing any code — even if you believe you remember it. Remove or update entries that no longer apply when you encounter them.
 
 ---
 

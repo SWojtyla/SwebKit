@@ -10,7 +10,7 @@ status: "Not started"
 
 ## Goal
 
-Describe the UI/client outcome and user-facing changes.
+Describe the UI/client outcome: what the user sees or can do that they couldn’t before.
 
 ## Impacted areas
 
@@ -18,10 +18,11 @@ Describe the UI/client outcome and user-facing changes.
 - Pages / routes
 - Shared components
 
-## UX and accessibility notes
+## UX notes
 
-- Expected user flows and states
-- Accessibility considerations (a11y checks required)
+- User flows: describe the happy path and key edge cases (empty state, loading, error)
+- Component states: loading / loaded / error / empty — all must be handled
+- Accessibility: keyboard navigation, contrast, screen reader _(if applicable for target platform)_
 
 ## API / contract changes
 
@@ -36,7 +37,7 @@ Describe the UI/client outcome and user-facing changes.
 - [ ] Wire to backend / state layer
 - [ ] Add unit / component tests
 - [ ] Add e2e tests for core flows
-- [ ] Accessibility review
+- [ ] Record key design choices in `decisions.md` _(if decisions exist)_
 
 ## Validation
 

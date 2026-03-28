@@ -5,6 +5,7 @@
 title: "Status - <feature-name>"
 owner: ""
 state: "Proposed"
+jira: ""
 branch: ""
 started: ""
 last_updated: ""
@@ -15,9 +16,13 @@ last_updated: ""
 
 One-line current status and the most important next step.
 
+**Jira:** <ticket-url> _(or: not linked)_
+
 **Current focus:** Describe the next meaningful deliverable.
 
 ## Progress checklist
+
+> For small features, use the generic list below. For large features (multi-sprint / phased), replace this with named wave or phase sections, each with their own sub-checklist.
 
 - [ ] Planning complete
 - [ ] Design reviewed

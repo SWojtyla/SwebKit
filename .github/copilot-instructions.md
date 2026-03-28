@@ -18,8 +18,8 @@ Always prefer this workflow over inventing a new one for the current task.
 
 Before making significant changes, consult these sources in this order when they exist:
 
-1. `docs/ways-of-working/ai-workflow.md`
-2. `docs/ways-of-working/definition-of-done.md`
+1. `ai-setup/ways-of-working/ai-workflow.md`
+2. `ai-setup/ways-of-working/definition-of-done.md`
 3. `docs/architecture/architecture.md` — system-wide component map (what connects to what)
 4. `docs/architecture/design.md` — component-level flows (how internals work)
 5. `docs/architecture/codebase-guide.md` — implementation navigation (where to touch the code)
@@ -162,11 +162,20 @@ The following skills automate multi-step workflows. Invoke them by name when the
 - `project-context` — load architecture, codebase-guide, and pitfalls before any non-trivial task
 - `swebistart` — generate `architecture.md`, `design.md`, and `codebase-guide.md` for a new project
 - `swebify` — end-to-end feature delivery from a Jira ticket
+- `swebiplan` — create a fully populated feature plan from a description (Jira optional); does NOT implement
 - `feature-archive` — archive a completed feature after the PR is merged
 - `atlassian-integration` — Jira/Confluence integration (status sync, comments, ticket lookups)
 - `pre-ship-review` — quality gate before push: DoD, architecture compliance, security scan, docs alignment, commit hygiene
 - `azure-devops` — commit, push, open a Pull Request, and trigger the CI pipeline
 - `swebifix` — read open PR threads (SonarQube, reviewer comments), fix reported issues, commit, push, and resolve threads
+
+## Delivery paths
+
+Two paths exist. Use the one that fits your workflow:
+
+**Jira-driven (autonomous):** `swebify` — takes a ticket key and delivers the full feature end-to-end.
+
+**General (manual control):** `swebiplan` → implement via orchestrator → `pre-ship-review` → `azure-devops` → `swebifix` → `feature-archive`
 
 ## Guardrails
 

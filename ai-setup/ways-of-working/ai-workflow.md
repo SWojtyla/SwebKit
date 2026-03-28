@@ -18,11 +18,11 @@ The purpose of this workflow is to keep implementation, validation, decisions, a
 
 Three documents cover different moments in the AI's workflow:
 
-| Document | Answers | When to read |
-|----------|---------|---------------|
-| `architecture.md` | What are the major components and how do they connect? | Planning a new feature (big picture) |
-| `design.md` | How is each component internally structured? | Designing a component's internals |
-| `codebase-guide.md` | Where do I start looking in the code? | Starting implementation |
+| Document            | Answers                                                | When to read                         |
+| ------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `architecture.md`   | What are the major components and how do they connect? | Planning a new feature (big picture) |
+| `design.md`         | How is each component internally structured?           | Designing a component's internals    |
+| `codebase-guide.md` | Where do I start looking in the code?                  | Starting implementation              |
 
 They do not overlap. Keep each one strictly scoped to its mandate.
 
@@ -32,7 +32,7 @@ Use this structure as the default model:
 
 - `docs/architecture/` for stable architecture and design context (including `codebase-guide.md`)
 - `docs/architecture/functionalities/` for per-functionality implementation deep dives
-- `docs/ways-of-working/` for process and quality rules
+- `ai-setup/ways-of-working/` for process and quality rules
 - `docs/pitfalls/` for recurring AI or implementation mistakes
 - `docs/features/active/<feature-name>/` for active feature work
 - `docs/features/archive/<year>/<feature-name>/` for completed feature history
@@ -121,7 +121,7 @@ When working on a feature, follow this sequence:
 
 1. Understand the request.
 2. Read the stable context:
-   - `docs/ways-of-working/definition-of-done.md`
+   - `ai-setup/ways-of-working/definition-of-done.md`
    - `docs/architecture/architecture.md` — system-wide component map
    - `docs/architecture/design.md` — component-level flows
    - `docs/architecture/codebase-guide.md` — where to touch the code

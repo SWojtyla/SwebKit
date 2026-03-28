@@ -27,9 +27,9 @@ Concise statement of what testing must validate (behaviour, performance, compati
 
 ## Automated coverage
 
-- Unit tests: components/services — target coverage:
-- Integration tests: subsystems/endpoints — CI gates
-- End-to-end tests: user journeys — smoke + regression suites
+- Unit tests: `<project>.Tests` — target coverage: _e.g., 80% on new code_
+- Integration tests: _describe subsystems under test_ — CI gates: _pass/fail threshold_
+- End-to-end tests: _describe user journeys_ — smoke + regression suites
 
 ## Test data and setup
 
@@ -59,5 +59,6 @@ Concise statement of what testing must validate (behaviour, performance, compati
 
 ## Sign-off
 
-- Owner:
-- Date:
+- **Approved by:**
+- **Date:**
+- **Conditions (if any):**

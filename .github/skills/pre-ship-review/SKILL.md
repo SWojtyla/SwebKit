@@ -45,6 +45,7 @@ git diff --name-only HEAD~1...HEAD
 ```
 
 Categorise the changed files into buckets:
+
 - `src/` — application source
 - `tests/` — test projects
 - `devops/` — pipelines, charts, variables
@@ -59,18 +60,18 @@ This categorisation drives which checks run below.
 
 ### Step 2 — Definition of Done check
 
-Read `docs/ways-of-working/definition-of-done.md` and evaluate each condition against the actual state of the feature folder and changed files.
+Read `ai-setup/ways-of-working/definition-of-done.md` and evaluate each condition against the actual state of the feature folder and changed files.
 
-| Condition | How to verify |
-|-----------|--------------|
-| Requested behaviour is implemented | `status.md` progress checklist is fully checked |
+| Condition                             | How to verify                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| Requested behaviour is implemented    | `status.md` progress checklist is fully checked                                    |
 | Code follows architecture constraints | Cross-reference changed `src/` paths against `docs/architecture/codebase-guide.md` |
-| Relevant tests are added or addressed | Changed `src/` files have corresponding entries in `tests/` or `test-plan.md` |
-| Existing tests still pass | Build + test run was completed in Phase 5 of swebify (check `status.md`) |
-| Related documentation updated | If `src/` changed, corresponding `docs/` entries must exist |
-| Technical decisions recorded | Non-obvious tradeoffs must appear in `decisions.md` |
-| No hidden blockers | `status.md` must not contain items marked as blocked or TODO |
-| Status accurately reflects reality | `status.md` state must be `Done` |
+| Relevant tests are added or addressed | Changed `src/` files have corresponding entries in `tests/` or `test-plan.md`      |
+| Existing tests still pass             | Build + test run was completed in Phase 5 of swebify (check `status.md`)           |
+| Related documentation updated         | If `src/` changed, corresponding `docs/` entries must exist                        |
+| Technical decisions recorded          | Non-obvious tradeoffs must appear in `decisions.md`                                |
+| No hidden blockers                    | `status.md` must not contain items marked as blocked or TODO                       |
+| Status accurately reflects reality    | `status.md` state must be `Done`                                                   |
 
 Flag each condition as ✓ pass, ⚠ warn (minor gap, not blocking), or ✗ fail (blocker).
 
@@ -80,14 +81,14 @@ Flag each condition as ✓ pass, ⚠ warn (minor gap, not blocking), or ✗ fail
 
 1. **Functionality docs** — if any changed file path matches a supported functionality, verify the matching doc was also updated:
 
-   | Changed path contains | Required doc update |
-   |-----------------------|--------------------|
-   | `ServiceBus`, `NServiceBus`, `MessageBus` | `docs/architecture/functionalities/service-bus.md` |
+   | Changed path contains                              | Required doc update                                  |
+   | -------------------------------------------------- | ---------------------------------------------------- |
+   | `ServiceBus`, `NServiceBus`, `MessageBus`          | `docs/architecture/functionalities/service-bus.md`   |
    | `ObservabilityService`, `Telemetry`, `AppInsights` | `docs/architecture/functionalities/observability.md` |
-   | `AksClient`, `kubernetes`, `helm`, `chart` | `docs/architecture/functionalities/aks.md` |
-   | `RedisCache`, `StackExchange.Redis` | `docs/architecture/functionalities/redis.md` |
-   | `ReleaseService`, `deployment`, `release` | `docs/architecture/functionalities/releases.md` |
-   | `SettingsService`, `IOptions`, `appsettings` | `docs/architecture/functionalities/settings.md` |
+   | `AksClient`, `kubernetes`, `helm`, `chart`         | `docs/architecture/functionalities/aks.md`           |
+   | `RedisCache`, `StackExchange.Redis`                | `docs/architecture/functionalities/redis.md`         |
+   | `ReleaseService`, `deployment`, `release`          | `docs/architecture/functionalities/releases.md`      |
+   | `SettingsService`, `IOptions`, `appsettings`       | `docs/architecture/functionalities/settings.md`      |
 
 2. **No silent divergence** — if `design.md` or `architecture.md` describe a pattern that the changed code visibly contradicts (e.g., a new direct DB call bypassing the repository layer), flag it as ✗ fail.
 
@@ -99,16 +100,16 @@ Flag each condition as ✓ pass, ⚠ warn (minor gap, not blocking), or ✗ fail
 
 Scan the changed `src/` files for known OWASP patterns. Flag any hit as ✗ fail.
 
-| Pattern to search | Risk |
-|-------------------|------|
-| Hardcoded connection strings, passwords, API keys (regex: `(?i)(password|secret|apikey|connectionstring)\s*=\s*["'][^"']{4,}`) | Credential exposure |
-| `SqlCommand` with string concatenation (`"SELECT" + ` or `$"SELECT`) | SQL injection |
-| `Html.Raw(` or `@Html.Raw(` with a non-literal argument | XSS |
-| `Process.Start(` with user-controlled input | Command injection |
-| `new HttpClient(` without a factory or `IHttpClientFactory` | Unstable HTTP client lifecycle (not a security issue, but a reliability flag) |
-| Disabled SSL/TLS validation (`ServerCertificateCustomValidationCallback.*true` or `DangerousAcceptAnyServerCertificateValidator`) | MITM exposure |
-| `[AllowAnonymous]` on a new controller or endpoint | Unintended anonymous access |
-| Secrets in config files committed to the repo (`appsettings.*.json` with non-placeholder values for sensitive keys) | Secret leakage |
+| Pattern to search                                                                                                                 | Risk                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------ | --------------------------------------- | ------------------- |
+| Hardcoded connection strings, passwords, API keys (regex: `(?i)(password                                                          | secret                                                                        | apikey | connectionstring)\s*=\s*["'][^"']{4,}`) | Credential exposure |
+| `SqlCommand` with string concatenation (`"SELECT" + ` or `$"SELECT`)                                                              | SQL injection                                                                 |
+| `Html.Raw(` or `@Html.Raw(` with a non-literal argument                                                                           | XSS                                                                           |
+| `Process.Start(` with user-controlled input                                                                                       | Command injection                                                             |
+| `new HttpClient(` without a factory or `IHttpClientFactory`                                                                       | Unstable HTTP client lifecycle (not a security issue, but a reliability flag) |
+| Disabled SSL/TLS validation (`ServerCertificateCustomValidationCallback.*true` or `DangerousAcceptAnyServerCertificateValidator`) | MITM exposure                                                                 |
+| `[AllowAnonymous]` on a new controller or endpoint                                                                                | Unintended anonymous access                                                   |
+| Secrets in config files committed to the repo (`appsettings.*.json` with non-placeholder values for sensitive keys)               | Secret leakage                                                                |
 
 Also check:
 
@@ -125,7 +126,12 @@ Also check:
 
 2. **Stale references** — scan feature docs for TODO, FIXME, or `[TBD]` markers that were not resolved. Flag each as ⚠ warn.
 
-3. **Test plan** — verify `test-plan.md` acceptance criteria are checked off or explicitly noted as deferred.
+3. **Test plan** — verify `test-plan.md` acceptance criteria:
+   - Every AC that is **checked** counts as ✓ pass.
+   - Every AC that is explicitly deferred **with a stated reason and owner** counts as ⚠ warn.
+   - Every AC that is unchecked, marked `[TBD]`, or deferred with no reason counts as ✗ fail.
+
+   A bare "deferred" with no explanation is not acceptable at ship time — flag it as ✗ fail.
 
 ---
 
@@ -138,6 +144,7 @@ git log origin/<DEFAULT_BRANCH>..HEAD --oneline
 ```
 
 Verify:
+
 - Each commit message follows Conventional Commits format (`<type>(<scope>): <subject>`).
 - No commit subject exceeds 72 characters.
 - No "WIP", "fixup", "temp", "debug", or "test commit" messages exist (these should be squashed before shipping).
@@ -193,11 +200,11 @@ Output the review report in this format:
 
 **Result logic:**
 
-| Condition | Result |
-|-----------|--------|
-| All checks ✓ | **GO** — proceed to ship automatically |
+| Condition                    | Result                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| All checks ✓                 | **GO** — proceed to ship automatically                                         |
 | Only ⚠ warn items, no ✗ fail | **CONDITIONAL GO** — present warnings, ask user to acknowledge before shipping |
-| Any ✗ fail | **NO-GO** — list blockers, stop, do not ship |
+| Any ✗ fail                   | **NO-GO** — list blockers, stop, do not ship                                   |
 
 ---
 
@@ -206,7 +213,7 @@ Output the review report in this format:
 - **GO** — proceed directly to the `azure-devops` skill without interruption.
 - **CONDITIONAL GO** — present the report, list warnings explicitly, and ask:
   > "There are warnings but no blockers. Do you want to proceed with shipping, or fix these first?"
-  Wait for user response.
+  > Wait for user response.
 - **NO-GO** — present the report, list each blocker with the exact file/doc and what needs to change. Do NOT invoke the `azure-devops` skill. Hand back to the user.
 
 ---

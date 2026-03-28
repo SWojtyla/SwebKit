@@ -22,16 +22,16 @@ They should help a human or AI quickly understand:
 ## Templates
 
 When creating a new active feature folder or adding a missing durable file, use the templates under:
-[feature templates](../../docs/features/_templates/)
+[feature templates](../../ai-setup/templates/)
 
 Use these files as the canonical starting point:
 
-- [index template](../../docs/features/_templates/index.md)
-- [status template](../../docs/features/_templates/status.md)
-- [test plan template](../../docs/features/_templates/test-plan.md)
-- [implementation module template](../../docs/features/_templates/implementation-module.md)
-- [decisions template](../../docs/features/_templates/decisions.md)
-- [archive summary template](../../docs/features/_templates/archive-summary.md)
+- [index template](../../ai-setup/templates/index.md)
+- [status template](../../ai-setup/templates/status.md)
+- [test plan template](../../ai-setup/templates/test-plan.md)
+- [implementation module template](../../ai-setup/templates/implementation-module.md)
+- [decisions template](../../ai-setup/templates/decisions.md)
+- [archive summary template](../../ai-setup/templates/archive-summary.md)
 
 Do not copy templates blindly.
 Adapt them to the actual feature, and create only the durable files that are needed.
@@ -65,7 +65,7 @@ Examples:
 - `decisions.md`
 
 When a concern needs its own durable file, start from the
-[implementation module template](../../docs/features/_templates/implementation-module.md)
+[implementation module template](../../ai-setup/templates/implementation-module.md)
 and rename the file to match the concern.
 
 Do not create empty placeholder files for concerns that do not exist in the feature.
@@ -116,7 +116,7 @@ Use for:
 - suggested modules
 
 Use the
-[index template](../../docs/features/_templates/index.md)
+[index template](../../ai-setup/templates/index.md)
 when creating or refreshing this file.
 
 Do not use it as a scratchpad.
@@ -133,7 +133,7 @@ Use for:
 - validation status
 
 Use the
-[status template](../../docs/features/_templates/status.md)
+[status template](../../ai-setup/templates/status.md)
 when creating or refreshing this file.
 
 This file should stay short and easy to scan.
@@ -150,7 +150,7 @@ Use for:
 - acceptance criteria
 
 Use the
-[test plan template](../../docs/features/_templates/test-plan.md)
+[test plan template](../../ai-setup/templates/test-plan.md)
 when creating or refreshing this file.
 
 ### Implementation modules
@@ -165,7 +165,7 @@ Use implementation modules for:
 - validation notes for that concern
 
 When creating a new implementation module, start from the
-[implementation module template](../../docs/features/_templates/implementation-module.md).
+[implementation module template](../../ai-setup/templates/implementation-module.md).
 
 ### `decisions.md`
 
@@ -177,7 +177,7 @@ Use for:
 - temporary compromises that need future review
 
 Use the
-[decisions template](../../docs/features/_templates/decisions.md)
+[decisions template](../../ai-setup/templates/decisions.md)
 when creating or refreshing this file.
 
 ## File hygiene
@@ -216,7 +216,7 @@ When a feature is effectively complete:
 A completed feature should normally move out of `docs/features/active/` and into `docs/features/archive/` when the task is closed.
 
 When preparing a feature for archive, create or update `summary.md` using the
-[archive summary template](../../docs/features/_templates/archive-summary.md).
+[archive summary template](../../ai-setup/templates/archive-summary.md).
 
 ## Archive boundary
 

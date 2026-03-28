@@ -10,7 +10,7 @@ status: "Not started"
 
 ## Goal
 
-Describe the backend outcome, SLA targets, and scaling expectations.
+Describe the backend outcome: what changes, what it enables, and any non-functional expectations (throughput, latency, reliability).
 
 ## Impacted areas
 
@@ -19,7 +19,7 @@ Describe the backend outcome, SLA targets, and scaling expectations.
 
 ## Design
 
-High-level design, contracts, data flow diagrams (link to architecture if available).
+Describe the approach: key types, services, or patterns involved. Reference the relevant section of `docs/architecture/design.md` if it applies. Note any divergence from existing patterns and why.
 
 ## API / Contracts
 
@@ -28,17 +28,20 @@ High-level design, contracts, data flow diagrams (link to architecture if availa
 
 ## Tasks
 
-- [ ] Define/update contracts
+- [ ] Define/update contracts and interfaces
 - [ ] Implement domain logic
 - [ ] Implement infrastructure/persistence changes
 - [ ] Add/update error handling
 - [ ] Add/update logging & telemetry
 - [ ] Add/update unit & integration tests
+- [ ] Record key design choices in `decisions.md` _(if decisions exist)_
 
 ## Migration and runtime changes
 
-- DB migration steps
-- Operational runbook and config changes
+_(Omit if not applicable.)_
+
+- Migration steps: config, data, or schema changes required
+- Operational runbook: what to do on deploy or rollback
 
 ## Validation
 

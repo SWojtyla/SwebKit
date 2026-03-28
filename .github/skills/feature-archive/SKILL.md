@@ -17,13 +17,14 @@ Use when a feature is ready to be closed out.
 Close out only when **all** of the following are true:
 
 - Feature state is `Done` in `status.md`
-- Implementation, tests, and docs are aligned (see `docs/ways-of-working/definition-of-done.md`)
+- Implementation, tests, and docs are aligned (see `ai-setup/ways-of-working/definition-of-done.md`)
 - No open blockers or pending follow-up belonging to this feature folder
 
 **If any condition is unmet: STOP.**
 State exactly which condition(s) fail and ask the user for explicit confirmation before proceeding.
 
 Example stop message:
+
 > "The feature is in state `Review`, not `Done`. Visual verification is still listed as pending in `status.md`. Do you want to close it out now anyway?"
 
 Only proceed after the user explicitly confirms.
@@ -48,11 +49,13 @@ Choose the format based on the scope of what was delivered.
 #### Small fix (bug, config change, minor tweak)
 
 Use a plain short comment — 2 to 4 sentences. Describe:
+
 - What the problem was
 - What was changed to fix it
 - How it was verified (if non-trivial)
 
 Example:
+
 ```
 Fixed a null reference in the quote response mapper when the insurer returns no coverages.
 The mapper now returns an empty list instead of throwing.
@@ -89,16 +92,17 @@ Code area
 
 **How to decide:**
 
-| Situation | Format |
-|-----------|--------|
-| Single file / single function change | Short fix comment |
-| Bug fix with a clear root cause | Short fix comment |
-| Config or dependency update | Short fix comment |
-| New flow, new handler, new integration | Structured template |
-| Multiple deliverables or technical decisions | Structured template |
+| Situation                                                | Format              |
+| -------------------------------------------------------- | ------------------- |
+| Single file / single function change                     | Short fix comment   |
+| Bug fix with a clear root cause                          | Short fix comment   |
+| Config or dependency update                              | Short fix comment   |
+| New flow, new handler, new integration                   | Structured template |
+| Multiple deliverables or technical decisions             | Structured template |
 | Feature with dedicated feature folder and `decisions.md` | Structured template |
 
 **Rules (both formats):**
+
 - Derive content from `status.md`, `decisions.md`, and `test-plan.md`.
 - Do **NOT** include step-by-step implementation notes, transient status history, or content already in the ticket description.
 - A team member should be able to read the comment and understand what changed and why — in under 2 minutes.
@@ -110,7 +114,7 @@ Code area
 **Use this path when `index.md` does NOT contain a Jira ticket link.**
 
 1. **Read the active feature folder** in full — `index.md`, `status.md`, `decisions.md`, and any implementation modules.
-2. **Read the archive summary template** at `docs/features/_templates/archive-summary.md`.
+2. **Read the archive summary template** at `ai-setup/templates/archive-summary.md`.
 3. **Create `summary.md`** inside the active folder using the template — populate every section with real content:
    - Goal: restate what the feature set out to achieve
    - Delivered: concrete list of what was shipped
