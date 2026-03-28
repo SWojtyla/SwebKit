@@ -60,6 +60,7 @@ public class SbEntityInfo
     public required string Name { get; set; }
     public required string EntityPath { get; set; }
     public SbEntityStats? Stats { get; set; }
+    public bool IsDisabled { get; set; }
     public bool IsTopic { get; set; }
     public bool IsSubscription { get; set; }
     public string? TopicName { get; set; }

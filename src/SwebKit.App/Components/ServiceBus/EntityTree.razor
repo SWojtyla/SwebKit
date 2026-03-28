@@ -19,6 +19,14 @@
             </div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(OperationMessage))
+        {
+            <div
+                style="padding:6px 12px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border);">
+                @OperationMessage
+            </div>
+        }
+
         <Virtualize Items="@_flatRows" Context="row" ItemSize="36">
             @switch (row.Kind)
             {
@@ -38,6 +46,7 @@
                                 <div @key="q.EntityPath" class="entity-tree-item" @onclick="() => OpenEntity(q)">
                                     <span class="entity-tree-glyph" style="font-size:14px;">Q</span>
                                     <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@q.Name</span>
+                                    <span class="entity-status-badge @(q.IsDisabled ? "disabled" : "active")">@GetStatusLabel(q)</span>
                                     <div class="entity-mode-actions" aria-label="Open queue mode">
                                         <button type="button" class="entity-mode-btn active" title="Open active messages"
                                                 @onclick:stopPropagation="true" @onclick="() => OpenEntity(q)">
@@ -48,6 +57,11 @@
                                             DLQ @FormatCount(q.Stats?.DeadLetterMessageCount)
                                         </button>
                                     </div>
+                                    <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
+                                            title="@(q.IsDisabled ? $"Enable queue '{q.Name}'" : $"Disable queue '{q.Name}'")"
+                                            @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(q)">
+                                        @(q.IsDisabled ? "Enable" : "Disable")
+                                    </button>
                                     <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
                                           style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
                                           @onclick:stopPropagation="true" @onclick="() => ToggleLink(q.EntityPath)">@(isLinked ? "📌" :
@@ -67,8 +81,16 @@
                                                 var t = row.Entity!;
                                                 <div @key="t.EntityPath" class="entity-tree-item entity-tree-topic" @onclick="() => ToggleTopic(t.Name)">
                                                     <span class="entity-tree-glyph" style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "▼" :
-                                                                                                                      "▶")</span>
+                                                                                                                                                                                                                                      "▶")</span>
                                                         <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@t.Name</span>
+                                                        <div class="entity-row-actions">
+                                                            <span class="entity-status-badge @(t.IsDisabled ? "disabled" : "active")">@GetStatusLabel(t)</span>
+                                                            <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
+                                                                    title="@(t.IsDisabled ? $"Enable topic '{t.Name}'" : $"Disable topic '{t.Name}'")"
+                                                                    @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(t)">
+                                                                @(t.IsDisabled ? "Enable" : "Disable")
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     break;
                                                 }
@@ -81,6 +103,7 @@
                                                              @onclick="() => OpenEntity(s)">
                                                             <span class="entity-tree-glyph" style="font-size:13px;">↳</span>
                                                             <span style="flex:1;">@s.Name</span>
+                                                            <span class="entity-status-badge @(s.IsDisabled ? "disabled" : "active")">@GetStatusLabel(s)</span>
                                                             <div class="entity-mode-actions" aria-label="Open subscription mode">
                                                                 <button type="button" class="entity-mode-btn active" title="Open active messages"
                                                                         @onclick:stopPropagation="true" @onclick="() => OpenEntity(s)">
@@ -91,6 +114,11 @@
                                                                     DLQ @FormatCount(s.Stats?.DeadLetterMessageCount)
                                                                 </button>
                                                             </div>
+                                                            <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
+                                                                    title="@(s.IsDisabled ? $"Enable subscription '{s.Name}'" : $"Disable subscription '{s.Name}'")"
+                                                                    @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(s)">
+                                                                @(s.IsDisabled ? "Enable" : "Disable")
+                                                            </button>
                                                             <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
                                                                   style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
                                                                   @onclick:stopPropagation="true" @onclick="() => ToggleLink(s.EntityPath)">@(isLinked ? "📌" :
@@ -120,6 +148,8 @@
     private IServiceBusClient? _loadedClient;
     private List<TreeRow> _flatRows = [];
     private bool _needsRender = true;
+    private bool IsMutating;
+    private string? OperationMessage;
 
     protected override bool ShouldRender()
     {
@@ -222,7 +252,8 @@ ex.Message.Contains("Forbidden")
         if (ExpandedTopics.Contains(name))
         {
             ExpandedTopics.Remove(name); RebuildFlatRows(); _needsRender = true;
-            StateHasChanged(); return;
+            await InvokeAsync(StateHasChanged);
+            return;
         }
         ExpandedTopics.Add(name);
         if (!Subscriptions.ContainsKey(name) && Client is not null)
@@ -230,6 +261,60 @@ ex.Message.Contains("Forbidden")
         RebuildFlatRows();
         _needsRender = true;
         await InvokeAsync(StateHasChanged); // BL-2: use InvokeAsync after await
+    }
+
+    private async Task ToggleEntityEnabledAsync(SbEntityInfo entity)
+    {
+        if (Client is null || IsMutating) return;
+
+        var shouldEnable = entity.IsDisabled;
+        IsMutating = true;
+        OperationMessage = null;
+        _needsRender = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (entity.IsSubscription)
+            {
+                if (!TryResolveSubscription(entity, out var topicName, out var subscriptionName))
+                {
+                    throw new InvalidOperationException($"Unable to resolve topic/subscription for '{entity.EntityPath}'.");
+                }
+
+                await Client.SetSubscriptionEnabledAsync(topicName, subscriptionName, shouldEnable);
+            }
+            else if (entity.IsTopic)
+            {
+                await Client.SetTopicEnabledAsync(entity.Name, shouldEnable);
+            }
+            else
+            {
+                await Client.SetQueueEnabledAsync(entity.Name, shouldEnable);
+            }
+
+            OperationMessage = shouldEnable
+                ? $"Enabled {entity.Name}."
+                : $"Disabled {entity.Name}.";
+
+            await LoadAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            OperationMessage = $"Failed to update {entity.Name}: {ex.Message}";
+            _needsRender = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            IsMutating = false;
+            _needsRender = true;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task OpenEntity(SbEntityInfo entity, bool isDlq = false)
@@ -244,6 +329,30 @@ ex.Message.Contains("Forbidden")
     }
 
     private static string FormatCount(long? count) => (count ?? 0).ToString();
+
+    private static string GetStatusLabel(SbEntityInfo entity) => entity.IsDisabled ? "Disabled" : "Active";
+
+    private static bool TryResolveSubscription(SbEntityInfo entity, out string topicName, out string subscriptionName)
+    {
+        topicName = entity.TopicName ?? string.Empty;
+        subscriptionName = entity.Name;
+
+        if (!string.IsNullOrWhiteSpace(topicName) && !string.IsNullOrWhiteSpace(subscriptionName))
+        {
+            return true;
+        }
+
+        const string marker = "/subscriptions/";
+        var markerIndex = entity.EntityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex <= 0)
+        {
+            return false;
+        }
+
+        topicName = entity.EntityPath[..markerIndex];
+        subscriptionName = entity.EntityPath[(markerIndex + marker.Length)..];
+        return !string.IsNullOrWhiteSpace(topicName) && !string.IsNullOrWhiteSpace(subscriptionName);
+    }
 
     private bool IsEntityLinked(string entityPath) =>
         LinkedEntities.Any(l => l.NamespaceId == NamespaceId && l.EntityPath == entityPath);

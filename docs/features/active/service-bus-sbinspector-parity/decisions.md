@@ -168,3 +168,31 @@ Implement filtered export parity as JSON in scope, with CSV export explicitly de
 
 - Include settings/theming parity in current feature — rejected because team themes are already in place and not required for operational parity.
 - Deliver JSON and CSV export together in parity waves — rejected to preserve delivery speed and reduce scope for initial parity completion.
+
+---
+
+## Decision 007 - Implement Wave 4 load-more as expanding peek windows
+
+**Status:** Accepted
+
+**Date:** 2026-03-28
+
+### Context
+
+Wave 4 requires load-more behavior and continuity guarantees in `MessageListView`. Existing Service Bus contracts expose count-based peek APIs but do not provide continuation tokens.
+
+### Decision
+
+Implement load-more by increasing the requested peek count window (`current window + page size`) and reloading the list, rather than introducing new continuation-token contracts in Wave 4.
+
+### Consequences
+
+- Delivers Wave 4 behavior without breaking or expanding `IServiceBusClient` contracts.
+- Preserves compatibility with existing Azure/demo client implementations and test doubles.
+- Keeps active filter and selection context stable because the visible dataset expands instead of replacing pagination segments.
+- May request a larger cumulative message window on each load-more action; acceptable for current parity scope and mitigated by existing grid virtualization.
+
+### Alternatives considered
+
+- Add explicit continuation-token contracts in `IServiceBusClient` — rejected for Wave 4 due contract churn and cross-project impact.
+- Keep fixed peek-only behavior without load-more — rejected because it does not meet parity scope.

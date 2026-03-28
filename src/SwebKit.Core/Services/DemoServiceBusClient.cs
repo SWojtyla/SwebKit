@@ -11,6 +11,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 {
     private readonly string _namespaceName;
     private readonly Dictionary<string, DemoEntityData> _entityData;
+    private readonly HashSet<string> _disabledEntities = new(StringComparer.OrdinalIgnoreCase);
     private long _nextSequence = 9000;
 
     // Named constructor for the two demo namespaces
@@ -35,6 +36,8 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
     public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         IReadOnlyList<SbEntityInfo> queues =
         [
             Entity("order-created"),
@@ -46,16 +49,32 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
     public Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         IReadOnlyList<SbEntityInfo> topics =
         [
-            new SbEntityInfo { Name = "user-events", EntityPath = "user-events", IsTopic = true },
-            new SbEntityInfo { Name = "audit-log", EntityPath = "audit-log", IsTopic = true }
+            new SbEntityInfo
+            {
+                Name = "user-events",
+                EntityPath = "user-events",
+                IsTopic = true,
+                IsDisabled = IsDisabled("user-events")
+            },
+            new SbEntityInfo
+            {
+                Name = "audit-log",
+                EntityPath = "audit-log",
+                IsTopic = true,
+                IsDisabled = IsDisabled("audit-log")
+            }
         ];
         return Task.FromResult(topics);
     }
 
     public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         var aPath = $"{topicName}/subscriptions/consumer-a";
         var bPath = $"{topicName}/subscriptions/consumer-b";
         IReadOnlyList<SbEntityInfo> subs =
@@ -66,6 +85,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
                 EntityPath = aPath,
                 IsSubscription = true,
                 TopicName = topicName,
+                IsDisabled = IsDisabled(aPath),
                 Stats = new SbEntityStats
                 {
                     ActiveMessageCount = CountFor(aPath, false),
@@ -78,6 +98,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
                 EntityPath = bPath,
                 IsSubscription = true,
                 TopicName = topicName,
+                IsDisabled = IsDisabled(bPath),
                 Stats = new SbEntityStats
                 {
                     ActiveMessageCount = CountFor(bPath, false),
@@ -86,6 +107,27 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             }
         ];
         return Task.FromResult(subs);
+    }
+
+    public Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        SetEntityEnabled(queueName, enabled);
+        return Task.CompletedTask;
+    }
+
+    public Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        SetEntityEnabled(topicName, enabled);
+        return Task.CompletedTask;
+    }
+
+    public Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        SetEntityEnabled($"{topicName}/subscriptions/{subscriptionName}", enabled);
+        return Task.CompletedTask;
     }
 
     public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
@@ -107,6 +149,49 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             _entityData.TryGetValue(entityPath, out var d)
                 ? d.DeadLetterMessages.Take(count).ToList()
                 : []);
+
+    public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (sequenceNumbers.Count == 0 || !_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(0);
+        }
+
+        var sequenceSet = new HashSet<long>(sequenceNumbers);
+        var kept = entityData.ActiveMessages
+            .Where(m => !m.SequenceNumber.HasValue || !sequenceSet.Contains(m.SequenceNumber.Value))
+            .ToList();
+        var removed = entityData.ActiveMessages.Count - kept.Count;
+        if (removed > 0)
+        {
+            _entityData[entityPath] = entityData with { ActiveMessages = kept };
+        }
+
+        return Task.FromResult(removed);
+    }
+
+    public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (!_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            return Task.FromResult(0);
+        }
+
+        if (deadLetter)
+        {
+            var removed = entityData.DeadLetterMessages.Count;
+            _entityData[entityPath] = entityData with { DeadLetterMessages = [] };
+            return Task.FromResult(removed);
+        }
+
+        var activeRemoved = entityData.ActiveMessages.Count;
+        _entityData[entityPath] = entityData with { ActiveMessages = [] };
+        return Task.FromResult(activeRemoved);
+    }
 
     public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) =>
         Task.CompletedTask;
@@ -137,12 +222,27 @@ public sealed class DemoServiceBusClient : IServiceBusClient
     {
         Name = name,
         EntityPath = name,
+        IsDisabled = IsDisabled(name),
         Stats = new SbEntityStats
         {
             ActiveMessageCount = CountFor(name, false),
             DeadLetterMessageCount = CountFor(name, true)
         }
     };
+
+    private bool IsDisabled(string entityPath) => _disabledEntities.Contains(entityPath);
+
+    private void SetEntityEnabled(string entityPath, bool enabled)
+    {
+        if (enabled)
+        {
+            _disabledEntities.Remove(entityPath);
+        }
+        else
+        {
+            _disabledEntities.Add(entityPath);
+        }
+    }
 
     // ── Seed data builders ────────────────────────────────────────────────────
 
@@ -265,32 +365,32 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         string id, string subject, string? correlationId, string body,
         DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber,
         Dictionary<string, object> props) => new()
-    {
-        MessageId = id,
-        Subject = subject,
-        CorrelationId = correlationId,
-        ContentType = "application/json",
-        Body = body,
-        EnqueuedAt = enqueuedAt,
-        DeliveryCount = deliveryCount,
-        SequenceNumber = sequenceNumber,
-        ApplicationProperties = props
-    };
+        {
+            MessageId = id,
+            Subject = subject,
+            CorrelationId = correlationId,
+            ContentType = "application/json",
+            Body = body,
+            EnqueuedAt = enqueuedAt,
+            DeliveryCount = deliveryCount,
+            SequenceNumber = sequenceNumber,
+            ApplicationProperties = props
+        };
 
     private static SbMessage DlqMsg(
         string id, string subject, string reason, string description, string body,
         DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber) => new()
-    {
-        MessageId = id,
-        Subject = subject,
-        ContentType = "application/json",
-        Body = body,
-        DeadLetterReason = reason,
-        DeadLetterErrorDescription = description,
-        EnqueuedAt = enqueuedAt,
-        DeliveryCount = deliveryCount,
-        SequenceNumber = sequenceNumber
-    };
+        {
+            MessageId = id,
+            Subject = subject,
+            ContentType = "application/json",
+            Body = body,
+            DeadLetterReason = reason,
+            DeadLetterErrorDescription = description,
+            EnqueuedAt = enqueuedAt,
+            DeliveryCount = deliveryCount,
+            SequenceNumber = sequenceNumber
+        };
 
     private sealed record DemoEntityData(
         IReadOnlyList<SbMessage> ActiveMessages,

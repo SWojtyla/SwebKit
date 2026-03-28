@@ -112,8 +112,83 @@ public sealed class EntityTreeTests : TestContext
         });
     }
 
+    [Fact]
+    public void QueueToggle_InvokesSetQueueEnabled_AndRefreshesStatusBadge()
+    {
+        var client = new FakeServiceBusClient();
+
+        var cut = RenderComponent<EntityTree>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, Guid.NewGuid()));
+
+        cut.WaitForAssertion(() =>
+        {
+            var queueRow = cut.FindAll(".entity-tree-item")
+                .First(item => item.TextContent.Contains("orders", StringComparison.OrdinalIgnoreCase));
+
+            Assert.Contains("Disabled", queueRow.TextContent, StringComparison.OrdinalIgnoreCase);
+            queueRow.QuerySelector(".entity-toggle-btn")!.Click();
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.QueueToggleCalls, call => call.QueueName == "orders" && call.Enabled);
+            var queueRow = cut.FindAll(".entity-tree-item")
+                .First(item => item.TextContent.Contains("orders", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("Active", queueRow.TextContent, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public void TopicToggle_InvokesSetTopicEnabled()
+    {
+        var client = new FakeServiceBusClient();
+
+        var cut = RenderComponent<EntityTree>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, Guid.NewGuid()));
+
+        cut.WaitForAssertion(() =>
+        {
+            var topicRow = cut.Find(".entity-tree-topic");
+            Assert.Contains("Disabled", topicRow.TextContent, StringComparison.OrdinalIgnoreCase);
+            topicRow.QuerySelector(".entity-toggle-btn")!.Click();
+        });
+
+        Assert.Contains(client.TopicToggleCalls, call => call.TopicName == "bundle-1" && call.Enabled);
+    }
+
+    [Fact]
+    public void SubscriptionToggle_InvokesSetSubscriptionEnabled()
+    {
+        var client = new FakeServiceBusClient();
+
+        var cut = RenderComponent<EntityTree>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, Guid.NewGuid()));
+
+        cut.Find(".entity-tree-topic").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var subscriptionRow = cut.Find(".entity-tree-subscription");
+            Assert.Contains("Disabled", subscriptionRow.TextContent, StringComparison.OrdinalIgnoreCase);
+            subscriptionRow.QuerySelector(".entity-toggle-btn")!.Click();
+        });
+
+        Assert.Contains(client.SubscriptionToggleCalls,
+            call => call.TopicName == "bundle-1" && call.SubscriptionName == "processor-a" && call.Enabled);
+    }
+
     private sealed class FakeServiceBusClient : IServiceBusClient
     {
+        private readonly HashSet<string> _disabledEntities =
+            ["orders", "bundle-1", "bundle-1/subscriptions/processor-a"];
+
+        public List<(string QueueName, bool Enabled)> QueueToggleCalls { get; } = [];
+        public List<(string TopicName, bool Enabled)> TopicToggleCalls { get; } = [];
+        public List<(string TopicName, string SubscriptionName, bool Enabled)> SubscriptionToggleCalls { get; } = [];
+
         public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) =>
             Task.FromResult(new SbNamespaceInfo { Name = "demo", Endpoint = "demo.servicebus.windows.net" });
 
@@ -124,6 +199,7 @@ public sealed class EntityTreeTests : TestContext
                 {
                     Name = "orders",
                     EntityPath = "orders",
+                    IsDisabled = IsDisabled("orders"),
                     Stats = new SbEntityStats { ActiveMessageCount = 42, DeadLetterMessageCount = 3 }
                 }
             ]);
@@ -134,7 +210,9 @@ public sealed class EntityTreeTests : TestContext
                 new SbEntityInfo
                 {
                     Name = "bundle-1",
-                    EntityPath = "bundle-1"
+                    EntityPath = "bundle-1",
+                    IsTopic = true,
+                    IsDisabled = IsDisabled("bundle-1")
                 }
             ]);
 
@@ -145,9 +223,33 @@ public sealed class EntityTreeTests : TestContext
                 {
                     Name = "processor-a",
                     EntityPath = $"{topicName}/subscriptions/processor-a",
+                    TopicName = topicName,
+                    IsSubscription = true,
+                    IsDisabled = IsDisabled($"{topicName}/subscriptions/processor-a"),
                     Stats = new SbEntityStats { ActiveMessageCount = 7, DeadLetterMessageCount = 1 }
                 }
             ]);
+
+        public Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default)
+        {
+            QueueToggleCalls.Add((queueName, enabled));
+            SetEntityEnabled(queueName, enabled);
+            return Task.CompletedTask;
+        }
+
+        public Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default)
+        {
+            TopicToggleCalls.Add((topicName, enabled));
+            SetEntityEnabled(topicName, enabled);
+            return Task.CompletedTask;
+        }
+
+        public Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default)
+        {
+            SubscriptionToggleCalls.Add((topicName, subscriptionName, enabled));
+            SetEntityEnabled($"{topicName}/subscriptions/{subscriptionName}", enabled);
+            return Task.CompletedTask;
+        }
 
         public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
             Task.FromResult(new SbEntityStats());
@@ -157,6 +259,12 @@ public sealed class EntityTreeTests : TestContext
 
         public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SbMessage>>([]);
+
+        public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default) =>
+            Task.FromResult(0);
+
+        public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default) =>
+            Task.FromResult(0);
 
         public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
@@ -172,5 +280,19 @@ public sealed class EntityTreeTests : TestContext
             Task.CompletedTask;
 
         public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+        private bool IsDisabled(string entityPath) => _disabledEntities.Contains(entityPath);
+
+        private void SetEntityEnabled(string entityPath, bool enabled)
+        {
+            if (enabled)
+            {
+                _disabledEntities.Remove(entityPath);
+            }
+            else
+            {
+                _disabledEntities.Add(entityPath);
+            }
+        }
     }
 }

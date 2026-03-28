@@ -1,5 +1,7 @@
 using Bunit;
 using Bunit.JSInterop;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -76,6 +78,137 @@ public sealed class MessageListViewTests : TestContext
             Assert.NotNull(cut.Find(".view-mode-badge.peek"));
             Assert.Contains("Peek mode", cut.Markup);
             Assert.Contains("Showing 2 message(s)", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void LoadMore_IncreasesLoadedWindow_WhenTotalIsLarger()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var messages = Enumerable.Range(1, 12)
+            .Select(i => new SbMessage
+            {
+                MessageId = $"msg-{i:000}",
+                Body = "{}",
+                EnqueuedAt = now.AddSeconds(i),
+                SequenceNumber = 9000 + i
+            })
+            .ToList();
+
+        var client = new FakeServiceBusClient(
+            statsResolver: _ => new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 },
+            peekResolver: _ => messages,
+            dlqResolver: _ => []);
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.Find("[data-testid='peek-count-select']").Change("5");
+        cut.Find("[data-testid='peek-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Showing 5 of 12 message(s)", cut.Markup);
+            Assert.Contains("Window 5/12 loaded", cut.Markup);
+        });
+
+        cut.Find("[data-testid='load-more-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Showing 10 of 12 message(s)", cut.Markup);
+            Assert.Contains("Window 10/12 loaded", cut.Markup);
+        });
+
+        Assert.Contains(client.PeekRequests,
+            req => req.EntityPath == "orders" && req.Count == 5 && !req.DeadLetter);
+        Assert.Contains(client.PeekRequests,
+            req => req.EntityPath == "orders" && req.Count == 10 && !req.DeadLetter);
+    }
+
+    [Fact]
+    public void LoadMore_Disabled_WhenAllMessagesAreAlreadyLoaded()
+    {
+        var client = new FakeServiceBusClient(
+            messages:
+            [
+                new SbMessage { MessageId = "msg-001", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+                new SbMessage { MessageId = "msg-002", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+                new SbMessage { MessageId = "msg-003", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow }
+            ],
+            stats: new SbEntityStats { ActiveMessageCount = 3, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Showing 3 message(s)", cut.Markup);
+            Assert.Contains("Window 3/3 loaded", cut.Markup);
+            Assert.Contains("All Loaded", cut.Markup);
+        });
+
+        var loadMoreButton = cut.Find("[data-testid='load-more-button']");
+        Assert.NotNull(loadMoreButton.GetAttribute("disabled"));
+    }
+
+    [Fact]
+    public void LoadMore_PreservesFilterAndSelectionContinuity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var messages = Enumerable.Range(1, 12)
+            .Select(i => new SbMessage
+            {
+                MessageId = $"track-{i:000}",
+                Body = i % 2 == 0 ? "target payload" : "other payload",
+                EnqueuedAt = now.AddMinutes(i),
+                SequenceNumber = 10000 + i
+            })
+            .ToList();
+
+        List<SbMessage> selectedBatch = [];
+        var onBatchChanged = EventCallback.Factory.Create<List<SbMessage>>(this, batch => selectedBatch = batch);
+
+        var client = new FakeServiceBusClient(
+            statsResolver: _ => new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 },
+            peekResolver: _ => messages,
+            dlqResolver: _ => []);
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false)
+            .Add(p => p.MultiSelect, true)
+            .Add(p => p.OnMultiSelectionChanged, onBatchChanged));
+
+        cut.Find("[data-testid='peek-count-select']").Change("5");
+        cut.Find("[data-testid='peek-button']").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 5 of 12 message(s)", cut.Markup));
+
+        cut.Find("input[placeholder='Filter messages...']").Input("track-001");
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 1 filtered of 5 loaded", cut.Markup));
+
+        cut.Find("[title='Select / deselect all visible messages']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(5, selectedBatch.Count);
+            Assert.Contains("5 selected", cut.Markup);
+        });
+
+        cut.Find("[data-testid='load-more-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Showing 1 filtered of 10 loaded", cut.Markup);
+            Assert.Contains("5 selected", cut.Markup);
+            Assert.Contains("track-001", cut.Markup);
         });
     }
 
@@ -216,14 +349,732 @@ public sealed class MessageListViewTests : TestContext
         });
     }
 
+    [Fact]
+    public void DeleteSelected_ActiveMode_CompletesMessageAndReloadsList()
+    {
+        var active = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] =
+            [
+                new SbMessage { MessageId = "active-001", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 501 },
+                new SbMessage { MessageId = "active-002", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 502 }
+            ]
+        };
+
+        var dlq = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] = []
+        };
+
+        var client = new FakeServiceBusClient(
+            statsResolver: entityPath => new SbEntityStats
+            {
+                ActiveMessageCount = active[entityPath].Count,
+                DeadLetterMessageCount = dlq[entityPath].Count
+            },
+            peekResolver: entityPath => active[entityPath].ToList(),
+            dlqResolver: entityPath => dlq[entityPath].ToList(),
+            completeResolver: (entityPath, sequenceNumbers) =>
+            {
+                var removed = active[entityPath].RemoveAll(m =>
+                    m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+                return removed;
+            });
+
+        var selectedMessage = active["orders"][0];
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false)
+            .Add(p => p.SelectedMessage, selectedMessage));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[title='Delete selected active message']").Click();
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Delete Message", cut.Markup);
+            cut.FindAll("button").First(b => b.TextContent.Trim() == "Delete").Click();
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.CompleteMessagesCalls,
+                call => call.EntityPath == "orders" && call.SequenceNumbers.SequenceEqual([501]));
+            Assert.Contains("Deleted message 'active-001'.", cut.Markup);
+            Assert.Contains("Showing 1 message(s)", cut.Markup);
+        });
+
+        Assert.True(client.PeekedEntityPaths.Count >= 2);
+    }
+
+    [Fact]
+    public void PurgeAll_UsesDlqFlag_AndWaitsForConfirm()
+    {
+        var active = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] = []
+        };
+
+        var dlq = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] =
+            [
+                new SbMessage { MessageId = "dead-101", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 8101 },
+                new SbMessage { MessageId = "dead-102", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 8102 }
+            ]
+        };
+
+        var client = new FakeServiceBusClient(
+            statsResolver: entityPath => new SbEntityStats
+            {
+                ActiveMessageCount = active[entityPath].Count,
+                DeadLetterMessageCount = dlq[entityPath].Count
+            },
+            peekResolver: entityPath => active[entityPath].ToList(),
+            dlqResolver: entityPath => dlq[entityPath].ToList(),
+            purgeResolver: (entityPath, deadLetter) =>
+            {
+                var bucket = deadLetter ? dlq : active;
+                var removed = bucket[entityPath].Count;
+                bucket[entityPath].Clear();
+                return removed;
+            });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, true)
+            .Add(p => p.ShowDlqColumns, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[title='Permanently delete all messages in the current mode']").Click();
+        });
+
+        Assert.Empty(client.PurgeMessagesCalls);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Purge DLQ Messages", cut.Markup);
+            cut.FindAll("button").First(b => b.TextContent.Trim() == "Purge").Click();
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.PurgeMessagesCalls,
+                call => call.EntityPath == "orders" && call.DeadLetter);
+            Assert.Contains("Purged 2 DLQ message(s).", cut.Markup);
+            Assert.Contains("No messages", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void AdvancedFiltering_AppliesApplicationPropertyNumericAndDateRules()
+    {
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "msg-eu-low-early",
+                Body = "{}",
+                EnqueuedAt = new DateTimeOffset(2026, 3, 28, 9, 0, 0, TimeSpan.Zero),
+                DeliveryCount = 2,
+                SequenceNumber = 1101,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu-west" }
+            },
+            new()
+            {
+                MessageId = "msg-us-high-late",
+                Body = "{}",
+                EnqueuedAt = new DateTimeOffset(2026, 3, 28, 13, 0, 0, TimeSpan.Zero),
+                DeliveryCount = 7,
+                SequenceNumber = 1102,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "us-east" }
+            },
+            new()
+            {
+                MessageId = "msg-eu-high-late",
+                Body = "{}",
+                EnqueuedAt = new DateTimeOffset(2026, 3, 28, 14, 0, 0, TimeSpan.Zero),
+                DeliveryCount = 8,
+                SequenceNumber = 1103,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu-central" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.Contains("msg-eu-high-late", cut.Markup));
+
+        cut.Find("[data-testid='advanced-toggle']").Click();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='advanced-filter-panel']")));
+
+        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .QuerySelector("[data-testid='rule-property']")!
+            .Input("region");
+        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .QuerySelector("[data-testid='rule-value']")!
+            .Input("eu");
+
+        cut.Find("[data-testid='add-rule']").Click();
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-field']")!
+            .Change("delivery-count");
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-operator']")!
+            .Change("gte");
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-value']")!
+            .Input("5");
+
+        cut.Find("[data-testid='add-rule']").Click();
+        cut.FindAll("[data-testid='advanced-rule']")[2]
+            .QuerySelector("[data-testid='rule-field']")!
+            .Change("enqueued-time");
+        cut.FindAll("[data-testid='advanced-rule']")[2]
+            .QuerySelector("[data-testid='rule-operator']")!
+            .Change("on-or-after");
+        cut.FindAll("[data-testid='advanced-rule']")[2]
+            .QuerySelector("[data-testid='rule-value']")!
+            .Input("2026-03-28T12:00:00Z");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("msg-eu-high-late", cut.Markup);
+            Assert.DoesNotContain("msg-eu-low-early", cut.Markup);
+            Assert.DoesNotContain("msg-us-high-late", cut.Markup);
+            Assert.Contains("Showing 1 filtered of 3 loaded", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public async Task SavedFilterApply_RestoresAdvancedCriteria_AndLegacyTextOnly()
+    {
+        var uiState = Services.GetRequiredService<UiStateRepository>();
+        var namespaceId = Guid.NewGuid();
+        var scopeKey = $"{namespaceId}:orders";
+
+        // Legacy format seeded directly: name + value only.
+        await uiState.SaveFilterAsync(scopeKey, new SavedFilter
+        {
+            Name = "Legacy Text",
+            Value = "legacy-only"
+        });
+
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "invoice-eu-001",
+                Body = "invoice body",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 7,
+                SequenceNumber = 2101,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu" }
+            },
+            new()
+            {
+                MessageId = "invoice-us-002",
+                Body = "invoice body",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 9,
+                SequenceNumber = 2102,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "us" }
+            },
+            new()
+            {
+                MessageId = "legacy-only-003",
+                Body = "legacy-only payload",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 1,
+                SequenceNumber = 2103,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "us" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.NamespaceId, namespaceId)
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.Contains("invoice-eu-001", cut.Markup));
+
+        // Roundtrip: configure advanced criteria in the UI, save them, then re-apply via saved filters.
+        cut.Find("[data-testid='advanced-toggle']").Click();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='advanced-rule']")));
+
+        cut.Find("input[placeholder='Filter messages...']").Input("invoice");
+        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .QuerySelector("[data-testid='rule-property']")!
+            .Input("region");
+        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .QuerySelector("[data-testid='rule-operator']")!
+            .Change("equals");
+        cut.FindAll("[data-testid='advanced-rule']")[0]
+            .QuerySelector("[data-testid='rule-value']")!
+            .Input("eu");
+
+        cut.Find("[data-testid='add-rule']").Click();
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-field']")!
+            .Change("delivery-count");
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-operator']")!
+            .Change("gte");
+        cut.FindAll("[data-testid='advanced-rule']")[1]
+            .QuerySelector("[data-testid='rule-value']")!
+            .Input("5");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("invoice-eu-001", cut.Markup);
+            Assert.DoesNotContain("invoice-us-002", cut.Markup);
+            Assert.DoesNotContain("legacy-only-003", cut.Markup);
+        });
+
+        cut.Find("button[title='Save current filter']").Click();
+        cut.WaitForAssertion(() => Assert.Contains("Save Filter", cut.Markup));
+        cut.Find("input[placeholder='Filter name…']").Change("EU Invoice High");
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Save").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var saved = uiState.GetFilters(scopeKey);
+            var roundtrip = saved.FirstOrDefault(f => f.Name == "EU Invoice High");
+            Assert.NotNull(roundtrip);
+            Assert.Equal("invoice", roundtrip!.Value);
+            Assert.True(roundtrip.FiltersEnabled);
+            Assert.True(roundtrip.AdvancedFilterEnabled);
+            Assert.Equal(2, roundtrip.AdvancedRules.Count);
+        });
+
+        // Reset UI state so applying the saved filter has observable effect.
+        cut.Find("[data-testid='filters-toggle']").Click();
+        cut.Find("input[placeholder='Filter messages...']").Input(string.Empty);
+
+        cut.Find("button[title='Saved filters']").Click();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='saved-filter-item']")));
+        cut.FindAll("[data-testid='saved-filter-item']")
+            .First(i => i.GetAttribute("data-filter-name") == "EU Invoice High")
+            .Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("invoice-eu-001", cut.Markup);
+            Assert.DoesNotContain("invoice-us-002", cut.Markup);
+            Assert.DoesNotContain("legacy-only-003", cut.Markup);
+            Assert.NotEmpty(cut.FindAll("[data-testid='advanced-rule']"));
+        });
+
+        cut.Find("button[title='Saved filters']").Click();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='saved-filter-item']")));
+        cut.FindAll("[data-testid='saved-filter-item']")
+            .First(i => i.GetAttribute("data-filter-name") == "Legacy Text")
+            .Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("legacy-only-003", cut.Markup);
+            Assert.DoesNotContain("invoice-eu-001", cut.Markup);
+            Assert.DoesNotContain("invoice-us-002", cut.Markup);
+            Assert.Empty(cut.FindAll("[data-testid='advanced-filter-panel']"));
+        });
+    }
+
+    [Fact]
+    public void DeleteFiltered_ActiveMode_CompletesMatchingSequenceNumbers()
+    {
+        var active = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] =
+            [
+                new SbMessage { MessageId = "active-match-001", Body = "target payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 5101 },
+                new SbMessage { MessageId = "active-match-002", Body = "target payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 5102 },
+                new SbMessage { MessageId = "active-keep-003", Body = "keep payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 5103 }
+            ]
+        };
+
+        var dlq = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] = []
+        };
+
+        var client = new FakeServiceBusClient(
+            statsResolver: entityPath => new SbEntityStats
+            {
+                ActiveMessageCount = active[entityPath].Count,
+                DeadLetterMessageCount = dlq[entityPath].Count
+            },
+            peekResolver: entityPath => active[entityPath].ToList(),
+            dlqResolver: entityPath => dlq[entityPath].ToList(),
+            completeResolver: (entityPath, sequenceNumbers) =>
+            {
+                var removed = active[entityPath].RemoveAll(m =>
+                    m.SequenceNumber is long seq && sequenceNumbers.Contains(seq));
+                return removed;
+            });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.Contains("active-match-001", cut.Markup));
+
+        cut.Find("input[placeholder='Filter messages...']").Input("target");
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 2 filtered of 3 loaded", cut.Markup));
+
+        cut.Find("[title='Delete currently filtered messages in the current mode']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Delete Filtered Active Messages", cut.Markup);
+            Assert.Contains("Delete 2 filtered message(s)", cut.Markup);
+        });
+
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Delete Filtered").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.CompleteMessagesCalls,
+                call => call.EntityPath == "orders" && call.SequenceNumbers.SequenceEqual([5101, 5102]));
+            Assert.Empty(client.CompleteDeadLetterCalls);
+            Assert.Contains("Deleted 2 filtered active message(s).", cut.Markup);
+        });
+
+        Assert.True(client.PeekedEntityPaths.Count >= 2);
+    }
+
+    [Fact]
+    public void DeleteFiltered_DlqMode_CompletesDeadLetterMatchingSequenceNumbers()
+    {
+        var active = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] = []
+        };
+
+        var dlq = new Dictionary<string, List<SbMessage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["orders"] =
+            [
+                new SbMessage { MessageId = "dlq-match-001", Body = "target payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 6101 },
+                new SbMessage { MessageId = "dlq-keep-002", Body = "keep payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 6102 },
+                new SbMessage { MessageId = "dlq-match-003", Body = "target payload", EnqueuedAt = DateTimeOffset.UtcNow, SequenceNumber = 6103 }
+            ]
+        };
+
+        var client = new FakeServiceBusClient(
+            statsResolver: entityPath => new SbEntityStats
+            {
+                ActiveMessageCount = active[entityPath].Count,
+                DeadLetterMessageCount = dlq[entityPath].Count
+            },
+            peekResolver: entityPath => active[entityPath].ToList(),
+            dlqResolver: entityPath => dlq[entityPath].ToList(),
+            completeDeadLetterResolver: (entityPath, sequenceNumbers) =>
+            {
+                var sequenceSet = sequenceNumbers.ToHashSet(StringComparer.Ordinal);
+                var removed = dlq[entityPath].RemoveAll(m =>
+                    m.SequenceNumber is long seq && sequenceSet.Contains(seq.ToString()));
+                return removed;
+            });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, true)
+            .Add(p => p.ShowDlqColumns, true));
+
+        cut.WaitForAssertion(() => Assert.Contains("dlq-match-001", cut.Markup));
+
+        cut.Find("input[placeholder='Filter messages...']").Input("target");
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 2 filtered of 3 loaded", cut.Markup));
+
+        cut.Find("[title='Delete currently filtered messages in the current mode']").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("Delete Filtered DLQ Messages", cut.Markup));
+
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Delete Filtered").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.CompleteDeadLetterCalls,
+                call => call.EntityPath == "orders" && call.SequenceNumbers.SequenceEqual(["6101", "6103"]));
+            Assert.Empty(client.CompleteMessagesCalls);
+            Assert.Contains("Deleted 2 filtered DLQ message(s).", cut.Markup);
+        });
+
+        Assert.True(client.PeekedEntityPaths.Count(path =>
+            string.Equals(path, "dlq:orders", StringComparison.OrdinalIgnoreCase)) >= 2);
+    }
+
+    [Fact]
+    public void ColumnChooser_ToggleBuiltInColumn_HidesAndRestoresSubjectValues()
+    {
+        var messages = new List<SbMessage>
+        {
+            new() { MessageId = "msg-001", Subject = "subject-visible-1", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, DeliveryCount = 1, SequenceNumber = 7001 },
+            new() { MessageId = "msg-002", Subject = "subject-visible-2", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, DeliveryCount = 1, SequenceNumber = 7002 }
+        };
+
+        var client = new FakeServiceBusClient(messages: messages, stats: new SbEntityStats { ActiveMessageCount = 2 });
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.Contains("subject-visible-1", cut.Markup));
+
+        cut.Find("[data-testid='column-chooser-toggle']").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='column-chooser-menu']")));
+
+        cut.FindAll("[data-testid='built-in-column-option']")
+            .First(option => option.GetAttribute("data-column-key") == "subject")
+            .QuerySelector("input")!
+            .Change(false);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.DoesNotContain("subject-visible-1", cut.Markup);
+            Assert.DoesNotContain("subject-visible-2", cut.Markup);
+        });
+
+        cut.FindAll("[data-testid='built-in-column-option']")
+            .First(option => option.GetAttribute("data-column-key") == "subject")
+            .QuerySelector("input")!
+            .Change(true);
+
+        cut.WaitForAssertion(() => Assert.Contains("subject-visible-1", cut.Markup));
+    }
+
+    [Fact]
+    public void ColumnChooser_CustomPropertyColumn_AddRemove_RendersExpectedValues()
+    {
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "msg-prop-001",
+                Body = "{}",
+                Subject = "subject",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 1,
+                SequenceNumber = 7101,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu-west" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(messages: messages, stats: new SbEntityStats { ActiveMessageCount = 1 });
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.DoesNotContain("eu-west", cut.Markup));
+
+        cut.Find("[data-testid='column-chooser-toggle']").Click();
+        cut.Find("[data-testid='custom-column-input']").Input("region");
+        cut.Find("[data-testid='add-custom-column']").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("eu-west", cut.Markup));
+
+        cut.FindAll("[data-testid='remove-custom-column']")
+            .First(button => button.GetAttribute("data-column-name") == "region")
+            .Click();
+
+        cut.WaitForAssertion(() => Assert.DoesNotContain("eu-west", cut.Markup));
+    }
+
+    [Fact]
+    public async Task ColumnPreferences_PersistenceRestore_AppliesDensityBuiltInAndCustomColumns()
+    {
+        var namespaceId = Guid.NewGuid();
+        var preferenceScope = $"{namespaceId}:orders:active";
+        var uiState = Services.GetRequiredService<UiStateRepository>();
+
+        await uiState.SaveMessageListPreferencesAsync(preferenceScope, new MessageListPreferences
+        {
+            RowDensity = "compact",
+            BuiltInColumns = new Dictionary<string, bool> { ["subject"] = false },
+            CustomPropertyColumns = ["region"]
+        });
+
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "persisted-001",
+                Subject = "subject-hidden-by-preference",
+                Body = "{}",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 3,
+                SequenceNumber = 7201,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu-north" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(messages: messages, stats: new SbEntityStats { ActiveMessageCount = 1 });
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.NamespaceId, namespaceId)
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("density-compact", cut.Find(".message-grid-host").ClassName);
+            Assert.DoesNotContain("subject-hidden-by-preference", cut.Markup);
+            Assert.Contains("eu-north", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void ColumnPreferences_Reset_RestoresDefaultsAndClearsCustomColumns()
+    {
+        var namespaceId = Guid.NewGuid();
+        var uiState = Services.GetRequiredService<UiStateRepository>();
+
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "reset-001",
+                Subject = "subject-restored-after-reset",
+                Body = "{}",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 1,
+                SequenceNumber = 7301,
+                ApplicationProperties = new Dictionary<string, object> { ["tenant"] = "tenant-a" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(messages: messages, stats: new SbEntityStats { ActiveMessageCount = 1 });
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.NamespaceId, namespaceId)
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() => Assert.Contains("subject-restored-after-reset", cut.Markup));
+
+        cut.Find("[data-testid='column-chooser-toggle']").Click();
+        cut.FindAll("[data-testid='built-in-column-option']")
+            .First(option => option.GetAttribute("data-column-key") == "subject")
+            .QuerySelector("input")!
+            .Change(false);
+        cut.Find("[data-testid='custom-column-input']").Input("tenant");
+        cut.Find("[data-testid='add-custom-column']").Click();
+        cut.Find("button.density-btn").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.DoesNotContain("subject-restored-after-reset", cut.Markup);
+            Assert.Contains("tenant-a", cut.Markup);
+            Assert.Contains("density-compact", cut.Find(".message-grid-host").ClassName);
+        });
+
+        cut.Find("[data-testid='reset-column-preferences']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("subject-restored-after-reset", cut.Markup);
+            Assert.DoesNotContain("tenant-a", cut.Markup);
+            Assert.Contains("density-default", cut.Find(".message-grid-host").ClassName);
+        });
+
+        var preferenceScope = $"{namespaceId}:orders:active";
+        var stored = uiState.GetMessageListPreferences(preferenceScope);
+        Assert.Equal("default", stored.RowDensity);
+        Assert.Empty(stored.BuiltInColumns);
+        Assert.Empty(stored.CustomPropertyColumns);
+    }
+
+    [Fact]
+    public void KeyboardNavigation_StillSelectsRows_AfterColumnCustomization()
+    {
+        SbMessage? selected = null;
+
+        var messages = new List<SbMessage>
+        {
+            new()
+            {
+                MessageId = "keyboard-001",
+                Subject = "keyboard-subject-1",
+                Body = "{}",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 1,
+                SequenceNumber = 7401,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "eu" }
+            },
+            new()
+            {
+                MessageId = "keyboard-002",
+                Subject = "keyboard-subject-2",
+                Body = "{}",
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                DeliveryCount = 1,
+                SequenceNumber = 7402,
+                ApplicationProperties = new Dictionary<string, object> { ["region"] = "us" }
+            }
+        };
+
+        var client = new FakeServiceBusClient(messages: messages, stats: new SbEntityStats { ActiveMessageCount = 2 });
+        var onMessageSelected = EventCallback.Factory.Create<SbMessage?>(this, (SbMessage? msg) => selected = msg);
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false)
+            .Add(p => p.OnMessageSelected, onMessageSelected));
+
+        cut.WaitForAssertion(() => Assert.Contains("keyboard-001", cut.Markup));
+
+        cut.Find("[data-testid='column-chooser-toggle']").Click();
+        cut.FindAll("[data-testid='built-in-column-option']")
+            .First(option => option.GetAttribute("data-column-key") == "subject")
+            .QuerySelector("input")!
+            .Change(false);
+        cut.Find("[data-testid='custom-column-input']").Input("region");
+        cut.Find("[data-testid='add-custom-column']").Click();
+
+        cut.Find(".message-grid-host").KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+
+        cut.WaitForAssertion(() => Assert.Equal("keyboard-001", selected?.MessageId));
+    }
+
     private sealed class FakeServiceBusClient : IServiceBusClient
     {
-        private readonly Func<string, IReadOnlyList<SbMessage>> _peekResolver;
-        private readonly Func<string, IReadOnlyList<SbMessage>> _dlqResolver;
+        private readonly Func<string, int, IReadOnlyList<SbMessage>> _peekResolver;
+        private readonly Func<string, int, IReadOnlyList<SbMessage>> _dlqResolver;
         private readonly Func<string, SbEntityStats> _statsResolver;
         private readonly Func<string, Task>? _beforePeekAsync;
+        private readonly Func<string, IReadOnlyList<long>, int>? _completeResolver;
+        private readonly Func<string, IReadOnlyList<string>, int>? _completeDeadLetterResolver;
+        private readonly Func<string, bool, int>? _purgeResolver;
 
         public ConcurrentQueue<string> PeekedEntityPaths { get; } = [];
+        public List<(string EntityPath, int Count, bool DeadLetter)> PeekRequests { get; } = [];
+        public List<(string EntityPath, IReadOnlyList<long> SequenceNumbers)> CompleteMessagesCalls { get; } = [];
+        public List<(string EntityPath, IReadOnlyList<string> SequenceNumbers)> CompleteDeadLetterCalls { get; } = [];
+        public List<(string EntityPath, bool DeadLetter)> PurgeMessagesCalls { get; } = [];
 
         public FakeServiceBusClient(IReadOnlyList<SbMessage> messages, SbEntityStats stats)
             : this(_ => stats, _ => messages, _ => messages)
@@ -234,12 +1085,18 @@ public sealed class MessageListViewTests : TestContext
             Func<string, SbEntityStats> statsResolver,
             Func<string, IReadOnlyList<SbMessage>> peekResolver,
             Func<string, IReadOnlyList<SbMessage>> dlqResolver,
-            Func<string, Task>? beforePeekAsync = null)
+            Func<string, Task>? beforePeekAsync = null,
+            Func<string, IReadOnlyList<long>, int>? completeResolver = null,
+            Func<string, IReadOnlyList<string>, int>? completeDeadLetterResolver = null,
+            Func<string, bool, int>? purgeResolver = null)
         {
             _statsResolver = statsResolver;
-            _peekResolver = peekResolver;
-            _dlqResolver = dlqResolver;
+            _peekResolver = (entityPath, count) => peekResolver(entityPath).Take(count).ToList();
+            _dlqResolver = (entityPath, count) => dlqResolver(entityPath).Take(count).ToList();
             _beforePeekAsync = beforePeekAsync;
+            _completeResolver = completeResolver;
+            _completeDeadLetterResolver = completeDeadLetterResolver;
+            _purgeResolver = purgeResolver;
         }
 
         public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) =>
@@ -254,29 +1111,52 @@ public sealed class MessageListViewTests : TestContext
         public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
 
+        public Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) =>
             Task.FromResult(_statsResolver(entityPath));
 
         public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default)
         {
             PeekedEntityPaths.Enqueue(entityPath);
+            PeekRequests.Add((entityPath, count, false));
             if (_beforePeekAsync is not null)
             {
                 await _beforePeekAsync(entityPath);
             }
 
-            return _peekResolver(entityPath);
+            return _peekResolver(entityPath, count);
         }
 
         public async Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default)
         {
             PeekedEntityPaths.Enqueue($"dlq:{entityPath}");
+            PeekRequests.Add((entityPath, count, true));
             if (_beforePeekAsync is not null)
             {
                 await _beforePeekAsync(entityPath);
             }
 
-            return _dlqResolver(entityPath);
+            return _dlqResolver(entityPath, count);
+        }
+
+        public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+        {
+            CompleteMessagesCalls.Add((entityPath, sequenceNumbers.ToArray()));
+            return Task.FromResult(_completeResolver?.Invoke(entityPath, sequenceNumbers) ?? 0);
+        }
+
+        public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default)
+        {
+            PurgeMessagesCalls.Add((entityPath, deadLetter));
+            return Task.FromResult(_purgeResolver?.Invoke(entityPath, deadLetter) ?? 0);
         }
 
         public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
@@ -289,8 +1169,12 @@ public sealed class MessageListViewTests : TestContext
         public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) =>
             Task.CompletedTask;
 
-        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) =>
-            Task.CompletedTask;
+        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
+        {
+            CompleteDeadLetterCalls.Add((entityPath, sequenceNumbers.ToArray()));
+            _completeDeadLetterResolver?.Invoke(entityPath, sequenceNumbers);
+            return Task.CompletedTask;
+        }
 
         public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
     }

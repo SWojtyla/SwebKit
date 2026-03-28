@@ -1,137 +1,200 @@
 @inject AppStateService AppState
 
-<div style="position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:550; display:flex; align-items:center; justify-content:center;">
-    <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:580px; width:90%; max-height:75vh; display:flex; flex-direction:column;">
+<div
+    style="position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:550; display:flex; align-items:center; justify-content:center;">
+    <div
+        style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:580px; width:90%; max-height:75vh; display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; margin-bottom:14px;">
             <h3 style="margin:0; font-size:14px; font-weight:600;">Message Templates</h3>
-            <span style="margin-left:8px; font-size:11px; color:var(--color-text-muted);">@AppState.MessageTemplates.Count template(s)</span>
-            <button @onclick="() => OnClose.InvokeAsync()" title="Close"
-                    style="margin-left:auto; background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:16px; padding:2px 6px;">&#x2715;</button>
-        </div>
-
-        @if (!AppState.MessageTemplates.Any())
-        {
-            <div style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:13px;">
-                No templates saved yet.<br />
-                <span style="font-size:12px;">Use <strong>Save as Template</strong> in the composer or detail pane to create one.</span>
+            <span
+                style="margin-left:8px; font-size:11px; color:var(--color-text-muted);">@AppState.MessageTemplates.Count
+                template(s)</span>
+                <button @onclick="() => OnClose.InvokeAsync()" title="Close"
+                        style="margin-left:auto; background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:16px; padding:2px 6px;">&#x2715;</button>
             </div>
-        }
-        else
-        {
-            <div style="overflow-y:auto; flex:1;">
-                @foreach (var template in AppState.MessageTemplates)
-                {
-                    <div style="display:flex; align-items:center; padding:10px 8px; border-bottom:1px solid var(--color-border); gap:8px;">
-                        <div style="flex:1; min-width:0;">
-                            @if (_renamingId == template.Id)
-                            {
-                                <div style="display:flex; gap:4px; align-items:center;">
-                                    <input type="text" @bind="_renameValue"
-                                           style="flex:1; padding:3px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-accent); border-radius:3px;" />
-                                    <button @onclick="() => ConfirmRename(template)" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;">OK</button>
-                                    <button @onclick="CancelRename" style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">Cancel</button>
-                                </div>
-                            }
-                            else
-                            {
-                                <div style="font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@template.Name</div>
-                            }
-                            <div style="font-size:11px; color:var(--color-text-muted); margin-top:2px;">
-                                @(template.ContentType ?? "no content-type")
-                                @if (!string.IsNullOrWhiteSpace(template.Subject)) { <span> · @template.Subject</span> }
-                                @if (template.Properties.Count > 0) { <span> · @template.Properties.Count props</span> }
-                                <span> · @template.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:4px; flex-shrink:0;">
-                            <FluentButton Appearance="Appearance.Accent" style="font-size:11px;"
-                                          @onclick="() => OnTemplateSelected.InvokeAsync(template)">
-                                Apply
-                            </FluentButton>
-                            <button @onclick="() => StartRename(template)" title="Rename"
-                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Rename</button>
-                            <button @onclick="() => DuplicateAsync(template)" title="Duplicate template"
-                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Duplicate</button>
-                            <button @onclick="() => StartEdit(template)" title="Edit template body and properties"
-                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Edit</button>
-                            <button @onclick="() => DeleteTemplateAsync(template.Id)" title="Delete template"
-                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-error);">&#x2715;</button>
-                        </div>
+
+            @if (!string.IsNullOrWhiteSpace(_validationMessage))
+            {
+                <div data-testid="template-validation-message"
+                     style="margin-bottom:10px; padding:8px 10px; border:1px solid var(--color-error); border-radius:4px; color:var(--color-error); font-size:12px;">
+                    @_validationMessage
+                </div>
+            }
+
+            @if (!AppState.MessageTemplates.Any())
+            {
+                <div style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:13px;">
+                    No templates saved yet.<br />
+                    <span style="font-size:12px;">Use <strong>Save as Template</strong> in the composer or detail pane to create
+                        one.</span>
                     </div>
                 }
-            </div>
-        }
-    </div>
-</div>
+        else
+                {
+                    var visibleTemplates = FilteredTemplates;
 
-@* Edit modal *@
-@if (_editingTemplate is not null)
-{
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:600; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:600px; width:90%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden;">
-            <h3 style="margin:0 0 12px; font-size:14px;">Edit Template: @_editingTemplate.Name</h3>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                        <input data-testid="template-search-input" type="text" @bind="_searchQuery" @bind:event="oninput"
+                               placeholder="Search templates by name, subject, or content-type" aria-label="Search templates"
+                               style="flex:1; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+                        <span style="font-size:11px; color:var(--color-text-muted);">
+                            @visibleTemplates.Count match(es)
+                        </span>
+                    </div>
 
-            <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Subject</label>
-                        <input type="text" @bind="_editSubject"
-                               style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                    </div>
-                    <div style="display:flex; flex-direction:column; gap:3px;">
-                        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Content-Type</label>
-                        <input type="text" @bind="_editContentType"
-                               style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                    </div>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:3px;">
-                    <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Correlation ID</label>
-                    <input type="text" @bind="_editCorrelationId"
-                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                </div>
-
-                <div>
-                    <div style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-                        Application Properties
-                        <button @onclick="EditAddProperty"
-                                style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+ Add</button>
-                    </div>
-                    @for (var i = 0; i < _editProperties.Count; i++)
+                    @if (!visibleTemplates.Any())
                     {
-                        var idx = i;
-                        <div style="display:flex; gap:4px; margin-bottom:4px;">
-                            <input type="text" value="@_editProperties[idx].Key" placeholder="Key"
-                                   @onchange="e => EditSetPropKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                   style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                            <input type="text" value="@_editProperties[idx].Value" placeholder="Value"
-                                   @onchange="e => EditSetPropValue(idx, e.Value?.ToString() ?? string.Empty)"
-                                   style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                            <button @onclick="() => _editProperties.RemoveAt(idx)" title="Remove"
-                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">&#x2715;</button>
+                        <div
+                            style="padding:20px; text-align:center; color:var(--color-text-muted); font-size:12px; border:1px solid var(--color-border); border-radius:6px;">
+                            No templates match "@_searchQuery".
                         </div>
                     }
-                </div>
-
-                <div style="display:flex; flex-direction:column; gap:3px;">
-                    <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Body</label>
-                    <textarea @bind="_editBody" rows="8"
-                              style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:100px;" />
+                    else
+                    {
+                        <div style="overflow-y:auto; flex:1;">
+                            @foreach (var template in visibleTemplates)
+                            {
+                                var isSelected = _selectedTemplateId == template.Id;
+                                <div data-testid="template-row" @onclick="() => SelectTemplate(template.Id)"
+                                     style="display:flex; align-items:center; padding:10px 8px; border-bottom:1px solid var(--color-border); gap:8px; background:@(isSelected ? "rgba(100,149,237,0.10)" : "transparent");">
+                                    <div style="flex:1; min-width:0;">
+                                        @if (_renamingId == template.Id)
+                                        {
+                                            <div style="display:flex; gap:4px; align-items:center;">
+                                                <input data-testid="rename-template-input" type="text" @bind="_renameValue"
+                                                       style="flex:1; padding:3px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-accent); border-radius:3px;" />
+                                                <button data-testid="confirm-rename-button" @onclick="() => ConfirmRename(template)"
+                                                        @onclick:stopPropagation="true"
+                                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;">OK</button>
+                                                <button @onclick="CancelRename" @onclick:stopPropagation="true"
+                                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">Cancel</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div
+                                                style="font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                                @template.Name</div>
+                                            }
+                                            <div style="font-size:11px; color:var(--color-text-muted); margin-top:2px;">
+                                                @(template.ContentType ?? "no content-type")
+                                                @if (!string.IsNullOrWhiteSpace(template.Subject))
+                                                {
+                                                    <span> · @template.Subject</span>
+                                                }
+                                                @if (template.Properties.Count > 0)
+                                                {
+                                                    <span> · @template.Properties.Count props</span>
+                                                }
+                                                <span> · @template.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                                            <FluentButton Appearance="Appearance.Accent" style="font-size:11px;"
+                                                          data-testid="apply-template-button" @onclick="() => ApplyTemplateAsync(template)">
+                                                Apply
+                                            </FluentButton>
+                                            <button data-testid="rename-template-button" @onclick="() => StartRename(template)"
+                                                    @onclick:stopPropagation="true" title="Rename"
+                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Rename</button>
+                                            <button @onclick="() => DuplicateAsync(template)" @onclick:stopPropagation="true"
+                                                    title="Duplicate template"
+                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Duplicate</button>
+                                            <button data-testid="edit-template-button" @onclick="() => StartEdit(template)"
+                                                    @onclick:stopPropagation="true" title="Edit template body and properties"
+                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Edit</button>
+                                            <button data-testid="delete-template-button" @onclick="() => DeleteTemplateAsync(template.Id)"
+                                                    @onclick:stopPropagation="true" title="Delete template"
+                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-error);">&#x2715;</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
                 </div>
             </div>
 
-            <div style="display:flex; gap:6px; margin-top:14px; justify-content:flex-end;">
-                <button @onclick="CancelEdit"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-                <button @onclick="SaveEdit"
-                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save Changes</button>
-            </div>
-        </div>
-    </div>
-}
+            @* Edit modal *@
+            @if (_editingTemplate is not null)
+            {
+                <div
+                    style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:600; display:flex; align-items:center; justify-content:center;">
+                    <div
+                        style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:600px; width:90%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden;">
+                        <h3 style="margin:0 0 12px; font-size:14px;">Edit Template: @_editingTemplate.Name</h3>
+
+                        <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                <div style="display:flex; flex-direction:column; gap:3px;">
+                                    <label
+                                    style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Subject</label>
+                                    <input type="text" @bind="_editSubject"
+                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:3px;">
+                                    <label
+                                    style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Content-Type</label>
+                                    <input type="text" @bind="_editContentType"
+                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:3px;">
+                                <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Correlation
+                                    ID</label>
+                                    <input type="text" @bind="_editCorrelationId"
+                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                </div>
+
+                                <div>
+                                    <div
+                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                        Application Properties
+                                        <button @onclick="EditAddProperty"
+                                                style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+
+                                            Add</button>
+                                        </div>
+                                        @for (var i = 0; i < _editProperties.Count; i++)
+                                        {
+                                            var idx = i;
+                                            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                                                <input type="text" value="@_editProperties[idx].Key" placeholder="Key"
+                                                       @onchange="e => EditSetPropKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <input type="text" value="@_editProperties[idx].Value" placeholder="Value"
+                                                       @onchange="e => EditSetPropValue(idx, e.Value?.ToString() ?? string.Empty)"
+                                                       style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                <button @onclick="() => _editProperties.RemoveAt(idx)" title="Remove"
+                                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">&#x2715;</button>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <div style="display:flex; flex-direction:column; gap:3px;">
+                                        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Body</label>
+                                        <textarea data-testid="edit-template-body" @bind="_editBody" rows="8"
+                                                  style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:100px;" />
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; gap:6px; margin-top:14px; justify-content:flex-end;">
+                                    <button @onclick="CancelEdit"
+                                            style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                                    <button data-testid="save-edit-template-button" @onclick="SaveEdit"
+                                            style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save
+                                        Changes</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
 
 @code {
     [Parameter] public EventCallback<SbMessageTemplate> OnTemplateSelected { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+
+    private Guid? _selectedTemplateId;
+    private string _searchQuery = "";
+    private string? _validationMessage;
 
     // Rename state
     private Guid? _renamingId;
@@ -145,28 +208,86 @@
     private string _editBody = "";
     private List<(string Key, string Value)> _editProperties = [];
 
+    private IReadOnlyList<SbMessageTemplate> FilteredTemplates
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_searchQuery))
+                return AppState.MessageTemplates;
+
+            var term = _searchQuery.Trim();
+            return AppState.MessageTemplates
+                .Where(t =>
+                    t.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || (t.Subject?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (t.ContentType?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+    }
+
+    private void SelectTemplate(Guid id)
+    {
+        _selectedTemplateId = id;
+        _validationMessage = null;
+    }
+
+    private Task ApplyTemplateAsync(SbMessageTemplate template)
+    {
+        _selectedTemplateId = template.Id;
+        _validationMessage = null;
+        return OnTemplateSelected.InvokeAsync(template);
+    }
+
     private void StartRename(SbMessageTemplate template)
     {
         _renamingId = template.Id;
         _renameValue = template.Name;
+        _selectedTemplateId = template.Id;
+        _validationMessage = null;
     }
 
-    private void CancelRename() => _renamingId = null;
+    private void CancelRename()
+    {
+        _renamingId = null;
+        _validationMessage = null;
+    }
 
     private async Task ConfirmRename(SbMessageTemplate template)
     {
-        if (string.IsNullOrWhiteSpace(_renameValue)) return;
-        template.Name = _renameValue.Trim();
+        var name = _renameValue.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _validationMessage = "Template name is required.";
+            return;
+        }
+
+        var duplicateNameExists = AppState.MessageTemplates.Any(t =>
+            t.Id != template.Id &&
+            string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (duplicateNameExists)
+        {
+            _validationMessage = "Template name must be unique.";
+            return;
+        }
+
+        template.Name = name;
         await AppState.SaveMessageTemplateAsync(template);
         _renamingId = null;
+        _validationMessage = null;
         StateHasChanged();
     }
 
     private async Task DuplicateAsync(SbMessageTemplate source)
     {
+        var copyNameBase = source.Name + " (copy)";
+        var copyName = copyNameBase;
+        var copySuffix = 2;
+        while (AppState.MessageTemplates.Any(t => string.Equals(t.Name, copyName, StringComparison.OrdinalIgnoreCase)))
+            copyName = $"{copyNameBase} {copySuffix++}";
+
         var copy = new SbMessageTemplate
         {
-            Name = source.Name + " (copy)",
+            Name = copyName,
             Body = source.Body,
             ContentType = source.ContentType,
             Subject = source.Subject,
@@ -174,6 +295,8 @@
             Properties = new Dictionary<string, string>(source.Properties)
         };
         await AppState.SaveMessageTemplateAsync(copy);
+        _selectedTemplateId = copy.Id;
+        _validationMessage = null;
         StateHasChanged();
     }
 
@@ -185,17 +308,44 @@
         _editCorrelationId = template.CorrelationId ?? "";
         _editBody = template.Body;
         _editProperties = template.Properties.Select(kvp => (kvp.Key, kvp.Value)).ToList();
+        _selectedTemplateId = template.Id;
+        _validationMessage = null;
     }
 
-    private void CancelEdit() => _editingTemplate = null;
+    private void CancelEdit()
+    {
+        _editingTemplate = null;
+        _validationMessage = null;
+    }
 
     private void EditAddProperty() => _editProperties.Add(("", ""));
-    private void EditSetPropKey(int idx, string key) { _editProperties[idx] = (key, _editProperties[idx].Value); StateHasChanged(); }
-    private void EditSetPropValue(int idx, string val) { _editProperties[idx] = (_editProperties[idx].Key, val); StateHasChanged(); }
+    private void EditSetPropKey(int idx, string key)
+    {
+        _editProperties[idx] = (key, _editProperties[idx].Value);
+        StateHasChanged();
+    }
+    private void EditSetPropValue(int idx, string val)
+    {
+        _editProperties[idx] = (_editProperties[idx].Key, val);
+        StateHasChanged();
+    }
 
     private async Task SaveEdit()
     {
         if (_editingTemplate is null) return;
+
+        var duplicatePropertyKey = _editProperties
+            .Select(p => p.Key.Trim())
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .GroupBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(g => g.Count() > 1)?
+            .Key;
+        if (!string.IsNullOrWhiteSpace(duplicatePropertyKey))
+        {
+            _validationMessage = $"Property key '{duplicatePropertyKey}' is duplicated.";
+            return;
+        }
+
         _editingTemplate.Subject = string.IsNullOrWhiteSpace(_editSubject) ? null : _editSubject;
         _editingTemplate.ContentType = string.IsNullOrWhiteSpace(_editContentType) ? null : _editContentType;
         _editingTemplate.CorrelationId = string.IsNullOrWhiteSpace(_editCorrelationId) ? null : _editCorrelationId;
@@ -205,12 +355,20 @@
             .ToDictionary(p => p.Key, p => p.Value);
         await AppState.SaveMessageTemplateAsync(_editingTemplate);
         _editingTemplate = null;
+        _validationMessage = null;
         StateHasChanged();
     }
 
     private async Task DeleteTemplateAsync(Guid id)
     {
         await AppState.DeleteMessageTemplateAsync(id);
+        if (_selectedTemplateId == id)
+            _selectedTemplateId = null;
+        if (_renamingId == id)
+            _renamingId = null;
+        if (_editingTemplate?.Id == id)
+            _editingTemplate = null;
+        _validationMessage = null;
         StateHasChanged();
     }
 }

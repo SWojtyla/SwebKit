@@ -12,9 +12,11 @@
         <div style="margin-left:auto; display:flex; gap:4px; align-items:center;">
             @if (Mode == ComposerMode.Compose)
             {
-                <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenTemplatePicker">Load
+                <FluentButton data-testid="load-template-button" Appearance="Appearance.Stealth" style="font-size:11px;"
+                              @onclick="OpenTemplatePicker">Load
                     Template</FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="OpenSaveTemplate">Save as
+                    <FluentButton data-testid="open-save-template-button" Appearance="Appearance.Stealth"
+                                  style="font-size:11px;" @onclick="OpenSaveTemplate">Save as
                         Template</FluentButton>
                     }
                     <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
@@ -180,7 +182,7 @@
                                     <div style="display:flex; flex-direction:column; gap:3px;">
                                         <label
                                         style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.4px;">Body</label>
-                                        <textarea @bind="_body" rows="5"
+                                        <textarea @bind="_body" rows="5" data-testid="composer-body-input"
                                                   style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:80px;" />
                                     </div>
 
@@ -191,8 +193,8 @@
                                             <span
                                             style="font-size:11px; color:@(_sendError ? "var(--color-error)" : "var(--color-success)");">@_sendResult</span>
                                         }
-                                        <FluentButton Appearance="Appearance.Accent" style="margin-left:auto;" Disabled="@(!CanSend)"
-                                                      @onclick="SendMessage">
+                                        <FluentButton data-testid="composer-send-button" Appearance="Appearance.Accent" style="margin-left:auto;"
+                                                      Disabled="@(!CanSend)" @onclick="SendMessage">
                                             @SendLabel
                                         </FluentButton>
                                     </div>
@@ -210,12 +212,13 @@
                                         <div
                                             style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
                                             <h3 style="margin:0 0 12px; font-size:14px;">Save as Template</h3>
-                                            <input type="text" @bind="_saveTemplateName" placeholder="Template name…"
+                                            <input data-testid="save-template-name-input" type="text" @bind="_saveTemplateName" placeholder="Template name…"
                                                    style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
                                             <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
                                                 <button @onclick="() => _showSaveTemplate = false"
                                                         style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-                                                <button @onclick="SaveTemplate" disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
+                                                <button data-testid="save-template-confirm-button" @onclick="SaveTemplate"
+                                                        disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
                                                         style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
                                             </div>
                                         </div>

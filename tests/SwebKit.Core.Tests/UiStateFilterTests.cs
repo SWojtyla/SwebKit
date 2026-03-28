@@ -117,4 +117,96 @@ public class UiStateFilterTests
         Assert.Equal("errors", result[0].Name);
         Assert.Equal("level=error", result[0].Value);
     }
+
+    [Fact]
+    public async Task MessageListPreferences_PersistenceRoundtrip_RestoresColumnsAndDensity()
+    {
+        using var _ = new AppDataSandbox();
+        const string preferenceScope = "ns-guid:my-queue:active";
+
+        var writer = new UiStateRepository();
+        await writer.SaveMessageListPreferencesAsync(preferenceScope, new MessageListPreferences
+        {
+            RowDensity = "compact",
+            BuiltInColumns = new Dictionary<string, bool>
+            {
+                ["message-id"] = true,
+                ["subject"] = false,
+            },
+            CustomPropertyColumns = ["region", "tenant"]
+        });
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        var restored = reader.GetMessageListPreferences(preferenceScope);
+        Assert.Equal("compact", restored.RowDensity);
+        Assert.True(restored.BuiltInColumns["message-id"]);
+        Assert.False(restored.BuiltInColumns["subject"]);
+        Assert.Equal(["region", "tenant"], restored.CustomPropertyColumns);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LegacyUiStateWithoutWave3Fields_UsesSafeDefaults()
+    {
+        using var _ = new AppDataSandbox();
+
+        var legacyJson =
+                """
+                        {
+                            "savedFilters": {
+                                "ns-guid:my-queue": [
+                                    { "name": "legacy", "value": "priority=high" }
+                                ]
+                            }
+                        }
+                        """;
+
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, legacyJson);
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var restoredFilter = repo.GetFilters(ScopeKey);
+        Assert.Single(restoredFilter);
+        Assert.Equal("legacy", restoredFilter[0].Name);
+
+        var preferences = repo.GetMessageListPreferences("ns-guid:my-queue:active");
+        Assert.Equal("default", preferences.RowDensity);
+        Assert.Empty(preferences.BuiltInColumns);
+        Assert.Empty(preferences.CustomPropertyColumns);
+    }
+
+    [Fact]
+    public async Task LoadAsync_NullWave3Fields_AreNormalizedOnRead()
+    {
+        using var _ = new AppDataSandbox();
+        const string preferenceScope = "ns-guid:my-queue:dlq";
+
+        var jsonWithNulls =
+                """
+                        {
+                            "messageListPreferences": {
+                                "ns-guid:my-queue:dlq": {
+                                    "rowDensity": null,
+                                    "builtInColumns": null,
+                                    "customPropertyColumns": [" region ", "REGION", " "]
+                                }
+                            }
+                        }
+                        """;
+
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, jsonWithNulls);
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var restored = repo.GetMessageListPreferences(preferenceScope);
+        Assert.Equal("default", restored.RowDensity);
+        Assert.Empty(restored.BuiltInColumns);
+        Assert.Single(restored.CustomPropertyColumns);
+        Assert.Equal("region", restored.CustomPropertyColumns[0]);
+    }
 }

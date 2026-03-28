@@ -13,7 +13,7 @@
     <div style="display:flex; flex:1; overflow:hidden;">
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
-                             MultiSelect="true" SelectedMessage="SelectedMessage"
+                             RefreshToken="@_refreshToken" MultiSelect="true" SelectedMessage="SelectedMessage"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
@@ -78,6 +78,7 @@
     private ElementReference _dlqSplitterRef;
     private ElementReference _dlqDetailRef;
     private IJSObjectReference? _dlqSplitterHandle;
+    private long _refreshToken;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -149,6 +150,13 @@
     {
         ShowConfirm = false;
         if (PendingAction is not null) await PendingAction();
+        PendingAction = null;
+    }
+
+    private async Task RefreshDlqListAsync()
+    {
+        _refreshToken++;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task DoResubmit()
@@ -161,13 +169,14 @@
             await Client.ResubmitDeadLetterAsync(EntityPath, [SelectedMessage.SequenceNumber.Value.ToString()], null);
             TaskQueue.Complete(task.Id);
             SelectedMessage = null;
+            await RefreshDlqListAsync();
         }
         catch (Exception ex)
         {
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; StateHasChanged(); }
+        finally { IsWorking = false; await InvokeAsync(StateHasChanged); }
     }
 
     private async Task DoComplete()
@@ -180,13 +189,14 @@
             await Client.CompleteDeadLetterAsync(EntityPath, [SelectedMessage.SequenceNumber.Value.ToString()]);
             TaskQueue.Complete(task.Id);
             SelectedMessage = null;
+            await RefreshDlqListAsync();
         }
         catch (Exception ex)
         {
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; StateHasChanged(); }
+        finally { IsWorking = false; await InvokeAsync(StateHasChanged); }
     }
 
     private async Task DoBatchResubmit()
@@ -221,13 +231,14 @@
             TaskQueue.Complete(task.Id);
             _batchSelected.Clear();
             SelectedMessage = null;
+            await RefreshDlqListAsync();
         }
         catch (Exception ex)
         {
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; _batchProgressMessage = null; StateHasChanged(); }
+        finally { IsWorking = false; _batchProgressMessage = null; await InvokeAsync(StateHasChanged); }
     }
 
     private async Task DoBatchComplete()
@@ -262,12 +273,13 @@
             TaskQueue.Complete(task.Id);
             _batchSelected.Clear();
             SelectedMessage = null;
+            await RefreshDlqListAsync();
         }
         catch (Exception ex)
         {
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; _batchProgressMessage = null; StateHasChanged(); }
+        finally { IsWorking = false; _batchProgressMessage = null; await InvokeAsync(StateHasChanged); }
     }
 }

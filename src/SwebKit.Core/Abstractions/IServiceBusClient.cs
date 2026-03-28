@@ -8,9 +8,14 @@ public interface IServiceBusClient
     Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default);
+    Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default);
+    Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default);
+    Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default);
     Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default);
     Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default);
     Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default);
+    Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default);
+    Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default);
     Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default);
     Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default);
     /// <summary>Schedules a message for future delivery and returns the sequence number assigned by the broker.</summary>

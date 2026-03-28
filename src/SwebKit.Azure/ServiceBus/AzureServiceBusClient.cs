@@ -11,6 +11,9 @@ namespace SwebKit.Azure.ServiceBus;
 
 public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 {
+    private const int MaxReceiveBatchSize = 100;
+    private static readonly TimeSpan ReceiveWaitTime = TimeSpan.FromSeconds(2);
+
     private readonly ServiceBusClient _client;
     private readonly ServiceBusAdministrationClient _adminClient;
     private readonly string? _scopedEntityPath;
@@ -62,20 +65,15 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var q in _adminClient.GetQueuesRuntimePropertiesAsync(ct))
+        await foreach (var q in _adminClient.GetQueuesAsync(ct))
         {
+            var stats = await TryGetQueueStatsAsync(q.Name, ct);
             result.Add(new SbEntityInfo
             {
                 Name = q.Name,
                 EntityPath = q.Name,
-                Stats = new SbEntityStats
-                {
-                    ActiveMessageCount = q.ActiveMessageCount,
-                    DeadLetterMessageCount = q.DeadLetterMessageCount,
-                    ScheduledMessageCount = q.ScheduledMessageCount,
-                    TransferCount = q.TransferMessageCount,
-                    UpdatedAt = q.UpdatedAt
-                }
+                IsDisabled = IsEntityDisabled(q.Status),
+                Stats = stats ?? new SbEntityStats()
             });
         }
 
@@ -90,9 +88,15 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
     public async Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var t in _adminClient.GetTopicsRuntimePropertiesAsync(ct))
+        await foreach (var t in _adminClient.GetTopicsAsync(ct))
         {
-            result.Add(new SbEntityInfo { Name = t.Name, EntityPath = t.Name, IsTopic = true });
+            result.Add(new SbEntityInfo
+            {
+                Name = t.Name,
+                EntityPath = t.Name,
+                IsTopic = true,
+                IsDisabled = IsEntityDisabled(t.Status)
+            });
         }
 
         if (result.Count == 0)
@@ -109,24 +113,23 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         try
         {
-            var q = await _adminClient.GetQueueRuntimePropertiesAsync(_scopedEntityPath, ct);
+            var q = await _adminClient.GetQueueAsync(_scopedEntityPath, ct);
+            var stats = await TryGetQueueStatsAsync(q.Value.Name, ct);
             result.Add(new SbEntityInfo
             {
                 Name = q.Value.Name,
                 EntityPath = q.Value.Name,
-                Stats = new SbEntityStats
-                {
-                    ActiveMessageCount = q.Value.ActiveMessageCount,
-                    DeadLetterMessageCount = q.Value.DeadLetterMessageCount,
-                    ScheduledMessageCount = q.Value.ScheduledMessageCount,
-                    TransferCount = q.Value.TransferMessageCount,
-                    UpdatedAt = q.Value.UpdatedAt
-                }
+                IsDisabled = IsEntityDisabled(q.Value.Status),
+                Stats = stats ?? new SbEntityStats()
             });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
-            // Intentionally ignore: scoped entity may be a topic or the principal may not have runtime rights.
+            // Intentionally ignore: scoped entity may be a topic or may not be accessible.
         }
     }
 
@@ -136,71 +139,114 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
         try
         {
-            var t = await _adminClient.GetTopicRuntimePropertiesAsync(_scopedEntityPath, ct);
+            var t = await _adminClient.GetTopicAsync(_scopedEntityPath, ct);
             result.Add(new SbEntityInfo
             {
                 Name = t.Value.Name,
                 EntityPath = t.Value.Name,
-                IsTopic = true
+                IsTopic = true,
+                IsDisabled = IsEntityDisabled(t.Value.Status)
             });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
-            // Intentionally ignore: scoped entity may be a queue or topic runtime properties may not be accessible.
+            // Intentionally ignore: scoped entity may be a queue or may not be accessible.
         }
     }
 
     public async Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default)
     {
         var result = new List<SbEntityInfo>();
-        await foreach (var s in _adminClient.GetSubscriptionsRuntimePropertiesAsync(topicName, ct))
+        await foreach (var s in _adminClient.GetSubscriptionsAsync(topicName, ct))
         {
+            var stats = await TryGetSubscriptionStatsAsync(topicName, s.SubscriptionName, ct);
             result.Add(new SbEntityInfo
             {
                 Name = s.SubscriptionName,
                 EntityPath = $"{topicName}/subscriptions/{s.SubscriptionName}",
                 IsSubscription = true,
                 TopicName = topicName,
-                Stats = new SbEntityStats
-                {
-                    ActiveMessageCount = s.ActiveMessageCount,
-                    DeadLetterMessageCount = s.DeadLetterMessageCount,
-                    UpdatedAt = s.UpdatedAt
-                }
+                IsDisabled = IsEntityDisabled(s.Status),
+                Stats = stats ?? new SbEntityStats()
             });
         }
+
         return result;
+    }
+
+    public async Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(queueName))
+            throw new ArgumentException("Queue name is required.", nameof(queueName));
+
+        var queue = await _adminClient.GetQueueAsync(queueName, ct);
+        queue.Value.Status = GetEntityStatus(enabled);
+        await _adminClient.UpdateQueueAsync(queue.Value, ct);
+    }
+
+    public async Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topicName))
+            throw new ArgumentException("Topic name is required.", nameof(topicName));
+
+        var topic = await _adminClient.GetTopicAsync(topicName, ct);
+        topic.Value.Status = GetEntityStatus(enabled);
+        await _adminClient.UpdateTopicAsync(topic.Value, ct);
+    }
+
+    public async Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topicName))
+            throw new ArgumentException("Topic name is required.", nameof(topicName));
+        if (string.IsNullOrWhiteSpace(subscriptionName))
+            throw new ArgumentException("Subscription name is required.", nameof(subscriptionName));
+
+        var sub = await _adminClient.GetSubscriptionAsync(topicName, subscriptionName, ct);
+        sub.Value.Status = GetEntityStatus(enabled);
+        await _adminClient.UpdateSubscriptionAsync(sub.Value, ct);
     }
 
     public async Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default)
     {
+        if (TryParseSubscriptionPath(entityPath, out var parsedTopic, out var parsedSubscription))
+        {
+            var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parsedTopic, parsedSubscription, ct);
+            return new SbEntityStats
+            {
+                ActiveMessageCount = props.Value.ActiveMessageCount,
+                DeadLetterMessageCount = props.Value.DeadLetterMessageCount,
+                UpdatedAt = props.Value.UpdatedAt
+            };
+        }
+
         if (entityPath.Contains('/'))
         {
             var parts = entityPath.Split('/', 2);
-            if (parts.Length != 2)
-                throw new ArgumentException($"Expected 'topic/subscription' format but got: '{entityPath}'", nameof(entityPath));
-            var topicName = parts[0];
-            var subName = parts[1];
-            var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subName, ct);
-            return new SbEntityStats
+            if (parts.Length == 2)
             {
-                ActiveMessageCount = props.Value.ActiveMessageCount,
-                DeadLetterMessageCount = props.Value.DeadLetterMessageCount,
-                UpdatedAt = props.Value.UpdatedAt
-            };
+                var props = await _adminClient.GetSubscriptionRuntimePropertiesAsync(parts[0], parts[1], ct);
+                return new SbEntityStats
+                {
+                    ActiveMessageCount = props.Value.ActiveMessageCount,
+                    DeadLetterMessageCount = props.Value.DeadLetterMessageCount,
+                    UpdatedAt = props.Value.UpdatedAt
+                };
+            }
         }
-        else
+
+        var queueProps = await _adminClient.GetQueueRuntimePropertiesAsync(entityPath, ct);
+        return new SbEntityStats
         {
-            var props = await _adminClient.GetQueueRuntimePropertiesAsync(entityPath, ct);
-            return new SbEntityStats
-            {
-                ActiveMessageCount = props.Value.ActiveMessageCount,
-                DeadLetterMessageCount = props.Value.DeadLetterMessageCount,
-                ScheduledMessageCount = props.Value.ScheduledMessageCount,
-                TransferCount = props.Value.TransferMessageCount,
-                UpdatedAt = props.Value.UpdatedAt
-            };
-        }
+            ActiveMessageCount = queueProps.Value.ActiveMessageCount,
+            DeadLetterMessageCount = queueProps.Value.DeadLetterMessageCount,
+            ScheduledMessageCount = queueProps.Value.ScheduledMessageCount,
+            TransferCount = queueProps.Value.TransferMessageCount,
+            UpdatedAt = queueProps.Value.UpdatedAt
+        };
     }
 
     public async Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default)
@@ -216,6 +262,83 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         await using var receiver = _client.CreateReceiver(dlqPath);
         var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct);
         return messages.Select(MapMessage).ToList();
+    }
+
+    public async Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
+    {
+        if (sequenceNumbers.Count == 0)
+        {
+            return 0;
+        }
+
+        var remaining = new HashSet<long>(sequenceNumbers);
+        var completed = 0;
+        await using var receiver = _client.CreateReceiver(entityPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = Math.Min(MaxReceiveBatchSize, remaining.Count)
+        });
+
+        while (remaining.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var receiveCount = Math.Min(MaxReceiveBatchSize, Math.Max(1, remaining.Count));
+            var received = await receiver.ReceiveMessagesAsync(receiveCount, ReceiveWaitTime, ct);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (remaining.Remove(message.SequenceNumber))
+                {
+                    await receiver.CompleteMessageAsync(message, ct);
+                    completed++;
+                }
+                else
+                {
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct);
+                }
+            }
+        }
+
+        return completed;
+    }
+
+    public async Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default)
+    {
+        var purgePath = deadLetter ? $"{entityPath}/$DeadLetterQueue" : entityPath;
+        var deleted = 0;
+
+        await using var receiver = _client.CreateReceiver(purgePath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = MaxReceiveBatchSize
+        });
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+                await receiver.CompleteMessageAsync(message, ct);
+                deleted++;
+            }
+        }
+
+        return deleted;
     }
 
     public async Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default)
@@ -282,11 +405,100 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
-        try { await _adminClient.GetNamespacePropertiesAsync(ct); return true; }
+        try
+        {
+            await foreach (var _ in _adminClient.GetQueuesAsync(ct))
+            {
+                break;
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Service Bus connection test failed for namespace {Namespace}", _client.FullyQualifiedNamespace);
             return false;
+        }
+    }
+
+    private static EntityStatus GetEntityStatus(bool enabled) => enabled ? EntityStatus.Active : EntityStatus.Disabled;
+
+    private static bool IsEntityDisabled(EntityStatus status) => status != EntityStatus.Active;
+
+    private static bool TryParseSubscriptionPath(string entityPath, out string topicName, out string subscriptionName)
+    {
+        const string marker = "/subscriptions/";
+        var markerIndex = entityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex <= 0)
+        {
+            topicName = string.Empty;
+            subscriptionName = string.Empty;
+            return false;
+        }
+
+        var topic = entityPath[..markerIndex];
+        var subscription = entityPath[(markerIndex + marker.Length)..];
+        if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(subscription))
+        {
+            topicName = string.Empty;
+            subscriptionName = string.Empty;
+            return false;
+        }
+
+        topicName = topic;
+        subscriptionName = subscription;
+        return true;
+    }
+
+    private async Task<SbEntityStats?> TryGetQueueStatsAsync(string queueName, CancellationToken ct)
+    {
+        try
+        {
+            var runtime = await _adminClient.GetQueueRuntimePropertiesAsync(queueName, ct);
+            return new SbEntityStats
+            {
+                ActiveMessageCount = runtime.Value.ActiveMessageCount,
+                DeadLetterMessageCount = runtime.Value.DeadLetterMessageCount,
+                ScheduledMessageCount = runtime.Value.ScheduledMessageCount,
+                TransferCount = runtime.Value.TransferMessageCount,
+                UpdatedAt = runtime.Value.UpdatedAt
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Unable to load queue runtime properties for {QueueName}", queueName);
+            return null;
+        }
+    }
+
+    private async Task<SbEntityStats?> TryGetSubscriptionStatsAsync(string topicName, string subscriptionName, CancellationToken ct)
+    {
+        try
+        {
+            var runtime = await _adminClient.GetSubscriptionRuntimePropertiesAsync(topicName, subscriptionName, ct);
+            return new SbEntityStats
+            {
+                ActiveMessageCount = runtime.Value.ActiveMessageCount,
+                DeadLetterMessageCount = runtime.Value.DeadLetterMessageCount,
+                UpdatedAt = runtime.Value.UpdatedAt
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Unable to load subscription runtime properties for {TopicName}/{SubscriptionName}", topicName, subscriptionName);
+            return null;
         }
     }
 
