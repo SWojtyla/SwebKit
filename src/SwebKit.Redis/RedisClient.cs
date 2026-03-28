@@ -104,6 +104,8 @@ public sealed class RedisClient : IRedisClient
         var ttl = await _db.KeyTimeToLiveAsync(key);
         var memoryBytes = await TryGetMemoryUsageAsync(key);
         var encoding = await TryGetEncodingAsync(key);
+        var frequency = await TryGetFrequencyAsync(key);
+        var idleSeconds = await TryGetIdleSecondsAsync(key);
 
         return new RedisKeyInfo
         {
@@ -111,7 +113,9 @@ public sealed class RedisClient : IRedisClient
             Type = ToTypeString(keyType),
             Ttl = ttl,
             MemoryBytes = memoryBytes,
-            Encoding = encoding
+            Encoding = encoding,
+            Frequency = frequency,
+            IdleSeconds = idleSeconds
         };
     }
 
@@ -291,6 +295,28 @@ public sealed class RedisClient : IRedisClient
             return string.IsNullOrWhiteSpace(value) ? null : value;
         }, nameof(TryGetEncodingAsync), key);
 
+    private Task<long?> TryGetFrequencyAsync(string key) =>
+        TryValueAsync(async () =>
+        {
+            var result = await _db.ExecuteAsync("OBJECT", "FREQ", key);
+            var parsed = ParseNullableLong(result.ToString());
+            if (!parsed.HasValue)
+                throw new InvalidOperationException("Redis OBJECT FREQ did not return a numeric result.");
+
+            return parsed.Value;
+        }, nameof(TryGetFrequencyAsync), key);
+
+    private Task<long?> TryGetIdleSecondsAsync(string key) =>
+        TryValueAsync(async () =>
+        {
+            var result = await _db.ExecuteAsync("OBJECT", "IDLETIME", key);
+            var parsed = ParseNullableLong(result.ToString());
+            if (!parsed.HasValue)
+                throw new InvalidOperationException("Redis OBJECT IDLETIME did not return a numeric result.");
+
+            return parsed.Value;
+        }, nameof(TryGetIdleSecondsAsync), key);
+
     private async Task<T?> TryAsync<T>(Func<Task<T?>> operation, string operationName, string key) where T : class
     {
         try { return await operation(); }
@@ -376,6 +402,11 @@ public sealed class RedisClient : IRedisClient
 
     private static long ParseLong(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+
+    private static long? ParseNullableLong(string? value) =>
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
 
     private static string GetString(Dictionary<string, string> metrics, string key) =>
         metrics.TryGetValue(key, out var value) ? value : string.Empty;

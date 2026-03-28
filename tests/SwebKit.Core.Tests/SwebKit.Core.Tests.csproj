@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SwebKit.Core\SwebKit.Core.csproj" />
+    <ProjectReference Include="..\..\src\SwebKit.Observability\SwebKit.Observability.csproj" />
     <ProjectReference Include="..\..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
   </ItemGroup>
 

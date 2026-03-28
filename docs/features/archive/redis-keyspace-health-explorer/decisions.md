@@ -92,3 +92,32 @@ Use progressive analysis over the currently loaded keyset and include explicit c
   - Rejected: can be too slow and operationally expensive.
 - Alternative B: Always sample silently without coverage indication.
   - Rejected: risks false confidence and poor operational decisions.
+
+---
+
+## Decision 004 - Treat hot-key telemetry as optional and explicit
+
+**Status:** Accepted
+
+**Date:** 2026-03-28
+
+### Context
+
+`OBJECT FREQ` and `OBJECT IDLETIME` are not guaranteed across all Redis configurations and policies. Hard-failing analysis when these signals are unavailable would reduce operational usefulness.
+
+### Decision
+
+Collect hot-key signals on a best-effort basis and continue analysis when unavailable. Surface signal availability explicitly in both report metadata and a dedicated informational finding.
+
+### Consequences
+
+- Keeps health analysis usable even when Redis does not expose optional object telemetry.
+- Makes confidence boundaries visible instead of silently hiding heuristic gaps.
+- Prevents false negatives caused by strict dependencies on optional commands.
+
+### Alternatives considered
+
+- Alternative A: Require `OBJECT FREQ` and fail analysis if unsupported.
+  - Rejected: too brittle across environments and reduces operator trust.
+- Alternative B: Ignore hot-key telemetry entirely.
+  - Rejected: misses valuable risk signals in environments where telemetry is available.

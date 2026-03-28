@@ -89,9 +89,9 @@ public class ObservabilityModelsTests
     // ── OverviewMetrics failure rate ──────────────────────────────────────────
 
     [Theory]
-    [InlineData(1000, 50,  0.05)]   // 5% failure rate
-    [InlineData(100,  0,   0.0)]    // 0% failure rate
-    [InlineData(200,  200, 1.0)]    // 100% failure rate
+    [InlineData(1000, 50, 0.05)]   // 5% failure rate
+    [InlineData(100, 0, 0.0)]    // 0% failure rate
+    [InlineData(200, 200, 1.0)]    // 100% failure rate
     public void OverviewMetrics_FailureRate_IsCalculatedFromRequestAndFailedCount(
         long requestCount, long failedCount, double expectedRate)
     {
@@ -119,5 +119,94 @@ public class ObservabilityModelsTests
         var metrics = new OverviewMetrics(0, failureRate, 0, 0, 0, 100.0, [], []);
 
         Assert.Equal(0.0, metrics.FailureRate);
+    }
+
+    // ── Guided KQL models ────────────────────────────────────────────────────
+
+    [Fact]
+    public void GuidedKqlQueryDefinition_Defaults_AreSafe()
+    {
+        var definition = GuidedKqlQueryDefinition.CreateDefault();
+
+        Assert.Equal("traces", definition.Table);
+        Assert.Empty(definition.Filters);
+        Assert.Empty(definition.Projections);
+        Assert.Equal("timestamp", definition.Sort.Column);
+        Assert.True(definition.Sort.Descending);
+        Assert.Equal(100, definition.Limit);
+    }
+
+    [Fact]
+    public void GuidedKqlQueryDefinition_Clone_CreatesDeepCopy()
+    {
+        var source = new GuidedKqlQueryDefinition
+        {
+            Table = "requests",
+            Filters = [new GuidedKqlFilter { Column = "name", Operator = GuidedKqlFilterOperator.Contains, Value = "api" }],
+            Projections = ["timestamp", "name"],
+            Sort = new GuidedKqlSort { Column = "duration", Descending = false },
+            Limit = 250,
+        };
+
+        var clone = source.Clone();
+
+        source.Filters[0].Value = "mutated";
+        source.Projections[0] = "resultCode";
+        source.Sort.Column = "timestamp";
+
+        Assert.Equal("api", clone.Filters[0].Value);
+        Assert.Equal("timestamp", clone.Projections[0]);
+        Assert.Equal("duration", clone.Sort.Column);
+        Assert.Equal(250, clone.Limit);
+    }
+
+    [Fact]
+    public void GuidedKqlQueryDefinition_CopyFrom_NullMembers_FallsBackToDefaults()
+    {
+        var source = new GuidedKqlQueryDefinition
+        {
+            Table = " ",
+            Filters = null!,
+            Projections = null!,
+            Sort = null!,
+            Limit = 0,
+        };
+
+        var target = new GuidedKqlQueryDefinition();
+        target.CopyFrom(source);
+
+        Assert.Equal("traces", target.Table);
+        Assert.Empty(target.Filters);
+        Assert.Empty(target.Projections);
+        Assert.Equal("timestamp", target.Sort.Column);
+        Assert.True(target.Sort.Descending);
+        Assert.Equal(100, target.Limit);
+    }
+
+    [Fact]
+    public void GuidedKqlCompileResult_HelpersReflectIssueSeverities()
+    {
+        var result = GuidedKqlCompileResult.Success(
+            query: "requests\n| take 10",
+            issues:
+            [
+                new GuidedKqlCompileIssue(GuidedKqlCompileIssueSeverity.Warning, "LIMIT_BROAD", "Warning"),
+            ]);
+
+        Assert.True(result.CanExecute);
+        Assert.False(result.HasErrors);
+        Assert.True(result.HasWarnings);
+    }
+
+    [Fact]
+    public void GuidedKqlCompileResult_Invalid_HasErrorsAndCannotExecute()
+    {
+        var result = GuidedKqlCompileResult.Invalid(
+            [
+                new GuidedKqlCompileIssue(GuidedKqlCompileIssueSeverity.Error, "TABLE_INVALID", "Invalid table"),
+            ]);
+
+        Assert.False(result.CanExecute);
+        Assert.True(result.HasErrors);
     }
 }

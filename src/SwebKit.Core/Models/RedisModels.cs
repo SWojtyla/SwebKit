@@ -14,6 +14,90 @@ public class RedisKeyInfo
     public TimeSpan? Ttl { get; set; }
     public long? MemoryBytes { get; set; }
     public string? Encoding { get; set; }
+    public long? Frequency { get; set; }
+    public long? IdleSeconds { get; set; }
+}
+
+public enum RedisHealthSeverity
+{
+    Info = 0,
+    Warning = 1,
+    Critical = 2,
+}
+
+public enum RedisHealthRiskType
+{
+    NoTtl = 0,
+    OversizedValue = 1,
+    HeavyPrefix = 2,
+    PossibleHotKey = 3,
+    HotKeySignalUnavailable = 4,
+}
+
+public enum RedisHealthEntityType
+{
+    Key = 0,
+    Prefix = 1,
+    Keyspace = 2,
+}
+
+public sealed class RedisHealthThresholds
+{
+    public long NoTtlWarningBytes { get; set; } = 16 * 1024;
+    public long NoTtlCriticalBytes { get; set; } = 128 * 1024;
+    public long OversizedWarningBytes { get; set; } = 64 * 1024;
+    public long OversizedCriticalBytes { get; set; } = 256 * 1024;
+    public double HeavyPrefixWarningPercent { get; set; } = 20;
+    public double HeavyPrefixCriticalPercent { get; set; } = 35;
+    public int HeavyPrefixWarningKeyCount { get; set; } = 200;
+    public int HeavyPrefixCriticalKeyCount { get; set; } = 500;
+    public long HotKeyWarningFrequency { get; set; } = 8;
+    public long HotKeyCriticalFrequency { get; set; } = 30;
+    public long HotKeyWarningIdleSeconds { get; set; } = 30;
+    public long HotKeyCriticalIdleSeconds { get; set; } = 10;
+}
+
+public sealed class RedisHealthScanOptions
+{
+    public string Separator { get; set; } = "-";
+    public int MaxFindings { get; set; } = 250;
+    public bool IncludeSignalUnavailableFinding { get; set; } = true;
+    public RedisHealthThresholds Thresholds { get; set; } = new();
+}
+
+public sealed class RedisHealthFinding
+{
+    public RedisHealthEntityType EntityType { get; set; }
+    public RedisHealthRiskType RiskType { get; set; }
+    public RedisHealthSeverity Severity { get; set; }
+    public string Target { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public long? MemoryBytes { get; set; }
+    public int? KeyCount { get; set; }
+    public double? SharePercent { get; set; }
+    public TimeSpan? Ttl { get; set; }
+    public long? Frequency { get; set; }
+    public long? IdleSeconds { get; set; }
+    public string? DrillKey { get; set; }
+}
+
+public sealed class RedisKeyspaceHealthReport
+{
+    public DateTimeOffset GeneratedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public int LoadedKeyCount { get; set; }
+    public long? EstimatedKeyCount { get; set; }
+    public double CoveragePercent { get; set; }
+    public bool IsPartialCoverage { get; set; }
+    public string ConfidenceLabel { get; set; } = "Unknown";
+    public bool HotKeySignalsAvailable { get; set; }
+    public int KeysWithHotKeySignal { get; set; }
+    public int KeysWithoutHotKeySignal { get; set; }
+    public int CriticalCount { get; set; }
+    public int WarningCount { get; set; }
+    public int InfoCount { get; set; }
+    public int KeyFindingCount { get; set; }
+    public int PrefixFindingCount { get; set; }
+    public IReadOnlyList<RedisHealthFinding> Findings { get; set; } = [];
 }
 
 public class RedisHashField

@@ -43,3 +43,8 @@ public interface IObservabilityResourceDiscovery
 {
     IAsyncEnumerable<ObservabilityResourceInfo> DiscoverResourcesAsync(CancellationToken ct = default);
 }
+
+public interface IGuidedKqlCompiler
+{
+    GuidedKqlCompileResult Compile(GuidedKqlQueryDefinition definition);
+}

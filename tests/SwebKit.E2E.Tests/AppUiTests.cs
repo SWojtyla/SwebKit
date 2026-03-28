@@ -206,9 +206,91 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
             .ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10_000 });
     }
 
+    [Fact]
+    public async Task ObservabilityLogs_GuidedFirstJourney_InDemoMode_RunsQuery()
+    {
+        await OpenObservabilityLogsInDemoModeAsync();
+
+        var runButton = _fixture.Page.Locator("[data-testid=\"obs-run-query\"]");
+        await runButton.ClickAsync();
+
+        var resultsHeader = _fixture.Page.Locator(".obs-results-header");
+        await Assertions.Expect(resultsHeader)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+        await Assertions.Expect(resultsHeader).ToContainTextAsync("results");
+    }
+
+    [Fact]
+    public async Task ObservabilityLogs_GuidedToAdvancedJourney_QueryStillRuns()
+    {
+        await OpenObservabilityLogsInDemoModeAsync();
+
+        var advancedModeButton = _fixture.Page.Locator("[data-testid=\"obs-mode-advanced\"]");
+        await advancedModeButton.ClickAsync();
+        await Assertions.Expect(advancedModeButton).ToHaveAttributeAsync("aria-pressed", "true");
+        await Assertions.Expect(_fixture.Page.Locator(".obs-monaco-wrapper"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+        var runButton = _fixture.Page.Locator("[data-testid=\"obs-run-query\"]");
+        await runButton.ClickAsync();
+
+        var resultsHeader = _fixture.Page.Locator(".obs-results-header");
+        await Assertions.Expect(resultsHeader)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+        await Assertions.Expect(resultsHeader).ToContainTextAsync("results");
+    }
+
     // =========================================================================
     // Helpers
     // =========================================================================
+
+    private async Task OpenObservabilityLogsInDemoModeAsync()
+    {
+        await NavigateToAsync("dashboard");
+        await EnsureDemoModeEnabledAsync();
+
+        await NavigateToAsync("observability");
+
+        await Assertions.Expect(_fixture.Page.Locator(".obs-page"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+
+        var logsTab = _fixture.Page.Locator("[data-testid=\"obs-tab-logs\"]");
+        await Assertions.Expect(logsTab)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+        await logsTab.ClickAsync();
+
+        var runButton = _fixture.Page.Locator("[data-testid=\"obs-run-query\"]");
+        await Assertions.Expect(runButton)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 });
+
+        var guidedModeButton = _fixture.Page.Locator("[data-testid=\"obs-mode-guided\"]");
+        await guidedModeButton.ClickAsync();
+
+        await Assertions.Expect(_fixture.Page.Locator("[data-testid=\"obs-guided-builder\"]"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    private async Task EnsureDemoModeEnabledAsync()
+    {
+        var banner = _fixture.Page.Locator(".demo-banner");
+        if (await banner.IsVisibleAsync())
+        {
+            return;
+        }
+
+        var toggleButton = _fixture.Page.Locator(".demo-toggle-btn");
+        await Assertions.Expect(toggleButton)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        await toggleButton.ClickAsync();
+
+        var confirmButton = _fixture.Page.Locator(".demo-confirm-enable");
+        await Assertions.Expect(confirmButton)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        await confirmButton.ClickAsync();
+
+        await Assertions.Expect(banner)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
 
     /// <summary>Clicks the nav item for the given area to trigger navigation.</summary>
     private Task NavigateToAsync(string area) =>

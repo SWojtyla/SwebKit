@@ -2,6 +2,7 @@
 @using SwebKit.Core.Models
 @using BlazorMonaco
 @using BlazorMonaco.Editor
+@using Microsoft.AspNetCore.Components.Web
 
 <div class="obs-logs">
     <div class="obs-logs-layout">
@@ -37,97 +38,363 @@
                 }
             }
 
-            <button class="obs-save-query-btn" @onclick="SaveCurrentQuery"
-                    disabled="@string.IsNullOrWhiteSpace(_query)">
+            <button class="obs-save-query-btn" @onclick="SaveCurrentQuery" disabled="@(!CanSaveCurrentQuery)">
                 + Save Query
             </button>
         </div>
 
         <!-- Right: editor + results -->
         <div class="obs-logs-main">
-            <div class="obs-query-toolbar">
-                <div class="obs-monaco-wrapper">
-                    <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorConstructionOptions"
-                                          OnDidInit="OnEditorInitAsync" />
-                </div>
-                <div class="obs-query-actions">
-                    <FluentButton Appearance="Appearance.Accent" @onclick="RunQueryAsync" Disabled="_isRunning">
-                        ▶ Run
-                    </FluentButton>
-                    @if (_result is not null)
-                    {
-                        <button class="obs-copy-btn" @onclick="CopyCsvAsync">📋 Copy CSV</button>
-                        <button class="obs-copy-btn" @onclick="DownloadCsvAsync">⬇ CSV</button>
-                        <button class="obs-copy-btn" @onclick="DownloadJsonAsync">⬇ JSON</button>
-                    }
-                </div>
+            <div class="obs-query-mode-toggle" role="group" aria-label="Logs query mode">
+                <button type="button" class="obs-mode-btn @(_mode == GuidedLogsQueryMode.Guided ? "active" : "")"
+                        data-testid="obs-mode-guided" aria-label="Switch to guided query builder"
+                        aria-pressed="@(_mode == GuidedLogsQueryMode.Guided ? "true" : "false")"
+                        aria-keyshortcuts="Enter Space" @onclick="() => SetModeAsync(GuidedLogsQueryMode.Guided)"
+                        @onkeydown="(args) => OnModeToggleKeyDownAsync(GuidedLogsQueryMode.Guided, args)"
+                        @onkeydown:preventDefault="true">
+                    Guided
+                </button>
+                <button type="button" class="obs-mode-btn @(_mode == GuidedLogsQueryMode.Advanced ? "active" : "")"
+                        data-testid="obs-mode-advanced" aria-label="Switch to advanced query editor"
+                        aria-pressed="@(_mode == GuidedLogsQueryMode.Advanced ? "true" : "false")"
+                        aria-keyshortcuts="Enter Space" @onclick="() => SetModeAsync(GuidedLogsQueryMode.Advanced)"
+                        @onkeydown="(args) => OnModeToggleKeyDownAsync(GuidedLogsQueryMode.Advanced, args)"
+                        @onkeydown:preventDefault="true">
+                    Advanced
+                </button>
             </div>
 
-            @if (_queryError is not null)
-            {
-                <div class="obs-query-error">⚠ @_queryError</div>
-            }
+            <div class="obs-query-toolbar">
+                @if (_mode == GuidedLogsQueryMode.Guided)
+                {
+                    <div class="obs-guided-builder @(_guidedCompileResult.HasErrors ? "obs-guided-builder-invalid" : "")"
+                         data-testid="obs-guided-builder">
+                        <div class="obs-guided-grid">
+                            @{
+                                var tableError = GetFieldErrorMessage("table");
+                            }
+                            <label class="obs-guided-field @(tableError is not null ? "obs-guided-field-invalid" : "")">
+                                <span>Table</span>
+                                <select class="obs-guided-input @(tableError is not null ? "obs-guided-input-invalid" : "")"
+                                        data-testid="obs-guided-table"
+                                        aria-invalid="@(tableError is not null ? "true" : "false")"
+                                        aria-describedby="@GetAriaDescribedBy(tableError, "obs-guided-error-table")"
+                                        value="@_guidedDefinition.Table" @onchange="OnGuidedTableChangedAsync">
+                                    @foreach (var table in GuidedTableOrder)
+                                    {
+                                        <option value="@table">@table</option>
+                                    }
+                                </select>
+                                @if (tableError is not null)
+                                {
+                                    <span id="obs-guided-error-table" class="obs-guided-field-error">@tableError</span>
+                                }
+                            </label>
 
-            @if (_isRunning)
-            {
-                <div class="obs-loading">
-                    <FluentProgressRing /> Running query…
-                </div>
-            }
-            else if (_error is not null)
-            {
-                <ErrorCallout Message="@_error" />
-            }
-            else if (_result is not null)
-            {
-                <div class="obs-results-header">
-                    @_result.Rows.Count results
-                    @if (_result.Truncated)
-                    {
-                        <span class="obs-truncated-badge">⚠ Truncated — showing first @_result.Rows.Count rows</span>
+                            @{
+                                var sortColumnError = GetFieldErrorMessage("sort.column");
+                            }
+                            <label
+                                class="obs-guided-field @(sortColumnError is not null ? "obs-guided-field-invalid" : "")">
+                                <span>Sort column</span>
+                                <select
+                                    class="obs-guided-input @(sortColumnError is not null ? "obs-guided-input-invalid" : "")"
+                                    data-testid="obs-guided-sort-column"
+                                    aria-invalid="@(sortColumnError is not null ? "true" : "false")"
+                                    aria-describedby="@GetAriaDescribedBy(sortColumnError, "obs-guided-error-sort-column")"
+                                    value="@_guidedDefinition.Sort.Column" @onchange="OnGuidedSortColumnChangedAsync">
+                                    @foreach (var column in CurrentTableColumns)
+                                    {
+                                        <option value="@column">@column</option>
+                                    }
+                                </select>
+                                @if (sortColumnError is not null)
+                                {
+                                    <span id="obs-guided-error-sort-column"
+                                          class="obs-guided-field-error">@sortColumnError</span>
+                                }
+                            </label>
+
+                            <label class="obs-guided-field">
+                                <span>Sort direction</span>
+                                <select class="obs-guided-input" data-testid="obs-guided-sort-direction"
+                                        value="@(_guidedDefinition.Sort.Descending ? "desc" : "asc")"
+                                        @onchange="OnGuidedSortDirectionChangedAsync">
+                                    <option value="desc">Descending</option>
+                                    <option value="asc">Ascending</option>
+                                </select>
+                            </label>
+
+                            @{
+                                var limitError = GetFieldErrorMessage("limit");
+                            }
+                            <label class="obs-guided-field @(limitError is not null ? "obs-guided-field-invalid" : "")">
+                                <span>Limit</span>
+                                <input class="obs-guided-input @(limitError is not null ? "obs-guided-input-invalid" : "")"
+                                       type="number" min="1" max="10000" data-testid="obs-guided-limit"
+                                       aria-invalid="@(limitError is not null ? "true" : "false")"
+                                       aria-describedby="@GetAriaDescribedBy(limitError, "obs-guided-error-limit")"
+                                       value="@_guidedDefinition.Limit" @onchange="OnGuidedLimitChangedAsync" />
+                                @if (limitError is not null)
+                                {
+                                    <span id="obs-guided-error-limit" class="obs-guided-field-error">@limitError</span>
+                                }
+                            </label>
+                        </div>
+
+                        <div class="obs-guided-section">
+                            <div class="obs-guided-section-title">Columns</div>
+                            <div class="obs-guided-projections">
+                                @foreach (var column in CurrentTableColumns)
+                                {
+                                    <label class="obs-guided-checkbox">
+                                        <input type="checkbox" checked="@IsProjectionSelected(column)"
+                                               @onchange="(e) => OnProjectionChangedAsync(column, e)" />
+                                        <span>@column</span>
+                                    </label>
+                                }
+                            </div>
+                            <div class="obs-guided-section-hint">Select columns to emit a <code>project</code> clause.</div>
+                        </div>
+
+                        <div class="obs-guided-section">
+                            <div class="obs-guided-section-header">
+                                <div class="obs-guided-section-title">Filters</div>
+                                <button type="button" class="obs-guided-add-filter" data-testid="obs-guided-add-filter"
+                                        @onclick="AddFilterAsync">+ Add
+                                    filter</button>
+                                </div>
+
+                                @if (_guidedDefinition.Filters.Count == 0)
+                                {
+                                    <div class="obs-guided-empty">No filters. Add one to narrow the query.</div>
+                                }
+                                else
+                                {
+                                    <div class="obs-guided-filters">
+                                        @for (var index = 0; index < _guidedDefinition.Filters.Count; index++)
+                                        {
+                                            var filterIndex = index;
+                                            var filter = _guidedDefinition.Filters[filterIndex];
+                                            var filterColumnError = GetFieldErrorMessage($"filters[{filterIndex}].column");
+                                            var filterOperatorError = GetFieldErrorMessage($"filters[{filterIndex}].operator");
+                                            var filterValueError = GetFieldErrorMessage($"filters[{filterIndex}].value");
+                                            var filterHasError = filterColumnError is not null || filterOperatorError is not null ||
+                                filterValueError is not null;
+                                            var filterColumnErrorId = $"obs-guided-error-filter-{filterIndex}-column";
+                                            var filterOperatorErrorId = $"obs-guided-error-filter-{filterIndex}-operator";
+                                            var filterValueErrorId = $"obs-guided-error-filter-{filterIndex}-value";
+
+                                            <div class="obs-guided-filter-row @(filterHasError ? "obs-guided-filter-row-invalid" : "")"
+                                                 data-testid="@($"obs-guided-filter-row-{filterIndex}")">
+                                                <select
+                                                    class="obs-guided-input @(filterColumnError is not null ? "obs-guided-input-invalid" : "")"
+                                                    data-testid="@($"obs-guided-filter-column-{filterIndex}")"
+                                                    aria-invalid="@(filterColumnError is not null ? "true" : "false")"
+                                                    aria-describedby="@GetAriaDescribedBy(filterColumnError, filterColumnErrorId)"
+                                                    value="@filter.Column"
+                                                    @onchange="(e) => OnFilterColumnChangedAsync(filterIndex, e)">
+                                                    @foreach (var column in CurrentTableColumns)
+                                                    {
+                                                        <option value="@column">@column</option>
+                                                    }
+                                                </select>
+
+                                                <select
+                                                    class="obs-guided-input @(filterOperatorError is not null ? "obs-guided-input-invalid" : "")"
+                                                    data-testid="@($"obs-guided-filter-operator-{filterIndex}")"
+                                                    aria-invalid="@(filterOperatorError is not null ? "true" : "false")"
+                                                    aria-describedby="@GetAriaDescribedBy(filterOperatorError, filterOperatorErrorId)"
+                                                    value="@((int)filter.Operator).ToString()"
+                                                    @onchange="(e) => OnFilterOperatorChangedAsync(filterIndex, e)">
+                                                    @foreach (var @operator in FilterOperators)
+                                                    {
+                                                        <option value="@((int)@operator)">@GetOperatorLabel(@operator)</option>
+                                                    }
+                                                </select>
+
+                                                <input
+                                                class="obs-guided-input @(filterValueError is not null ? "obs-guided-input-invalid" : "")"
+                                                type="text" data-testid="@($"obs-guided-filter-value-{filterIndex}")"
+                                                aria-invalid="@(filterValueError is not null ? "true" : "false")"
+                                                aria-describedby="@GetAriaDescribedBy(filterValueError, filterValueErrorId)"
+                                                value="@filter.Value" placeholder="Value"
+                                                @onchange="(e) => OnFilterValueChangedAsync(filterIndex, e)" />
+
+                                                <button type="button" class="obs-guided-remove-filter"
+                                                        @onclick="() => RemoveFilterAsync(filterIndex)" aria-label="Remove filter">
+                                                    ✕
+                                                </button>
+                                            </div>
+
+                                            @if (filterHasError)
+                                            {
+                                                <div class="obs-guided-filter-errors" aria-live="polite">
+                                                    @if (filterColumnError is not null)
+                                                    {
+                                                        <span id="@filterColumnErrorId" class="obs-guided-field-error">@filterColumnError</span>
+                                                    }
+                                                    @if (filterOperatorError is not null)
+                                                    {
+                                                        <span id="@filterOperatorErrorId"
+                                                              class="obs-guided-field-error">@filterOperatorError</span>
+                                                    }
+                                                    @if (filterValueError is not null)
+                                                    {
+                                                        <span id="@filterValueErrorId" class="obs-guided-field-error">@filterValueError</span>
+                                                    }
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
                     }
-                    <span class="obs-exec-time">(@_result.ExecutionTime.TotalMilliseconds:F0 ms)</span>
+                else
+                    {
+                        <div class="obs-monaco-wrapper">
+                            <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorConstructionOptions"
+                                                  OnDidInit="OnEditorInitAsync" />
+                        </div>
+                    }
+
+                    <div class="obs-query-actions" aria-live="polite">
+                        <FluentButton Appearance="Appearance.Accent" data-testid="obs-run-query"
+                                      @onclick="OnRunRequestedAsync" Disabled="@(!CanRunCurrentQuery)" aria-label="Run logs query"
+                                      aria-disabled="@(!CanRunCurrentQuery ? "true" : "false")"
+                                      aria-describedby="@(GuidedRunBlocked ? "obs-guided-run-guardrail" : null)"
+                                      @onkeydown="OnRunActionKeyDownAsync">
+                            ▶ Run
+                        </FluentButton>
+                        @if (_result is not null)
+                        {
+                            <button class="obs-copy-btn" @onclick="CopyCsvAsync">📋 Copy CSV</button>
+                            <button class="obs-copy-btn" @onclick="DownloadCsvAsync">⬇ CSV</button>
+                            <button class="obs-copy-btn" @onclick="DownloadJsonAsync">⬇ JSON</button>
+                        }
+                    </div>
+
+                    @if (GuidedRunBlocked)
+                    {
+                        <div id="obs-guided-run-guardrail" class="obs-guided-run-guardrail" role="status"
+                             data-testid="obs-guided-run-guardrail">
+                            Guided query has validation errors. Fix highlighted fields to enable Run.
+                        </div>
+                    }
                 </div>
 
-                <div class="obs-results-grid">
-                    <FluentDataGrid Items="_result.Rows.AsQueryable()" TGridItem="LogRow">
-                        @foreach (var col in _result.ColumnNames)
+                @if (_mode == GuidedLogsQueryMode.Guided)
+                {
+                    <div class="obs-guided-preview" data-testid="obs-guided-preview" aria-live="polite">
+                        <div class="obs-guided-preview-header">
+                            <span>Compiled KQL preview</span>
+                            @if (_guidedCompileResult.HasErrors)
+                            {
+                                <span class="obs-guided-issue-error">Validation errors</span>
+                            }
+                            else if (_guidedCompileResult.HasWarnings)
+                            {
+                                <span class="obs-guided-issue-warning">Warnings</span>
+                            }
+                        </div>
+
+                        @if (_guidedCompileResult.CanExecute)
                         {
-                            var colName = col;
-                            <TemplateColumn Title="@colName">
-                                <span class="obs-cell" title="@GetCell(context, colName)">
-                                    @Truncate(GetCell(context, colName), 80)
-                                </span>
-                            </TemplateColumn>
+                            <pre class="obs-guided-preview-code">@_guidedCompileResult.Query</pre>
                         }
-                    </FluentDataGrid>
-                </div>
-            }
-            else
-            {
-                <div class="obs-results-empty">Run a query to see results.</div>
-            }
+                        else
+                        {
+                            <div class="obs-guided-preview-placeholder">Fix validation issues to generate a runnable query.</div>
+                        }
+
+                        @if (_guidedCompileResult.Issues.Count > 0)
+                        {
+                            <ul class="obs-guided-issues" data-testid="obs-guided-issues" aria-live="polite">
+                                @foreach (var issue in _guidedCompileResult.Issues)
+                                {
+                                    <li class="obs-guided-issue-item @(issue.IsError ? "obs-guided-issue-error" : "obs-guided-issue-warning")"
+                                        data-testid="obs-guided-issue-item">
+                                        <span class="obs-guided-issue-code">@issue.Code</span>
+                                        <span>@issue.Message</span>
+                                        @if (!string.IsNullOrWhiteSpace(issue.Field))
+                                        {
+                                            <span class="obs-guided-issue-field">Field: @issue.Field</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+
+                @if (_queryError is not null)
+                {
+                    <div class="obs-query-error" role="alert" aria-live="assertive" data-testid="obs-query-error">⚠ @_queryError
+                    </div>
+                }
+
+                @if (_isRunning)
+                {
+                    <div class="obs-loading">
+                        <FluentProgressRing /> Running query…
+                    </div>
+                }
+                else if (_error is not null)
+                {
+                    <ErrorCallout Message="@_error" />
+                }
+                else if (_result is not null)
+                {
+                    <div class="obs-results-header">
+                        @_result.Rows.Count results
+                        @if (_result.Truncated)
+                        {
+                            <span class="obs-truncated-badge">⚠ Truncated — showing first @_result.Rows.Count rows</span>
+                        }
+                        <span class="obs-exec-time">(@_result.ExecutionTime.TotalMilliseconds:F0 ms)</span>
+                    </div>
+
+                    <div class="obs-results-grid">
+                        <FluentDataGrid Items="_result.Rows.AsQueryable()" TGridItem="LogRow">
+                            @foreach (var col in _result.ColumnNames)
+                            {
+                                var colName = col;
+                                <TemplateColumn Title="@colName">
+                                    <span class="obs-cell" title="@GetCell(context, colName)">
+                                        @Truncate(GetCell(context, colName), 80)
+                                    </span>
+                                </TemplateColumn>
+                            }
+                        </FluentDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="obs-results-empty">Run a query to see results.</div>
+                }
+            </div>
         </div>
     </div>
-</div>
 
-@if (_saveDialogOpen)
-{
-    <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
-        <FluentDialogHeader>Save Query</FluentDialogHeader>
-        <FluentDialogBody>
-            <FluentTextField @bind-Value="_saveQueryName" Label="Query Name"
-                             Placeholder="folder/query-name (use / for folders)" Autofocus="true" />
-        </FluentDialogBody>
-        <FluentDialogFooter>
-            <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
-            <FluentButton @onclick="() => { _saveDialogOpen = false; _saveDialogHidden = true; }">Cancel</FluentButton>
-        </FluentDialogFooter>
-    </FluentDialog>
-}
+    @if (_saveDialogOpen)
+    {
+        <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
+            <FluentDialogHeader>Save Query</FluentDialogHeader>
+            <FluentDialogBody>
+                <FluentTextField @bind-Value="_saveQueryName" Label="Query Name"
+                                 Placeholder="folder/query-name (use / for folders)" Autofocus="true" />
+            </FluentDialogBody>
+            <FluentDialogFooter>
+                <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
+                <FluentButton @onclick="() => { _saveDialogOpen = false; _saveDialogHidden = true; }">Cancel</FluentButton>
+            </FluentDialogFooter>
+        </FluentDialog>
+    }
 
 @inject IJSRuntime JS
 @inject INotificationService Notifications
+@inject IGuidedKqlCompiler GuidedCompiler
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
@@ -135,6 +402,36 @@
     [Parameter] public int MaxRows { get; set; } = 500;
     [Parameter] public List<SwebKit.Core.Domain.SavedQuery> SavedQueries { get; set; } = [];
     [Parameter] public EventCallback<List<SwebKit.Core.Domain.SavedQuery>> SavedQueriesChanged { get; set; }
+    [Parameter] public GuidedLogsQueryMode Mode { get; set; } = GuidedLogsQueryMode.Advanced;
+    [Parameter] public EventCallback<GuidedLogsQueryMode> ModeChanged { get; set; }
+    [Parameter] public GuidedKqlQueryDefinition? GuidedDraft { get; set; }
+    [Parameter] public EventCallback<GuidedKqlQueryDefinition> GuidedDraftChanged { get; set; }
+
+    private static readonly IReadOnlyList<string> GuidedTableOrder =
+    [
+        "traces",
+        "requests",
+        "exceptions",
+        "dependencies",
+        "customEvents",
+        "availabilityResults",
+    ];
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> GuidedTableColumns =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["traces"] = ["timestamp", "message", "severityLevel", "operation_Id", "operation_Name", "cloud_RoleName", "itemId"],
+            ["requests"] = ["timestamp", "name", "resultCode", "success", "duration", "operation_Id", "operation_Name",
+"cloud_RoleName", "session_Id", "user_AuthenticatedId"],
+            ["exceptions"] = ["timestamp", "type", "problemId", "innermostMessage", "severityLevel", "operation_Id",
+"operation_Name", "cloud_RoleName"],
+            ["dependencies"] = ["timestamp", "name", "target", "type", "resultCode", "success", "duration", "operation_Id"],
+            ["customEvents"] = ["timestamp", "name", "operation_Id", "cloud_RoleName"],
+            ["availabilityResults"] = ["timestamp", "name", "location", "success", "duration", "message"],
+        };
+
+    private static readonly IReadOnlyList<GuidedKqlFilterOperator> FilterOperators =
+Enum.GetValues<GuidedKqlFilterOperator>();
 
     private string _query = string.Empty;
     private LogQueryResult? _result;
@@ -146,6 +443,15 @@
     private List<SwebKit.Core.Domain.SavedQuery> _savedQueries = [];
     private CancellationTokenSource _cts = new();
     private StandaloneCodeEditor? _editor;
+
+    private GuidedLogsQueryMode _mode = GuidedLogsQueryMode.Advanced;
+    private GuidedKqlQueryDefinition _guidedDefinition = GuidedKqlQueryDefinition.CreateDefault();
+    private GuidedKqlCompileResult _guidedCompileResult = GuidedKqlCompileResult.Success("", []);
+    private DateTimeOffset _lastKeyboardRunRequestedAt = DateTimeOffset.MinValue;
+    private bool _modeInitialized;
+    private GuidedLogsQueryMode _lastModeParameter;
+    private bool _guidedDraftInitialized;
+    private GuidedKqlQueryDefinition? _lastGuidedDraftParameter;
 
     // Save dialog
     private bool _saveDialogOpen;
@@ -165,6 +471,21 @@
         var idx = name.IndexOf('/');
         return idx > 0 ? name[(idx + 1)..] : name;
     }
+
+    private IReadOnlyList<string> CurrentTableColumns => GetColumnsForTable(_guidedDefinition.Table);
+
+    private bool CanSaveCurrentQuery =>
+        _mode == GuidedLogsQueryMode.Guided
+            ? _guidedCompileResult.CanExecute
+            : !string.IsNullOrWhiteSpace(_query);
+
+    private bool GuidedRunBlocked =>
+        _mode == GuidedLogsQueryMode.Guided && _guidedCompileResult.HasErrors;
+
+    private bool CanRunCurrentQuery =>
+        Provider is not null
+        && !_isRunning
+        && (_mode != GuidedLogsQueryMode.Guided || _guidedCompileResult.CanExecute);
 
     private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor) => new()
     {
@@ -198,11 +519,28 @@
     {
         _presets = Provider?.GetPresets() ?? [];
         _savedQueries = SavedQueries;
+
+        if (!_modeInitialized || _lastModeParameter != Mode)
+        {
+            _mode = Mode;
+            _lastModeParameter = Mode;
+            _modeInitialized = true;
+        }
+
+        if (!_guidedDraftInitialized || !ReferenceEquals(_lastGuidedDraftParameter, GuidedDraft))
+        {
+            _guidedDefinition = (GuidedDraft ?? GuidedKqlQueryDefinition.CreateDefault()).Clone();
+            EnsureGuidedDefinition();
+            RecomputeGuidedPreview();
+            _lastGuidedDraftParameter = GuidedDraft;
+            _guidedDraftInitialized = true;
+        }
     }
 
     /// <summary>Load a query from outside (e.g. "Drill to Logs" from Failures tab).</summary>
     public async Task LoadQueryAsync(string kql)
     {
+        await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
         _query = kql;
         _activePresetId = null;
         if (_editor is not null)
@@ -212,29 +550,49 @@
 
     private async Task ApplyPreset(QueryPreset preset)
     {
+        await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
         _query = preset.Query;
         _activePresetId = preset.Id;
         if (_editor is not null)
             await _editor.SetValue(preset.Query);
-        _ = RunQueryAsync();
+        await RunQueryAsync();
     }
 
     private async Task LoadSaved(SwebKit.Core.Domain.SavedQuery sq)
     {
+        await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
         _query = sq.Query;
         _activePresetId = null;
         if (_editor is not null)
             await _editor.SetValue(sq.Query);
-        _ = RunQueryAsync();
+        await RunQueryAsync();
     }
 
     private async Task RunQueryAsync()
     {
         if (Provider is null) return;
+        if (_isRunning) return;
 
-        // Sync query from editor
-        if (_editor is not null)
-            _query = await _editor.GetValue();
+        if (_mode == GuidedLogsQueryMode.Guided)
+        {
+            var compileResult = RecomputeGuidedPreview();
+            if (!compileResult.CanExecute)
+            {
+                _queryError = BuildGuidedValidationSummary(compileResult.Issues);
+                _error = null;
+                _result = null;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _query = compileResult.Query;
+        }
+        else
+        {
+            // Sync query from editor
+            if (_editor is not null)
+                _query = await _editor.GetValue();
+        }
 
         if (string.IsNullOrWhiteSpace(_query)) return;
 
@@ -303,8 +661,21 @@
         Notifications.ShowSuccess($"Exported {rows.Count} rows");
     }
 
-    private void SaveCurrentQuery()
+    private async Task SaveCurrentQuery()
     {
+        if (_mode == GuidedLogsQueryMode.Guided)
+        {
+            var compileResult = RecomputeGuidedPreview();
+            if (!compileResult.CanExecute)
+            {
+                _queryError = BuildGuidedValidationSummary(compileResult.Issues);
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _query = compileResult.Query;
+        }
+
         _saveQueryName = string.Empty;
         _saveDialogOpen = true;
         _saveDialogHidden = false;
@@ -314,9 +685,24 @@
     {
         if (string.IsNullOrWhiteSpace(_saveQueryName)) return;
 
-        // Sync query from editor before saving
-        if (_editor is not null)
-            _query = await _editor.GetValue();
+        if (_mode == GuidedLogsQueryMode.Guided)
+        {
+            var compileResult = RecomputeGuidedPreview();
+            if (!compileResult.CanExecute)
+            {
+                _queryError = BuildGuidedValidationSummary(compileResult.Issues);
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _query = compileResult.Query;
+        }
+        else
+        {
+            // Sync query from editor before saving
+            if (_editor is not null)
+                _query = await _editor.GetValue();
+        }
 
         var sq = new SwebKit.Core.Domain.SavedQuery
         {
@@ -342,4 +728,333 @@
 
     private static string Truncate(string s, int max) =>
         s.Length > max ? s[..max] + "…" : s;
+
+    private async Task SetModeAsync(GuidedLogsQueryMode mode, bool transferFromGuided = true)
+    {
+        if (_mode == mode)
+        {
+            return;
+        }
+
+        if (_mode == GuidedLogsQueryMode.Guided && mode == GuidedLogsQueryMode.Advanced && transferFromGuided)
+        {
+            var compileResult = RecomputeGuidedPreview();
+            if (compileResult.CanExecute)
+            {
+                _query = compileResult.Query;
+                if (_editor is not null)
+                {
+                    await _editor.SetValue(_query);
+                }
+            }
+        }
+
+        _mode = mode;
+        if (ModeChanged.HasDelegate)
+        {
+            await ModeChanged.InvokeAsync(mode);
+        }
+    }
+
+    private async Task OnModeToggleKeyDownAsync(GuidedLogsQueryMode mode, KeyboardEventArgs args)
+    {
+        if (!IsActivationKey(args.Key))
+        {
+            return;
+        }
+
+        await SetModeAsync(mode);
+    }
+
+    private async Task OnRunActionKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (!IsActivationKey(args.Key))
+        {
+            return;
+        }
+
+        _lastKeyboardRunRequestedAt = DateTimeOffset.UtcNow;
+        await RunQueryAsync();
+    }
+
+    private async Task OnRunRequestedAsync()
+    {
+        if (_lastKeyboardRunRequestedAt != DateTimeOffset.MinValue
+            && DateTimeOffset.UtcNow - _lastKeyboardRunRequestedAt <= TimeSpan.FromMilliseconds(300))
+        {
+            _lastKeyboardRunRequestedAt = DateTimeOffset.MinValue;
+            return;
+        }
+
+        _lastKeyboardRunRequestedAt = DateTimeOffset.MinValue;
+        await RunQueryAsync();
+    }
+
+    private async Task OnGuidedTableChangedAsync(ChangeEventArgs args)
+    {
+        var selectedTable = args.Value?.ToString();
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            draft.Table = string.IsNullOrWhiteSpace(selectedTable) ? "traces" : selectedTable.Trim();
+            NormalizeDefinitionToCurrentTable(draft);
+        });
+    }
+
+    private async Task OnGuidedSortColumnChangedAsync(ChangeEventArgs args)
+    {
+        var column = args.Value?.ToString();
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            draft.Sort.Column = string.IsNullOrWhiteSpace(column) ? "timestamp" : column.Trim();
+        });
+    }
+
+    private async Task OnGuidedSortDirectionChangedAsync(ChangeEventArgs args)
+    {
+        var direction = args.Value?.ToString();
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            draft.Sort.Descending = !string.Equals(direction, "asc", StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    private async Task OnGuidedLimitChangedAsync(ChangeEventArgs args)
+    {
+        var parsed = int.TryParse(args.Value?.ToString(), out var limit) ? limit : 0;
+        await UpdateGuidedDraftAsync(draft => draft.Limit = parsed);
+    }
+
+    private async Task OnProjectionChangedAsync(string column, ChangeEventArgs args)
+    {
+        var shouldInclude = IsChecked(args.Value);
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            if (shouldInclude)
+            {
+                if (!draft.Projections.Any(existing => string.Equals(existing, column, StringComparison.OrdinalIgnoreCase)))
+                {
+                    draft.Projections.Add(column);
+                }
+            }
+            else
+            {
+                draft.Projections.RemoveAll(existing => string.Equals(existing, column, StringComparison.OrdinalIgnoreCase));
+            }
+        });
+    }
+
+    private async Task AddFilterAsync()
+    {
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            var defaultColumn = GetColumnsForTable(draft.Table).FirstOrDefault() ?? "timestamp";
+            draft.Filters.Add(new GuidedKqlFilter
+            {
+                Column = defaultColumn,
+                Operator = GuidedKqlFilterOperator.Equals,
+                Value = string.Empty,
+            });
+        });
+    }
+
+    private async Task RemoveFilterAsync(int index)
+    {
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            if (index >= 0 && index < draft.Filters.Count)
+            {
+                draft.Filters.RemoveAt(index);
+            }
+        });
+    }
+
+    private async Task OnFilterColumnChangedAsync(int index, ChangeEventArgs args)
+    {
+        var column = args.Value?.ToString() ?? string.Empty;
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            if (index < 0 || index >= draft.Filters.Count)
+            {
+                return;
+            }
+
+            draft.Filters[index].Column = column.Trim();
+        });
+    }
+
+    private async Task OnFilterOperatorChangedAsync(int index, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var operatorValue))
+        {
+            return;
+        }
+
+        var @operator = (GuidedKqlFilterOperator)operatorValue;
+        if (!Enum.IsDefined(@operator))
+        {
+            return;
+        }
+
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            if (index < 0 || index >= draft.Filters.Count)
+            {
+                return;
+            }
+
+            draft.Filters[index].Operator = @operator;
+        });
+    }
+
+    private async Task OnFilterValueChangedAsync(int index, ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString() ?? string.Empty;
+        await UpdateGuidedDraftAsync(draft =>
+        {
+            if (index < 0 || index >= draft.Filters.Count)
+            {
+                return;
+            }
+
+            draft.Filters[index].Value = value;
+        });
+    }
+
+    private async Task UpdateGuidedDraftAsync(Action<GuidedKqlQueryDefinition> apply)
+    {
+        apply(_guidedDefinition);
+        EnsureGuidedDefinition();
+        RecomputeGuidedPreview();
+
+        if (GuidedDraftChanged.HasDelegate)
+        {
+            await GuidedDraftChanged.InvokeAsync(_guidedDefinition.Clone());
+        }
+    }
+
+    private void EnsureGuidedDefinition()
+    {
+        _guidedDefinition.Table = NormalizeTable(_guidedDefinition.Table);
+        _guidedDefinition.Filters ??= [];
+        _guidedDefinition.Projections ??= [];
+        _guidedDefinition.Sort ??= new GuidedKqlSort();
+
+        NormalizeDefinitionToCurrentTable(_guidedDefinition);
+    }
+
+    private static string NormalizeTable(string? table)
+    {
+        if (!string.IsNullOrWhiteSpace(table) && GuidedTableColumns.ContainsKey(table.Trim()))
+        {
+            return table.Trim();
+        }
+
+        return "traces";
+    }
+
+    private static IReadOnlyList<string> GetColumnsForTable(string? table)
+    {
+        if (!string.IsNullOrWhiteSpace(table) && GuidedTableColumns.TryGetValue(table.Trim(), out var columns))
+        {
+            return columns;
+        }
+
+        return GuidedTableColumns["traces"];
+    }
+
+    private static void NormalizeDefinitionToCurrentTable(GuidedKqlQueryDefinition definition)
+    {
+        var columns = GetColumnsForTable(definition.Table);
+        var allowed = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
+
+        definition.Filters = definition.Filters
+            .Where(filter => !string.IsNullOrWhiteSpace(filter.Column) && allowed.Contains(filter.Column))
+            .Select(filter =>
+            {
+                filter.Column = filter.Column.Trim();
+                if (!Enum.IsDefined(filter.Operator))
+                {
+                    filter.Operator = GuidedKqlFilterOperator.Equals;
+                }
+
+                filter.Value ??= string.Empty;
+                return filter;
+            })
+            .ToList();
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        definition.Projections = definition.Projections
+            .Where(column => !string.IsNullOrWhiteSpace(column))
+            .Select(column => column.Trim())
+            .Where(column => allowed.Contains(column) && seen.Add(column))
+            .ToList();
+
+        var sortColumn = string.IsNullOrWhiteSpace(definition.Sort.Column)
+            ? "timestamp"
+            : definition.Sort.Column.Trim();
+        definition.Sort.Column = allowed.Contains(sortColumn)
+            ? sortColumn
+            : columns.FirstOrDefault() ?? "timestamp";
+    }
+
+    private GuidedKqlCompileResult RecomputeGuidedPreview()
+    {
+        _guidedCompileResult = GuidedCompiler.Compile(_guidedDefinition.Clone());
+        return _guidedCompileResult;
+    }
+
+    private bool IsProjectionSelected(string column) =>
+        _guidedDefinition.Projections.Any(existing => string.Equals(existing, column, StringComparison.OrdinalIgnoreCase));
+
+    private string? GetFieldErrorMessage(string fieldPath) =>
+        _guidedCompileResult.Issues
+            .Where(issue => issue.IsError && string.Equals(issue.Field, fieldPath, StringComparison.OrdinalIgnoreCase))
+            .Select(issue => issue.Message)
+            .FirstOrDefault();
+
+    private static string? GetAriaDescribedBy(string? errorMessage, string elementId) =>
+        string.IsNullOrWhiteSpace(errorMessage) ? null : elementId;
+
+    private static bool IsChecked(object? value)
+    {
+        return value switch
+        {
+            bool boolValue => boolValue,
+            string text => string.Equals(text, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(text, "on", StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        };
+    }
+
+    private static bool IsActivationKey(string? key) =>
+        string.Equals(key, "Enter", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, " ", StringComparison.Ordinal)
+        || string.Equals(key, "Spacebar", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetOperatorLabel(GuidedKqlFilterOperator @operator) => @operator switch
+    {
+        GuidedKqlFilterOperator.Equals => "Equals",
+        GuidedKqlFilterOperator.NotEquals => "Not equals",
+        GuidedKqlFilterOperator.Contains => "Contains",
+        GuidedKqlFilterOperator.StartsWith => "Starts with",
+        GuidedKqlFilterOperator.EndsWith => "Ends with",
+        GuidedKqlFilterOperator.GreaterThan => "Greater than",
+        GuidedKqlFilterOperator.GreaterThanOrEqual => "Greater than or equal",
+        GuidedKqlFilterOperator.LessThan => "Less than",
+        GuidedKqlFilterOperator.LessThanOrEqual => "Less than or equal",
+        _ => @operator.ToString(),
+    };
+
+    private static string BuildGuidedValidationSummary(IReadOnlyList<GuidedKqlCompileIssue> issues)
+    {
+        var errors = issues
+            .Where(static issue => issue.IsError)
+            .Select(static issue => issue.Message)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return errors.Count > 0
+            ? string.Join(" ", errors)
+            : "Guided query has validation errors.";
+    }
 }

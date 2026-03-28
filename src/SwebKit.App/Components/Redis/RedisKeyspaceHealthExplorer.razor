@@ -1,0 +1,213 @@
+<div class="health-explorer">
+    <div class="health-header">
+        <strong>Keyspace Health</strong>
+        <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
+            @(IsLoading ? "Analyzing..." : "Analyze")
+        </FluentButton>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="health-loading">Analyzing loaded keys for risk signals...</div>
+    }
+    else if (Report is null)
+    {
+        <div class="health-empty">Run Analyze to detect no-TTL, oversized, heavy-prefix, and hot-key signals.</div>
+    }
+    else
+    {
+        <div class="health-coverage @(Report.IsPartialCoverage ? "coverage-partial" : "coverage-full")">
+            @BuildCoverageText(Report)
+            <span class="coverage-confidence">Confidence: @Report.ConfidenceLabel</span>
+        </div>
+
+        <div class="health-signal">
+            @BuildHotSignalText(Report)
+        </div>
+
+        <div class="summary-grid">
+            <button class="summary-card critical @(IsFilterActive(RedisHealthSeverity.Critical) ? "active" : "")" type="button"
+                    @onclick="() => ToggleFilter(RedisHealthSeverity.Critical)">
+                <span>Critical</span>
+                <strong>@Report.CriticalCount</strong>
+            </button>
+            <button class="summary-card warning @(IsFilterActive(RedisHealthSeverity.Warning) ? "active" : "")" type="button"
+                    @onclick="() => ToggleFilter(RedisHealthSeverity.Warning)">
+                <span>Warning</span>
+                <strong>@Report.WarningCount</strong>
+            </button>
+            <button class="summary-card info @(IsFilterActive(RedisHealthSeverity.Info) ? "active" : "")" type="button"
+                    @onclick="() => ToggleFilter(RedisHealthSeverity.Info)">
+                <span>Info</span>
+                <strong>@Report.InfoCount</strong>
+            </button>
+        </div>
+
+        <div class="filter-row">
+            <FluentButton Appearance="@(_severityFilter is null ? Appearance.Accent : Appearance.Neutral)"
+                          @onclick="ClearFilter">
+                All (@Report.Findings.Count)
+            </FluentButton>
+            @if (_severityFilter is not null)
+            {
+                <span class="active-filter">Filtered: @_severityFilter.Value</span>
+            }
+        </div>
+
+        @if (FilteredFindings.Count == 0)
+        {
+            <div class="health-empty">No findings match the selected severity filter.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="health-table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Risk</th>
+                            <th>Target</th>
+                            <th>Reason</th>
+                            <th>Metrics</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var finding in FilteredFindings)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="severity-pill @GetSeverityClass(finding.Severity)">@finding.Severity</span>
+                                </td>
+                                <td>@FormatRiskType(finding.RiskType)</td>
+                                <td class="target">@finding.Target</td>
+                                <td>@finding.Reason</td>
+                                <td>@FormatMetrics(finding)</td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(finding.DrillKey))
+                                    {
+                                        <FluentButton Appearance="Appearance.Lightweight"
+                                                      @onclick="() => OnFindingSelected.InvokeAsync(finding.DrillKey!)">
+                                            Open key
+                                        </FluentButton>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public RedisKeyspaceHealthReport? Report { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback OnAnalyze { get; set; }
+    [Parameter] public EventCallback<string> OnFindingSelected { get; set; }
+
+    private RedisHealthSeverity? _severityFilter;
+
+    private IReadOnlyList<RedisHealthFinding> FilteredFindings =>
+        Report?.Findings
+            .Where(finding => _severityFilter is null || finding.Severity == _severityFilter.Value)
+            .ToList()
+        ?? [];
+
+    private bool IsFilterActive(RedisHealthSeverity severity) => _severityFilter == severity;
+
+    private void ToggleFilter(RedisHealthSeverity severity)
+    {
+        _severityFilter = _severityFilter == severity ? null : severity;
+    }
+
+    private void ClearFilter() => _severityFilter = null;
+
+    private static string BuildCoverageText(RedisKeyspaceHealthReport report)
+    {
+        if (report.EstimatedKeyCount.HasValue)
+        {
+            return $"Coverage: {report.LoadedKeyCount} loaded of {report.EstimatedKeyCount.Value} estimated keys ({report.CoveragePercent:0.#}%).";
+        }
+
+        return $"Coverage: {report.LoadedKeyCount} loaded keys (estimated total unavailable).";
+    }
+
+    private static string BuildHotSignalText(RedisKeyspaceHealthReport report)
+    {
+        if (!report.HotKeySignalsAvailable)
+        {
+            return "Hot-key signals unavailable for this scan; only size/TTL/prefix heuristics are applied.";
+        }
+
+        return $"Hot-key signal coverage: {report.KeysWithHotKeySignal} of {report.LoadedKeyCount} keys expose OBJECT FREQ/IDLETIME.";
+    }
+
+    private static string GetSeverityClass(RedisHealthSeverity severity) => severity switch
+    {
+        RedisHealthSeverity.Critical => "sev-critical",
+        RedisHealthSeverity.Warning => "sev-warning",
+        _ => "sev-info",
+    };
+
+    private static string FormatRiskType(RedisHealthRiskType riskType) => riskType switch
+    {
+        RedisHealthRiskType.NoTtl => "No TTL",
+        RedisHealthRiskType.OversizedValue => "Oversized Value",
+        RedisHealthRiskType.HeavyPrefix => "Heavy Prefix",
+        RedisHealthRiskType.PossibleHotKey => "Possible Hot Key",
+        RedisHealthRiskType.HotKeySignalUnavailable => "Hot-Key Signal",
+        _ => riskType.ToString(),
+    };
+
+    private static string FormatMetrics(RedisHealthFinding finding)
+    {
+        var parts = new List<string>(4);
+
+        if (finding.MemoryBytes.HasValue)
+        {
+            parts.Add(FormatBytes(finding.MemoryBytes.Value));
+        }
+
+        if (finding.KeyCount.HasValue)
+        {
+            parts.Add($"{finding.KeyCount.Value} keys");
+        }
+
+        if (finding.SharePercent.HasValue)
+        {
+            parts.Add($"{finding.SharePercent.Value:0.#}% share");
+        }
+
+        if (finding.Frequency.HasValue)
+        {
+            parts.Add($"freq={finding.Frequency.Value}");
+        }
+
+        if (finding.IdleSeconds.HasValue)
+        {
+            parts.Add($"idle={finding.IdleSeconds.Value}s");
+        }
+
+        return parts.Count == 0 ? "-" : string.Join(" | ", parts);
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const double kb = 1024;
+        const double mb = kb * 1024;
+
+        if (bytes >= mb)
+        {
+            return $"{bytes / mb:0.##} MB";
+        }
+
+        if (bytes >= kb)
+        {
+            return $"{bytes / kb:0.##} KB";
+        }
+
+        return $"{bytes} B";
+    }
+}

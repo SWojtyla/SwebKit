@@ -81,7 +81,9 @@ public sealed class DemoRedisClient : IRedisClient
             Type = value.Type,
             Ttl = GetTtl(value),
             MemoryBytes = EstimateBytes(value),
-            Encoding = GetEncoding(value.Type)
+            Encoding = GetEncoding(value.Type),
+            Frequency = value.Frequency,
+            IdleSeconds = value.IdleSeconds
         });
     }
 
@@ -436,7 +438,7 @@ public sealed class DemoRedisClient : IRedisClient
     {
         var db = GetDb();
 
-        db["user:1001"] = new DemoValue("string", "{\"id\":1001,\"name\":\"Alice\",\"email\":\"alice@example.com\"}", DateTimeOffset.UtcNow.AddHours(1));
+        db["user:1001"] = new DemoValue("string", "{\"id\":1001,\"name\":\"Alice\",\"email\":\"alice@example.com\"}", DateTimeOffset.UtcNow.AddHours(1), frequency: 12, idleSeconds: 8);
         db["user:1002"] = new DemoValue("string", "{\"id\":1002,\"name\":\"Bob\",\"email\":\"bob@example.com\"}", DateTimeOffset.UtcNow.AddHours(1));
         db["session:abc123"] = new DemoValue("hash", new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -464,9 +466,9 @@ public sealed class DemoRedisClient : IRedisClient
             ["beta_api"] = "false",
             ["max_retries"] = "3"
         }, null);
-        db["rate-limit:api:10.0.0.1"] = new DemoValue("string", "42", DateTimeOffset.UtcNow.AddSeconds(60));
+        db["rate-limit:api:10.0.0.1"] = new DemoValue("string", "42", DateTimeOffset.UtcNow.AddSeconds(60), frequency: 46, idleSeconds: 2);
         db["rate-limit:api:10.0.0.2"] = new DemoValue("string", "17", DateTimeOffset.UtcNow.AddSeconds(45));
-        db["lock:inventory-sync"] = new DemoValue("string", "worker-1", DateTimeOffset.UtcNow.AddSeconds(30));
+        db["lock:inventory-sync"] = new DemoValue("string", "worker-1", DateTimeOffset.UtcNow.AddSeconds(30), frequency: 18, idleSeconds: 5);
         db["lock:payment-batch"] = new DemoValue("string", "worker-2", DateTimeOffset.UtcNow.AddSeconds(120));
 
         // Additional namespace-rich keys for tree grouping demo
@@ -508,15 +510,24 @@ public sealed class DemoRedisClient : IRedisClient
 
     private sealed class DemoValue
     {
-        public DemoValue(string type, object value, DateTimeOffset? expiresAt)
+        public DemoValue(
+            string type,
+            object value,
+            DateTimeOffset? expiresAt,
+            long? frequency = null,
+            long? idleSeconds = null)
         {
             Type = type;
             Value = value;
             ExpiresAt = expiresAt;
+            Frequency = frequency;
+            IdleSeconds = idleSeconds;
         }
 
         public string Type { get; }
         public object Value { get; }
         public DateTimeOffset? ExpiresAt { get; set; }
+        public long? Frequency { get; }
+        public long? IdleSeconds { get; }
     }
 }

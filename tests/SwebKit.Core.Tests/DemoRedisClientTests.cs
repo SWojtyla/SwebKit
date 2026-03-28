@@ -96,6 +96,29 @@ public class DemoRedisClientTests
     }
 
     [Fact]
+    public async Task GetKeyInfoAsync_ExposesOptionalHotKeySignals_ForSeededKeys()
+    {
+        using var client = new DemoRedisClient();
+
+        var info = await client.GetKeyInfoAsync("rate-limit:api:10.0.0.1");
+
+        Assert.True(info.Frequency.HasValue);
+        Assert.True(info.IdleSeconds.HasValue);
+        Assert.True(info.Frequency.Value > 0);
+    }
+
+    [Fact]
+    public async Task GetKeyInfoAsync_AllowsMissingHotKeySignals_WhenNotSeeded()
+    {
+        using var client = new DemoRedisClient();
+
+        var info = await client.GetKeyInfoAsync("cache:categories");
+
+        Assert.False(info.Frequency.HasValue);
+        Assert.False(info.IdleSeconds.HasValue);
+    }
+
+    [Fact]
     public async Task SetKeyValueAsync_ThenReadBack_ReturnsUpdatedValue()
     {
         using var client = new DemoRedisClient();

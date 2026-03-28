@@ -1,3 +1,5 @@
+using SwebKit.Core.Models;
+
 namespace SwebKit.Core.Domain;
 
 public class ObservabilityConfig
@@ -10,6 +12,12 @@ public class ObservabilityConfig
 
     /// <summary>Maximum rows returned per query. Caps cost and prevents UI freezes.</summary>
     public int MaxRowsPerQuery { get; set; } = 500;
+
+    /// <summary>Optional persisted mode preference for Logs tab query editing.</summary>
+    public GuidedLogsQueryMode? LogsQueryMode { get; set; }
+
+    /// <summary>Optional persisted draft for guided query builder state.</summary>
+    public GuidedKqlQueryDefinition? GuidedLogsDraft { get; set; }
 
     public List<SavedQuery> SavedQueries { get; set; } = [];
 

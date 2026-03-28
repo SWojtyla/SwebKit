@@ -79,3 +79,115 @@ public record QueryPreset(
     string Name,
     string Description,
     string Query);
+
+public enum GuidedLogsQueryMode
+{
+    Advanced = 0,
+    Guided = 1,
+}
+
+public enum GuidedKqlFilterOperator
+{
+    Equals = 0,
+    NotEquals = 1,
+    Contains = 2,
+    StartsWith = 3,
+    EndsWith = 4,
+    GreaterThan = 5,
+    GreaterThanOrEqual = 6,
+    LessThan = 7,
+    LessThanOrEqual = 8,
+}
+
+public sealed class GuidedKqlFilter
+{
+    public string Column { get; set; } = string.Empty;
+    public GuidedKqlFilterOperator Operator { get; set; } = GuidedKqlFilterOperator.Equals;
+    public string Value { get; set; } = string.Empty;
+
+    public GuidedKqlFilter Clone() => new()
+    {
+        Column = Column,
+        Operator = Operator,
+        Value = Value,
+    };
+}
+
+public sealed class GuidedKqlSort
+{
+    public string Column { get; set; } = "timestamp";
+    public bool Descending { get; set; } = true;
+
+    public GuidedKqlSort Clone() => new()
+    {
+        Column = Column,
+        Descending = Descending,
+    };
+}
+
+public sealed class GuidedKqlQueryDefinition
+{
+    public string Table { get; set; } = "traces";
+    public List<GuidedKqlFilter> Filters { get; set; } = [];
+    public List<string> Projections { get; set; } = [];
+    public GuidedKqlSort Sort { get; set; } = new();
+    public int Limit { get; set; } = 100;
+
+    public static GuidedKqlQueryDefinition CreateDefault() => new();
+
+    public GuidedKqlQueryDefinition Clone()
+    {
+        var clone = new GuidedKqlQueryDefinition();
+        clone.CopyFrom(this);
+        return clone;
+    }
+
+    public void CopyFrom(GuidedKqlQueryDefinition source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        Table = string.IsNullOrWhiteSpace(source.Table) ? "traces" : source.Table;
+        Filters = source.Filters?.Select(static filter => filter.Clone()).ToList() ?? [];
+        Projections = source.Projections?.Select(static column => column).ToList() ?? [];
+        Sort = source.Sort?.Clone() ?? new GuidedKqlSort();
+        Limit = source.Limit > 0 ? source.Limit : 100;
+    }
+}
+
+public enum GuidedKqlCompileIssueSeverity
+{
+    Error = 0,
+    Warning = 1,
+}
+
+public sealed record GuidedKqlCompileIssue(
+    GuidedKqlCompileIssueSeverity Severity,
+    string Code,
+    string Message,
+    string? Field = null)
+{
+    public bool IsError => Severity == GuidedKqlCompileIssueSeverity.Error;
+    public bool IsWarning => Severity == GuidedKqlCompileIssueSeverity.Warning;
+}
+
+public sealed class GuidedKqlCompileResult
+{
+    public string Query { get; init; } = string.Empty;
+    public IReadOnlyList<GuidedKqlCompileIssue> Issues { get; init; } = [];
+
+    public bool HasErrors => Issues.Any(static issue => issue.IsError);
+    public bool HasWarnings => Issues.Any(static issue => issue.IsWarning);
+    public bool CanExecute => !HasErrors && !string.IsNullOrWhiteSpace(Query);
+
+    public static GuidedKqlCompileResult Success(string query, IReadOnlyList<GuidedKqlCompileIssue>? issues = null) => new()
+    {
+        Query = query,
+        Issues = issues ?? [],
+    };
+
+    public static GuidedKqlCompileResult Invalid(IReadOnlyList<GuidedKqlCompileIssue> issues) => new()
+    {
+        Query = string.Empty,
+        Issues = issues,
+    };
+}

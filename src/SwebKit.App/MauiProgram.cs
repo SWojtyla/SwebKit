@@ -62,6 +62,7 @@ public static class MauiProgram
 
         // Observability — real resource discovery (singleton for caching); providers are created per-resource by the page
         builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
+        builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
 
         // DevOps / Releases
         builder.Services.AddSingleton<DevOpsAuthHandler>();

@@ -3,11 +3,17 @@
 ## What It Supports Today
 
 - Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
-- Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (KQL query editor + preset library + saved queries), **Availability** (test results)
+- Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
 - Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
 - Drill-to-Logs: clicking "View in Logs" from any tab pre-populates the KQL editor and switches tab
+- Logs supports explicit mode switching:
+  - Guided mode compiles `GuidedKqlQueryDefinition` via `IGuidedKqlCompiler` and blocks execution on compile validation errors
+  - Guided mode surfaces inline field-level validation (`aria-invalid`) and keeps warning-only issues non-blocking
+  - Guided -> Advanced transfers compiled KQL into advanced query state
+  - Advanced -> Guided keeps the existing guided draft (no reverse KQL parsing)
 - Saved queries persisted to `profiles.json`
+- Logs mode preference and guided draft are persisted under `ObservabilityConfig`
 - Full demo mode with realistic in-memory data (no Azure connection required)
 
 ## Authentication
@@ -46,6 +52,7 @@ User opens Observability page
   → User selects resource → ObservabilityPage.ActivateResourceAsync()
   → AzureAppInsightsProvider created with the selected resource's ARM resource ID
   → Each tab calls provider.GetXxx(TimeRange, ct)
+      → Logs tab (Guided mode): Guided definition → IGuidedKqlCompiler.Compile() → KQL
       → LogsQueryClient.QueryResourceAsync(resourceId, kql, QueryTimeRange)
       → Returns LogsQueryResult / OverviewMetrics / ExceptionGroup[] / etc.
   → Razor components render data; detail pane opens on row click
@@ -53,20 +60,21 @@ User opens Observability page
 
 ## Key Code Locations
 
-| What                      | Where                                                             |
-| ------------------------- | ----------------------------------------------------------------- |
-| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`         |
-| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`         |
-| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                  |
-| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                  |
-| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`          |
-| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`           |
-| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`        |
-| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                         |
-| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`        |
-| Sub-components            | `src/SwebKit.App/Components/Observability/`                       |
-| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page") |
-| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                  |
+| What                      | Where                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                   |
+| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                   |
+| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                                                            |
+| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                                                            |
+| Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs` |
+| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                    |
+| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                     |
+| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                  |
+| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                   |
+| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                  |
+| Sub-components            | `src/SwebKit.App/Components/Observability/`                                                                 |
+| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page")                                           |
+| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                                                            |
 
 ## NuGet Packages (SwebKit.Observability)
 

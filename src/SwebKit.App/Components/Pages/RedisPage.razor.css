@@ -46,6 +46,10 @@
     flex: 1;
 }
 
+.health-panel {
+    max-height: 360px;
+}
+
 @media (max-width: 1000px) {
     .content-grid {
         grid-template-columns: 1fr;

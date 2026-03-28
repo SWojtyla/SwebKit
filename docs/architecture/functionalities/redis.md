@@ -5,7 +5,7 @@
 - Configure multiple Redis cache entries per environment.
 - Select active cache and database index.
 - Connection test for configured cache.
-- Full key scan with pattern (all keys loaded at once, no pagination).
+- Pattern-based key scan with progressive pagination (`Load more` support).
 - Unified key tree view: keys organized hierarchically by configurable separator (default `-`, persisted across sessions).
 - Key detail inspection by type (string, hash, list, set, zset).
 - TTL read/set/remove operations.
@@ -13,6 +13,8 @@
 - String/hash value updates.
 - Key deletion and full database purge.
 - Prefix memory analysis workflow.
+- **Keyspace Health Explorer**: read-only risk analysis for no-TTL keys, oversized values, heavy prefixes, and possible hot keys, including severity counts, filtering, and key drill-through.
+- Scan coverage/confidence reporting (loaded keys vs estimated keyspace) to make partial analysis explicit.
 
 ## Core Runtime Flow
 
@@ -22,6 +24,7 @@
 4. Scan loops through all cursor pages to load complete keyspace, then builds the namespace tree with `RedisKeyGrouper.BuildNamespaceTree`.
 5. Tree nodes are either namespace prefixes (expandable) or key leaves (clickable to load details).
 6. Detail pane actions dispatch typed operations through `IRedisClient`.
+7. Health analysis (on-demand) loads metadata for currently loaded keys, computes findings via `RedisKeyspaceHealthAnalyzer`, and supports drill-through to key detail.
 
 ## Main Code Locations
 
@@ -31,20 +34,24 @@
 - `src/SwebKit.App/Components/Redis/RedisNamespaceTreeNode.razor`
 - `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor` — key details + TTL visualisation
 - `src/SwebKit.App/Components/Redis/RedisPrefixMemory.razor`
+- `src/SwebKit.App/Components/Redis/RedisKeyspaceHealthExplorer.razor`
 - `src/SwebKit.Core/Abstractions/IRedisClient.cs`
 - `src/SwebKit.Core/Services/TtlFormatter.cs` — human-readable TTL formatting and bar math
+- `src/SwebKit.Core/Services/RedisKeyspaceHealthAnalyzer.cs`
 - `src/SwebKit.Redis/RedisClient.cs`
 - `src/SwebKit.Core/Services/DemoRedisClient.cs`
 - `src/SwebKit.Core/Services/RedisKeyGrouper.cs`
-- `src/SwebKit.Core/Models/RedisModels.cs` (NamespaceNode with IsKey/FullKey)
+- `src/SwebKit.Core/Models/RedisModels.cs` (namespace tree + health report contracts)
 
 ## Important Notes
 
 - Runtime client uses `StackExchange.Redis` and issues raw `SCAN`/`MEMORY USAGE`/`OBJECT ENCODING` commands as needed.
+- Health metadata retrieval also uses best-effort `OBJECT FREQ` and `OBJECT IDLETIME`; unsupported commands degrade gracefully.
 - Database index is clamped to 0..15 in client setup and config form.
 - Potentially destructive actions (delete/purge) are surfaced with confirmation UX in production contexts.
 - Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveProfilesAsync()`.
 - Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze.
+- Health findings are invalidated on scans and key mutations to prevent stale risk output.
 
 ## Validation Pointers
 
@@ -53,3 +60,5 @@
 - `tests/SwebKit.Core.Tests/RedisKeyGrouperTests.cs`
 - `tests/SwebKit.Core.Tests/RedisConfigMigrationTests.cs`
 - `tests/SwebKit.Core.Tests/RedisValueHelpersTests.cs`
+- `tests/SwebKit.Core.Tests/RedisKeyspaceHealthAnalyzerTests.cs`
+- `tests/SwebKit.App.Tests/RedisKeyspaceHealthExplorerTests.cs`

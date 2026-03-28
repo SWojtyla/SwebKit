@@ -68,6 +68,11 @@
                                         HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
                     </div>
 
+                    <div class="panel health-panel">
+                        <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
+                                                    OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
+                    </div>
+
                     <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
                                        TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
                 </div>
@@ -95,6 +100,7 @@
 
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
+    private readonly RedisKeyspaceHealthAnalyzer _healthAnalyzer = new();
 
     // RDS-1: Key scan pagination
     private long _scanCursor;
@@ -125,6 +131,10 @@
     private List<PrefixMemoryBucket> PrefixMemoryBuckets = [];
     private List<RedisKeyInfo> ScannedKeyInfos = [];
     private bool IsAnalyzingMemory;
+
+    // Keyspace health
+    private RedisKeyspaceHealthReport? HealthReport;
+    private bool IsAnalyzingHealth;
 
     // Confirm dialog
     private bool ConfirmVisible;
@@ -259,6 +269,8 @@
 
     private async Task ConnectAndScanAsync(CancellationToken ct = default)
     {
+        InvalidateHealthReport();
+
         // PERF-18: Stale-while-revalidate — restore cached snapshot for instant back-navigation
         var cacheKey = $"redis:{SelectedCacheId}";
         var cached = Cache.Get<RedisPageSnapshot>(cacheKey);
@@ -334,6 +346,7 @@
         KeyTypes.Clear();
         ScannedKeyInfos.Clear();
         PrefixMemoryBuckets.Clear();
+        InvalidateHealthReport();
         await InvokeAsync(StateHasChanged);
 
         try
@@ -499,6 +512,7 @@
                 SelectedItems = [];
                 SelectedSortedSetItems = [];
                 RebuildNamespaceTree();
+                InvalidateHealthReport();
                 Notifications.ShowSuccess("Key deleted", deletedKey);
             });
     }
@@ -527,6 +541,7 @@
                 NamespaceNodes = [];
                 PrefixMemoryBuckets = [];
                 ScannedKeyInfos.Clear();
+                InvalidateHealthReport();
                 Notifications.ShowWarning("Database purged", "All keys have been removed.");
             });
     }
@@ -540,6 +555,7 @@
         {
             await Client.SetTtlAsync(SelectedKey, TimeSpan.FromSeconds(Math.Max(1, ttlSeconds)));
             await RefreshSelectedAsync();
+            InvalidateHealthReport();
             Notifications.ShowSuccess("TTL updated", $"{ttlSeconds}s on '{SelectedKey}'");
         }
         catch (Exception ex)
@@ -558,6 +574,7 @@
         {
             await Client.RemoveTtlAsync(SelectedKey);
             await RefreshSelectedAsync();
+            InvalidateHealthReport();
             Notifications.ShowSuccess("TTL removed", $"Key '{SelectedKey}' will not expire.");
         }
         catch (Exception ex)
@@ -576,6 +593,7 @@
         {
             await Client.SetKeyValueAsync(SelectedKey, value);
             await RefreshSelectedAsync();
+            InvalidateHealthReport();
             Notifications.ShowSuccess("Value saved", SelectedKey);
         }
         catch (Exception ex)
@@ -594,6 +612,7 @@
         {
             await Client.SetHashFieldAsync(SelectedKey, entry.Field, entry.Value);
             await RefreshSelectedAsync();
+            InvalidateHealthReport();
             Notifications.ShowSuccess("Field saved", $"{entry.Field} on '{SelectedKey}'");
         }
         catch (Exception ex)
@@ -642,6 +661,7 @@
 
             await LoadVisibleKeyTypesAsync(Keys.Skip(Keys.Count - loaded).ToList());
             RebuildNamespaceTree();
+            InvalidateHealthReport();
         }
         catch (OperationCanceledException) { throw; } // CS-2
         catch (Exception ex)
@@ -733,6 +753,7 @@
             SelectedKey = newKey;
             Selection.SetSelection("redis", newKey);
             RebuildNamespaceTree();
+            InvalidateHealthReport();
             await RefreshSelectedAsync();
             Notifications.ShowSuccess("Key renamed", $"'{oldKey}' → '{newKey}'");
         }
@@ -793,6 +814,7 @@
                     }
 
                     RebuildNamespaceTree();
+                    InvalidateHealthReport();
                     Notifications.ShowSuccess("Keys deleted", $"{keyList.Count} key(s) removed.");
                 }
                 finally
@@ -812,6 +834,7 @@
         {
             await Client.DeleteHashFieldAsync(SelectedKey, field);
             await RefreshSelectedAsync();
+            InvalidateHealthReport();
             Notifications.ShowSuccess("Field deleted", $"{field} from '{SelectedKey}'");
         }
         catch (OperationCanceledException) { throw; } // CS-2
@@ -930,6 +953,100 @@
         await ScanAsync(_cts.Token);
     }
 
+    private void InvalidateHealthReport()
+    {
+        HealthReport = null;
+    }
+
+    private async Task<IReadOnlyList<RedisKeyInfo>> LoadKeyInfosForLoadedKeysAsync(CancellationToken ct)
+    {
+        if (Client is null || Keys.Count == 0)
+            return [];
+
+        var results = new List<RedisKeyInfo>(Keys.Count);
+        foreach (var key in Keys)
+        {
+            ct.ThrowIfCancellationRequested();
+            var info = await Client.GetKeyInfoAsync(key, ct);
+            results.Add(info);
+        }
+
+        return results;
+    }
+
+    private async Task<long?> TryGetEstimatedKeyCountAsync(CancellationToken ct)
+    {
+        if (Client is null)
+            return null;
+
+        try
+        {
+            var serverInfo = await Client.GetServerInfoAsync(ct);
+            var dbIndex = Math.Clamp(ActiveCacheEntry?.Database ?? 0, 0, 15);
+            return serverInfo.Databases.FirstOrDefault(db => db.Index == dbIndex)?.Keys;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task AnalyzeKeyspaceHealthAsync()
+    {
+        if (Client is null || Keys.Count == 0)
+            return;
+
+        IsAnalyzingHealth = true;
+        ErrorMessage = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var keyInfos = await LoadKeyInfosForLoadedKeysAsync(_cts.Token);
+            var estimate = await TryGetEstimatedKeyCountAsync(_cts.Token);
+
+            HealthReport = _healthAnalyzer.Analyze(
+                keyInfos,
+                estimate,
+                new RedisHealthScanOptions
+                {
+                    Separator = CurrentSeparator,
+                });
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsAnalyzingHealth = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenFindingKeyAsync(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        var exists = Keys.Any(candidate => string.Equals(candidate, key, StringComparison.Ordinal));
+        if (!exists)
+        {
+            Notifications.ShowWarning("Key not loaded", key);
+            return;
+        }
+
+        await SelectKeyAsync(key);
+    }
+
     // ── Prefix memory analysis ──
 
     private async Task AnalyzePrefixMemoryAsync()
@@ -942,14 +1059,13 @@
 
         try
         {
-            ScannedKeyInfos.Clear();
-            foreach (var key in Keys)
-            {
-                var info = await Client.GetKeyInfoAsync(key);
-                ScannedKeyInfos.Add(info);
-            }
+            ScannedKeyInfos = (await LoadKeyInfosForLoadedKeysAsync(_cts.Token)).ToList();
 
             PrefixMemoryBuckets = RedisKeyGrouper.ComputePrefixMemory(ScannedKeyInfos, CurrentSeparator);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (Exception ex)
         {

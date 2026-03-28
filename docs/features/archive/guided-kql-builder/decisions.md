@@ -4,7 +4,7 @@
 
 title: "Decisions - guided-kql-builder"
 owner: ""
-status: "Planned"
+status: "Accepted"
 
 ---
 
@@ -86,3 +86,30 @@ Do not replace current raw KQL execution path. Guided mode augments the Logs exp
 
 - Alternative A: Replace advanced editor entirely with guided mode - rejected due power-user impact.
 - Alternative B: Ship guided mode as a separate page - rejected due fragmented user experience and duplicated state handling.
+
+---
+
+## Decision 004 - Block guided Run on compile errors, keep warnings non-blocking
+
+**Status:** Accepted
+
+**Date:** 2026-03-28
+
+### Context
+
+Wave 3 required stronger guardrails and clearer validation feedback in guided mode. Existing validation issues already surfaced in preview, but execution relied on runtime blocking text and did not clearly signal disabled action states before run.
+
+### Decision
+
+Disable guided query execution when compiler errors are present, with inline field-level error affordances and a visible run guardrail message. Compiler warnings remain non-blocking so users can run broad-but-valid queries intentionally.
+
+### Consequences
+
+- Reduces invalid query attempts and clarifies remediation directly in guided controls.
+- Improves accessibility by exposing `aria-invalid`, `aria-live`, and explicit control state signaling.
+- Preserves expert flexibility by not over-blocking warning-only cases.
+
+### Alternatives considered
+
+- Alternative A: Allow run for error states and rely on post-click error text only - rejected due poor affordance and avoidable failed actions.
+- Alternative B: Block both errors and warnings - rejected due unnecessary friction for valid but high-volume exploratory queries.

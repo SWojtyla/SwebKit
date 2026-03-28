@@ -102,7 +102,8 @@
                         @onclick="() => SetTab(Tab.Failures)">Failures</button>
                 <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
                         @onclick="() => SetTab(Tab.Performance)">Performance</button>
-                <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" @onclick="() => SetTab(Tab.Logs)">Logs</button>
+                <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" data-testid="obs-tab-logs"
+                        @onclick="() => SetTab(Tab.Logs)">Logs</button>
                 <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
                         @onclick="() => SetTab(Tab.Availability)">Availability</button>
             </div>
@@ -124,7 +125,9 @@
                     case Tab.Logs:
                         <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
                                            MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
-                                           SavedQueriesChanged="OnSavedQueriesChangedAsync" />
+                                           SavedQueriesChanged="OnSavedQueriesChangedAsync"
+                                           Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
+                                           GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
                         break;
                     case Tab.Availability:
                         <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
@@ -342,6 +345,20 @@
     {
         var config = EnsureConfig();
         config.SavedQueries = queries;
+        await AppState.SaveConfigAsync();
+    }
+
+    private async Task OnLogsModeChangedAsync(GuidedLogsQueryMode mode)
+    {
+        var config = EnsureConfig();
+        config.LogsQueryMode = mode;
+        await AppState.SaveConfigAsync();
+    }
+
+    private async Task OnGuidedDraftChangedAsync(GuidedKqlQueryDefinition draft)
+    {
+        var config = EnsureConfig();
+        config.GuidedLogsDraft = draft?.Clone();
         await AppState.SaveConfigAsync();
     }
 
