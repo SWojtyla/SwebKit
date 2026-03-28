@@ -1,77 +1,217 @@
 using Microsoft.Playwright;
+using System.Text.RegularExpressions;
 
 namespace SwebKit.E2E.Tests;
 
 /// <summary>
-/// End-to-end UI tests that connect to a running SwebKit MAUI app via WebView2 remote debugging.
+/// End-to-end UI tests that connect to the running SwebKit MAUI app via WebView2 remote
+/// debugging (CDP). The <see cref="AppFixture"/> launches the app (if needed), connects
+/// Playwright, and exposes a ready <see cref="IPage"/> shared across all tests.
 ///
 /// Prerequisites:
-///   1. Set the environment variable before launching the app:
-///        $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
-///   2. Launch the MAUI app (dotnet run / F5 in VS).
-///   3. Run these tests:
-///        dotnet test tests/SwebKit.E2E.Tests --filter "FullyQualifiedName~AppUiTests"
+///   Build the app in Debug:
+///     dotnet build src/SwebKit.App/SwebKit.App.csproj -c Debug -f net10.0-windows10.0.19041.0 -p:WindowsPackageType=None
+///
+///   Run E2E tests (fixture auto-launches the app):
+///     dotnet test tests/SwebKit.E2E.Tests --filter "Category=E2E"
+///
+///   Or pre-launch the app yourself (the fixture will detect it and skip launching):
+///     Run SwebKit.App in Debug from Visual Studio / VS Code.
 /// </summary>
 [Trait("Category", "E2E")]
-public sealed class AppUiTests : IAsyncLifetime
+public sealed class AppUiTests : IClassFixture<AppFixture>
 {
-    private const string CdpEndpoint = "http://localhost:9222";
+    private readonly AppFixture _fixture;
 
-    private IPlaywright _playwright = null!;
-    private IBrowser _browser = null!;
-    private IPage _page = null!;
+    public AppUiTests(AppFixture fixture) => _fixture = fixture;
 
-    public async Task InitializeAsync()
+    // =========================================================================
+    // AppShell_Renders — basic shell structure is present on startup
+    // =========================================================================
+
+    [Fact]
+    public async Task AppShell_HasTopBar()
     {
-        _playwright = await Playwright.CreateAsync();
-        _browser = await _playwright.Chromium.ConnectOverCDPAsync(CdpEndpoint);
-
-        // WebView2 exposes the Blazor app in the first (default) browser context
-        var context = _browser.Contexts[0];
-        _page = context.Pages[0];
-    }
-
-    public async Task DisposeAsync()
-    {
-        // Don't close the page/context — we don't own the app process
-        await _browser.CloseAsync();
-        _playwright.Dispose();
+        await Assertions.Expect(_fixture.Page.Locator(".top-bar"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 
     [Fact]
-    public async Task AppShell_Renders_TopBarWithLogo()
+    public async Task AppShell_HasAppLogo()
     {
-        var logo = _page.Locator(".app-logo");
-        await Assertions.Expect(logo).ToBeVisibleAsync();
+        var logo = _fixture.Page.Locator(".app-logo-text");
+        await Assertions.Expect(logo)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
         await Assertions.Expect(logo).ToHaveTextAsync("SwebKit");
     }
 
     [Fact]
-    public async Task AppShell_Renders_LeftNavigation()
+    public async Task AppShell_HasLeftNavigation()
     {
-        var nav = _page.Locator("nav.left-nav");
-        await Assertions.Expect(nav).ToBeVisibleAsync();
-
-        // Verify core navigation items are present
-        await Assertions.Expect(_page.GetByText("Service Bus")).ToBeVisibleAsync();
-        await Assertions.Expect(_page.GetByText("AKS")).ToBeVisibleAsync();
-        await Assertions.Expect(_page.GetByText("Settings")).ToBeVisibleAsync();
+        await Assertions.Expect(_fixture.Page.Locator("nav.left-nav"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 
     [Fact]
-    public async Task AppShell_Renders_CommandPaletteButton()
+    public async Task AppShell_HasAllNavItems()
     {
-        var button = _page.Locator(".cmd-palette-btn");
-        await Assertions.Expect(button).ToBeVisibleAsync();
+        var areas = new[]
+        {
+            "dashboard", "service-bus", "aks", "redis",
+            "storage", "pipelines", "observability", "settings"
+        };
+
+        foreach (var area in areas)
+        {
+            await Assertions.Expect(_fixture.Page.Locator($"[data-area=\"{area}\"]"))
+                .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        }
     }
 
     [Fact]
-    public async Task Navigation_CanSwitchToServiceBus()
+    public async Task AppShell_HasCommandPaletteButton()
     {
-        // Click the Service Bus nav item
-        await _page.GetByText("Service Bus").ClickAsync();
-
-        // Wait for navigation to complete — the URL should contain /service-bus
-        await _page.WaitForURLAsync("**/service-bus");
+        await Assertions.Expect(_fixture.Page.Locator(".cmd-palette-btn"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
+
+    [Fact]
+    public async Task AppShell_HasStatusBar()
+    {
+        await Assertions.Expect(_fixture.Page.Locator(".status-bar"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    // =========================================================================
+    // Navigation_Works — clicking nav items changes routes and active state
+    // =========================================================================
+
+    [Fact]
+    public async Task Navigation_ToDashboard()
+    {
+        await NavigateToAsync("dashboard");
+
+        await Assertions.Expect(_fixture.Page.Locator(".dashboard-page"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task Navigation_ToSettings()
+    {
+        await NavigateToAsync("settings");
+
+        await Assertions.Expect(_fixture.Page.Locator(".settings-shell"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task Navigation_ToServiceBus()
+    {
+        await NavigateToAsync("dashboard");
+        await Assertions.Expect(_fixture.Page.Locator(".dashboard-page"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+        await NavigateToAsync("service-bus");
+
+        await Assertions.Expect(_fixture.Page.Locator(".service-bus-page-shell"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task Navigation_NavToggle_CollapsesAndExpands()
+    {
+        var appShell = _fixture.Page.Locator(".app-shell");
+        var navToggle = _fixture.Page.Locator(".nav-toggle");
+
+        // Ensure we start in the expanded state regardless of prior test order.
+        var isCollapsed = await appShell.EvaluateAsync<bool>(
+            "el => el.classList.contains('nav-collapsed')");
+        if (isCollapsed)
+        {
+            await navToggle.ClickAsync();
+            await Assertions.Expect(appShell).Not.ToHaveClassAsync(
+                new Regex(@"\bnav-collapsed\b"),
+                new LocatorAssertionsToHaveClassOptions { Timeout = 5_000 });
+        }
+
+        // Collapse.
+        await navToggle.ClickAsync();
+        await Assertions.Expect(appShell).ToHaveClassAsync(
+            new Regex(@"\bnav-collapsed\b"),
+            new LocatorAssertionsToHaveClassOptions { Timeout = 5_000 });
+
+        // Expand again.
+        await navToggle.ClickAsync();
+        await Assertions.Expect(appShell).Not.ToHaveClassAsync(
+            new Regex(@"\bnav-collapsed\b"),
+            new LocatorAssertionsToHaveClassOptions { Timeout = 5_000 });
+    }
+
+    // =========================================================================
+    // DemoMode_Works — demo mode toggle shows/hides the banner
+    // Each test enables and then disables demo so state is always clean.
+    // =========================================================================
+
+    [Fact]
+    public async Task DemoMode_ToggleVisible()
+    {
+        await Assertions.Expect(_fixture.Page.Locator(".demo-toggle-btn"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task DemoMode_EnableShowsBanner()
+    {
+        await NavigateToAsync("dashboard");
+
+        // Enable demo mode via the toggle + confirmation popover.
+        await _fixture.Page.Locator(".demo-toggle-btn").ClickAsync();
+
+        var confirmBtn = _fixture.Page.Locator(".demo-confirm-enable");
+        await Assertions.Expect(confirmBtn)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        await confirmBtn.ClickAsync();
+
+        var banner = _fixture.Page.Locator(".demo-banner");
+        await Assertions.Expect(banner)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        await Assertions.Expect(banner).ToContainTextAsync("DEMO MODE");
+
+        // Clean up: disable demo so subsequent tests start from a clean state.
+        await _fixture.Page.Locator("button.demo-banner-disable").ClickAsync();
+        await Assertions.Expect(banner)
+            .ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task DemoMode_DisableBanner()
+    {
+        await NavigateToAsync("dashboard");
+
+        // Ensure demo mode is on so there is a banner to dismiss.
+        await _fixture.Page.Locator(".demo-toggle-btn").ClickAsync();
+
+        var confirmBtn = _fixture.Page.Locator(".demo-confirm-enable");
+        await Assertions.Expect(confirmBtn)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+        await confirmBtn.ClickAsync();
+
+        var banner = _fixture.Page.Locator(".demo-banner");
+        await Assertions.Expect(banner)
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+        // Disable demo via the banner's own dismiss button.
+        await _fixture.Page.Locator("button.demo-banner-disable").ClickAsync();
+        await Assertions.Expect(banner)
+            .ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10_000 });
+    }
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
+    /// <summary>Clicks the nav item for the given area to trigger navigation.</summary>
+    private Task NavigateToAsync(string area) =>
+        _fixture.Page.Locator($"[data-area=\"{area}\"]").ClickAsync();
 }
+

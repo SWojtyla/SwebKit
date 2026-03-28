@@ -16,6 +16,14 @@ public partial class App : MauiWinUIApplication
 	/// </summary>
 	public App()
 	{
+#if DEBUG
+		// Enable WebView2 remote debugging so Playwright can connect via CDP.
+		// This MUST be set before InitializeComponent() — that's when the WebView2
+		// subprocess is created and it reads this env var to pass to the browser process.
+		Environment.SetEnvironmentVariable(
+			"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+			"--remote-debugging-port=9222");
+#endif
 		this.InitializeComponent();
 	}
 
