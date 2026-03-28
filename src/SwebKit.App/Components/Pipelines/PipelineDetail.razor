@@ -32,13 +32,25 @@
             <div class="pipeline-trigger-row">
                 <div class="form-group trigger-form__branch">
                     <label class="form-label">Branch</label>
-                    <input type="text" list="trigger-branches" class="form-input" @bind="_branch" placeholder="main" />
-                    <datalist id="trigger-branches">
-                        @foreach (var b in BranchSuggestions)
-                        {
-                            <option value="@b" />
-                        }
-                    </datalist>
+                    @if (_branches is { Count: > 0 })
+                    {
+                        <select class="form-input" @bind="_branch">
+                            @foreach (var b in _branches)
+                            {
+                                <option value="@b">@b</option>
+                            }
+                        </select>
+                    }
+                    else if (_loadingBranches)
+                    {
+                        <select class="form-input" disabled>
+                            <option>Loading branches…</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <input type="text" class="form-input" @bind="_branch" placeholder="main" />
+                    }
                 </div>
                 <div class="form-group trigger-form__params">
                     <label class="form-label">Template Parameters <span class="text-muted">(key=val, ...)</span></label>
@@ -156,13 +168,6 @@
     [Parameter] public AdoProject Project { get; set; } = default!;
     [Parameter] public AdoPipeline Pipeline { get; set; } = default!;
 
-    private IEnumerable<string> BranchSuggestions =>
-        _recentRuns
-            .Select(r => r.SourceBranch?.Replace("refs/heads/", "") ?? "")
-            .Where(b => !string.IsNullOrEmpty(b))
-            .Distinct()
-            .Take(10);
-
     private bool _isLoading;
     private string? _error;
     private List<PipelineEnvironmentStatus> _envStatus = [];
@@ -174,6 +179,8 @@
     private bool _triggering;
     private string _branch = "main";
     private string _templateParams = string.Empty;
+    private List<string>? _branches;
+    private bool _loadingBranches;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -198,6 +205,50 @@
     {
         _showTrigger = !_showTrigger;
         _showTriggerConfirm = false;
+        if (_showTrigger && _branches is null)
+            _ = LoadBranchesAsync();
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        _loadingBranches = true;
+        StateHasChanged();
+        try
+        {
+            var repos = await DevOpsClient.GetRepositoriesAsync(Project.Name);
+            if (repos.Count > 0)
+            {
+                var branchTasks = repos.Select(r => DevOpsClient.GetBranchesAsync(Project.Name, r.Id));
+                var results = await Task.WhenAll(branchTasks);
+                _branches = results
+                    .SelectMany(b => b)
+                    .Distinct()
+                    .OrderBy(b => b)
+                    .ToList();
+
+                // Pre-select the most recently used branch if it exists in the list
+                var lastBranch = _recentRuns.FirstOrDefault()?.SourceBranch;
+                if (lastBranch is not null && _branches.Contains(lastBranch))
+                    _branch = lastBranch;
+                else if (_branches.Contains("main"))
+                    _branch = "main";
+                else if (_branches.Count > 0)
+                    _branch = _branches[0];
+            }
+            else
+            {
+                _branches = [];
+            }
+        }
+        catch
+        {
+            _branches = [];
+        }
+        finally
+        {
+            _loadingBranches = false;
+            StateHasChanged();
+        }
     }
 
     private void OpenTriggerConfirm() => _showTriggerConfirm = true;

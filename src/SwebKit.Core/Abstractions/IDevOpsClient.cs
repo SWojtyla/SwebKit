@@ -45,6 +45,8 @@ public interface IDevOpsClient
 
     Task<List<AdoRepository>> GetRepositoriesAsync(string project, CancellationToken ct = default);
 
+    Task<List<string>> GetBranchesAsync(string project, string repositoryId, CancellationToken ct = default);
+
     Task<List<AdoTag>> GetTagsAsync(string project, string repositoryId, CancellationToken ct = default);
 
     Task<AdoTag> CreateAnnotatedTagAsync(

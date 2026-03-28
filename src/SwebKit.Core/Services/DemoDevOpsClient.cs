@@ -289,6 +289,12 @@ public class DemoDevOpsClient : IDevOpsClient
             : [];
     }
 
+    public async Task<List<string>> GetBranchesAsync(string project, string repositoryId, CancellationToken ct = default)
+    {
+        await Task.Delay(150, ct);
+        return ["develop", "feature/cart-improvements", "feature/new-checkout", "hotfix/payment-fix", "main", "release/1.5.0"];
+    }
+
     public async Task<List<AdoTag>> GetTagsAsync(string project, string repositoryId, CancellationToken ct = default)
     {
         await Task.Delay(150, ct);

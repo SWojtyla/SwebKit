@@ -298,6 +298,18 @@ public class DevOpsClient : IDevOpsClient
         )).ToList() ?? [];
     }
 
+    public async Task<List<string>> GetBranchesAsync(string project, string repositoryId, CancellationToken ct = default)
+    {
+        var response = await _http.GetFromJsonAsync<AdoListResponse<AdoRefDto>>(
+            $"{ProjectApi(project)}/git/repositories/{repositoryId}/refs?filter=heads/&api-version=7.1", JsonOptions, ct);
+
+        return response?.Value
+            .Select(r => (r.Name ?? string.Empty).Replace("refs/heads/", ""))
+            .Where(name => !string.IsNullOrEmpty(name))
+            .OrderBy(name => name)
+            .ToList() ?? [];
+    }
+
     public async Task<List<AdoTag>> GetTagsAsync(string project, string repositoryId, CancellationToken ct = default)
     {
         // ADO lists tags via the refs endpoint with a tags/ filter
