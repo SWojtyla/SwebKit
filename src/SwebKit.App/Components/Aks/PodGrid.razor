@@ -1,4 +1,6 @@
 @* Renders the Pods FluentDataGrid with CPU/Memory metrics. *@
+@inject IJSRuntime JS
+@inject INotificationService Notify
 
 <FluentDataGrid Items="@FilteredItems" TGridItem="PodInfo" Virtualize="true" ItemSize="36"
                 RowClass="@(p => p.Name == SelectedPod?.Name ? "selected-row" : "")"
@@ -16,38 +18,24 @@
                   @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Phase" Width="120px">
-        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
-             @oncontextmenu:preventDefault>
-            <span class="pod-status-badge pod-status-badge--@context.Phase.ToLower().Replace(" ", "").Replace(":", "")">
-                @context.Phase
-            </span>
-        </div>
-    </TemplateColumn>
     <TemplateColumn Title="Ready" Width="70px">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            <span class="aks-ready-badge @(context.Ready ? "healthy" : "degraded")">
-                @(context.Ready ? "Yes" : "No")
+            <span
+                class="aks-ready-badge @(context.ReadyContainers == context.TotalContainers ? "healthy" : "degraded")">
+                @context.ReadyDisplay
             </span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Node" Width="180px">
+    <TemplateColumn Title="Status" Width="150px">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            @context.NodeName
+            <span class="pod-status-badge pod-status-badge--@StatusCssKey(context)" title="Phase: @context.Phase">
+                @context.Status
+            </span>
         </div>
     </TemplateColumn>
-    <TemplateColumn Title="Age" Width="80px">
-        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
-             @oncontextmenu:preventDefault>
-            @if (context.StartTime.HasValue)
-            {
-                @FormatAge(context.StartTime.Value)
-            }
-        </div>
-    </TemplateColumn>
-    <TemplateColumn Title="CPU" Width="90px">
+    <TemplateColumn Title="CPU Usage" Width="90px">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             @{
@@ -55,47 +43,93 @@
             }
             @if (cpuMetric is not null)
             {
-                var cpuPct = Math.Min(100.0, cpuMetric.Value * 1000.0 / 500.0 * 100.0);
+                var cpuPct = Math.Min(100.0, cpuMetric.Value * 1000.0 / CpuCeiling * 100.0);
                 <div class="aks-metric-cell">
                     <span class="aks-metric @CpuClass(cpuMetric.Value)"
-                          title="@($"{cpuMetric.Value * 1000:F0}m / ~500m")">@($"{cpuMetric.Value * 1000:F0}m")</span>
-                    <div class="aks-metric-bar-track">
-                        <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)"
-                             style="width:@($"{cpuPct:F0}")%"></div>
+                          title="@($"{cpuMetric.Value * 1000:F0}m / ~{CpuCeiling}m")">@($"{cpuMetric.Value *
+                                            1000:F0}m")</span>
+                        <div class="aks-metric-bar-track">
+                            <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)" style="width:@($"{cpuPct:F0}")%"></div>
+                        </div>
                     </div>
-                </div>
-            }
+                }
             else
-            {
-                <span class="aks-metric-na">—</span>
-            }
-        </div>
-    </TemplateColumn>
-    <TemplateColumn Title="Memory" Width="100px">
-        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
-             @oncontextmenu:preventDefault>
-            @{
-                var memMetric = GetPodMemoryMi(context.Name);
-            }
-            @if (memMetric is not null)
-            {
-                var memPct = Math.Min(100.0, memMetric.Value / 512.0 * 100.0);
-                <div class="aks-metric-cell">
-                    <span class="aks-metric @MemoryClass(memMetric.Value)"
-                          title="@($"{memMetric.Value:F0}Mi / ~512Mi")">@($"{memMetric.Value:F0}Mi")</span>
-                    <div class="aks-metric-bar-track">
-                        <div class="aks-metric-bar-fill @MemoryClass(memMetric.Value)"
-                             style="width:@($"{memPct:F0}")%"></div>
+                {
+                    <span class="aks-metric-na"
+                          title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Memory Usage" Width="100px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                @{
+                    var memMetric = GetPodMemoryMi(context.Name);
+                }
+                @if (memMetric is not null)
+                {
+                    var memPct = Math.Min(100.0, memMetric.Value / MemoryCeiling * 100.0);
+                    <div class="aks-metric-cell">
+                        <span class="aks-metric @MemoryClass(memMetric.Value)"
+                              title="@($"{memMetric.Value:F0}Mi / ~{MemoryCeiling}Mi")">@($"{memMetric.Value:F0}Mi")</span>
+                        <div class="aks-metric-bar-track">
+                            <div class="aks-metric-bar-fill @MemoryClass(memMetric.Value)" style="width:@($"{memPct:F0}")%">
+                            </div>
+                        </div>
                     </div>
-                </div>
-            }
-            else
-            {
-                <span class="aks-metric-na">—</span>
-            }
-        </div>
-    </TemplateColumn>
-</FluentDataGrid>
+                }
+                else
+                {
+                    <span class="aks-metric-na"
+                          title="Metrics unavailable — metrics-server may not be installed or pod has no resource data">—</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Restarts" Width="80px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-restart-count @(context.RestartCount > 0 ? "has-restarts" : "")">
+                    @context.RestartCount
+                </span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Last Restart" Width="100px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-restart-info">
+                    @if (context.LastRestartTime.HasValue)
+                    {
+                        @FormatTimeAgo(context.LastRestartTime.Value)
+                    }
+                    else
+                    {
+                        <text>-</text>
+                    }
+                </span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Last Restart Reason" Width="130px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-restart-info">@(context.LastRestartReason ?? "-")</span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Pod IP" Width="120px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-pod-ip">@(context.PodIP ?? "—")</span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Age" Width="80px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                @if (context.StartTime.HasValue)
+                {
+                    @FormatAge(context.StartTime.Value)
+                }
+            </div>
+        </TemplateColumn>
+    </FluentDataGrid>
 
 @code {
     [Parameter] public IQueryable<PodInfo> FilteredItems { get; set; } = Enumerable.Empty<PodInfo>().AsQueryable();
@@ -105,6 +139,9 @@
     [Parameter] public EventCallback<PodInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, PodInfo)> OnContextMenu { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+    [Parameter] public int CpuCeiling { get; set; } = 500;
+    [Parameter] public int MemoryCeiling { get; set; } = 512;
+    [Parameter] public EventCallback<string> OnCopyName { get; set; }
 
     private double? GetPodCpu(string podName)
     {
@@ -126,11 +163,22 @@
     private static string MemoryClass(double mi) =>
         mi > 400 ? "metric-high" : mi > 200 ? "metric-med" : "metric-low";
 
+    private static string StatusCssKey(PodInfo pod) =>
+        pod.Status.ToLowerInvariant().Replace(" ", "").Replace(":", "");
+
     private static string FormatAge(DateTimeOffset start)
     {
         var span = DateTimeOffset.UtcNow - start;
         if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
         if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
         return $"{(int)span.TotalMinutes}m";
+    }
+
+    private static string FormatTimeAgo(DateTimeOffset time)
+    {
+        var span = DateTimeOffset.UtcNow - time;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d {(int)(span.TotalHours % 24)}h ago";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h {(int)(span.TotalMinutes % 60)}m ago";
+        return $"{(int)span.TotalMinutes}m ago";
     }
 }

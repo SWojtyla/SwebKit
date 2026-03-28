@@ -13,9 +13,8 @@
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Personal Access Token (PAT)</label>
-        <input type="password" @bind="Pat" @bind:event="oninput"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="Enter PAT (stored securely in Windows Credential Manager)" />
+        <PasswordField Value="@Pat" ValueChanged="@(v => Pat = v ?? string.Empty)" Label="Personal Access Token"
+                       Placeholder="Enter PAT (stored securely in Windows Credential Manager)" />
     </div>
 
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -24,7 +23,8 @@
 
         @if (StatusMessage is not null)
         {
-            <span style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
+            <span
+            style="font-size:12px; color:@(StatusOk ? "var(--color-success)" : "var(--color-error)");">@StatusMessage</span>
         }
     </div>
 </div>

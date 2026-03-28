@@ -69,7 +69,8 @@ SwebKit.sln
 │   ├── SwebKit.Azure/        # Service Bus + Storage implementations
 │   ├── SwebKit.Kubernetes/   # Kubernetes/AKS implementation
 │   ├── SwebKit.Redis/        # Redis implementation (StackExchange.Redis)
-│   └── SwebKit.DevOps/       # Azure DevOps REST API implementation
+│   ├── SwebKit.DevOps/       # Azure DevOps REST API implementation
+│   └── SwebKit.Observability/ # Application Insights implementation (Azure Monitor Logs API)
 └── tests/
     ├── SwebKit.Core.Tests/
     ├── SwebKit.Azure.Tests/

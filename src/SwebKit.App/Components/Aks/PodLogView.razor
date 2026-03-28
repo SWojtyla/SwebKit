@@ -1,4 +1,6 @@
 @inject IAppEventBus Events
+@inject IJSRuntime JS
+@inject INotificationService Notify
 @implements IAsyncDisposable
 
 <div class="log-viewer">
@@ -8,10 +10,32 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
-        <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter…"
+        @if (Containers.Count > 1)
+        {
+            <select class="log-container-select" value="@_selectedContainer" @onchange="OnContainerChanged">
+                @foreach (var c in Containers)
+                {
+                    <option value="@c" selected="@(c == _selectedContainer)">@c</option>
+                }
+            </select>
+        }
+        <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
                class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportLogsAsync" Disabled="@(FilteredLines.Count == 0)"
+                      Title="Export logs as text file">Export</FluentButton>
+        @if (IsLive && IsLoading)
+        {
+            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
+                          Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                @(_paused ? "▶ Resume" : "⏸ Pause")
+            </FluentButton>
+        }
+        <label class="log-live-toggle" style="margin-left:auto;">
+            <input type="checkbox" @bind="_tailEnabled" />
+            ↓ Tail
+        </label>
     </div>
 
     <div class="log-output" @ref="_logContainer">
@@ -21,10 +45,9 @@
         }
         else
         {
-            @foreach (var line in FilteredLines)
-            {
-                <div class="log-line @GetLineClass(line)">@line</div>
-            }
+            <Virtualize Items="@FilteredLines" Context="entry" ItemSize="22">
+                <div class="log-line @entry.CssClass">@entry.Line</div>
+            </Virtualize>
             @if (IsLive && IsLoading)
             {
                 <div class="log-tailing">
@@ -39,6 +62,10 @@
     [Parameter] public IAksClient? Client { get; set; }
     [Parameter] public string? Namespace { get; set; }
     [Parameter] public string? PodName { get; set; }
+    [Parameter] public IReadOnlyList<string> Containers { get; set; } = [];
+    [Parameter] public int BufferSize { get; set; } = 10_000;
+
+    private readonly record struct LogEntry(string Line, string CssClass);
 
     private List<string> Lines = [];
     private bool IsLive = true;
@@ -47,64 +74,183 @@
     private CancellationTokenSource? _cts;
     private ElementReference _logContainer;
     private Task? _streamTask;
+    private bool _tailEnabled = true;
+    private string _selectedContainer = string.Empty;
+    private bool _paused;
 
-    private IReadOnlyList<string> FilteredLines => string.IsNullOrEmpty(TextFilter)
-        ? Lines.TakeLast(500).ToList()
-        : Lines.Where(l => l.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).TakeLast(500).ToList();
+    // PERF2-3: Cached filtered lines — recomputed only when dirty
+    private List<LogEntry> _filteredLinesCache = [];
+    private bool _filterDirty = true;
+    private int _lastFilteredLineCount;
+    private string _lastFilterText = "";
+
+    private List<LogEntry> FilteredLines
+    {
+        get
+        {
+            if (_filterDirty || Lines.Count != _lastFilteredLineCount || TextFilter != _lastFilterText)
+            {
+                _lastFilteredLineCount = Lines.Count;
+                _lastFilterText = TextFilter;
+                _filterDirty = false;
+
+                var source = string.IsNullOrEmpty(TextFilter)
+                    ? Lines.TakeLast(500)
+                    : Lines.Where(l => l.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).TakeLast(500);
+
+                _filteredLinesCache = source.Select(l => new LogEntry(l, GetLineClass(l))).ToList();
+            }
+            return _filteredLinesCache;
+        }
+    }
+
+    private void InvalidateFilter() => _filterDirty = true;
+
+    // PERF2-2: Render-batching timer state
+    private PeriodicTimer? _renderTimer;
+    private Task? _renderTimerTask;
+    private volatile bool _linesDirty;
 
     protected override async Task OnParametersSetAsync()
     {
         if (Client is not null && PodName is not null && Namespace is not null && IsLive)
+        {
+            if (string.IsNullOrEmpty(_selectedContainer) && Containers.Count > 0)
+                _selectedContainer = Containers[0];
             await StartTailingAsync();
+        }
     }
 
     private async Task OnLiveToggle()
     {
         if (IsLive) await StartTailingAsync();
-        else { _cts?.Cancel(); IsLoading = false; }
+        else { StopTailing(); IsLoading = false; _paused = false; }
+    }
+
+    private async Task OnContainerChanged(ChangeEventArgs e)
+    {
+        _selectedContainer = e.Value?.ToString() ?? string.Empty;
+        await StartTailingAsync();
+    }
+
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        if (!_paused)
+            InvokeAsync(StateHasChanged);
     }
 
     private async Task StartTailingAsync()
     {
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
+        // PERF2-4: Interlocked swap for thread-safe CTS lifecycle
+        var newCts = new CancellationTokenSource();
+        var oldCts = Interlocked.Exchange(ref _cts, newCts);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        var token = newCts.Token;
+
         IsLoading = true;
+        _paused = false;
         Lines.Clear();
+        _filterDirty = true;
         StateHasChanged();
+
+        StopRenderTimer();
+        StartRenderTimer(token);
+
+        _streamTask = Task.Run(() => StreamLogsAsync(token));
+    }
+
+    private void StopTailing()
+    {
+        var oldCts = Interlocked.Exchange(ref _cts, null);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        StopRenderTimer();
+    }
+
+    // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
+    private void StartRenderTimer(CancellationToken token)
+    {
+        _renderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        _renderTimerTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _renderTimer.WaitForNextTickAsync(token))
+                {
+                    if (_paused || !_linesDirty) continue;
+                    _linesDirty = false;
+                    _filterDirty = true;
+                    await InvokeAsync(StateHasChanged);
+                    if (_tailEnabled)
+                        await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void StopRenderTimer()
+    {
+        _renderTimer?.Dispose();
+        _renderTimer = null;
+    }
+
+    private async Task StreamLogsAsync(CancellationToken token)
+    {
+        try
+        {
+            var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
+            var container = _selectedContainer;
+            await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, token))
+            {
+                Lines.Add(line);
+                if (Lines.Count > BufferSize) Lines.RemoveAt(0);
+                _linesDirty = true;
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            // Final flush after stream ends
+            _linesDirty = false;
+            _filterDirty = true;
+            StopRenderTimer();
+            await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+        }
+    }
+
+    private void ClearLogs() { Lines.Clear(); _filterDirty = true; StateHasChanged(); }
+
+    private async Task ExportLogsAsync()
+    {
+        var lines = FilteredLines;
+        if (lines.Count == 0) return;
+
+        var content = string.Join('\n', lines.Select(e => e.Line));
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var podSlug = (PodName ?? "pod").Replace('/', '-');
+        var fileName = $"{podSlug}-{ts}.log";
 
         try
         {
-            _streamTask = Task.Run(StreamLogsAsync);
+            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content);
+            Notify.ShowSuccess($"Exported {lines.Count} lines to {fileName}");
         }
-        catch (Exception) { IsLoading = false; StateHasChanged(); }
-    }
-
-    private async Task StreamLogsAsync()
-    {
-        var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
-        var container = string.Empty;
-        int lineCount = 0;
-        await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, _cts!.Token))
+        catch (Exception ex)
         {
-            Lines.Add(line);
-            if (Lines.Count > 10_000) Lines.RemoveAt(0);
-            lineCount++;
-            if (lineCount % 20 == 0)  // Render every 20 lines
-            {
-                await InvokeAsync(StateHasChanged);
-            }
+            Notify.ShowError("Export failed", ex.Message);
         }
-        await InvokeAsync(StateHasChanged); // Final render
-        await InvokeAsync(() => { IsLoading = false; StateHasChanged(); });
     }
-
-    private void ClearLogs() { Lines.Clear(); StateHasChanged(); }
 
     private static string GetLineClass(string line)
     {
-        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
+        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR",
+StringComparison.OrdinalIgnoreCase))
             return "error";
-        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN", StringComparison.OrdinalIgnoreCase))
+        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN",
+StringComparison.OrdinalIgnoreCase))
             return "warn";
         if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
             return "debug";
@@ -113,7 +259,13 @@
 
     public async ValueTask DisposeAsync()
     {
-        _cts?.Cancel();
+        // PERF2-4: Thread-safe CTS teardown
+        var cts = Interlocked.Exchange(ref _cts, null);
+        cts?.Cancel();
+        cts?.Dispose();
+
+        StopRenderTimer();
+
         if (_streamTask is not null)
         {
             try { await _streamTask.WaitAsync(TimeSpan.FromSeconds(2)); }

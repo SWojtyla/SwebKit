@@ -11,6 +11,9 @@
     --nav-collapsed-width: 56px;
     --status-bar-height: 28px;
     --top-bar-height: 48px;
+    --sb-entity-panel-width: 260px;
+    --sb-entity-panel-collapsed-width: 48px;
+    --sb-detail-drawer-width: 380px;
 
     /* z-index scale */
     --z-dropdown: 200;
@@ -296,7 +299,7 @@ html, body {
 .demo-banner {
     grid-column: 1 / -1;
     grid-row: 2;
-    background: #d97706;
+    background: var(--color-warning);
     color: #1a1a1a;
     display: flex;
     align-items: center;
@@ -996,6 +999,148 @@ html, body {
 
 .service-bus-left-pane.collapsed { border-right-width: 1px; }
 
+/* ── Service Bus UI revamp ─────────────────────────────── */
+
+.sb-entity-panel {
+    flex: 0 0 var(--sb-entity-panel-width);
+    min-width: var(--sb-entity-panel-width);
+    max-width: var(--sb-entity-panel-width);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: flex-basis 0.2s ease, min-width 0.2s ease, max-width 0.2s ease;
+}
+
+.sb-entity-panel.collapsed {
+    flex-basis: var(--sb-entity-panel-collapsed-width);
+    min-width: var(--sb-entity-panel-collapsed-width);
+    max-width: var(--sb-entity-panel-collapsed-width);
+}
+
+.sb-entity-panel-icon-strip {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.sb-entity-panel.collapsed .sb-entity-panel-icon-strip { display: flex; }
+.sb-entity-panel.collapsed .sb-entity-panel-body { display: none; }
+
+.sb-ns-icon-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    color: var(--color-nav-servicebus);
+    cursor: pointer;
+}
+
+.sb-ns-icon-badge:hover {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+}
+
+.sb-active-workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+}
+
+.sb-detail-drawer {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-surface);
+    animation: sb-drawer-slide-in 0.18s ease;
+}
+
+.sb-detail-drawer.overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--sb-detail-drawer-width);
+    z-index: var(--z-dropdown);
+    box-shadow: var(--shadow-lg);
+    border-left: 1px solid var(--color-border);
+}
+
+.sb-detail-drawer-header {
+    padding: 6px 8px 6px 12px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-xs);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.sb-detail-close-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    line-height: 1;
+}
+
+.sb-detail-close-btn:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+}
+
+.sb-tab-bar .tab-item {
+    padding: 4px 10px;
+}
+
+.density-toggle {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 2px;
+    background: var(--color-surface-2);
+}
+
+.density-btn {
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.density-btn.active {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+}
+
+.message-grid-host.density-compact fluent-data-grid-row { height: 28px; }
+.message-grid-host.density-default fluent-data-grid-row { height: 36px; }
+.message-grid-host.density-comfort fluent-data-grid-row { height: 44px; }
+
+@keyframes sb-drawer-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
 .sb-page-shell {
     display: grid;
     grid-template-columns: 280px 1fr;
@@ -1060,13 +1205,25 @@ html, body {
     letter-spacing: 0.4px;
 }
 
-.pod-status-badge--running  { background: rgba(67, 160, 71, 0.15);  color: var(--color-success); }
-.pod-status-badge--pending  { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
-.pod-status-badge--failed   { background: rgba(229, 57, 53, 0.15);  color: var(--color-error); }
-.pod-status-badge--unknown  { background: var(--color-surface-2);   color: var(--color-text-muted); }
-.pod-status-badge--succeeded{ background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
-.pod-status-badge--completed{ background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
-.pod-status-badge--crashloopbackoff { background: rgba(229, 57, 53, 0.2); color: var(--color-error); }
+.pod-status-badge--running       { background: rgba(67, 160, 71, 0.15);  color: var(--color-success); }
+.pod-status-badge--pending       { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
+.pod-status-badge--failed        { background: rgba(229, 57, 53, 0.15);  color: var(--color-error); }
+.pod-status-badge--unknown       { background: var(--color-surface-2);   color: var(--color-text-muted); }
+.pod-status-badge--succeeded     { background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
+.pod-status-badge--completed     { background: rgba(67, 160, 71, 0.1);   color: var(--color-success); }
+.pod-status-badge--terminating   { background: rgba(251, 140, 0, 0.15);  color: var(--color-warning); }
+/* Error states — container waiting/terminated reasons */
+.pod-status-badge--crashloopbackoff     { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--imagepullbackoff     { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--errimagepull         { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--oomkilled            { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+.pod-status-badge--error                { background: rgba(229, 57, 53, 0.15); color: var(--color-error); }
+.pod-status-badge--createcontainerconfigerror { background: rgba(229, 57, 53, 0.2); color: var(--color-error); }
+.pod-status-badge--invalidimgname       { background: rgba(229, 57, 53, 0.2);  color: var(--color-error); }
+/* Transient / in-progress states */
+.pod-status-badge--containercreating    { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
+.pod-status-badge--podinitiializing     { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
+.pod-status-badge--podinitializing      { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
 
 /* ═══════════════════════════════════════════════════════════
    Redis key type badges
@@ -1190,6 +1347,19 @@ html, body {
     border-radius: var(--radius-sm);
     font-size: var(--font-size-sm);
     color: var(--color-success);
+}
+
+.settings-unsaved-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(255, 183, 77, 0.15);
+    border: 1px solid var(--color-warning, #ffb74d);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-warning, #ffb74d);
 }
 
 /* ── Settings info card (used by Observability and similar no-config sections) ── */
@@ -1316,11 +1486,37 @@ html, body {
     color: #FF6B6B;
 }
 
+.error-callout-retry {
+    margin-left: 8px;
+    padding: 2px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius-sm);
+    color: inherit;
+}
+
+.error-callout-retry:hover:not(:disabled) {
+    background: rgba(229, 57, 53, 0.15);
+}
+
+.error-callout-retry:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .connection-dot {
-    width: 8px;
-    height: 8px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
 }
 .dot-ok      { background: var(--color-success); }
 .dot-error   { background: var(--color-error); }
@@ -1645,6 +1841,7 @@ button:active { transform: scale(0.97); }
 .resource-item-name   { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); font-weight: 500; }
 .resource-item-meta   { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .resource-item-badge  { font-size: var(--font-size-xs); background: rgba(0,120,212,0.2); color: var(--color-accent); border-radius: var(--radius-sm); padding: 1px 5px; margin-left: 4px; }
+.resource-type-badge  { font-size: var(--font-size-xs); background: var(--color-surface-3); color: var(--color-text-muted); border-radius: var(--radius-sm); padding: 1px 5px; margin-left: 4px; border: 1px solid var(--color-border); }
 .resource-selector-error { padding: var(--spacing-sm) var(--spacing-md); color: var(--color-error); font-size: var(--font-size-sm); }
 
 /* Time range picker */
@@ -1653,6 +1850,40 @@ button:active { transform: scale(0.97); }
 
 /* Selected row in data grids (shared across features, harmless) */
 .selected-row { background: rgba(0, 120, 212, 0.12) !important; }
+
+/* OBS-1: Monaco editor wrapper */
+.obs-monaco-wrapper {
+    height: 140px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden;
+}
+
+/* OBS-2: Query validation error */
+.obs-query-error {
+    font-size: var(--font-size-sm); color: #e08000; background: rgba(184,106,0,0.08);
+    border-left: 3px solid #e08000; padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* OBS-3: Saved query folders */
+.obs-folder-header {
+    font-size: var(--font-size-xs); color: var(--color-text-muted); padding: 4px var(--spacing-sm);
+    margin-top: var(--spacing-xs);
+}
+.obs-folder-item { padding-left: var(--spacing-md); }
+
+/* OBS-7: Auto-refresh */
+.obs-auto-refresh { display: flex; align-items: center; gap: var(--spacing-xs); }
+.obs-auto-refresh-interval {
+    background: var(--color-surface-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    color: var(--color-text); font-size: var(--font-size-xs); padding: 2px 4px;
+}
+.obs-last-updated { font-size: var(--font-size-xs); color: var(--color-text-faint); }
+
+/* OBS-9: Settings threshold grid */
+.settings-threshold-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-sm); }
+.settings-label-sm { font-size: var(--font-size-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
+
+/* OBS-15: Heatmap inline */
+.obs-loading-inline { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); color: var(--color-text-muted); padding: var(--spacing-sm) 0; }
 
 /* ═══════════════════════════════════════════════════════════
    Pipelines — shared utilities (global, used across isolated components)
@@ -1787,4 +2018,136 @@ button:active { transform: scale(0.97); }
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+}
+
+/* ── Skeleton loading ── */
+@keyframes skeleton-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.skeleton-row {
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+        90deg,
+        var(--color-surface-2) 25%,
+        var(--color-surface-3) 50%,
+        var(--color-surface-2) 75%
+    );
+    background-size: 800px 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    margin-bottom: 4px;
+}
+
+/* ── Error boundary ── */
+.error-boundary-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--color-text);
+}
+
+.error-boundary-icon {
+    font-size: 48px;
+    color: var(--color-error);
+}
+
+.error-boundary-page h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.error-boundary-message {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    max-width: 480px;
+}
+
+.error-boundary-retry {
+    background: var(--color-accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 20px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+
+.error-boundary-retry:hover {
+    background: var(--color-accent-hover);
+}
+
+.error-boundary-details {
+    margin-top: 8px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    max-width: 600px;
+    text-align: left;
+}
+
+.error-boundary-details pre {
+    background: var(--color-surface-2);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    font-size: 11px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* ── Focus rings (UI-23) ── */
+:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* ── Notification toast detail expansion (UI-11) ── */
+.notification-detail {
+    color: rgba(255,255,255,0.6);
+    font-size: 11px;
+    margin-top: 4px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
+    max-height: 2.8em;
+    transition: max-height 0.2s ease;
+}
+.notification-detail.expanded {
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    max-height: none;
+}
+.notification-toggle {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.45);
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 0 0;
+    text-decoration: underline;
+}
+.notification-toggle:hover {
+    color: rgba(255,255,255,0.7);
+}
+
+/* ── UI-16: Form validation ── */
+.field-invalid {
+    border-color: var(--color-error) !important;
+    outline: 1px solid var(--color-error);
+}
+
+.field-error-msg {
+    display: block;
+    color: var(--color-error);
+    font-size: 11px;
+    margin-top: 2px;
 }

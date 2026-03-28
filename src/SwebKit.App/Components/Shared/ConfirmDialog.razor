@@ -3,12 +3,10 @@
 
 @if (Visible)
 {
-    <div
-        style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;"
-        @onkeydown="OnBackdropKeyDown">
-        <div
-            style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;"
-            @ref="_dialogRef">
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;"
+         @onkeydown="OnBackdropKeyDown">
+        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;"
+             @ref="_dialogRef">
             @if (IsProduction)
             {
                 <div
@@ -54,17 +52,40 @@
     private bool IsConfirmDisabled => RequireTyping && IsProduction && TypingConfirm != "CONFIRM";
     private ElementReference _dialogRef;
     private bool _trapApplied;
+    private bool _wasVisible;
+    private IJSObjectReference? _savedFocusRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!Visible || _trapApplied) return;
         _trapApplied = true;
-        try { await JS.InvokeVoidAsync("SwebKit.trapFocus", _dialogRef); }
+        try
+        {
+            _savedFocusRef = await JS.InvokeAsync<IJSObjectReference>("SwebKit.saveFocus");
+            await JS.InvokeVoidAsync("SwebKit.trapFocus", _dialogRef);
+        }
         catch { }
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
+        if (Visible && !_wasVisible)
+        {
+            _wasVisible = true;
+        }
+        else if (!Visible && _wasVisible)
+        {
+            _wasVisible = false;
+            if (_savedFocusRef is not null)
+            {
+                try { await JS.InvokeVoidAsync("SwebKit.restoreFocus", _savedFocusRef); }
+                catch { }
+                try { await _savedFocusRef.DisposeAsync(); }
+                catch { }
+                _savedFocusRef = null;
+            }
+        }
+
         if (!Visible) _trapApplied = false;
     }
 
@@ -81,5 +102,10 @@
     {
         try { await JS.InvokeVoidAsync("SwebKit.releaseTrap", _dialogRef); }
         catch { }
+        if (_savedFocusRef is not null)
+        {
+            try { await _savedFocusRef.DisposeAsync(); }
+            catch { }
+        }
     }
 }

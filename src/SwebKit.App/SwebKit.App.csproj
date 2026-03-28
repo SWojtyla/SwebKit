@@ -31,7 +31,7 @@
         <MauiXamlInflator>SourceGen</MauiXamlInflator>
 
         <!-- Display name -->
-        <ApplicationTitle>SwebKit.App</ApplicationTitle>
+        <ApplicationTitle>SwebKit</ApplicationTitle>
 
         <!-- App Identifier -->
         <ApplicationId>com.companyname.swebkit.app</ApplicationId>
@@ -72,11 +72,13 @@
 
     <ItemGroup>
         <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
+        <PackageReference Include="BlazorMonaco" Version="3.4.0" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.0" />
         <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.14.0" />
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
     <ItemGroup>

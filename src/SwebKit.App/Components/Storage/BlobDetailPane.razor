@@ -1,6 +1,7 @@
 @inject IJSRuntime JS
 @inject INotificationService Notifications
 @using System.Text.Json
+@using SwebKit.Azure.Storage
 
 <div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
 
@@ -16,6 +17,16 @@
     }
     else if (_properties is not null)
     {
+        @* ── Tab bar ── *@
+        <div style="display:flex; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+            <button style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "properties" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "properties" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "properties" ? "2px solid var(--color-accent)" : "2px solid transparent");"
+                    @onclick='() => _activeTab = "properties"'>Properties</button>
+            <button style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "versions" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "versions" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "versions" ? "2px solid var(--color-accent)" : "2px solid transparent");"
+                    @onclick="SelectVersionsTabAsync">Versions</button>
+        </div>
+
+        @if (_activeTab == "properties")
+        {
         <div style="overflow-y:auto; flex:1; padding:16px;">
 
             @* ── Action bar ── *@
@@ -125,11 +136,12 @@
                                 {
                                     <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
                                 }
-                                else if (_content.IsBinary)
+                                else if (_content.IsBinary || _binaryOverride)
                                 {
                                     <div
-                                        style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);">
-                                        Binary content — use Download to inspect this blob.
+                                        style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);"
+                                        title="@_binaryDetectionMethod">
+                                        Binary content — use Download to inspect this blob. @if (_binaryDetectionMethod is not null) { <span style="font-size:10px; color:var(--color-text-muted);">(@_binaryDetectionMethod)</span> }
                                     </div>
                                 }
                                 else
@@ -158,9 +170,57 @@
                                 }
 
                             </div>
-                        }
-
+        }
+        else @* versions tab *@
+        {
+            <div style="overflow-y:auto; flex:1; padding:16px;">
+                @if (_loadingVersions)
+                {
+                    <div style="display:flex; justify-content:center; padding:20px;">
+                        <FluentProgressRing />
                     </div>
+                }
+                else if (_versionsError is not null)
+                {
+                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">@_versionsError</div>
+                }
+                else if (_versions is not null && _versions.Count > 0)
+                {
+                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--color-border);">
+                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">Version ID</th>
+                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">Created</th>
+                                <th style="padding:6px 8px; text-align:right; font-weight:600; color:var(--color-text-muted);">Size</th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:600; color:var(--color-text-muted);">Current</th>
+                                <th style="padding:6px 8px; width:80px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in _versions)
+                            {
+                                <tr style="border-bottom:1px solid var(--color-border);">
+                                    <td style="padding:5px 8px; font-size:11px; font-family:Consolas,monospace; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@v.VersionId">@v.VersionId</td>
+                                    <td style="padding:5px 8px; white-space:nowrap;">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                    <td style="padding:5px 8px; text-align:right; white-space:nowrap;">@FormatSize(v.ContentLength ?? 0)</td>
+                                    <td style="padding:5px 8px; text-align:center;">@(v.IsCurrentVersion ? "✔" : "")</td>
+                                    <td style="padding:5px 8px;">
+                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="() => DownloadVersionAsync(v)">⬇</FluentButton>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">Versioning is not enabled on this container.</div>
+                }
+            </div>
+        }
+    }
+
+</div>
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -179,6 +239,16 @@
     private bool _showTags;
     private string? _loadedBlobName;
 
+    // STG-6: Versions tab
+    private string _activeTab = "properties";
+    private IReadOnlyList<BlobVersionItem>? _versions;
+    private bool _loadingVersions;
+    private string? _versionsError;
+
+    // STG-7: Binary detection override
+    private bool _binaryOverride;
+    private string? _binaryDetectionMethod;
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedBlobName == Blob.Name)
@@ -194,6 +264,11 @@
         _showTags = false;
         _loadingProperties = true;
         _loadingContent = true;
+        _activeTab = "properties";
+        _versions = null;
+        _versionsError = null;
+        _binaryOverride = false;
+        _binaryDetectionMethod = null;
 
         await InvokeAsync(StateHasChanged);
         await Task.WhenAll(LoadPropertiesAsync(), LoadContentAsync(524_288));
@@ -205,6 +280,7 @@
         {
             _properties = await Client.GetBlobPropertiesAsync(ContainerName, Blob.Name);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _propertiesError = ex.Message;
@@ -222,8 +298,28 @@
         {
             var raw = await Client.GetBlobContentAsync(ContainerName, Blob.Name, maxBytes);
             _content = raw;
+
+            // STG-7: Binary detection via magic bytes
+            _binaryOverride = false;
+            _binaryDetectionMethod = null;
+            if (raw.IsBinary)
+            {
+                _binaryDetectionMethod = "Detected by content-type";
+            }
+            else if (!string.IsNullOrEmpty(raw.Content))
+            {
+                var sampleBytes = System.Text.Encoding.UTF8.GetBytes(
+                    raw.Content.Length > 512 ? raw.Content[..512] : raw.Content);
+                if (BinaryContentDetector.IsBinary(sampleBytes))
+                {
+                    _binaryOverride = true;
+                    _binaryDetectionMethod = "Detected by magic bytes analysis";
+                }
+            }
+
             _displayContent = BuildDisplayContent(raw);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _content = new StorageBlobContent(ContainerName, Blob.Name, $"Error: {ex.Message}", null, 0, false, false);
@@ -242,6 +338,63 @@
         _content = null;
         await InvokeAsync(StateHasChanged);
         await LoadContentAsync(2_097_152);
+    }
+
+    private async Task SelectVersionsTabAsync()
+    {
+        _activeTab = "versions";
+        if (_versions is null && !_loadingVersions)
+            await LoadVersionsAsync();
+    }
+
+    private async Task LoadVersionsAsync()
+    {
+        _loadingVersions = true;
+        _versionsError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _versions = await Client.ListBlobVersionsAsync(ContainerName, Blob.Name);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _versionsError = "Versioning is not enabled on this container.";
+            _versions = [];
+            _ = ex; // consumed
+        }
+        finally
+        {
+            _loadingVersions = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DownloadVersionAsync(BlobVersionItem version)
+    {
+        try
+        {
+            var fileName = $"{System.IO.Path.GetFileName(Blob.Name)}_{version.VersionId}";
+            if (string.IsNullOrEmpty(fileName)) fileName = Blob.Name.Replace('/', '_');
+            var destPath = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                "Downloads", fileName);
+            // Download the versioned blob by appending versionId to the blob name request
+            await using var fs = System.IO.File.OpenWrite(destPath);
+            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs);
+            _actionOk = true;
+            _actionMessage = $"Downloaded version to: {destPath}";
+            Notifications.ShowSuccess("Version downloaded", fileName);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _actionOk = false;
+            _actionMessage = $"Download failed: {ex.Message}";
+            Notifications.ShowError("Download failed", ex: ex);
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private static string BuildDisplayContent(StorageBlobContent content)
@@ -291,9 +444,11 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "URL copied.";
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _actionOk = false;
@@ -312,6 +467,7 @@
             _actionMessage = "SAS URL copied (expires 24 h).";
             Notifications.ShowSuccess("SAS URL copied", "Expires in 24 hours");
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _actionOk = false;
@@ -327,9 +483,11 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", _displayContent);
+            Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "Content copied.";
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _actionOk = false;
@@ -353,6 +511,7 @@
             _actionMessage = $"Downloaded to: {destPath}";
             Notifications.ShowSuccess("Blob downloaded", fileName);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _actionOk = false;

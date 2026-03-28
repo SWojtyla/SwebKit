@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using SwebKit.Core.Models;
 
 namespace SwebKit.Observability;
@@ -6,7 +7,7 @@ namespace SwebKit.Observability;
 /// Built-in KQL query presets for Azure Application Insights.
 /// The $timeRange placeholder is substituted at runtime with the selected time range.
 /// </summary>
-internal static class KqlPresets
+public static class KqlPresets
 {
     public static readonly IReadOnlyList<QueryPreset> All =
     [
@@ -60,4 +61,14 @@ internal static class KqlPresets
             "Most active authenticated users",
             "requests\n| where isnotempty(user_AuthenticatedId)\n| summarize Count = count() by user_AuthenticatedId\n| order by Count desc\n| take 20"),
     ];
+
+    private static readonly Regex SafeOperationIdPattern = new(@"^[a-zA-Z0-9\-]+$", RegexOptions.Compiled);
+
+    public static string TraceByOperationId(string operationId)
+    {
+        if (!SafeOperationIdPattern.IsMatch(operationId))
+            throw new ArgumentException("Operation ID contains invalid characters.", nameof(operationId));
+
+        return $"union traces, exceptions, requests\n| where operation_Id == '{operationId}'\n| order by timestamp asc\n| take 200";
+    }
 }

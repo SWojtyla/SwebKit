@@ -1,0 +1,21 @@
+/* FQ-19 – CSS isolation: structural styles extracted from ServiceBusPage.razor */
+
+.service-bus-page-shell {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.service-bus-right-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sb-status-error {
+    color: var(--color-error);
+    display: inline-flex;
+    align-items: center;
+}

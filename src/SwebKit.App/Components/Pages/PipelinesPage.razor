@@ -6,6 +6,7 @@
 @inject IAppEventBus Events
 @inject ReleaseRepository ReleaseRepo
 @inject IConnectionStateService ConnectionState
+@inject CommandRegistry Commands
 @implements IDisposable
 
 <CascadingValue Value="ActiveClient" Name="DevOpsClient">
@@ -40,25 +41,28 @@
         {
             <div class="text-muted">
                 <p>Azure DevOps is not configured for this project.</p>
-                <p>Go to <strong>Settings</strong> and configure the <strong>Azure DevOps</strong> section to get started.</p>
+                <p>Go to <strong>Settings</strong> and configure the <strong>Azure DevOps</strong> section to get started.
+                </p>
             </div>
         }
         else if (_showProjectPicker)
         {
             <ProjectPicker CurrentPinned="EffectivePinnedProjects"
-                           AllowCancel="@(EffectivePinnedProjects.Count > 0 || AppState.UseDemoData)"
-                           IsDemoMode="AppState.UseDemoData"
-                           OnConfirmed="OnProjectsPinned"
-                           OnCancelled="@(() => _showProjectPicker = false)" />
+                           AllowCancel="@(EffectivePinnedProjects.Count > 0 || AppState.UseDemoData)" IsDemoMode="AppState.UseDemoData"
+                           OnConfirmed="OnProjectsPinned" OnCancelled="@(() => _showProjectPicker = false)" />
         }
         else
         {
             @* ── Tab bar ── *@
             <div class="pill-tab-bar">
-                <button class="pill-tab @(ActiveTab == "pipelines" ? "active" : "")" @onclick="@(() => SetTab("pipelines"))">Pipelines</button>
-                <button class="pill-tab @(ActiveTab == "activity" ? "active" : "")" @onclick="@(() => SetTab("activity"))">Activity</button>
-                <button class="pill-tab @(ActiveTab == "releases" ? "active" : "")" @onclick="@(() => SetTab("releases"))">Releases</button>
-                <button class="pill-tab @(ActiveTab == "approvals" ? "active" : "")" @onclick="@(() => SetTab("approvals"))">
+                <button class="pill-tab @(ActiveTab == "pipelines" ? "active" : "")"
+                        @onclick="@(() => SetTab("pipelines"))">Pipelines</button>
+                <button class="pill-tab @(ActiveTab == "activity" ? "active" : "")"
+                        @onclick="@(() => SetTab("activity"))">Activity</button>
+                <button class="pill-tab @(ActiveTab == "releases" ? "active" : "")"
+                        @onclick="@(() => SetTab("releases"))">Releases</button>
+                <button class="pill-tab @(ActiveTab == "approvals" ? "active" : "")"
+                        @onclick="@(() => SetTab("approvals"))">
                     Approvals
                     @if (_pendingApprovalCount > 0)
                     {
@@ -73,10 +77,8 @@
                     case "pipelines":
                         <div class="pipeline-split">
                             <div class="pipeline-split__left @(_leftCollapsed ? "pipeline-split__left--collapsed" : "")">
-                                <PipelineTree SelectedProject="_selectedProject"
-                                              SelectedPipeline="_selectedPipeline"
-                                              OnPipelineSelected="OnPipelineSelected"
-                                              Collapsed="_leftCollapsed"
+                                <PipelineTree SelectedProject="_selectedProject" SelectedPipeline="_selectedPipeline"
+                                              OnPipelineSelected="OnPipelineSelected" Collapsed="_leftCollapsed"
                                               OnToggleCollapse="@(() => { _leftCollapsed = !_leftCollapsed; })"
                                               PinnedProjects="EffectivePinnedProjects" />
                             </div>
@@ -101,17 +103,12 @@
                     case "releases":
                         <div class="pipeline-split">
                             <div class="pipeline-split__left pipeline-split__left--releases">
-                                <ReleaseList Releases="EffectiveReleases"
-                                             SelectedRelease="_selectedRelease"
-                                             IsDemoMode="AppState.UseDemoData"
-                                             OnCreate="CreateRelease"
-                                             OnSelect="OnReleaseSelected" />
+                                <ReleaseList Releases="EffectiveReleases" SelectedRelease="_selectedRelease"
+                                             IsDemoMode="AppState.UseDemoData" OnCreate="CreateRelease" OnSelect="OnReleaseSelected" />
                             </div>
                             <div class="pipeline-split__right">
-                                <ReleaseDetail Release="_selectedRelease"
-                                               IsDemoOnly="IsSelectedReleaseDemoOnly"
-                                               OnEditRelease="EditRelease"
-                                               OnEditComponents="EditComponents"
+                                <ReleaseDetail Release="_selectedRelease" IsDemoOnly="IsSelectedReleaseDemoOnly"
+                                               OnEditRelease="EditRelease" OnEditComponents="EditComponents"
                                                OnDeleteRelease="ConfirmDeleteRelease" />
                             </div>
                         </div>
@@ -119,8 +116,7 @@
 
                     case "approvals":
                         <div class="pipelines-approvals-wrap">
-                            <ApprovalCenter OnCountChanged="OnApprovalCountChanged"
-                                            PinnedProjects="EffectivePinnedProjects" />
+                            <ApprovalCenter OnCountChanged="OnApprovalCountChanged" PinnedProjects="EffectivePinnedProjects" />
                         </div>
                         break;
                 }
@@ -129,14 +125,10 @@
     </div>
 
     @* ── Modals ── *@
-    <ReleaseEditor Visible="ShowReleaseEditor"
-                   Release="EditingRelease"
-                   OnSaved="OnReleaseSaved"
+    <ReleaseEditor Visible="ShowReleaseEditor" Release="EditingRelease" OnSaved="OnReleaseSaved"
                    OnCancel="@(() => ShowReleaseEditor = false)" />
 
-    <ComponentScopeEditor Visible="ShowComponentEditor"
-                          Release="_selectedRelease"
-                          OnSaved="OnComponentsSaved"
+    <ComponentScopeEditor Visible="ShowComponentEditor" Release="_selectedRelease" OnSaved="OnComponentsSaved"
                           OnClose="@(() => ShowComponentEditor = false)" />
 
     @if (ShowDeleteConfirm && _selectedRelease is not null)
@@ -160,12 +152,22 @@
 
 <style>
     .releases-delete-overlay {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-        z-index: var(--z-modal); display: flex; align-items: center; justify-content: center;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: var(--z-modal);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
+
     .releases-delete-dialog {
-        background: var(--color-surface-2); border: 1px solid var(--color-border);
-        border-radius: var(--radius-md); padding: 24px; max-width: 400px; width: 90%;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 24px;
+        max-width: 400px;
+        width: 90%;
         box-shadow: var(--shadow-lg);
     }
 </style>
@@ -175,6 +177,7 @@
     private int _pendingApprovalCount;
     private bool _showProjectPicker;
     private List<string> _demoPinnedProjects = [];
+    private CancellationTokenSource _cts = new();
 
     // Pipelines tab state
     private AdoProject? _selectedProject;
@@ -216,8 +219,18 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await AppState.InitializeAsync();
-        await ReleaseRepo.LoadAsync();
+        // PERF-9: Load AppState and release repo in parallel
+        var loadTask = Task.WhenAll(
+            AppState.WhenInitializedAsync(),
+            ReleaseRepo.LoadAsync()
+        );
+
+        // PERF-16: Stop waiting if the component is disposed (user navigated away)
+        try
+        {
+            await loadTask.WaitAsync(_cts.Token);
+        }
+        catch (OperationCanceledException) { return; } // CS-2
 
         if (!AppState.UseDemoData && IsConfigured)
         {
@@ -245,6 +258,46 @@
     protected override void OnInitialized()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefresh);
+        RegisterCommands();
+    }
+
+    private void RegisterCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-refresh",
+            Label = "Refresh Releases",
+            Category = "Releases",
+            AreaScope = "releases",
+            Execute = async () => { await ReleaseRepo.LoadAsync(); await InvokeAsync(StateHasChanged); }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-new",
+            Label = "New Release",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => IsConfigured,
+            Execute = () => { CreateRelease(); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-edit",
+            Label = "Edit Release",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => _selectedRelease is not null && !IsSelectedReleaseDemoOnly,
+            Execute = () => { EditRelease(); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "releases-approvals",
+            Label = "Open Approval Center",
+            Category = "Releases",
+            AreaScope = "releases",
+            IsAvailable = () => IsConfigured,
+            Execute = () => { SetTab("approvals"); return Task.CompletedTask; }
+        });
     }
 
     private async Task OnProjectsPinned(List<string> pinned)
@@ -287,7 +340,7 @@
         if (_selectedRelease is null) return;
         await ReleaseRepo.RemoveReleaseAsync(_selectedRelease.Id);
         _selectedRelease = ReleaseRepo.AllReleases.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnReleaseSaved(ReleaseRecord release)
@@ -313,5 +366,12 @@
 
     private void SetTab(string tab) => ActiveTab = tab;
 
-    public void Dispose() => Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
+        foreach (var id in new[] { "releases-refresh", "releases-new", "releases-edit", "releases-approvals" })
+            Commands.Unregister(id);
+    }
 }

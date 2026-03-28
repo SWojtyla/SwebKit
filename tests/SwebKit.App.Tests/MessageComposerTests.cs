@@ -26,7 +26,7 @@ public sealed class MessageComposerTests : TestContext
         Services.AddFluentUIComponents();
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
         Services.AddSingleton<ITaskQueue>(new TaskQueueService());
-        Services.AddSingleton<INotificationService>(new NotificationService());
+        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
     }
 
     [Fact]

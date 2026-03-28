@@ -4,31 +4,14 @@
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
+@inject PageDataCache Cache
 
 <div class="redis-page">
-    <div class="page-header">
-        @if (ActiveCacheEntry is not null)
-        {
-            <h2 class="cache-title">
-                <input class="cache-name-input" type="text" value="@ActiveCacheEntry.DisplayName"
-                       @onchange="OnCacheNameChanged" />
-            </h2>
-        }
-        else
-        {
-            <h2>Redis</h2>
-        }
-
-        @if (CacheEntries.Count > 1)
-        {
-            <select class="cache-selector" @bind="SelectedCacheId" @bind:after="OnCacheChangedAsync">
-                @foreach (var cache in CacheEntries)
-                {
-                    <option value="@cache.Id">@cache.DisplayName</option>
-                }
-            </select>
-        }
-    </div>
+    <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
+                        SelectedCacheId="@SelectedCacheId" IsConnected="@(Client is not null)" ConnectionLabel="@ConnectionLabel"
+                        OnCacheChanged="HandleCacheChanged" OnCacheNameChanged="HandleCacheNameChanged" />
 
     @if (!AppState.UseDemoData && !IsConfigured)
     {
@@ -38,53 +21,58 @@
     }
     else
     {
-        <div class="toolbar">
-            <div class="field">
-                <label>Pattern</label>
-                <input @bind="Pattern" placeholder="*" />
-                <div class="pattern-help">
-                    Examples: <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
-                </div>
-            </div>
-
-            <FluentButton Appearance="Appearance.Accent" @onclick="ScanAsync" Disabled="@IsLoading">Scan</FluentButton>
-            <FluentButton @onclick="RefreshSelectedAsync" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
-            </FluentButton>
-            <FluentButton @onclick="DeleteSelectedKeyAsync" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
-            </FluentButton>
-            <FluentButton @onclick="PurgeAllAsync" Disabled="@IsLoading">Purge All</FluentButton>
-            <AutoRefreshToggle OnRefresh="ScanAsync" Paused="@IsLoading" />
-
-            <span class="connection">@ConnectionLabel</span>
-        </div>
+        <RedisToolbar @ref="_toolbar" IsLoading="@IsLoading" SelectedKey="@SelectedKey" KeyCount="@Keys.Count"
+                      HasMoreKeys="@_hasMoreKeys" IsProduction="@IsProduction" HasAnyPanel="@(SelectedInfo is not null)"
+                      BatchProgressMessage="@_batchProgressMessage" OnScan="HandleScan" OnRefreshKey="RefreshSelectedAsync"
+                      OnDeleteKey="DeleteSelectedKeyAsync" OnPurgeAll="PurgeAllAsync" OnExportJson="ExportKeysToJsonAsync"
+                      OnBatchDelete="DeleteSelectedKeysAsync" />
 
         @if (ErrorMessage is not null)
         {
             <ErrorCallout Message="@ErrorMessage" />
         }
 
-        <div class="content-grid">
-            <div class="left-column">
-                <div class="panel key-tree-panel">
-                    <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
-                                        KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
-                                        OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync" />
+        @if (IsLoading && Client is null)
+        {
+            <LoadingSpinner Message="Connecting to Redis…" />
+        }
+        else
+        {
+            <div class="content-grid">
+                <div class="left-column">
+                    <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown"
+                         @onkeydown:preventDefault="@_preventKeyListKey">
+                        <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
+                                            KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
+                                            OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
+                                            MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
+                                            SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled" />
+                        @if (_hasMoreKeys)
+                        {
+                            <div class="load-more-bar">
+                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more (@Keys.Count loaded)
+                                </FluentButton>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="right-column">
+                    <div class="panel detail-panel">
+                        <RedisKeyDetail SelectedKey="@SelectedKey" KeyInfo="@SelectedInfo" StringValue="@SelectedStringValue"
+                                        HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
+                                        OnRefresh="RefreshSelectedAsync" OnDelete="DeleteSelectedKeyAsync" OnSetTtl="SetTtlAsync"
+                                        OnRemoveTtl="RemoveTtlAsync" OnSetStringValue="SetStringValueAsync"
+                                        OnSetHashField="SetHashFieldAsync" OnUpdateSortedSetScore="UpdateSortedSetScoreAsync"
+                                        OnRenameKey="RenameSelectedKeyAsync" OnDeleteHashField="DeleteHashFieldAsync"
+                                        HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
+                    </div>
+
+                    <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
+                                       TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
                 </div>
             </div>
-
-            <div class="right-column">
-                <div class="panel detail-panel">
-                    <RedisKeyDetail SelectedKey="@SelectedKey" KeyInfo="@SelectedInfo" StringValue="@SelectedStringValue"
-                                    HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
-                                    OnRefresh="RefreshSelectedAsync" OnDelete="DeleteSelectedKeyAsync" OnSetTtl="SetTtlAsync"
-                                    OnRemoveTtl="RemoveTtlAsync" OnSetStringValue="SetStringValueAsync"
-                                    OnSetHashField="SetHashFieldAsync" />
-                </div>
-
-                <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
-                                   TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
-            </div>
-        </div>
+        }
     }
 </div>
 
@@ -93,12 +81,34 @@
 
 @code {
     private IRedisClient? Client;
-    private string Pattern = "*";
+    private RedisToolbar? _toolbar;
+    private static readonly HashSet<string> _emptySelectedKeys = [];
     private bool IsLoading;
     private string? ErrorMessage;
+    private CancellationTokenSource _cts = new();
+
+    private sealed record RedisPageSnapshot(
+        List<string> Keys,
+        Dictionary<string, string> KeyTypes,
+        List<NamespaceNode> NamespaceNodes,
+        string Separator);
 
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
+
+    // RDS-1: Key scan pagination
+    private long _scanCursor;
+    private bool _hasMoreKeys;
+    private const int ScanPageSize = 1000;
+
+    // RDS-4: Item pagination
+    private long _itemsOffset;
+    private long _setItemsCursor;
+    private bool _hasMoreItems;
+    private const int ItemPageSize = 100;
+
+    // RDS-9: Multi-key delete
+    private string? _batchProgressMessage;
 
     private string? SelectedKey;
     private RedisKeyInfo? SelectedInfo;
@@ -144,7 +154,7 @@
 
     private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c =>
 !string.IsNullOrWhiteSpace(c.ConnectionString));
-    private bool IsProduction => false;
+    private bool IsProduction => AppState.Config.IsProduction;
 
     private string ConnectionLabel
     {
@@ -157,7 +167,70 @@
         }
     }
 
-    protected override void OnParametersSet()
+    protected override void OnInitialized()
+    {
+        RegisterRedisCommands();
+    }
+
+    private void RegisterRedisCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-scan",
+            Label = "Scan Keys",
+            Category = "Redis",
+            AreaScope = "redis",
+            Execute = () => ScanAsync(_cts.Token)
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-refresh-key",
+            Label = "Refresh Selected Key",
+            Category = "Redis",
+            AreaScope = "redis",
+            IsAvailable = () => SelectedKey is not null,
+            Execute = () => RefreshSelectedAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "redis-delete-key",
+            Label = "Delete Selected Key",
+            Category = "Redis",
+            AreaScope = "redis",
+            IsAvailable = () => SelectedKey is not null,
+            Execute = () => DeleteSelectedKeyAsync()
+        });
+    }
+
+    // ── Key list keyboard navigation ──
+
+    private bool _preventKeyListKey;
+
+    private async Task HandleKeyListKeyDown(KeyboardEventArgs e)
+    {
+        _preventKeyListKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+        switch (e.Key)
+        {
+            case "ArrowDown": SelectKeyRelative(+1); break;
+            case "ArrowUp": SelectKeyRelative(-1); break;
+            case "Escape": SelectedKey = null; Selection.SetSelection("redis", null); StateHasChanged(); break;
+            case "Enter": if (SelectedKey is not null) await RefreshSelectedAsync(); break;
+        }
+    }
+
+    private void SelectKeyRelative(int delta)
+    {
+        if (Keys.Count == 0) return;
+        var idx = SelectedKey is null ? -1 : Keys.IndexOf(SelectedKey);
+        var next = Keys[Math.Clamp(idx + delta, 0, Keys.Count - 1)];
+        SelectedKey = next;
+        Selection.SetSelection("redis", next);
+        _ = RefreshSelectedAsync();
+    }
+
+    private string? _loadedCacheId;
+
+    protected override async Task OnParametersSetAsync()
     {
         // Initialize separator from config
         CurrentSeparator = CurrentRedisConfig?.NamespaceSeparator ?? "-";
@@ -170,20 +243,56 @@
             SelectedCacheId = config.ActiveCacheId ?? config.Caches.FirstOrDefault()?.Id ?? "";
         }
 
-        // Fire-and-forget so the UI renders immediately with loading state
-        _ = ConnectAndScanAsync();
+        // PERF-10: Guard — only reload if the cache selection actually changed (BL-3, BL-5)
+        if (string.Equals(_loadedCacheId, SelectedCacheId, StringComparison.Ordinal))
+            return;
+
+        _loadedCacheId = SelectedCacheId; // Set guard BEFORE await (BL-3)
+
+        // PERF-16: Cancel any in-flight scan before starting new connection
+        _cts.Cancel();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+
+        await ConnectAndScanAsync(_cts.Token);
     }
 
-    private async Task ConnectAndScanAsync()
+    private async Task ConnectAndScanAsync(CancellationToken ct = default)
     {
-        await ConnectAsync();
-        await ScanAsync();
+        // PERF-18: Stale-while-revalidate — restore cached snapshot for instant back-navigation
+        var cacheKey = $"redis:{SelectedCacheId}";
+        var cached = Cache.Get<RedisPageSnapshot>(cacheKey);
+        if (cached is not null)
+        {
+            Keys.Clear();
+            Keys.AddRange(cached.Keys);
+            KeyTypes.Clear();
+            foreach (var kv in cached.KeyTypes)
+                KeyTypes[kv.Key] = kv.Value;
+            NamespaceNodes = cached.NamespaceNodes;
+            CurrentSeparator = cached.Separator;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        IsLoading = true;
+        ErrorMessage = null;
+        await InvokeAsync(StateHasChanged); // Show spinner before connection attempt
+        try
+        {
+            await ConnectAsync();
+            ct.ThrowIfCancellationRequested();
+            await ScanAsync(ct);
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task ConnectAsync()
     {
         DisposeClient();
-        ErrorMessage = null;
 
         try
         {
@@ -202,7 +311,7 @@
                 return;
             }
 
-            Client = new SwebKit.Redis.RedisClient(entry);
+            Client = await SwebKit.Redis.RedisClient.CreateAsync(entry);
             await Client.TestConnectionAsync();
             ConnectionState.SetConnected("redis");
         }
@@ -214,7 +323,7 @@
         }
     }
 
-    private async Task ScanAsync()
+    private async Task ScanAsync(CancellationToken ct = default)
     {
         if (Client is null)
             return;
@@ -229,32 +338,59 @@
 
         try
         {
-            var pattern = string.IsNullOrWhiteSpace(Pattern) ? "*" : Pattern;
-            long cursor = 0;
+            var pattern = _toolbar?.Pattern ?? "*";
+            if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
+            _scanCursor = 0;
+            _hasMoreKeys = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
+            var loaded = 0;
 
             do
             {
-                var result = await Client.ScanKeysAsync(pattern, cursor, 500);
+                ct.ThrowIfCancellationRequested();
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
                 var newKeys = result.Keys.Where(k => seen.Add(k)).ToList();
                 Keys.AddRange(newKeys);
-                cursor = result.Cursor;
+                loaded += newKeys.Count;
+                _scanCursor = result.Cursor;
 
-                if (result.IsComplete || cursor == 0)
+                if (result.IsComplete || _scanCursor == 0)
+                {
+                    _hasMoreKeys = false;
                     break;
+                }
+
+                if (loaded >= ScanPageSize)
+                {
+                    _hasMoreKeys = true;
+                    break;
+                }
             } while (true);
 
+            ct.ThrowIfCancellationRequested();
             await LoadVisibleKeyTypesAsync(Keys);
             RebuildNamespaceTree();
         }
+        catch (OperationCanceledException) { return; } // CS-2: cancelled — silently abort
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
         }
         finally
         {
-            IsLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!ct.IsCancellationRequested)
+            {
+                // PERF-18: Save snapshot to cache after successful scan
+                var cacheKey = $"redis:{SelectedCacheId}";
+                Cache.Set(cacheKey, new RedisPageSnapshot(
+                    Keys.ToList(),
+                    new Dictionary<string, string>(KeyTypes, StringComparer.Ordinal),
+                    NamespaceNodes.ToList(),
+                    CurrentSeparator));
+
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -282,6 +418,7 @@
     private async Task SelectKeyAsync(string key)
     {
         SelectedKey = key;
+        Selection.SetSelection("redis", key);
         await RefreshSelectedAsync();
     }
 
@@ -300,6 +437,7 @@
             SelectedHashFields = [];
             SelectedItems = [];
             SelectedSortedSetItems = [];
+            _hasMoreItems = false;
 
             switch (SelectedInfo.Type)
             {
@@ -310,13 +448,20 @@
                     SelectedHashFields = (await Client.GetHashFieldsAsync(SelectedKey)).ToList();
                     break;
                 case "list":
-                    SelectedItems = (await Client.GetListItemsAsync(SelectedKey, 0, 100)).ToList();
+                    _itemsOffset = ItemPageSize;
+                    SelectedItems = (await Client.GetListItemsAsync(SelectedKey, 0, ItemPageSize - 1)).ToList();
+                    _hasMoreItems = SelectedItems.Count >= ItemPageSize;
                     break;
                 case "set":
-                    SelectedItems = (await Client.GetSetMembersAsync(SelectedKey)).ToList();
+                    var setPage = await Client.GetSetMembersPageAsync(SelectedKey, 0, ItemPageSize);
+                    SelectedItems = setPage.Members.ToList();
+                    _setItemsCursor = setPage.Cursor;
+                    _hasMoreItems = !setPage.IsComplete;
                     break;
                 case "zset":
-                    SelectedSortedSetItems = (await Client.GetSortedSetMembersAsync(SelectedKey, 0, 100)).ToList();
+                    _itemsOffset = ItemPageSize;
+                    SelectedSortedSetItems = (await Client.GetSortedSetMembersAsync(SelectedKey, 0, ItemPageSize - 1)).ToList();
+                    _hasMoreItems = SelectedSortedSetItems.Count >= ItemPageSize;
                     break;
             }
         }
@@ -458,10 +603,287 @@
         }
     }
 
+    // ── RDS-1: Load more keys ──
+
+    private async Task LoadMoreKeysAsync()
+    {
+        if (Client is null || !_hasMoreKeys) return;
+
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var pattern = _toolbar?.Pattern ?? "*";
+            if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
+            var existing = new HashSet<string>(Keys, StringComparer.Ordinal);
+            var loaded = 0;
+
+            do
+            {
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
+                var newKeys = result.Keys.Where(k => existing.Add(k)).ToList();
+                Keys.AddRange(newKeys);
+                loaded += newKeys.Count;
+                _scanCursor = result.Cursor;
+
+                if (result.IsComplete || _scanCursor == 0)
+                {
+                    _hasMoreKeys = false;
+                    break;
+                }
+
+                if (loaded >= ScanPageSize)
+                {
+                    _hasMoreKeys = true;
+                    break;
+                }
+            } while (true);
+
+            await LoadVisibleKeyTypesAsync(Keys.Skip(Keys.Count - loaded).ToList());
+            RebuildNamespaceTree();
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-4: Load more items ──
+
+    private async Task LoadMoreItemsAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey) || !_hasMoreItems) return;
+
+        try
+        {
+            switch (SelectedInfo?.Type)
+            {
+                case "list":
+                    var listPage = (await Client.GetListItemsAsync(SelectedKey, _itemsOffset, _itemsOffset + ItemPageSize - 1)).ToList();
+                    SelectedItems.AddRange(listPage);
+                    _itemsOffset += listPage.Count;
+                    _hasMoreItems = listPage.Count >= ItemPageSize;
+                    break;
+                case "set":
+                    var setPage = await Client.GetSetMembersPageAsync(SelectedKey, _setItemsCursor, ItemPageSize);
+                    SelectedItems.AddRange(setPage.Members);
+                    _setItemsCursor = setPage.Cursor;
+                    _hasMoreItems = !setPage.IsComplete;
+                    break;
+                case "zset":
+                    var zsetPage = (await Client.GetSortedSetMembersAsync(SelectedKey, _itemsOffset, _itemsOffset + ItemPageSize -
+1)).ToList();
+                    SelectedSortedSetItems.AddRange(zsetPage);
+                    _itemsOffset += zsetPage.Count;
+                    _hasMoreItems = zsetPage.Count >= ItemPageSize;
+                    break;
+            }
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── RDS-3: Update sorted set score ──
+
+    private async Task UpdateSortedSetScoreAsync((string Member, double Score) entry)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        try
+        {
+            await Client.UpdateSortedSetScoreAsync(SelectedKey, entry.Member, entry.Score);
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Score updated", $"{entry.Member} = {entry.Score}");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to update score", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-6: Rename key ──
+
+    private async Task RenameSelectedKeyAsync(string newKey)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        var oldKey = SelectedKey;
+        try
+        {
+            await Client.RenameKeyAsync(oldKey, newKey);
+            var idx = Keys.IndexOf(oldKey);
+            if (idx >= 0)
+                Keys[idx] = newKey;
+            if (KeyTypes.Remove(oldKey, out var type))
+                KeyTypes[newKey] = type;
+            SelectedKey = newKey;
+            Selection.SetSelection("redis", newKey);
+            RebuildNamespaceTree();
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Key renamed", $"'{oldKey}' → '{newKey}'");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Rename failed", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-9: Multi-key delete ──
+
+    private void HandleKeyToggled(string key)
+    {
+        _toolbar?.ToggleKeySelection(key);
+    }
+
+    private Task DeleteSelectedKeysAsync()
+    {
+        if (_toolbar is null || _toolbar.SelectedKeys.Count == 0) return Task.CompletedTask;
+
+        var keyList = _toolbar.SelectedKeys.ToList();
+        return ShowConfirmationAsync(
+            title: "Delete Keys",
+            message: $"Delete {keyList.Count} selected key(s)?",
+            label: "Delete",
+            action: async () =>
+            {
+                if (Client is null) return;
+
+                try
+                {
+                    var chunks = keyList.Chunk(10).ToList();
+                    int done = 0;
+                    foreach (var chunk in chunks)
+                    {
+                        await Client.DeleteKeysAsync(chunk);
+                        done += chunk.Length;
+                        _batchProgressMessage = $"Deleting key {done} of {keyList.Count}\u2026";
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    foreach (var key in keyList)
+                    {
+                        Keys.Remove(key);
+                        KeyTypes.Remove(key);
+                    }
+                    _toolbar.ClearMultiSelect();
+
+                    if (keyList.Contains(SelectedKey ?? ""))
+                    {
+                        SelectedKey = null;
+                        SelectedInfo = null;
+                        SelectedStringValue = null;
+                        SelectedHashFields = [];
+                        SelectedItems = [];
+                        SelectedSortedSetItems = [];
+                    }
+
+                    RebuildNamespaceTree();
+                    Notifications.ShowSuccess("Keys deleted", $"{keyList.Count} key(s) removed.");
+                }
+                finally
+                {
+                    _batchProgressMessage = null;
+                }
+            });
+    }
+
+    // ── RDS-11: Delete hash field ──
+
+    private async Task DeleteHashFieldAsync(string field)
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(SelectedKey)) return;
+
+        try
+        {
+            await Client.DeleteHashFieldAsync(SelectedKey, field);
+            await RefreshSelectedAsync();
+            Notifications.ShowSuccess("Field deleted", $"{field} from '{SelectedKey}'");
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Failed to delete field", ex: ex);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ── RDS-12: Export keys to JSON ──
+
+    private async Task ExportKeysToJsonAsync()
+    {
+        if (Client is null || Keys.Count == 0) return;
+
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var data = new Dictionary<string, object?>();
+            foreach (var key in Keys)
+            {
+                try
+                {
+                    var info = await Client.GetKeyInfoAsync(key);
+                    object? value = info.Type switch
+                    {
+                        "string" => await Client.GetKeyValueAsync(key),
+                        "hash" => (await Client.GetHashFieldsAsync(key)).ToDictionary(f => f.Field, f => f.Value),
+                        "list" => await Client.GetListItemsAsync(key),
+                        "set" => await Client.GetSetMembersAsync(key),
+                        "zset" => (await Client.GetSortedSetMembersAsync(key))
+                                    .Select(e => new { e.Member, e.Score }).ToList() as object,
+                        _ => null
+                    };
+                    data[key] = value;
+                }
+                catch
+                {
+                    data[key] = "<error reading key>";
+                }
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(data,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var fileName = $"redis-export-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var filePath = Path.Combine(downloads, fileName);
+            await File.WriteAllTextAsync(filePath, json);
+            Notifications.ShowSuccess("Export complete", filePath);
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            Notifications.ShowError("Export failed", ex: ex);
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     // ── Cache switching ──
 
-    private async Task OnCacheChangedAsync()
+    private async Task HandleCacheChanged(string newCacheId)
     {
+        SelectedCacheId = newCacheId;
         var config = CurrentRedisConfig;
         if (config is not null)
             config.ActiveCacheId = SelectedCacheId;
@@ -470,13 +892,15 @@
         await ScanAsync();
     }
 
-    private async void OnCacheNameChanged(ChangeEventArgs e)
+    private async Task HandleCacheNameChanged(string name)
     {
         var entry = ActiveCacheEntry;
         if (entry is null) return;
-        entry.DisplayName = e.Value?.ToString()?.Trim() ?? "Cache";
+        entry.DisplayName = name;
         await InvokeAsync(StateHasChanged);
     }
+
+    private Task HandleScan(string _) => ScanAsync(_cts.Token);
 
     // ── Namespace tree ──
 
@@ -495,14 +919,15 @@
             await AppState.SaveConfigAsync();
         }
 
+        // RDS-7 invariant: Do NOT call RefreshSelectedAsync here — preserve TTL countdown across separator changes
         RebuildNamespaceTree();
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnPrefixSelectedAsync(string prefix)
     {
-        Pattern = $"{prefix}{CurrentSeparator}*";
-        await ScanAsync();
+        if (_toolbar is not null) _toolbar.Pattern = $"{prefix}{CurrentSeparator}*";
+        await ScanAsync(_cts.Token);
     }
 
     // ── Prefix memory analysis ──
@@ -584,6 +1009,11 @@
 
     public void Dispose()
     {
+        _cts.Cancel();
+        _cts.Dispose();
         DisposeClient();
+        foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
+            Commands.Unregister(id);
+        Selection.SetSelection("redis", null);
     }
 }

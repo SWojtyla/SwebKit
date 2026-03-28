@@ -1,0 +1,38 @@
+.toolbar {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.field {
+    display: grid;
+    gap: var(--spacing-xs);
+}
+
+.field label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.field input {
+    width: 220px;
+    padding: 6px var(--spacing-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.pattern-help {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.pattern-help code {
+    background: rgba(127, 127, 127, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+}

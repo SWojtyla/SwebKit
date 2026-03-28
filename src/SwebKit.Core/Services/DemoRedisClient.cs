@@ -226,6 +226,65 @@ public sealed class DemoRedisClient : IRedisClient
         return Task.CompletedTask;
     }
 
+    public Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "zset")
+            return Task.CompletedTask;
+
+        var entries = (List<RedisSortedSetEntry>)value.Value;
+        var existing = entries.FirstOrDefault(e => e.Member == member);
+        if (existing is not null)
+            existing.Score = score;
+
+        return Task.CompletedTask;
+    }
+
+    public Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!db.Remove(oldKey, out var value))
+            throw new InvalidOperationException($"Key '{oldKey}' does not exist.");
+
+        db[newKey] = value;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "hash")
+            return Task.CompletedTask;
+
+        ((Dictionary<string, string>)value.Value).Remove(field);
+        return Task.CompletedTask;
+    }
+
+    public Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        if (!TryGetValue(db, key, out var value) || value.Type != "set")
+            return Task.FromResult(new SetScanResult([], 0, true));
+
+        var members = ((HashSet<string>)value.Value)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        var start = (int)Math.Max(0, cursor);
+        if (start >= members.Count)
+            return Task.FromResult(new SetScanResult([], 0, true));
+
+        var page = members.Skip(start).Take(pageSize).ToList();
+        var nextCursor = start + page.Count;
+        var isComplete = nextCursor >= members.Count;
+
+        return Task.FromResult(new SetScanResult(page, isComplete ? 0 : nextCursor, isComplete));
+    }
+
     public Task<RedisServerInfo> GetServerInfoAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

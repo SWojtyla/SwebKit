@@ -207,4 +207,20 @@ public sealed class DemoStorageClient : IStorageClient
         var bytes = Encoding.UTF8.GetBytes(content);
         return destination.WriteAsync(bytes, ct).AsTask();
     }
+
+    public Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(
+        string containerName, string blobName, CancellationToken ct = default)
+    {
+        IReadOnlyList<BlobVersionItem> versions =
+        [
+            new("2026-03-20T10:00:00Z", DateTimeOffset.UtcNow.AddDays(-1), 1024, true),
+            new("2026-03-15T08:30:00Z", DateTimeOffset.UtcNow.AddDays(-6), 980, false),
+            new("2026-03-10T14:15:00Z", DateTimeOffset.UtcNow.AddDays(-11), 950, false),
+        ];
+        return Task.FromResult(versions);
+    }
+
+    public Task<string> GetContainerSasUrlAsync(
+        string containerName, TimeSpan expiry, CancellationToken ct = default) =>
+        Task.FromResult($"https://devstore.blob.core.windows.net/{containerName}?sv=demo&se={DateTimeOffset.UtcNow.Add(expiry):O}&sp=rl");
 }

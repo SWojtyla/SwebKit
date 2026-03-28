@@ -50,105 +50,111 @@
             @if (!IsDemoOnly)
             {
                 <div class="release-detail__actions">
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditComponents.InvokeAsync())">Manage Scope</FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTagManager">Tag Manager</FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditRelease.InvokeAsync())">Edit</FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnDeleteRelease.InvokeAsync())"
-                                  style="color:var(--color-error);">Delete</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditComponents.InvokeAsync())">Manage
+                        Scope</FluentButton>
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTagManager">Tag Manager</FluentButton>
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditRelease.InvokeAsync())">Edit
+                        </FluentButton>
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnDeleteRelease.InvokeAsync())"
+                                      style="color:var(--color-error);">Delete</FluentButton>
+                    </div>
+                }
+            </div>
+
+            @* ── Component × Environment matrix ── *@
+            @if (_scopedComponents.Count == 0)
+            {
+                <div class="text-muted text-sm" style="padding:16px 0;">
+                    No components in scope. Click <strong>Manage Scope</strong> to add repos and pipelines.
                 </div>
             }
-        </div>
-
-        @* ── Component × Environment matrix ── *@
-        @if (_scopedComponents.Count == 0)
-        {
-            <div class="text-muted text-sm" style="padding:16px 0;">
-                No components in scope. Click <strong>Manage Scope</strong> to add repos and pipelines.
-            </div>
-        }
-        else
-        {
-            <div style="overflow-x:auto;">
-                <table class="release-matrix">
-                    <thead>
-                        <tr>
-                            <th style="min-width:180px;">Component</th>
-                            <th style="min-width:80px;">Tag</th>
-                            @foreach (var env in _discoveredEnvironments)
-                            {
-                                <th style="min-width:100px;">@env</th>
-                            }
-                            <th style="min-width:60px;">Ready</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var comp in _scopedComponents)
-                        {
-                            var compData = _boardData.GetValueOrDefault(comp.ComponentName);
-                            var runName = _runNames.GetValueOrDefault(comp.ComponentName);
+            else
+            {
+                <div style="overflow-x:auto;" tabindex="0" @onkeydown="HandleMatrixKeyDown"
+                     @onkeydown:preventDefault="_preventMatrixKey">
+                    <table class="release-matrix">
+                        <thead>
                             <tr>
-                                <td>
-                                    <div class="release-matrix-comp-name">@comp.ComponentName</div>
-                                    @if (runName is not null)
-                                    {
-                                        <div class="release-matrix-run">#@runName</div>
-                                    }
-                                </td>
-                                <td>
-                                    @if (comp.TagConfirmed)
-                                    {
-                                        <span class="release-matrix-tag--confirmed">@comp.TargetTag</span>
-                                    }
-                                    else if (!string.IsNullOrEmpty(comp.TargetTag))
-                                    {
-                                        <span class="text-muted">@comp.TargetTag</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">—</span>
-                                    }
-                                </td>
+                                <th style="min-width:180px;">Component</th>
+                                <th style="min-width:80px;">Tag</th>
                                 @foreach (var env in _discoveredEnvironments)
                                 {
-                                    var cell = compData?.GetValueOrDefault(env);
+                                    <th style="min-width:100px;">@env</th>
+                                }
+                                <th style="min-width:60px;">Ready</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int idx = 0; idx < _scopedComponents.Count; idx++)
+                            {
+                                var comp = _scopedComponents[idx];
+                                var compData = _boardData.GetValueOrDefault(comp.ComponentName);
+                                var runName = _runNames.GetValueOrDefault(comp.ComponentName);
+                                var isRowSelected = idx == _selectedComponentIdx;
+                                <tr style="@(isRowSelected ? "background:var(--color-accent-subtle);" : "")">
                                     <td>
-                                        @if (cell is not null)
+                                        <div class="release-matrix-comp-name">@comp.ComponentName</div>
+                                        @if (runName is not null)
                                         {
-                                            <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result" style="text-decoration:none;">
-                                                <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
-                                            </a>
+                                            <div class="release-matrix-run">#@runName</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (comp.TagConfirmed)
+                                        {
+                                            <span class="release-matrix-tag--confirmed">@comp.TargetTag</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(comp.TargetTag))
+                                        {
+                                            <span class="text-muted">@comp.TargetTag</span>
                                         }
                                         else
                                         {
                                             <span class="text-muted">—</span>
                                         }
                                     </td>
-                                }
-                                <td>
-                                    @{
-                                        var (icon, tooltip) = ComponentReadiness(comp, compData);
+                                    @foreach (var env in _discoveredEnvironments)
+                                    {
+                                        var cell = compData?.GetValueOrDefault(env);
+                                        <td>
+                                            @if (cell is not null)
+                                            {
+                                                <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result"
+                                                       style="text-decoration:none;">
+                                                    <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
                                     }
-                                    <span title="@tooltip" style="display:inline-flex; align-items:center;">
-                                        <FluentIcon Value="@icon" Width="14px" />
-                                    </span>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+                                    <td>
+                                        @{
+                                            var (icon, tooltip) = ComponentReadiness(comp, compData);
+                                        }
+                                        <span title="@tooltip" style="display:inline-flex; align-items:center;">
+                                            <FluentIcon Value="@icon" Width="14px" />
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
 
-        @* ── Tag Manager (inline toggle) ── *@
-        @if (_showTagManager)
-        {
-            <div class="pipeline-section" style="margin-top:24px;">
-                <h4 class="pipeline-section-title">Tag Manager</h4>
-                <TagManager Release="Release" />
-            </div>
+            @* ── Tag Manager (inline toggle) ── *@
+            @if (_showTagManager)
+            {
+                <div class="pipeline-section" style="margin-top:24px;">
+                    <h4 class="pipeline-section-title">Tag Manager</h4>
+                    <TagManager Release="Release" />
+                </div>
+            }
         }
-    }
-</div>
+    </div>
 
 
 @code {
@@ -162,6 +168,8 @@
     private bool _isLoading;
     private string? _errorMessage;
     private bool _showTagManager;
+    private int _selectedComponentIdx = -1;
+    private bool _preventMatrixKey;
 
     private List<string> _discoveredEnvironments = [];
     private List<ComponentScope> _scopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
@@ -330,4 +338,22 @@
     };
 
     private void ToggleTagManager() => _showTagManager = !_showTagManager;
+
+    private void HandleMatrixKeyDown(KeyboardEventArgs e)
+    {
+        if (_scopedComponents.Count == 0) return;
+        _preventMatrixKey = e.Key is "ArrowUp" or "ArrowDown" or "Escape";
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _selectedComponentIdx = Math.Min(_selectedComponentIdx + 1, _scopedComponents.Count - 1);
+                break;
+            case "ArrowUp":
+                _selectedComponentIdx = Math.Max(_selectedComponentIdx - 1, 0);
+                break;
+            case "Escape":
+                _selectedComponentIdx = -1;
+                break;
+        }
+    }
 }

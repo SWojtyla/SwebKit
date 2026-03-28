@@ -1,6 +1,9 @@
 @page "/settings"
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
 
 <div class="settings-shell">
 
@@ -16,18 +19,15 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
             Service Bus
         </button>
-        <button class="settings-nav-item @(_active == "aks" ? "active" : "")"
-                @onclick="@(() => _active = "aks")">
+        <button class="settings-nav-item @(_active == "aks" ? "active" : "")" @onclick="@(() => _active = "aks")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="18px" />
             AKS
         </button>
-        <button class="settings-nav-item @(_active == "redis" ? "active" : "")"
-                @onclick="@(() => _active = "redis")">
+        <button class="settings-nav-item @(_active == "redis" ? "active" : "")" @onclick="@(() => _active = "redis")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="18px" />
             Redis
         </button>
-        <button class="settings-nav-item @(_active == "devops" ? "active" : "")"
-                @onclick="@(() => _active = "devops")">
+        <button class="settings-nav-item @(_active == "devops" ? "active" : "")" @onclick="@(() => _active = "devops")">
             <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="18px" />
             DevOps
         </button>
@@ -45,41 +45,59 @@
 
     @* ── Right content well ── *@
     <div class="settings-content">
+        @if (IsDirty)
+        {
+            <div class="settings-unsaved-banner" role="status">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Width="16px" />
+                Unsaved changes
+            </div>
+        }
+
         @switch (_active)
         {
             case "appearance":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Appearance</h3>
-                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme"
-                                    OnThemeChanged="ApplyThemeAsync" />
+                <h3 class="page-title">Appearance</h3>
+                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
+
+                <div class="settings-field-group">
+                    <p class="settings-hint">
+                        Mark this environment as production. Destructive operations (e.g. DLQ resubmit/delete) will show
+                        an extra confirmation step requiring you to type CONFIRM.
+                    </p>
+                    <FluentCheckbox Value="@AppState.Config.IsProduction"
+                                    ValueChanged="@(async (bool v) => { AppState.Config.IsProduction = v; await SaveAsync(); })">
+                        This is a production environment
+                    </FluentCheckbox>
+                </div>
                 break;
 
             case "servicebus":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Service Bus</h3>
+                <h3 class="page-title">Service Bus</h3>
                 <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case "aks":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">AKS / Kubernetes</h3>
+                <h3 class="page-title">AKS / Kubernetes</h3>
                 <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case "redis":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Redis</h3>
+                <h3 class="page-title">Redis</h3>
                 <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case "devops":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Azure DevOps (Releases)</h3>
+                <h3 class="page-title">Azure DevOps (Releases)</h3>
                 <DevOpsConfigForm OnSaved="SaveAsync" />
                 break;
 
             case "storage":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Storage (Azure Blob)</h3>
+                <h3 class="page-title">Storage (Azure Blob)</h3>
                 <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
                 break;
 
             case "observability":
-                <h3 class="page-title" style="margin-bottom:var(--spacing-lg);">Observability</h3>
+                <h3 class="page-title">Observability</h3>
                 <div class="settings-info-card">
                     <div class="settings-info-icon">🔑</div>
                     <div>
@@ -104,15 +122,47 @@
 
                 @if (AppState.Config.ObservabilityConfig is { } obsCfg)
                 {
-                    <div class="settings-field-group" style="margin-top:var(--spacing-xl);">
-                        <label class="settings-label">Max rows per query</label>
+                    <div class="settings-field-group">
                         <p class="settings-hint">
                             Caps the number of rows returned by any KQL query. Lower values reduce Azure Monitor query costs.
                             Range: 100 – 5000.
                         </p>
-                        <input class="settings-input" type="number" min="100" max="5000"
-                               value="@obsCfg.MaxRowsPerQuery"
+                        <input class="settings-input" type="number" min="100" max="5000" value="@obsCfg.MaxRowsPerQuery"
                                @onchange="async e => { obsCfg.MaxRowsPerQuery = Math.Clamp(int.TryParse(e.Value?.ToString(), out var v) ? v : 500, 100, 5000); await SaveAsync(); }" />
+                    </div>
+
+                    <div class="settings-field-group" style="margin-top:var(--spacing-lg);">
+                        <label class="settings-label">Metric thresholds</label>
+                        <p class="settings-hint">
+                            Customize the colour thresholds for failure rate and latency indicators across overview and performance
+                            tabs.
+                        </p>
+                        <div class="settings-threshold-grid">
+                            <div>
+                                <label class="settings-label-sm">Failure rate — amber above</label>
+                                <input class="settings-input" type="number" step="0.01" min="0" max="1"
+                                       value="@obsCfg.FailureRateAmberThreshold"
+                                       @onchange="async e => { obsCfg.FailureRateAmberThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.01; await SaveAsync(); }" />
+                            </div>
+                            <div>
+                                <label class="settings-label-sm">Failure rate — red above</label>
+                                <input class="settings-input" type="number" step="0.01" min="0" max="1"
+                                       value="@obsCfg.FailureRateRedThreshold"
+                                       @onchange="async e => { obsCfg.FailureRateRedThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.05; await SaveAsync(); }" />
+                            </div>
+                            <div>
+                                <label class="settings-label-sm">Latency P95 — amber above (ms)</label>
+                                <input class="settings-input" type="number" min="0" max="60000"
+                                       value="@obsCfg.LatencyAmberThresholdMs"
+                                       @onchange="async e => { obsCfg.LatencyAmberThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 500; await SaveAsync(); }" />
+                            </div>
+                            <div>
+                                <label class="settings-label-sm">Latency P95 — red above (ms)</label>
+                                <input class="settings-input" type="number" min="0" max="60000"
+                                       value="@obsCfg.LatencyRedThresholdMs"
+                                       @onchange="async e => { obsCfg.LatencyRedThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 2000; await SaveAsync(); }" />
+                            </div>
+                        </div>
                     </div>
                 }
                 break;
@@ -131,20 +181,51 @@
 
     private string _active = "appearance";
     private string? _savedMessage;
+    private string _configSnapshot = string.Empty;
+    private IDisposable? _navGuard;
+
+    private bool IsDirty => _configSnapshot.Length > 0
+        && _configSnapshot != CurrentConfigJson();
+
+    protected override void OnInitialized()
+    {
+        _configSnapshot = CurrentConfigJson();
+        _navGuard = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!IsDirty)
+            return;
+
+        var leave = await JS.InvokeAsync<bool>("confirm",
+            "You have unsaved changes. Leave this page?");
+        if (!leave)
+            context.PreventNavigation();
+    }
+
+    private string CurrentConfigJson() =>
+        System.Text.Json.JsonSerializer.Serialize(AppState.Config);
 
     private async Task SaveAsync()
     {
         await AppState.SaveConfigAsync();
+        _configSnapshot = CurrentConfigJson();
         _savedMessage = "Settings saved.";
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
         await Task.Delay(3000);
         _savedMessage = null;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ApplyThemeAsync(string theme)
     {
         if (_layout is not null)
             await _layout.SetThemeAsync(theme);
+    }
+
+    public void Dispose()
+    {
+        _navGuard?.Dispose();
     }
 }

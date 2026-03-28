@@ -1,0 +1,11 @@
+/* FQ-19 – CSS isolation: repeated inline styles extracted from SettingsPage.razor */
+
+/* Applied to every section heading in the settings content well (7 occurrences) */
+.page-title {
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Default top-spacing for settings field groups (covers the xl-margin cases) */
+.settings-field-group {
+    margin-top: var(--spacing-xl);
+}

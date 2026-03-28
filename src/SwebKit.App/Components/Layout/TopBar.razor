@@ -5,7 +5,8 @@
 @implements IDisposable
 
 <div class="top-bar">
-    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation">&#9776;</button>
+    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
+            aria-label="Toggle sidebar">&#9776;</button>
     <span class="app-logo-text" style="margin-right:8px;">SwebKit</span>
 
     <div style="display:flex; align-items:center; flex:1;"></div>
@@ -13,7 +14,8 @@
     @if (!AppState.UseDemoData)
     {
         <div style="position:relative; margin-right:8px;">
-            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode">Demo</button>
+            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
+                    aria-label="Enable demo mode">Demo</button>
             @if (_showDemoConfirm)
             {
                 <div class="demo-confirm-popover">
@@ -33,7 +35,7 @@
     <div style="position:relative; margin-right:8px;">
         <button @onclick="ToggleHistory"
                 style="background:transparent; border:none; color:var(--env-text); font-size:18px; cursor:pointer; padding:4px 8px; position:relative; line-height:1;"
-                title="Notifications">
+                title="Notifications" aria-label="Notifications">
             🔔
             @if (UnreadCount > 0)
             {
@@ -49,7 +51,7 @@
         }
     </div>
 
-    <button class="cmd-palette-btn" @onclick="OpenCommandPalette"
+    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette"
             style="background:rgba(127,127,127,0.15); color:var(--env-text); border:1px solid rgba(127,127,127,0.3); border-radius:var(--radius-sm); padding:4px 10px; font-size:var(--font-size-sm); cursor:pointer;">
         &gt;_ Command Palette &nbsp;<kbd>Ctrl+P</kbd>
     </button>

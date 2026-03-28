@@ -6,6 +6,10 @@ public class AksConfig
     public string? KubeconfigContext { get; set; }
     public string DefaultNamespace { get; set; } = "default";
     public List<string> WatchedDeployments { get; set; } = [];
+    public int LogBufferSize { get; set; } = 10_000;
+    public int CpuBarCeilingMillicores { get; set; } = 500;
+    public int MemoryBarCeilingMi { get; set; } = 512;
+    public int AutoRefreshIntervalSeconds { get; set; } = 30;
 
     public void Validate()
     {

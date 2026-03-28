@@ -16,23 +16,25 @@ public sealed class RedisClient : IRedisClient
     private readonly IServer _server;
     private readonly ILogger<RedisClient> _logger;
 
-    public RedisClient(RedisCacheEntry cacheEntry)
-        : this(cacheEntry, NullLogger<RedisClient>.Instance) { }
-
-    public RedisClient(RedisCacheEntry cacheEntry, ILogger<RedisClient> logger)
+    private RedisClient(RedisCacheEntry cacheEntry, ConnectionMultiplexer mux, ILogger<RedisClient> logger)
     {
         _logger = logger;
         _cacheEntry = cacheEntry;
-
-        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
-        options.AbortOnConnectFail = false;
-
-        _mux = ConnectionMultiplexer.Connect(options);
+        _mux = mux;
         _db = _mux.GetDatabase(Math.Clamp(cacheEntry.Database, 0, 15));
 
         var endpoint = _mux.GetEndPoints().FirstOrDefault()
             ?? throw new InvalidOperationException("No Redis endpoints available.");
         _server = _mux.GetServer(endpoint);
+    }
+
+    public static async Task<RedisClient> CreateAsync(RedisCacheEntry cacheEntry, ILogger<RedisClient>? logger = null)
+    {
+        logger ??= NullLogger<RedisClient>.Instance;
+        var options = ConfigurationOptions.Parse(cacheEntry.ConnectionString);
+        options.AbortOnConnectFail = false;
+        var mux = await ConnectionMultiplexer.ConnectAsync(options);
+        return new RedisClient(cacheEntry, mux, logger);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
@@ -229,6 +231,44 @@ public sealed class RedisClient : IRedisClient
         };
 
         return Task.FromResult(info);
+    }
+
+    public async Task UpdateSortedSetScoreAsync(string key, string member, double score, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.SortedSetAddAsync(key, member, score, SortedSetWhen.Exists);
+    }
+
+    public async Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.KeyRenameAsync(oldKey, newKey);
+    }
+
+    public async Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await _db.HashDeleteAsync(key, field);
+    }
+
+    public async Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var members = new List<string>();
+        long nextCursor = cursor;
+
+        await foreach (var entry in _db.SetScanAsync(key, cursor: cursor, pageSize: pageSize))
+        {
+            ct.ThrowIfCancellationRequested();
+            members.Add(entry.ToString());
+            if (members.Count >= pageSize) break;
+        }
+
+        // SetScanAsync abstracts cursor; if we got fewer than pageSize we're done
+        var isComplete = members.Count < pageSize;
+        nextCursor = isComplete ? 0 : cursor + members.Count;
+
+        return new SetScanResult(members, nextCursor, isComplete);
     }
 
     public void Dispose()

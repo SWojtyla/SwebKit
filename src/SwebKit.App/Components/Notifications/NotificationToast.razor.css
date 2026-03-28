@@ -1,0 +1,69 @@
+/* FQ-20 – CSS isolation: structural and repeated inline styles extracted from NotificationToast.razor */
+
+/* Keyframe moved here from the inline <style> block in the razor file */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.nt-container {
+    position: fixed;
+    top: 56px;
+    right: 16px;
+    z-index: 9000;
+    pointer-events: none;
+}
+
+/* border-left-color stays as inline style (dynamic per severity) */
+.nt-toast {
+    pointer-events: auto;
+    width: 320px;
+    margin-bottom: 8px;
+    background: #2D2D44;
+    border-radius: 6px;
+    border-left-width: 3px;
+    border-left-style: solid;
+    padding: 10px 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    position: relative;
+    animation: slideInRight 0.25s ease-out;
+}
+
+.nt-dismiss-btn {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.nt-content {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-right: 20px;
+}
+
+/* font properties only; color stays as inline style (dynamic per severity) */
+.nt-icon {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.nt-label {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+}

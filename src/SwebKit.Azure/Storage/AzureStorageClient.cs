@@ -210,6 +210,35 @@ public class AzureStorageClient : IStorageClient
         await blobClient.DownloadToAsync(destination, cancellationToken: ct);
     }
 
+    public async Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(
+        string containerName, string blobName, CancellationToken ct = default)
+    {
+        var container = _blobService.GetBlobContainerClient(containerName);
+        var result = new List<BlobVersionItem>();
+
+        await foreach (var item in container.GetBlobsAsync(
+            BlobTraits.None, BlobStates.Version, blobName, ct))
+        {
+            result.Add(new BlobVersionItem(
+                VersionId: item.VersionId ?? string.Empty,
+                CreatedOn: item.Properties.CreatedOn,
+                ContentLength: item.Properties.ContentLength,
+                IsCurrentVersion: item.IsLatestVersion ?? false));
+        }
+
+        return result;
+    }
+
+    public Task<string> GetContainerSasUrlAsync(
+        string containerName, TimeSpan expiry, CancellationToken ct = default)
+    {
+        var container = _blobService.GetBlobContainerClient(containerName);
+        var uri = container.GenerateSasUri(
+            BlobContainerSasPermissions.Read | BlobContainerSasPermissions.List,
+            DateTimeOffset.UtcNow.Add(expiry));
+        return Task.FromResult(uri.ToString());
+    }
+
     /// <summary>
     /// Returns false only for clearly binary content types.
     /// Null/empty content type (common for blobs uploaded without explicit type) defaults to

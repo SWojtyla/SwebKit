@@ -1,12 +1,12 @@
 # Claude Code Instructions
 
+The full workflow is defined in `.github/copilot-instructions.md`. Read it first — everything below is Claude-specific context only.
+
 ## Read first
 
-Before doing any substantial work, read these files:
-
-1. `.github/copilot-instructions.md` — workflow rules, feature execution model, and guardrails
-2. `docs/ways-of-working/ai-workflow.md` — repository structure, feature model, and execution flow
-3. `docs/ways-of-working/definition-of-done.md` — conditions a task must meet before it is done
+1. `.github/copilot-instructions.md` — authoritative workflow rules, feature model, skills, and guardrails
+2. `ai-setup/ways-of-working/ai-workflow.md` — repository structure and feature execution flow
+3. `ai-setup/ways-of-working/definition-of-done.md` — conditions a task must meet before it is done
 4. Relevant files in `docs/pitfalls/` — check before making non-trivial changes
 
 ## Where things live
@@ -16,28 +16,17 @@ Before doing any substantial work, read these files:
 | Active feature plans | `docs/features/active/<feature-name>/`  |
 | Archived features    | `docs/features/archive/<feature-name>/` |
 | Architecture         | `docs/architecture/`                    |
-| Process rules        | `docs/ways-of-working/`                 |
+| Process rules        | `ai-setup/ways-of-working/`             |
 | Pitfalls             | `docs/pitfalls/`                        |
+| Feature templates    | `ai-setup/templates/`                   |
 
 **Never write plans, feature docs, or decisions outside the repository.** Everything belongs under `docs/`.
 
-## Standard feature files
+## Delivery paths
 
-Every substantial feature folder contains:
-
-- `index.md` — goal, scope, non-goals, dependencies, risks, quick links
-- `status.md` — current state, progress checklist, blockers
-- `backend.md` — backend design, contracts, implementation notes, tasks
-- `frontend.md` — UI design, components, UX notes, tasks
-- `test-plan.md` — scenarios, automated coverage, manual checks, acceptance criteria
-- `decisions.md` — key tradeoffs recorded as numbered decision entries
-
-Add only the files the feature actually needs. Do not create empty placeholders.
+- **Jira-driven (autonomous):** `swebify` — ticket key → full feature end-to-end
+- **General (manual control):** `swebiplan` → implement via orchestrator → `pre-ship-review` → `azure-devops` → `swebifix` → `feature-archive`
 
 ## Status values
 
 Use exactly one of: `Proposed`, `Planned`, `In Progress`, `Review`, `Done`, `Archived`
-
-## Architecture maintenance
-
-When behavior changes in a supported functionality (Service Bus, AKS, Redis, Storage, Releases, Observability, Settings), update the matching file under `docs/architecture/functionalities/` in the same change set.

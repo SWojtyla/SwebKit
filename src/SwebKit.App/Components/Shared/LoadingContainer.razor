@@ -1,0 +1,36 @@
+@if (IsLoading && Error is null)
+{
+    @if (LoadingContent is not null)
+    {
+        @LoadingContent
+    }
+    else
+    {
+        <LoadingSpinner Message="Loading..." Timeout="@Timeout" OnRetry="@OnRetry" />
+    }
+}
+else if (Error is not null)
+{
+    <div style="padding:16px; color:var(--color-status-danger, #d32f2f); font-size:13px;">
+        <span>⚠ @Error</span>
+        @if (OnRetry.HasDelegate)
+        {
+            <button style="margin-left:8px; padding:2px 8px; font-size:11px; cursor:pointer;
+            border:1px solid currentColor; border-radius:3px; background:transparent; color:inherit;"
+                    @onclick="OnRetry">Retry</button>
+        }
+    </div>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+    [Parameter] public RenderFragment? LoadingContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -67,6 +67,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<DevOpsClient>();
         builder.Services.AddSingleton<DemoDevOpsClient>();
         builder.Services.AddSingleton<ReleaseRepository>();
+        builder.Services.AddSingleton<PageDataCache>();
 
         return builder.Build();
     }

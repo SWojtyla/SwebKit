@@ -1,14 +1,17 @@
 using SwebKit.App.Services;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 
 namespace SwebKit.App.Tests;
 
 public class NotificationServiceTests
 {
+    private static NotificationService CreateService() => new(new UiStateRepository());
+
     [Fact]
     public void ShowSuccess_AddsSuccessNotification()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowSuccess("Done");
 
@@ -21,7 +24,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowInfo_AddsInfoNotification()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowInfo("FYI", "some detail");
 
@@ -33,7 +36,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowWarning_AddsWarningNotification()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowWarning("Careful");
 
@@ -43,7 +46,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowError_AddsErrorNotification()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowError("Failed");
 
@@ -53,7 +56,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowError_WithException_UsesExceptionMessageAsDetail()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowError("Failed", ex: new InvalidOperationException("bad state"));
 
@@ -63,7 +66,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowError_WithDetailAndException_AppendExceptionMessageToDetail()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowError("Failed", "context info", new InvalidOperationException("root cause"));
 
@@ -73,7 +76,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowSuccess_FiresNotificationsChanged()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         var fired = 0;
         svc.NotificationsChanged += () => fired++;
 
@@ -85,7 +88,7 @@ public class NotificationServiceTests
     [Fact]
     public void ShowError_FiresNotificationsChanged()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         var fired = 0;
         svc.NotificationsChanged += () => fired++;
 
@@ -97,7 +100,7 @@ public class NotificationServiceTests
     [Fact]
     public void MultipleCalls_EachFiresOneEvent()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         var fired = 0;
         svc.NotificationsChanged += () => fired++;
 
@@ -112,7 +115,7 @@ public class NotificationServiceTests
     [Fact]
     public void Dismiss_RemovesNotificationById()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         svc.ShowSuccess("a");
         svc.ShowSuccess("b");
         var id = svc.All[0].Id;
@@ -126,7 +129,7 @@ public class NotificationServiceTests
     [Fact]
     public void Dismiss_FiresNotificationsChanged()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         svc.ShowSuccess("a");
         var fired = 0;
         svc.NotificationsChanged += () => fired++;
@@ -139,7 +142,7 @@ public class NotificationServiceTests
     [Fact]
     public void ClearAll_RemovesAllNotifications()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         svc.ShowSuccess("a");
         svc.ShowError("b");
 
@@ -151,7 +154,7 @@ public class NotificationServiceTests
     [Fact]
     public void ClearAll_FiresNotificationsChanged()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         svc.ShowSuccess("a");
         var fired = 0;
         svc.NotificationsChanged += () => fired++;
@@ -164,7 +167,7 @@ public class NotificationServiceTests
     [Fact]
     public void All_ReturnsSnapshot_NotLiveReference()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
         svc.ShowSuccess("a");
         var snapshot = svc.All;
 
@@ -177,7 +180,7 @@ public class NotificationServiceTests
     [Fact]
     public void ConcurrentAdd_DoesNotThrow()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         Parallel.For(0, 100, i => svc.ShowSuccess($"msg-{i}"));
 
@@ -187,7 +190,7 @@ public class NotificationServiceTests
     [Fact]
     public void EachNotification_HasUniqueId()
     {
-        var svc = new NotificationService();
+        var svc = CreateService();
 
         svc.ShowSuccess("a");
         svc.ShowSuccess("b");

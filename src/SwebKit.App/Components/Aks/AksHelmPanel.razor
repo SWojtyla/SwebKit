@@ -1,0 +1,238 @@
+@inject IJSRuntime JS
+
+@* ── Helm History ── *@
+@if (_historyTarget is not null)
+{
+    <div class="aks-panel-pane">
+        <div class="aks-section-header">
+            <span class="aks-section-title">@(_rollbackMode ? "Rollback" : "History"):
+                @_historyTarget</span>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHistory" Title="Close">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                </FluentButton>
+            </div>
+            @if (_rollbackMode)
+            {
+                <div class="aks-rollback-hint">Select a revision to rollback to:</div>
+            }
+            <div class="aks-yaml-content">
+                @if (_historyLoading)
+                {
+                    <LoadingSpinner Message="Loading history…" />
+                }
+                else
+                {
+                    <table class="aks-history-table">
+                        <thead>
+                            <tr>
+                                <th>Rev</th>
+                                <th>Status</th>
+                                <th>Chart</th>
+                                <th>App Version</th>
+                                <th>Updated</th>
+                                <th>Description</th>
+                                @if (_rollbackMode)
+                                {
+                                    <th></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var rev in _history.OrderByDescending(r => r.Revision))
+                            {
+                                <tr class="@(rev.Status == "deployed" ? "aks-rev-current" : "")">
+                                    <td>@rev.Revision</td>
+                                    <td><span
+                                        class="aks-status @(rev.Status == "deployed" ? "running" : rev.Status == "failed" ? "error" : "other")">@rev.Status</span>
+                                    </td>
+                                    <td>@rev.Chart</td>
+                                    <td>@rev.AppVersion</td>
+                                    <td>@rev.Updated?.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@rev.Description</td>
+                                    @if (_rollbackMode)
+                                    {
+                                        <td>
+                                            @if (rev.Status == "superseded")
+                                            {
+                                                var r = rev;
+                                                <button class="ctx-item destructive aks-rollback-btn"
+                                                        style="display:inline-flex; align-items:center; gap:4px;"
+                                                        @onclick="() => OnRollbackToRevision(r)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
+                                                    Rollback
+                                                </button>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Helm Values ── *@
+    @if (_valuesTarget is not null && _historyTarget is null)
+    {
+        <div class="aks-panel-pane">
+            <div class="aks-section-header">
+                <span class="aks-section-title">Values: @_valuesTarget</span>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseValues" Title="Close">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                </FluentButton>
+            </div>
+            <div class="aks-yaml-content">
+                @if (_valuesLoading)
+                {
+                    <LoadingSpinner Message="Loading values…" />
+                }
+                else
+                {
+                    <pre class="aks-yaml-pre">@_valuesHighlighted</pre>
+                }
+            </div>
+        </div>
+    }
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public bool IsProduction { get; set; }
+    [Parameter] public AksConfirmBar Confirm { get; set; } = default!;
+    [Parameter] public INotificationService Notifications { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    // History state
+    private string? _historyTarget;
+    private List<HelmRevisionInfo> _history = [];
+    private bool _historyLoading;
+    private bool _rollbackMode;
+
+    // Values state
+    private string? _valuesTarget;
+    private string? _valuesText;
+    private bool _valuesLoading;
+    private MarkupString _valuesHighlighted;
+
+    // Public properties
+    public bool IsHistoryOpen => _historyTarget is not null;
+    public bool IsValuesOpen => _valuesTarget is not null;
+    public bool IsOpen => IsHistoryOpen || IsValuesOpen;
+
+    // ── Public methods (called by parent via @ref) ──
+
+    public async Task ShowHistoryAsync(string releaseName)
+    {
+        if (Client is null) return;
+        CloseValues();
+        _historyTarget = releaseName;
+        _rollbackMode = false;
+        _historyLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _history = (await Client.GetHelmReleaseHistoryAsync(Namespace, releaseName)).ToList();
+        }
+        catch (Exception ex) { await OnError.InvokeAsync(ex.Message); }
+        finally { _historyLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    public async Task ShowValuesAsync(string releaseName)
+    {
+        if (Client is null) return;
+        CloseHistory();
+        _valuesTarget = releaseName;
+        _valuesLoading = true;
+        _valuesText = null;
+        StateHasChanged();
+
+        try
+        {
+            _valuesText = await Client.GetHelmReleaseValuesAsync(Namespace, releaseName);
+            _valuesHighlighted = await HighlightAsync(_valuesText);
+        }
+        catch (Exception ex) { await OnError.InvokeAsync(ex.Message); }
+        finally { _valuesLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    public async Task ShowRollbackAsync(string releaseName)
+    {
+        if (Client is null) return;
+        CloseValues();
+        _historyTarget = releaseName;
+        _rollbackMode = true;
+        _historyLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _history = (await Client.GetHelmReleaseHistoryAsync(Namespace, releaseName)).ToList();
+            var hasPrevious = _history.Any(r => r.Status == "superseded");
+            if (!hasPrevious)
+            {
+                await OnError.InvokeAsync($"No previous revisions available for \"{releaseName}\".");
+                CloseHistory();
+                return;
+            }
+        }
+        catch (Exception ex) { await OnError.InvokeAsync(ex.Message); CloseHistory(); return; }
+        finally { _historyLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    public void CloseHistory()
+    {
+        _historyTarget = null;
+        _history = [];
+        _rollbackMode = false;
+        StateHasChanged();
+    }
+
+    public void CloseValues()
+    {
+        _valuesTarget = null;
+        _valuesText = null;
+        StateHasChanged();
+    }
+
+    // ── Private methods ──
+
+    private async Task OnRollbackToRevision(HelmRevisionInfo rev)
+    {
+        if (_historyTarget is null || Client is null) return;
+        var releaseName = _historyTarget;
+
+        var confirmed = await Confirm.ShowAsync(
+            $"Rollback \"{releaseName}\" to revision {rev.Revision} ({rev.Chart})?",
+            releaseName,
+            requireTypedName: IsProduction);
+        if (!confirmed) return;
+
+        try
+        {
+            await Client.RollbackHelmReleaseAsync(Namespace, releaseName, rev.Revision);
+            CloseHistory();
+            await OnDataChanged.InvokeAsync();
+            Notifications.ShowSuccess("Helm rollback complete", $"{releaseName} → revision {rev.Revision}");
+        }
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            Notifications.ShowError("Helm rollback failed", ex: ex);
+        }
+    }
+
+    private async Task<MarkupString> HighlightAsync(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return default;
+        var clean = string.Join('\n', text.ReplaceLineEndings("\n")
+            .Split('\n')
+            .Where(static l => !string.IsNullOrWhiteSpace(l)));
+        var html = await JS.InvokeAsync<string>("yamlHighlight.highlight", clean);
+        return (MarkupString)html;
+    }
+}

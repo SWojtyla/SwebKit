@@ -75,3 +75,5 @@ public class PrefixMemoryBucket
     public long TotalBytes { get; set; }
     public double Percentage { get; set; }
 }
+
+public record SetScanResult(IReadOnlyList<string> Members, long Cursor, bool IsComplete);

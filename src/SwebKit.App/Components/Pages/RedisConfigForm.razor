@@ -8,7 +8,8 @@
         <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">Configured Caches</div>
         @foreach (var cache in Caches)
         {
-            <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
+            <div
+                style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
                 <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@cache.DisplayName</span>
                 <span style="font-size:11px; color:var(--color-text-muted);">DB@cache.Database</span>
                 <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditCache(cache)">Edit</FluentButton>
@@ -24,16 +25,26 @@
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Display Name</label>
-        <input type="text" @bind="DisplayName" @bind:event="oninput"
+        <input type="text" @bind="DisplayName" @bind:event="oninput" class="@FieldClass(FieldDisplayName)"
+               aria-invalid="@HasError(FieldDisplayName)" aria-describedby="@ErrorId(FieldDisplayName)"
                style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="Dev Cache" />
+               placeholder="Dev Cache" @onfocusin="() => ClearError(FieldDisplayName)" />
+        @if (_errors.TryGetValue(FieldDisplayName, out var dnErr))
+        {
+            <span id="err-display-name" class="field-error-msg" role="alert">@dnErr</span>
+        }
     </div>
 
     <div style="display:grid; gap:4px;">
         <label style="font-size:12px; color:var(--color-text-muted);">Redis Connection String</label>
-        <input type="text" @bind="ConnectionString" @bind:event="oninput"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="localhost:6379,password=***,abortConnect=false" />
+        <PasswordField Value="@ConnectionString"
+                       ValueChanged="@(v => { ConnectionString = v ?? ""; ClearError(FieldConnectionString); })"
+                       Label="Redis Connection String" Placeholder="localhost:6379,password=***,abortConnect=false"
+                       InputClass="@FieldClass(FieldConnectionString)" />
+        @if (_errors.TryGetValue(FieldConnectionString, out var csErr))
+        {
+            <span id="err-conn-str" class="field-error-msg" role="alert">@csErr</span>
+        }
     </div>
 
     <div style="display:grid; gap:6px;">
@@ -59,7 +70,8 @@
 
         @if (ConnectionStatus is not null)
         {
-            <span style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
+            <span
+            style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
         }
     </div>
 </div>
@@ -71,6 +83,14 @@
     private string DisplayName = string.Empty;
     private string ConnectionString = string.Empty;
     private int Database;
+    private Dictionary<string, string> _errors = new();
+
+    private const string FieldDisplayName = "DisplayName";
+    private const string FieldConnectionString = "ConnectionString";
+
+    private string FieldClass(string field) => _errors.ContainsKey(field) ? "field-invalid" : "";
+    private string? HasError(string field) => _errors.ContainsKey(field) ? "true" : null;
+    private string? ErrorId(string field) => _errors.ContainsKey(field) ? $"err-{field.ToLowerInvariant()}" : null;
     private string? ConnectionStatus;
     private bool ConnectionOk;
     private string? EditingCacheId;
@@ -99,6 +119,23 @@
         Database = 0;
         ConnectionStatus = null;
         ConnectionOk = false;
+        _errors.Clear();
+    }
+
+    private bool Validate()
+    {
+        _errors.Clear();
+        if (string.IsNullOrWhiteSpace(DisplayName))
+            _errors["DisplayName"] = "Display name is required.";
+        if (string.IsNullOrWhiteSpace(ConnectionString))
+            _errors["ConnectionString"] = "Connection string is required.";
+        return _errors.Count == 0;
+    }
+
+    private void ClearError(string field)
+    {
+        if (_errors.Remove(field))
+            StateHasChanged();
     }
 
     private void EditCache(RedisCacheEntry cache)
@@ -130,10 +167,8 @@
 
     private async Task SaveAsync()
     {
-        if (string.IsNullOrWhiteSpace(ConnectionString))
+        if (!Validate())
         {
-            ConnectionOk = false;
-            ConnectionStatus = "Connection string is required.";
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -177,7 +212,7 @@
 
         try
         {
-            using var client = CreateClient();
+            using var client = await CreateClientAsync();
             var ok = await client.TestConnectionAsync();
             ConnectionOk = ok;
             ConnectionStatus = ok ? "Connection successful." : "Connection failed.";
@@ -191,7 +226,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private IRedisClient CreateClient()
+    private async Task<IRedisClient> CreateClientAsync()
     {
         if (AppState.UseDemoData)
             return new DemoRedisClient(Database);
@@ -199,7 +234,7 @@
         if (string.IsNullOrWhiteSpace(ConnectionString))
             throw new InvalidOperationException("Provide a Redis connection string before testing.");
 
-        return new SwebKit.Redis.RedisClient(new RedisCacheEntry
+        return await SwebKit.Redis.RedisClient.CreateAsync(new RedisCacheEntry
         {
             DisplayName = DisplayName,
             ConnectionString = ConnectionString,

@@ -94,12 +94,22 @@ public class DemoAksClient : IAksClient
             {
                 var suffix = Guid.NewGuid().ToString("N")[..8];
                 var isReady = i < d.Ready;
+                var restarts = isReady ? 0 : Rng.Next(1, 10);
+                var phase = isReady ? "Running" : (d.Status == "Unavailable" ? "Pending" : "Pending");
+                var status = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "ImagePullBackOff");
                 pods.Add(new PodInfo
                 {
                     Name = $"{d.Name}-{suffix[..5]}-{suffix[5..]}",
                     Namespace = ns,
-                    Phase = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "Pending"),
+                    Phase = phase,
+                    Status = status,
                     Ready = isReady,
+                    ReadyContainers = isReady ? 2 : (d.Status == "Unavailable" ? 0 : 1),
+                    TotalContainers = 2,
+                    RestartCount = restarts,
+                    LastRestartTime = restarts > 0 ? DateTimeOffset.UtcNow.AddMinutes(-Rng.Next(1, 120)) : null,
+                    LastRestartReason = restarts > 0 ? (Rng.Next(2) == 0 ? "OOMKilled" : "Error") : null,
+                    PodIP = $"10.16.{Rng.Next(30, 40)}.{Rng.Next(1, 255)}",
                     NodeName = $"aks-nodepool1-{37000000 + Rng.Next(100):D8}-vmss00000{Rng.Next(0, 6)}",
                     StartTime = DateTimeOffset.UtcNow.AddHours(-Rng.Next(1, 72)),
                     Containers = [d.Name, "istio-proxy"],

@@ -58,4 +58,10 @@ public interface IStorageClient
         string blobName,
         Stream destination,
         CancellationToken ct = default);
+
+    Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(
+        string containerName, string blobName, CancellationToken ct = default);
+
+    Task<string> GetContainerSasUrlAsync(
+        string containerName, TimeSpan expiry, CancellationToken ct = default);
 }

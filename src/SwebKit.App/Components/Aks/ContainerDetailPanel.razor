@@ -1,4 +1,5 @@
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 @implements IDisposable
 
 <div class="cdp-panel">
@@ -35,7 +36,8 @@
             <div class="cdp-label">Image</div>
             <div class="cdp-image-row">
                 <code class="cdp-image-badge">@_containers[_selectedIdx].Image</code>
-                <button class="cdp-copy-btn" title="Copy image" @onclick="() => CopyToClipboard(_containers[_selectedIdx].Image)">⎘</button>
+                <button class="cdp-copy-btn" title="Copy image"
+                        @onclick="() => CopyToClipboard(_containers[_selectedIdx].Image)">⎘</button>
             </div>
         </div>
 
@@ -65,7 +67,11 @@
             <div class="cdp-label">Environment Variables (@_containers[_selectedIdx].EnvVars.Count)</div>
             <table class="cdp-env-table">
                 <thead>
-                    <tr><th>Name</th><th>Source</th><th>Value</th></tr>
+                    <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Value</th>
+                    </tr>
                 </thead>
                 <tbody>
                     @foreach (var ev in _containers[_selectedIdx].EnvVars)
@@ -105,7 +111,8 @@
                                 }
                                 else
                                 {
-                                    <span class="@(ev.Source == EnvVarSourceKind.FieldRef || ev.Source == EnvVarSourceKind.ConfigMapRef && ev.Value is null ? "cdp-muted" : "")">
+                                    <span
+                                        class="@(ev.Source == EnvVarSourceKind.FieldRef || ev.Source == EnvVarSourceKind.ConfigMapRef && ev.Value is null ? "cdp-muted" : "")">
                                         @(ev.Value ?? "—")
                                     </span>
                                 }
@@ -188,7 +195,11 @@
     private async Task CopyToClipboard(string text)
     {
         if (!_isRendered) return;
-        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Notifications.ShowSuccess("Copied!");
+        }
         catch { /* best-effort */ }
     }
 

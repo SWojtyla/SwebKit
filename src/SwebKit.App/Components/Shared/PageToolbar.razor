@@ -1,0 +1,20 @@
+<div class="page-toolbar">
+    @if (LeadingContent is not null)
+    {
+        <div class="page-toolbar-leading">@LeadingContent</div>
+    }
+    @if (CenterContent is not null)
+    {
+        <div class="page-toolbar-center">@CenterContent</div>
+    }
+    @if (TrailingContent is not null)
+    {
+        <div class="page-toolbar-trailing">@TrailingContent</div>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? LeadingContent { get; set; }
+    [Parameter] public RenderFragment? CenterContent { get; set; }
+    [Parameter] public RenderFragment? TrailingContent { get; set; }
+}

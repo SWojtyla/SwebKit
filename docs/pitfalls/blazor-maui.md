@@ -1,12 +1,12 @@
-# Pitfalls — Blazor / MAUI Hybrid
+# Pitfalls â€” Blazor / MAUI Hybrid
 
 ---
 
-## BL-1 — Missing `@using` in `_Imports.razor` silently breaks components
+## BL-1 â€” Missing `@using` in `_Imports.razor` silently breaks components
 
 **Symptom:** A component renders blank. No error, no lifecycle fires, no render output.
 
-**Cause:** Blazor does not auto-import component namespaces from subdirectories. A component in `Components/ServiceBus/EntityTree.razor` that is NOT listed in `_Imports.razor` is treated as an unknown HTML element — `<entitytree>` — with no Blazor behaviour. The build emits a **RZ10012** warning; treat it as a functional error.
+**Cause:** Blazor does not auto-import component namespaces from subdirectories. A component in `Components/ServiceBus/EntityTree.razor` that is NOT listed in `_Imports.razor` is treated as an unknown HTML element â€” `<entitytree>` â€” with no Blazor behaviour. The build emits a **RZ10012** warning; treat it as a functional error.
 
 **Fix:** Add the namespace immediately when creating a new `Components/` subdirectory.
 
@@ -19,7 +19,7 @@
 
 ---
 
-## BL-2 — `StateHasChanged()` must be dispatched via `InvokeAsync` inside async methods
+## BL-2 â€” `StateHasChanged()` must be dispatched via `InvokeAsync` inside async methods
 
 **Symptom:** UI does not update after an `await` completes inside a component method (e.g., loading spinner never disappears, list stays empty).
 
@@ -37,7 +37,7 @@ await InvokeAsync(StateHasChanged);
 
 ---
 
-## BL-3 — Set guard state before `await` in `OnParametersSetAsync`
+## BL-3 â€” Set guard state before `await` in `OnParametersSetAsync`
 
 **Symptom:** Data loads twice concurrently; race condition on component fields.
 
@@ -50,7 +50,7 @@ await InvokeAsync(StateHasChanged);
 if (!ReferenceEquals(_loadedClient, Client))
 {
     await LoadAsync();
-    _loadedClient = Client; // too late — parent may re-render before this
+    _loadedClient = Client; // too late â€” parent may re-render before this
 }
 
 // Correct
@@ -63,7 +63,7 @@ if (!ReferenceEquals(_loadedClient, Client))
 
 ---
 
-## BL-4 — `@if` blocks fully destroy and recreate components
+## BL-4 â€” `@if` blocks fully destroy and recreate components
 
 **Symptom:** Collapsing and re-expanding a section resets all component state (loaded data, scroll position, local fields).
 
@@ -73,7 +73,7 @@ if (!ReferenceEquals(_loadedClient, Client))
 
 ---
 
-## BL-5 — `OnParametersSetAsync` fires on every parent render
+## BL-5 â€” `OnParametersSetAsync` fires on every parent render
 
 **Symptom:** Expensive operation (network call, large computation) runs repeatedly as the user interacts with sibling components.
 
@@ -91,7 +91,7 @@ if (!ReferenceEquals(_loadedClient, Client))
 
 ---
 
-## BL-6 — JS interop must wait for the DOM (`OnAfterRenderAsync`)
+## BL-6 â€” JS interop must wait for the DOM (`OnAfterRenderAsync`)
 
 **Symptom:** JS call throws `Cannot read properties of null` or the interop target element is not found.
 
@@ -109,7 +109,7 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 
 ---
 
-## BL-7 — `IAsyncEnumerable` streams must be cancelled on component dispose
+## BL-7 â€” `IAsyncEnumerable` streams must be cancelled on component dispose
 
 **Symptom:** Background streaming task (log tail, pod watch) continues running after navigating away; possible `ObjectDisposedException` or stale updates on a dead component.
 
@@ -129,7 +129,7 @@ await foreach (var line in client.StreamLogsAsync(pod, _cts.Token))
 
 ---
 
-## BL-8 — Throttle `StateHasChanged` in high-frequency update loops
+## BL-8 â€” Throttle `StateHasChanged` in high-frequency update loops
 
 **Symptom:** UI freezes or becomes unresponsive while streaming log lines or consuming a fast event source.
 
@@ -153,7 +153,7 @@ while (await _flushTimer.WaitForNextTickAsync(_cts.Token))
 
 ---
 
-## BL-9 — CSS isolation does not apply to HTML injected via `MarkupString`
+## BL-9 â€” CSS isolation does not apply to HTML injected via `MarkupString`
 
 **Symptom:** CSS rules defined in a `.razor.css` scoped stylesheet have no visible effect on elements that were injected at runtime via a `MarkupString` (e.g., syntax-highlighted `<span>` elements produced by a JS highlighter).
 
@@ -162,18 +162,22 @@ while (await _flushTimer.WaitForNextTickAsync(_cts.Token))
 **Fix:** Use the `::deep` combinator in the scoped stylesheet. It tells the CSS isolation build step to emit the scope attribute only on the ancestor, not on the descendant selector.
 
 ```css
-/* Wrong — spans inside MarkupString never receive [b-xxxxxxxx] */
-.aks-yaml-pre .yml-key { color: #9cdcfe; }
+/* Wrong â€” spans inside MarkupString never receive [b-xxxxxxxx] */
+.aks-yaml-pre .yml-key {
+  color: #9cdcfe;
+}
 
-/* Correct — ::deep drops the scope requirement on the child */
-.aks-yaml-pre ::deep .yml-key { color: #9cdcfe; }
+/* Correct â€” ::deep drops the scope requirement on the child */
+.aks-yaml-pre ::deep .yml-key {
+  color: #9cdcfe;
+}
 ```
 
 **Rule:** any time a component injects raw HTML via `MarkupString` (syntax highlighters, sanitised user content, server-rendered fragments) and needs to style the injected content from a scoped stylesheet, every CSS rule that targets a child element inside the injected HTML must use `::deep`.
 
 ---
 
-## BL-10 — Windows `\r\n` line endings survive into JS / HTML and create ghost blank lines
+## BL-10 â€” Windows `\r\n` line endings survive into JS / HTML and create ghost blank lines
 
 **Symptom:** Content rendered inside a `<pre>` tag (or any whitespace-sensitive element) shows an extra blank line after every real line, or a `\r` character appears at the end of processed text values. The bug is Windows-only; CI (Linux) passes cleanly.
 
@@ -182,7 +186,7 @@ while (await _flushTimer.WaitForNextTickAsync(_cts.Token))
 **Fix:** Normalize line endings in C# before passing the string to JS (or before rendering it as HTML):
 
 ```csharp
-// Normalize \r\n → \n and strip blank/whitespace-only lines
+// Normalize \r\n â†’ \n and strip blank/whitespace-only lines
 var clean = string.Join('\n', text.ReplaceLineEndings("\n")
     .Split('\n')
     .Where(static l => !string.IsNullOrWhiteSpace(l)));
@@ -194,28 +198,71 @@ Do this in the C# layer rather than in JS so the fix is guaranteed regardless of
 
 ---
 
-## BL-11 — CSS isolation does not reach child components
+## BL-11 â€” CSS isolation does not reach child components
 
-**Symptom:** A child component renders with no CSS — buttons look like default browser controls, layout classes have no effect, despite the styles clearly existing in the parent page's `.razor.css` file.
+**Symptom:** A child component renders with no CSS â€” buttons look like default browser controls, layout classes have no effect, despite the styles clearly existing in the parent page's `.razor.css` file.
 
-**Cause:** Blazor CSS isolation scopes every rule in `PageFoo.razor.css` to elements rendered by `PageFoo.razor` only. The build step rewrites `.my-class` to `.my-class[b-xxxxxxxx]`, where `b-xxxxxxxx` is the page's unique scope attribute. Child components rendered inside the page (`<ChildBar />`) get a *different* scope attribute (`b-yyyyyyyy`), so parent page rules never match their elements.
+**Cause:** Blazor CSS isolation scopes every rule in `PageFoo.razor.css` to elements rendered by `PageFoo.razor` only. The build step rewrites `.my-class` to `.my-class[b-xxxxxxxx]`, where `b-xxxxxxxx` is the page's unique scope attribute. Child components rendered inside the page (`<ChildBar />`) get a _different_ scope attribute (`b-yyyyyyyy`), so parent page rules never match their elements.
 
 **Fix:** Create a sibling `.razor.css` file for each component. CSS must live next to the component it styles.
 
 ```
 Components/
-  PipelinesPage.razor          ← page shell only
-  PipelinesPage.razor.css      ← page-level layout (split panels, tab bar)
+  PipelinesPage.razor          â† page shell only
+  PipelinesPage.razor.css      â† page-level layout (split panels, tab bar)
   Pipelines/
     PipelineTree.razor
-    PipelineTree.razor.css     ← tree-item styles live HERE, not in the page CSS
+    PipelineTree.razor.css     â† tree-item styles live HERE, not in the page CSS
     PipelineActivity.razor
-    PipelineActivity.razor.css ← activity row styles live HERE
+    PipelineActivity.razor.css â† activity row styles live HERE
 ```
 
 Styles that are used across multiple isolated components (status dots, status badges, form inputs, shared text utilities) must be placed in `wwwroot/app.css` so they are not isolated and apply globally.
 
 **Rule:** never write styles for a child component's internal elements in the parent's `.razor.css` file. If a class is used by more than one component, put it in `app.css`.
+
+---
+
+## BL-12 — Calling `OpenAsync` directly on a `@ref` child bypasses parent `@if` re-render
+
+**Symptom:** A panel opens correctly the first time but silently fails to reopen after being closed. No exception; nothing happens when the user triggers the second open.
+
+**Cause:** The parent hosts the child inside `@if (HasOpenPanel)`. After close, `HasOpenPanel = false` and the block collapses. A stale (or Blazor-retained) `@ref` field still points to the child instance. Calling `child.OpenAsync(...)` directly sets internal state on the child and calls `StateHasChanged()` on it — but the parent `HasOpenPanel` is never re-evaluated and no re-render is queued on the parent. The `@if` block stays collapsed, the child updates the DOM it no longer owns, and nothing appears.
+
+**Fix:** Always tell the **parent** to re-render first. Use the pending-open pattern: store the arguments to a nullable field that contributes to the `HasOpenPanel` condition, call `InvokeAsync(StateHasChanged)` on the parent, then drain the pending field in `OnAfterRenderAsync` once the child `@ref` is live.
+
+```csharp
+// Wrong — fast-path that bypasses the parent's @if block
+public async Task OpenYamlAsync(string kind, string name)
+{
+    if (_yamlViewer is not null) { await _yamlViewer.OpenAsync(kind, name); return; }
+    _pendingYamlOpen = (kind, name);
+    await InvokeAsync(StateHasChanged);
+}
+
+// Correct — always go through the parent re-render
+public async Task OpenYamlAsync(string kind, string name)
+{
+    _pendingYamlOpen = (kind, name);
+    await InvokeAsync(StateHasChanged);
+}
+
+private bool HasOpenPanel =>
+    _pendingYamlOpen.HasValue || // ← this is what makes the @if block render
+    _yamlViewer?.IsOpen == true;
+
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (_pendingYamlOpen.HasValue && _yamlViewer is not null)
+    {
+        var (kind, name) = _pendingYamlOpen.Value;
+        _pendingYamlOpen = null;
+        await _yamlViewer.OpenAsync(kind, name);
+    }
+}
+```
+
+**Rule:** never shortcut to a direct child method call when the parent's `@if` condition depends on child state. The parent must always be the one to re-render and expose the child before its public API is called.
 
 ---
 

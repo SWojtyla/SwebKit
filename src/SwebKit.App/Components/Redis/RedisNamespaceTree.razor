@@ -2,11 +2,7 @@
     <div class="ns-header">
         <div class="separator-control">
             <label>Sep:</label>
-            <input type="text"
-                   value="@Separator"
-                   @onchange="OnSepChanged"
-                   class="sep-input"
-                   maxlength="4" />
+            <input type="text" value="@Separator" @onchange="OnSepChanged" class="sep-input" maxlength="4" />
         </div>
     </div>
 
@@ -26,11 +22,9 @@
         <div class="ns-nodes">
             @foreach (var node in Nodes)
             {
-                <RedisNamespaceTreeNode Node="@node"
-                                        OnPrefixSelected="OnPrefixSelected"
-                                        OnKeySelected="OnKeySelected"
-                                        SelectedKey="@SelectedKey"
-                                        KeyTypes="@KeyTypes" />
+                <RedisNamespaceTreeNode @key="node.FullPrefix" Node="@node" OnPrefixSelected="OnPrefixSelected"
+                                        OnKeySelected="OnKeySelected" SelectedKey="@SelectedKey" KeyTypes="@KeyTypes"
+                                        MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys" OnKeyToggled="OnKeyToggled" />
             }
         </div>
     }
@@ -45,6 +39,9 @@
     [Parameter] public EventCallback<string> OnSeparatorChanged { get; set; }
     [Parameter] public EventCallback<string> OnPrefixSelected { get; set; }
     [Parameter] public EventCallback<string> OnKeySelected { get; set; }
+    [Parameter] public bool MultiSelectMode { get; set; }
+    [Parameter] public HashSet<string> SelectedKeys { get; set; } = new();
+    [Parameter] public EventCallback<string> OnKeyToggled { get; set; }
 
     private Task OnSepChanged(ChangeEventArgs e)
     {

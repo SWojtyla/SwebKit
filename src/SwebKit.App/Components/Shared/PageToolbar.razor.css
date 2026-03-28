@@ -1,0 +1,28 @@
+.page-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.page-toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.page-toolbar-center {
+    flex: 1;
+    min-width: 0;
+}
+
+.page-toolbar-trailing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: auto;
+}

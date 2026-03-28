@@ -1,0 +1,335 @@
+@inject IJSRuntime JS
+
+@if (_target is not null)
+{
+    <div class="aks-panel-pane">
+        <div class="aks-section-header">
+            <span class="aks-section-title" title="@_target.Value.Kind/@_target.Value.Name">
+                @(_editMode ? "Edit" : "") @_target.Value.Kind: @_target.Value.Name
+            </span>
+            @if (!_loading && _error is null && IsEditable && !_editMode)
+            {
+                <FluentButton Appearance="Appearance.Stealth" @onclick="OnEditToggle" Title="Edit YAML">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="16px" />
+                </FluentButton>
+            }
+            @if (!_loading && _error is null)
+            {
+                <button class="aks-search-toggle-btn @(_showSearch ? "active" : "")"
+                        @onclick="() => { _showSearch = !_showSearch; if (!_showSearch) _ = ClearSearch(); StateHasChanged(); }"
+                        title="Search in YAML">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Search())" Width="16px" />
+                </button>
+            }
+            @if (_editMode)
+            {
+                <FluentButton Appearance="Appearance.Accent" Disabled="@_applying" @onclick="OnSave" Title="Apply YAML">
+                    @(_applying ? "Saving…" : "Save")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" Disabled="@_applying" @onclick="OnCancelEdit" Title="Cancel edit">
+                    Cancel</FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Stealth" @onclick="Close" Title="Close">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                </FluentButton>
+            </div>
+            @if (_showSearch)
+            {
+                <div class="aks-yaml-search-bar">
+                    <input type="text" class="aks-yaml-search-input" placeholder="Search in YAML…" value="@_search"
+                           @oninput="OnSearchInput" autofocus />
+                    @if (!string.IsNullOrEmpty(_search))
+                    {
+                        <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "")</span>
+                            <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+                            </button>
+                        }
+                        @if (_editMode && !string.IsNullOrEmpty(_search))
+                        {
+                            <input type="text" class="aks-yaml-search-input" placeholder="Replace with…" @bind="_replace"
+                                   @bind:event="oninput" />
+                            <button class="aks-yaml-replace-btn" @onclick="OnReplaceAll" title="Replace all">Replace
+                                all</button>
+                            }
+                        </div>
+                    }
+                    @if (_validationError is not null)
+                    {
+                        <div class="aks-yaml-validation-error">⚠ @_validationError</div>
+                    }
+                    <div class="aks-yaml-content">
+                        @if (_loading)
+                        {
+                            <LoadingSpinner Message="Loading YAML…" />
+                        }
+                        else if (_error is not null)
+                        {
+                            <div class="aks-yaml-error">@_error</div>
+                        }
+                        else if (_editMode)
+                        {
+                            <div class="aks-yaml-edit-wrap" @key="_editKey">
+                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre">@_editHighlighted</pre>
+                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"
+                                          @oninput="OnEditInput">@_editText</textarea>
+                            </div>
+                        }
+                        else
+                        {
+                            <pre class="aks-yaml-pre" @ref="_yamlViewPre">@_highlighted</pre>
+                        }
+                    </div>
+                </div>
+            }
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public bool IsProduction { get; set; }
+    [Parameter] public AksConfirmBar Confirm { get; set; } = default!;
+    [Parameter] public INotificationService Notifications { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+    [Parameter] public EventCallback OnYamlApplied { get; set; }
+
+    // YAML viewer/editor state
+    private (string Kind, string Name)? _target;
+    private string? _text;
+    private string? _error;
+    private bool _loading;
+    private bool _editMode;
+    private string _editText = string.Empty;
+    private bool _applying;
+
+    // Highlighted markup for YAML panels
+    private MarkupString _highlighted;
+    private MarkupString _editHighlighted;
+
+    // Edit overlay refs & lifecycle flags
+    private ElementReference _editTextarea;
+    private ElementReference _editPre;
+    private ElementReference _yamlViewPre;
+    private bool _initEditOverlay;
+    private int _editKey;
+
+    // YAML search state
+    private string _search = string.Empty;
+    private int _searchCount;
+    private bool _showSearch;
+    private string _replace = string.Empty;
+    private string? _validationError;
+
+    /// <summary>Whether the YAML panel is currently showing.</summary>
+    public bool IsOpen => _target is not null;
+
+    /// <summary>Whether the YAML panel is in edit mode.</summary>
+    public bool IsEditing => _editMode;
+
+    // Only these resource types are editable
+    private bool IsEditable => _target?.Kind is "Deployment" or "Ingress" or "StatefulSet" or "ConfigMap" or
+    "Secret";
+
+    /// <summary>Opens the YAML viewer for the given resource, optionally starting in edit mode.</summary>
+    public async Task OpenAsync(string kind, string name, bool startInEditMode = false)
+    {
+        _target = (kind, name);
+        _text = null;
+        _error = null;
+        _loading = true;
+        _editMode = false;
+        _editText = string.Empty;
+        _applying = false;
+        StateHasChanged();
+
+        try
+        {
+            _text = await Client!.GetResourceYamlAsync(Namespace, kind, name);
+            _highlighted = await HighlightAsync(_text);
+            if (startInEditMode && IsEditable)
+            {
+                _editMode = true;
+                _editText = _text ?? string.Empty;
+                _editHighlighted = _highlighted;
+                _editKey++;
+                _initEditOverlay = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Closes the YAML panel and resets all state.</summary>
+    public void Close()
+    {
+        _target = null;
+        _text = null;
+        _error = null;
+        _editMode = false;
+        _editText = string.Empty;
+        _applying = false;
+        _search = string.Empty;
+        _searchCount = 0;
+        _showSearch = false;
+        _replace = string.Empty;
+        _validationError = null;
+        StateHasChanged();
+        _ = OnClose.InvokeAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_initEditOverlay)
+        {
+            _initEditOverlay = false;
+            await JS.InvokeVoidAsync("yamlHighlight.initEditOverlay", _editTextarea, _editPre);
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        if (_editMode)
+        {
+            _searchCount = string.IsNullOrEmpty(_search) ? 0
+                : CountOccurrences(_editText, _search);
+            StateHasChanged();
+            return;
+        }
+        if (_yamlViewPre.Id is null) { StateHasChanged(); return; }
+        _searchCount = await JS.InvokeAsync<int>("yamlHighlight.searchInPre", _yamlViewPre, _search);
+        StateHasChanged();
+    }
+
+    private async Task ClearSearch()
+    {
+        _search = string.Empty;
+        _searchCount = 0;
+        if (_yamlViewPre.Id is not null)
+            await JS.InvokeVoidAsync("yamlHighlight.clearSearch", _yamlViewPre);
+        StateHasChanged();
+    }
+
+    private async Task OnEditToggle()
+    {
+        _editMode = true;
+        _editText = _text ?? string.Empty;
+        _editHighlighted = _highlighted;
+        _editKey++;
+        _initEditOverlay = true;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private void OnCancelEdit()
+    {
+        _editMode = false;
+        _editText = string.Empty;
+        _validationError = null;
+        _replace = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task OnEditInput(ChangeEventArgs e)
+    {
+        _editText = e.Value?.ToString() ?? string.Empty;
+        _validationError = null;
+        _editHighlighted = await HighlightAsync(_editText);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnSave()
+    {
+        if (_target is null || Client is null) return;
+
+        _validationError = ValidateYaml(_editText);
+        if (_validationError is not null) { StateHasChanged(); return; }
+
+        _applying = true;
+        StateHasChanged();
+
+        try
+        {
+            if (IsProduction)
+            {
+                var confirmed = await Confirm.ShowAsync(
+                $"Apply YAML changes to {_target.Value.Kind} \"{_target.Value.Name}\" in production?",
+                _target.Value.Name,
+                requireTypedName: true);
+                if (!confirmed) { _applying = false; StateHasChanged(); return; }
+            }
+
+            await Client.ApplyResourceYamlAsync(Namespace, _target.Value.Kind, _target.Value.Name, _editText);
+            _text = _editText;
+            _highlighted = await HighlightAsync(_text);
+            _editMode = false;
+            _editText = string.Empty;
+            StateHasChanged();
+            Notifications.ShowSuccess("YAML applied", $"{_target.Value.Kind} {_target.Value.Name}");
+            await OnYamlApplied.InvokeAsync();
+        }
+        catch (OperationCanceledException) { throw; } // CS-2
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            Notifications.ShowError("Failed to apply YAML", ex: ex);
+        }
+        finally { _applying = false; await InvokeAsync(StateHasChanged); } // BL-2
+    }
+
+    private async Task OnReplaceAll()
+    {
+        if (string.IsNullOrEmpty(_search) || !_editMode) return;
+        _editText = _editText.Replace(_search, _replace, StringComparison.Ordinal);
+        _validationError = null;
+        _editHighlighted = await HighlightAsync(_editText);
+        _searchCount = CountOccurrences(_editText, _search);
+        _editKey++;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task<MarkupString> HighlightAsync(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return default;
+        // Normalize line endings and strip blank lines before passing to the highlighter
+        var clean = string.Join('\n', text.ReplaceLineEndings("\n")
+        .Split('\n')
+        .Where(static l => !string.IsNullOrWhiteSpace(l)));
+        var html = await JS.InvokeAsync<string>("yamlHighlight.highlight", clean);
+        return (MarkupString)html;
+    }
+
+    private static string? ValidateYaml(string yaml)
+    {
+        try
+        {
+            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder().Build();
+            deserializer.Deserialize<object>(yaml);
+            return null;
+        }
+        catch (YamlDotNet.Core.YamlException ex)
+        {
+            return $"YAML parse error at line {ex.Start.Line}: {ex.Message}";
+        }
+    }
+
+    private static int CountOccurrences(string text, string search)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(search)) return 0;
+        int count = 0, idx = 0;
+        while ((idx = text.IndexOf(search, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += search.Length;
+        }
+        return count;
+    }
+}

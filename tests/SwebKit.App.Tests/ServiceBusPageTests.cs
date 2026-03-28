@@ -3,6 +3,7 @@ using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.Pages;
+using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
@@ -21,6 +22,10 @@ public sealed class ServiceBusPageTests : TestContext
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
         Services.AddSingleton(new ScheduledMessageRepository());
         Services.AddSingleton(new UiStateRepository());
+        Services.AddSingleton(new PageDataCache());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
+        Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
     }
 
     [Fact]
@@ -31,8 +36,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.DoesNotContain("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
         });
 
         cut.Find("button[aria-label='Collapse namespace panel']").Click();
@@ -40,8 +45,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.Contains("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.Contains("collapsed", panel.ClassName, StringComparison.Ordinal);
             Assert.NotNull(cut.Find(".service-bus-right-pane"));
         });
 
@@ -50,8 +55,8 @@ public sealed class ServiceBusPageTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var shell = cut.Find(".service-bus-page-shell");
-            Assert.DoesNotContain("left-pane-collapsed", shell.ClassName, StringComparison.Ordinal);
+            var panel = cut.Find(".sb-entity-panel");
+            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
         });
     }
 
@@ -67,5 +72,17 @@ public sealed class ServiceBusPageTests : TestContext
 
         public IReadOnlyList<string> ListKeys(string prefix = "") =>
             _secrets.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+    }
+
+    private sealed class FakeSelectionContext : ISelectionContext
+    {
+        private readonly Dictionary<string, object?> _selections = new(StringComparer.Ordinal);
+
+        public void SetSelection(string area, object? selected) => _selections[area] = selected;
+
+        public T? GetSelection<T>(string area) where T : class =>
+            _selections.TryGetValue(area, out var value) ? value as T : null;
+
+        public event Action? SelectionChanged;
     }
 }

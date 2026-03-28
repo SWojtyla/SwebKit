@@ -83,179 +83,6 @@
 }
 
 /* ════════════════════════════════════════════════
-   AKS PAGE — Toolbar & Namespace Picker
-   ════════════════════════════════════════════════ */
-
-/* ── Toolbar ── */
-.aks-toolbar {
-    display: flex;
-    flex-direction: column;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
-
-/* Row 1: connection status, context, namespace, actions */
-.aks-toolbar-row {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: 6px var(--spacing-md);
-}
-
-/* Row 2: resource type tabs */
-.aks-tab-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: 0 var(--spacing-sm) 5px;
-    overflow-x: auto;
-}
-
-.aks-context-label {
-    font-size: 12px;
-    color: var(--color-text);
-}
-
-.aks-toolbar-divider {
-    width: 1px;
-    height: 20px;
-    background: var(--color-border);
-    flex-shrink: 0;
-}
-
-.aks-toolbar-spacer {
-    flex: 1;
-}
-
-/* ── Namespace label ── */
-.aks-ns-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    white-space: nowrap;
-}
-
-/* ── Namespace dropdown select (existing context + namespace style) ── */
-.aks-ns-select {
-    padding: 3px var(--spacing-sm);
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 12px;
-    outline: none;
-    min-width: 120px;
-    cursor: pointer;
-}
-
-.aks-ns-select:focus {
-    border-color: var(--color-accent);
-}
-
-/* ── Namespace picker (searchable custom dropdown) ── */
-.aks-ns-picker {
-    position: relative;
-}
-
-.aks-ns-search {
-    cursor: default;
-    min-width: 150px;
-}
-
-.aks-ns-search:not([readonly]) {
-    cursor: text;
-}
-
-.aks-ns-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: calc(var(--z-dropdown) - 1);
-}
-
-.aks-ns-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 200px;
-    max-height: 260px;
-    overflow-y: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-    z-index: var(--z-dropdown);
-    padding: var(--spacing-xs) 0;
-}
-
-.aks-ns-option {
-    padding: 6px var(--spacing-md);
-    font-size: 12px;
-    color: var(--color-text);
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.aks-ns-option:hover {
-    background: var(--color-surface-2);
-}
-
-.aks-ns-option.current {
-    color: var(--color-accent);
-    font-weight: 600;
-}
-
-/* ── Resource type tabs ── */
-.aks-resource-tab {
-    padding: var(--spacing-xs) var(--spacing-md);
-    background: transparent;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.1s;
-}
-
-.aks-resource-tab:hover {
-    color: var(--color-text);
-    background: var(--color-surface-2);
-}
-
-.aks-resource-tab.active {
-    color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: rgba(0, 120, 212, 0.08);
-}
-
-/* ── Events toggle button (in toolbar row) ── */
-.aks-events-toggle {
-    padding: 3px 10px;
-    background: transparent;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: all 0.1s;
-}
-
-.aks-events-toggle:hover {
-    color: var(--color-text);
-    background: var(--color-surface-2);
-}
-
-.aks-events-toggle.active {
-    color: var(--color-warning);
-    border-color: var(--color-warning);
-    background: rgba(255, 165, 0, 0.08);
-}
-
-/* ════════════════════════════════════════════════
    AKS PAGE — Resource Tables
    ════════════════════════════════════════════════ */
 
@@ -714,6 +541,30 @@
 .aks-yaml-search-clear:hover {
     color: var(--color-text);
     background: var(--color-surface-2);
+}
+
+.aks-yaml-replace-btn {
+    padding: 3px 10px;
+    font-size: var(--font-size-sm);
+    background: var(--color-accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.aks-yaml-replace-btn:hover {
+    opacity: 0.85;
+}
+
+.aks-yaml-validation-error {
+    padding: 6px 10px;
+    background: rgba(255, 170, 0, 0.12);
+    color: var(--color-warning, #e5a100);
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
 }
 
 .aks-search-toggle-btn {

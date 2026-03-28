@@ -7,10 +7,8 @@
     @if (_showComposer && ShowCompose)
     {
         <div style="border-bottom:1px solid var(--color-border); background:var(--color-surface); flex-shrink:0;">
-            <MessageComposer Client="Client" EntityPath="EntityPath"
-                             IsProduction="false"
-                             OnSent="@((_) => OnComposerSent())"
-                             OnClose="@(() => _showComposer = false)" />
+            <MessageComposer Client="Client" EntityPath="EntityPath" IsProduction="false"
+                             OnSent="@((_) => OnComposerSent())" OnClose="@(() => _showComposer = false)" />
         </div>
     }
 
@@ -18,26 +16,33 @@
         <span class="view-mode-badge @(IsDlqMode ? "dlq" : "peek")" aria-label="Message list mode">
             @(IsDlqMode ? "DLQ mode" : "Peek mode")
         </span>
-        <select @bind="PeekCount" style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
+        <select @bind="PeekCount"
+                style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
             <option value="5">5 messages</option>
             <option value="10">10 messages</option>
             <option value="50">50 messages</option>
             <option value="100">100 messages</option>
             <option value="200">200 messages</option>
         </select>
-        <select @bind="_autoRefreshSeconds" @bind:after="ApplyAutoRefresh"
-                title="Auto-refresh interval"
+        <select @bind="_autoRefreshSeconds" @bind:after="ApplyAutoRefresh" title="Auto-refresh interval"
                 style="padding:3px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-size:11px;">
             <option value="0">No auto-refresh</option>
             <option value="10">Refresh 10 s</option>
             <option value="30">Refresh 30 s</option>
             <option value="60">Refresh 60 s</option>
         </select>
+        <div class="density-toggle" title="Row density" aria-label="Row density">
+            <button type="button" class="density-btn @(_density == "compact" ? "active" : "")"
+                    @onclick='() => SetDensityAsync("compact")'>Compact</button>
+            <button type="button" class="density-btn @(_density == "default" ? "active" : "")"
+                    @onclick='() => SetDensityAsync("default")'>Default</button>
+            <button type="button" class="density-btn @(_density == "comfort" ? "active" : "")"
+                    @onclick='() => SetDensityAsync("comfort")'>Comfort</button>
+        </div>
         @if (MultiSelect && Messages.Count > 0)
         {
             <FluentButton @onclick="ToggleSelectAll" Appearance="Appearance.Stealth"
-                          style="font-size:11px; padding:2px 6px;"
-                          title="Select / deselect all visible messages">
+                          style="font-size:11px; padding:2px 6px;" title="Select / deselect all visible messages">
                 @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
             </FluentButton>
         }
@@ -56,14 +61,15 @@
                         disabled="@(SavedFilters.Count == 0)">▾</button>
                 @if (_showFilterMenu && SavedFilters.Count > 0)
                 {
-                    <div style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                    <div
+                        style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
                         @foreach (var f in SavedFilters)
                         {
                             <div style="display:flex; align-items:center; padding:5px 8px; gap:6px; cursor:pointer; font-size:12px;"
                                  @onclick="() => ApplySavedFilter(f)">
-                                <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@f.Value">@f.Name</span>
-                                <button @onclick:stopPropagation="true"
-                                        @onclick="() => DeleteSavedFilter(f.Name)"
+                                <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                      title="@f.Value">@f.Name</span>
+                                <button @onclick:stopPropagation="true" @onclick="() => DeleteSavedFilter(f.Name)"
                                         title="Remove filter"
                                         style="background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; font-size:11px; padding:1px 3px;">✕</button>
                             </div>
@@ -72,28 +78,35 @@
                 }
             </div>
         </div>
+        @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
+        {
+            <FluentButton @onclick="OnCloseDetails" Appearance="Appearance.Stealth" title="Close message details">
+                Close Details
+            </FluentButton>
+        }
         @if (ShowCompose && !IsDlqMode && Client is not null)
         {
             <FluentButton @onclick="@(() => _showComposer = !_showComposer)"
-                          Appearance="@(_showComposer ? Appearance.Accent : Appearance.Stealth)"
-                          title="Open message composer">
+                          Appearance="@(_showComposer ? Appearance.Accent : Appearance.Stealth)" title="Open message composer">
                 ✉ Send
             </FluentButton>
         }
         <!-- Export dropdown -->
         <div style="position:relative;">
-            <FluentButton @onclick="() => _showExportMenu = !_showExportMenu"
-                          Appearance="Appearance.Stealth"
-                          Disabled="@(FilteredMessages.Count == 0)"
-                          title="Export visible messages">
+            <FluentButton @onclick="() => _showExportMenu = !_showExportMenu" Appearance="Appearance.Stealth"
+                          Disabled="@(FilteredMessages.Count == 0)" title="Export visible messages">
                 ⬇ Export
             </FluentButton>
             @if (_showExportMenu)
             {
-                <div style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:150px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
-                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Json)">JSON array</div>
-                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Ndjson)">NDJSON (one per line)</div>
-                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;" @onclick="() => ExportAsync(ExportFormat.Csv)">CSV</div>
+                <div
+                    style="position:absolute; top:100%; right:0; z-index:200; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:4px; min-width:150px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;"
+                         @onclick="() => ExportAsync(ExportFormat.Json)">JSON array</div>
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;"
+                         @onclick="() => ExportAsync(ExportFormat.Ndjson)">NDJSON (one per line)</div>
+                    <div style="padding:6px 10px; font-size:12px; cursor:pointer;"
+                         @onclick="() => ExportAsync(ExportFormat.Csv)">CSV</div>
                 </div>
             }
         </div>
@@ -102,7 +115,10 @@
         </FluentButton>
     </div>
 
-    @if (ErrorMessage is not null) { <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" /> }
+    @if (ErrorMessage is not null)
+    {
+        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+    }
 
     @if (IsLoading)
     {
@@ -116,67 +132,87 @@
         }
         else
         {
-            <EmptyState Icon="🔍" Title="No matches" Subtitle="@($"No messages match \"{TextFilter}\". Try a different filter.")" />
+            <EmptyState Icon="🔍" Title="No matches"
+                        Subtitle="@($"No messages match \"{TextFilter}\". Try a different filter.")" />
         }
     }
     else
     {
-        <div class="data-table-container message-grid-scroll" tabindex="0"
+        <div class="data-table-container message-grid-scroll message-grid-host density-@_density" tabindex="0"
              @onkeydown="HandleKeyDown" @onkeydown:preventDefault="@_preventKeyDefault"
              aria-label="Message list scroll container">
-            <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage"
-                            Class="message-grid"
-                            ResizableColumns="true"
-                            Virtualize="true" ItemSize="32"
-                            RowClass="@(m => GetRowClass(m))"
+            <FluentDataGrid Items="@FilteredMessages.AsQueryable()" TGridItem="SbMessage" Class="message-grid"
+                            ResizableColumns="true" Virtualize="true" ItemSize="@ItemSize" RowClass="@(m => GetRowClass(m))"
                             OnRowClick="@(e => OnRowClickedAsync(e.Item))">
                 @if (MultiSelect)
                 {
                     <TemplateColumn Title="" Width="40px">
-                        <input type="checkbox"
-                               checked="@_selection.IsSelected(context.MessageId)"
+                        <input type="checkbox" checked="@_selection.IsSelected(context.MessageId)"
                                @onclick:stopPropagation="true"
-                               @onchange="async e => await ToggleSelection(context, (bool)e.Value!)"
-                               style="cursor:pointer;" />
+                               @onchange="async e => await ToggleSelection(context, (bool)e.Value!)" style="cursor:pointer;" />
                     </TemplateColumn>
                 }
-                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="120px" Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
-                <TemplateColumn Title="Message ID" Width="220px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.MessageId))">
+                <PropertyColumn Property="m => m.EnqueuedAt" Title="Enqueued" Format="HH:mm:ss.fff" Width="120px"
+                                Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+                <TemplateColumn Title="Message ID" Width="220px"
+                                SortBy="@(GridSort<SbMessage>.ByAscending(m => m.MessageId))">
                     <span class="cell-truncate" title="@context.MessageId">@context.MessageId</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Correlation ID" Width="180px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
-                    <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ?? "-")</span>
-                </TemplateColumn>
-                <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
-                    <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
-                </TemplateColumn>
-                <TemplateColumn Title="Delivery" Width="72px" SortBy="@(GridSort<SbMessage>.ByDescending(m => m.DeliveryCount))">@context.DeliveryCount</TemplateColumn>
-                @if (ShowDlqColumns)
-                {
-                    <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
-                        <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ?? "-")</span>
+                <TemplateColumn Title="Correlation ID" Width="180px"
+                                SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
+                    <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
+                                                                                "-")</span>
                     </TemplateColumn>
-                }
-            </FluentDataGrid>
+                    <TemplateColumn Title="Subject" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.Subject))">
+                        <span class="cell-truncate" title="@(context.Subject ?? "-")">@(context.Subject ?? "-")</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Delivery" Width="72px"
+                                    SortBy="@(GridSort<SbMessage>.ByDescending(m => m.DeliveryCount))">@context.DeliveryCount
+                    </TemplateColumn>
+                    @if (!IsDetailPaneOpen)
+                    {
+                        <TemplateColumn Title="Expires" Width="130px"
+                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.ExpiresAt))">
+                            <span class="cell-truncate" title="@(context.SystemProperties.ExpiresAt?.ToString("O") ?? "-")">
+                                @(context.SystemProperties.ExpiresAt?.ToString("HH:mm:ss") ?? "-")
+                            </span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Content Type" Width="110px"
+                                        SortBy="@(GridSort<SbMessage>.ByAscending(m => m.ContentType))">
+                            <span class="cell-truncate" title="@(context.ContentType ?? "-")">@(context.ContentType ?? "-")</span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Session" Width="130px" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SessionId))">
+                            <span class="cell-truncate" title="@(context.SessionId ?? "-")">@(context.SessionId ?? "-")</span>
+                        </TemplateColumn>
+                    }
+                    @if (ShowDlqColumns)
+                    {
+                        <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
+                            <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
+                                                                                                           "-")</span>
+                            </TemplateColumn>
+                        }
+                    </FluentDataGrid>
+                </div>
+                <div
+                    style="padding:4px 8px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border);">
+                    @CountSummary
+                </div>
+            }
         </div>
-        <div style="padding:4px 8px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border);">
-            @CountSummary
-        </div>
-    }
-</div>
 
-<Modal IsOpen="@_showSaveFilterDialog" OnClose="@(() => _showSaveFilterDialog = false)">
-    <h3 style="margin:0 0 12px; font-size:14px;">Save Filter</h3>
-    <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Filter: "@TextFilter"</div>
-    <input type="text" @bind="_saveFilterName" placeholder="Filter name…"
-           style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
-    <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
-        <button @onclick="() => _showSaveFilterDialog = false"
-                style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-        <button @onclick="ConfirmSaveFilter" disabled="@string.IsNullOrWhiteSpace(_saveFilterName)"
-                style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
-    </div>
-</Modal>
+        <Modal IsOpen="@_showSaveFilterDialog" OnClose="@(() => _showSaveFilterDialog = false)">
+            <h3 style="margin:0 0 12px; font-size:14px;">Save Filter</h3>
+            <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Filter: "@TextFilter"</div>
+            <input type="text" @bind="_saveFilterName" placeholder="Filter name…"
+                   style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
+            <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                <button @onclick="() => _showSaveFilterDialog = false"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                <button @onclick="ConfirmSaveFilter" disabled="@string.IsNullOrWhiteSpace(_saveFilterName)"
+                        style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+            </div>
+        </Modal>
 
 @code {
     private enum ExportFormat { Json, Ndjson, Csv }
@@ -186,11 +222,13 @@
     [Parameter] public Guid? NamespaceId { get; set; }
     [Parameter] public bool ShowDlqColumns { get; set; }
     [Parameter] public bool IsDlqMode { get; set; }
-    [Parameter] public EventCallback<SbMessage> OnMessageSelected { get; set; }
+    [Parameter] public EventCallback<SbMessage?> OnMessageSelected { get; set; }
     [Parameter] public SbMessage? SelectedMessage { get; set; }
     [Parameter] public bool MultiSelect { get; set; }
     [Parameter] public EventCallback<List<SbMessage>> OnMultiSelectionChanged { get; set; }
     [Parameter] public bool ShowCompose { get; set; }
+    [Parameter] public bool IsDetailPaneOpen { get; set; }
+    [Parameter] public EventCallback OnCloseDetails { get; set; }
 
     private bool IsLoading;
     private string? ErrorMessage;
@@ -212,6 +250,10 @@
     private bool _showFilterMenu;
     private bool _showSaveFilterDialog;
     private string _saveFilterName = "";
+    private string _density = "default";
+    private bool _densityLoaded;
+
+    private const string DensityStorageKey = "sb:message-density";
 
     private string FilterScopeKey =>
         NamespaceId.HasValue && EntityPath is not null
@@ -227,6 +269,13 @@
                             || m.CorrelationId?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
                             || m.Subject?.Contains(TextFilter, StringComparison.OrdinalIgnoreCase) == true
                             || m.Body.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private int ItemSize => _density switch
+    {
+        "compact" => 28,
+        "comfort" => 44,
+        _ => 36
+    };
 
     private string GetRowClass(SbMessage m)
     {
@@ -322,6 +371,23 @@
         _selection.Clear();
 
         await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _densityLoaded) return;
+        _densityLoaded = true;
+        var stored = await JS.InvokeAsync<string?>("SwebKitUi.getLocalStorage", DensityStorageKey);
+        if (stored is "compact" or "default" or "comfort")
+            _density = stored;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SetDensityAsync(string density)
+    {
+        if (density is not ("compact" or "default" or "comfort")) return;
+        _density = density;
+        await JS.InvokeVoidAsync("SwebKitUi.setLocalStorage", DensityStorageKey, density);
     }
 
     private async Task LoadAsync()
@@ -520,9 +586,17 @@
     private static string CsvEscape(string? value)
     {
         if (value is null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        return value;
+        bool needsQuoting = false;
+        foreach (var c in value)
+        {
+            if (c is ',' or '"' or '\n' or '\r' or '\t' || char.IsControl(c))
+            {
+                needsQuoting = true;
+                break;
+            }
+        }
+        if (!needsQuoting) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     public async ValueTask DisposeAsync()

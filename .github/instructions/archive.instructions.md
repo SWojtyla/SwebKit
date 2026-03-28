@@ -22,7 +22,7 @@ Each archived feature folder should normally contain a `summary.md` file.
 
 Treat `summary.md` as the primary entry point for understanding an archived feature.
 When creating or updating archived feature documentation, use the archive summary template:
-[archive summary template](../../docs/features/_templates/archive-summary.md)
+[archive summary template](ai-setup/templates/archive-summary.md)
 
 Prefer reading `summary.md` before opening other archived files.
 

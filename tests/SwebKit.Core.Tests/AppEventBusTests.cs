@@ -105,4 +105,109 @@ public class AppEventBusTests
 
         Assert.Equal(1, count);
     }
+
+    [Fact]
+    public async Task SubscribeAsync_InvokesAsyncHandler()
+    {
+        var bus = CreateBus();
+        string? received = null;
+
+        bus.Subscribe<TestEventA>(async e =>
+        {
+            await Task.Yield();
+            received = e.Value;
+        });
+
+        await bus.PublishAsync(new TestEventA("async-ok"));
+
+        Assert.Equal("async-ok", received);
+    }
+
+    [Fact]
+    public async Task PublishAsync_SyncAndAsyncHandlers_BothFire()
+    {
+        var bus = CreateBus();
+        var syncFired = false;
+        var asyncFired = false;
+
+        bus.Subscribe<TestEventA>(_ => syncFired = true);
+        bus.Subscribe<TestEventA>(async _ =>
+        {
+            await Task.Yield();
+            asyncFired = true;
+        });
+
+        await bus.PublishAsync(new TestEventA("both"));
+
+        Assert.True(syncFired);
+        Assert.True(asyncFired);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WhenAsyncHandlerThrows_OtherHandlersStillFire()
+    {
+        var bus = CreateBus();
+        var secondFired = false;
+
+        bus.Subscribe<TestEventA>(async _ =>
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("Intentional async test exception");
+        });
+        bus.Subscribe<TestEventA>(async _ =>
+        {
+            await Task.Yield();
+            secondFired = true;
+        });
+
+        await bus.PublishAsync(new TestEventA("fault"));
+
+        Assert.True(secondFired);
+    }
+
+    [Fact]
+    public async Task UnsubscribeAsync_RemovesHandler()
+    {
+        var bus = CreateBus();
+        var count = 0;
+        Func<TestEventA, Task> handler = async _ =>
+        {
+            await Task.Yield();
+            count++;
+        };
+
+        bus.Subscribe(handler);
+        await bus.PublishAsync(new TestEventA("first"));
+        bus.Unsubscribe(handler);
+        await bus.PublishAsync(new TestEventA("second"));
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WhenNoSubscribers_DoesNotThrow()
+    {
+        var bus = CreateBus();
+
+        var ex = await Record.ExceptionAsync(() => bus.PublishAsync(new TestEventA("orphan")));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Publish_IgnoresAsyncHandlers()
+    {
+        var bus = CreateBus();
+        var asyncCalled = false;
+
+        bus.Subscribe<TestEventA>(async _ =>
+        {
+            await Task.Yield();
+            asyncCalled = true;
+        });
+
+        bus.Publish(new TestEventA("sync-only"));
+
+        Assert.False(asyncCalled);
+    }
 }

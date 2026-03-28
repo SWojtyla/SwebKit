@@ -4,18 +4,22 @@
 @using SwebKit.Core.Models
 @using SwebKit.Core.Services
 @using SwebKit.App.Components.Observability
+@using SwebKit.App.Services
 @inject AppStateService AppState
 @inject IConnectionStateService ConnectionState
 @inject IObservabilityResourceDiscovery RealDiscovery
 @inject INotificationService Notifications
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="obs-page">
     <!-- Top toolbar: resource selector + time range + refresh -->
-    <div class="obs-toolbar">
+    <PageToolbar>
+        <LeadingContent>
         <div class="obs-resource-selector">
-            <FluentButton @onclick="ToggleResourceSelector"
-                          IconStart="@(new Icons.Regular.Size16.DataTrending())"
+            <FluentButton @onclick="ToggleResourceSelector" IconStart="@(new Icons.Regular.Size16.DataTrending())"
                           title="Select Application Insights resource">
                 @(_selectedResource?.Name ?? "Select resource…")
             </FluentButton>
@@ -24,18 +28,40 @@
             {
                 <div class="obs-resource-flyout">
                     <ResourceSelectorDialog SelectedResourceId="@_selectedResource?.ResourceId"
-                                            Discovery="@CurrentDiscovery"
-                                            OnSelected="OnResourceSelectedAsync" />
+                                            Discovery="@CurrentDiscovery" OnSelected="OnResourceSelectedAsync" />
                 </div>
             }
         </div>
-
+        </LeadingContent>
+        <CenterContent>
         <TimeRangePicker Value="_range" ValueChanged="OnRangeChangedAsync" />
+        </CenterContent>
 
-        <FluentButton @onclick="RefreshAsync" title="Refresh (F5)"
-                      Disabled="@(_provider is null)" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())">
+        <TrailingContent>
+        <FluentButton @onclick="RefreshAsync" title="Refresh (F5)" Disabled="@(_provider is null)"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())">
             Refresh
         </FluentButton>
+
+        @* OBS-7: Auto-refresh toggle *@
+        <div class="obs-auto-refresh">
+            <FluentButton Appearance="@(_autoRefreshEnabled? Appearance.Accent: Appearance.Lightweight)"
+                          @onclick="ToggleAutoRefresh" title="Toggle auto-refresh">
+                @(_autoRefreshEnabled ? "⏸ Auto" : "▶ Auto")
+            </FluentButton>
+            @if (_autoRefreshEnabled)
+            {
+                <select class="obs-auto-refresh-interval" @onchange="OnAutoRefreshIntervalChanged">
+                    <option value="60" selected="@(_autoRefreshSeconds == 60)">1 min</option>
+                    <option value="120" selected="@(_autoRefreshSeconds == 120)">2 min</option>
+                    <option value="300" selected="@(_autoRefreshSeconds == 300)">5 min</option>
+                </select>
+            }
+            @if (_lastRefreshedAt is not null)
+            {
+                <span class="obs-last-updated">Last: @_lastRefreshedAt.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+            }
+        </div>
 
         @if (AppState.UseDemoData)
         {
@@ -45,7 +71,8 @@
         {
             <span class="obs-provider-badge">@_provider.ProviderType</span>
         }
-    </div>
+        </TrailingContent>
+    </PageToolbar>
 
     @if (_provider is null)
     {
@@ -59,57 +86,60 @@
                 }
                 else
                 {
-                    <span>Click <strong>Select resource…</strong> to scan your subscriptions and pick an Application Insights resource.</span>
+                    <span>Click <strong>Select resource…</strong> to scan your subscriptions and pick an Application Insights
+                        resource.</span>
+                    }
+                </div>
+            </div>
+        }
+    else
+        {
+            <!-- Tab bar -->
+            <div class="obs-tabs">
+                <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
+                        @onclick="() => SetTab(Tab.Overview)">Overview</button>
+                <button class="obs-tab @(_tab == Tab.Failures ? "active" : "")"
+                        @onclick="() => SetTab(Tab.Failures)">Failures</button>
+                <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
+                        @onclick="() => SetTab(Tab.Performance)">Performance</button>
+                <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" @onclick="() => SetTab(Tab.Logs)">Logs</button>
+                <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
+                        @onclick="() => SetTab(Tab.Availability)">Availability</button>
+            </div>
+
+            <!-- Tab content -->
+            <div class="obs-tab-content">
+                @switch (_tab)
+                {
+                    case Tab.Overview:
+                        <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                        break;
+                    case Tab.Failures:
+                        <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
+                                               TzOffsetMinutes="_tzOffsetMinutes" OnDrillToLogs="DrillToLogsAsync" />
+                        break;
+                    case Tab.Performance:
+                        <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                        break;
+                    case Tab.Logs:
+                        <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
+                                           MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
+                                           SavedQueriesChanged="OnSavedQueriesChangedAsync" />
+                        break;
+                    case Tab.Availability:
+                        <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
+                                                   TzOffsetMinutes="_tzOffsetMinutes" />
+                        break;
                 }
             </div>
-        </div>
-    }
-    else
+        }
+    </div>
+
+    @* Click-outside to close resource selector *@
+    @if (_resourceSelectorOpen)
     {
-        <!-- Tab bar -->
-        <div class="obs-tabs">
-            <button class="obs-tab @(_tab == Tab.Overview     ? "active" : "")" @onclick="() => SetTab(Tab.Overview)">Overview</button>
-            <button class="obs-tab @(_tab == Tab.Failures     ? "active" : "")" @onclick="() => SetTab(Tab.Failures)">Failures</button>
-            <button class="obs-tab @(_tab == Tab.Performance  ? "active" : "")" @onclick="() => SetTab(Tab.Performance)">Performance</button>
-            <button class="obs-tab @(_tab == Tab.Logs         ? "active" : "")" @onclick="() => SetTab(Tab.Logs)">Logs</button>
-            <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")" @onclick="() => SetTab(Tab.Availability)">Availability</button>
-        </div>
-
-        <!-- Tab content -->
-        <div class="obs-tab-content">
-            @switch (_tab)
-            {
-                case Tab.Overview:
-                    <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" />
-                    break;
-                case Tab.Failures:
-                    <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
-                                           OnDrillToLogs="DrillToLogsAsync" />
-                    break;
-                case Tab.Performance:
-                    <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" />
-                    break;
-                case Tab.Logs:
-                    <ObservabilityLogs @ref="_logsRef"
-                                       Provider="_provider"
-                                       Range="_range"
-                                       MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)"
-                                       SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
-                                       SavedQueriesChanged="OnSavedQueriesChangedAsync" />
-                    break;
-                case Tab.Availability:
-                    <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range" />
-                    break;
-            }
-        </div>
+        <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
     }
-</div>
-
-@* Click-outside to close resource selector *@
-@if (_resourceSelectorOpen)
-{
-    <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
-}
 
 @code {
     private enum Tab { Overview, Failures, Performance, Logs, Availability }
@@ -120,6 +150,16 @@
     private ObservabilityResourceInfo? _selectedResource;
     private bool _resourceSelectorOpen;
     private CancellationTokenSource _cts = new();
+
+    // Auto-refresh (OBS-7)
+    private bool _autoRefreshEnabled;
+    private int _autoRefreshSeconds = 60;
+    private PeriodicTimer? _autoRefreshTimer;
+    private CancellationTokenSource? _autoRefreshCts;
+    private DateTimeOffset? _lastRefreshedAt;
+
+    // Timezone offset (OBS-8) — minutes ahead of UTC
+    private int _tzOffsetMinutes;
 
     // Component refs for targeted refresh
     private ObservabilityOverview? _overviewRef;
@@ -138,7 +178,63 @@
     protected override async Task OnInitializedAsync()
     {
         AppState.DemoModeChanged += OnDemoModeChanged;
+        RegisterObsCommands();
         await TryRestoreLastResourceAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _tzOffsetMinutes = await JS.InvokeAsync<int>("SwebKit.getBrowserTimezoneOffset");
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void RegisterObsCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "obs-refresh",
+            Label = "Refresh",
+            Category = "Observability",
+            AreaScope = "observability",
+            IsAvailable = () => _provider is not null,
+            Execute = () => RefreshAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "obs-run-query",
+            Label = "Run Query",
+            Category = "Observability",
+            AreaScope = "observability",
+            IsAvailable = () => _tab == Tab.Logs && _provider is not null,
+            Execute = () => _logsRef is not null ? _logsRef.LoadQueryAsync(string.Empty) : Task.CompletedTask
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "obs-show-logs",
+            Label = "Switch to Logs",
+            Category = "Observability",
+            AreaScope = "observability",
+            Execute = () => { SetTab(Tab.Logs); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "obs-show-failures",
+            Label = "Switch to Failures",
+            Category = "Observability",
+            AreaScope = "observability",
+            Execute = () => { SetTab(Tab.Failures); return Task.CompletedTask; }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "obs-show-overview",
+            Label = "Switch to Overview",
+            Category = "Observability",
+            AreaScope = "observability",
+            Execute = () => { SetTab(Tab.Overview); return Task.CompletedTask; }
+        });
     }
 
     private async Task TryRestoreLastResourceAsync()
@@ -215,14 +311,15 @@
 
     private async Task RefreshAsync()
     {
+        _lastRefreshedAt = DateTimeOffset.Now;
         await InvokeAsync(async () =>
         {
             switch (_tab)
             {
-                case Tab.Overview:     if (_overviewRef is not null) await _overviewRef.RefreshAsync(); break;
-                case Tab.Failures:     if (_failuresRef is not null) await _failuresRef.RefreshAsync(); break;
-                case Tab.Performance:  if (_perfRef     is not null) await _perfRef.RefreshAsync();     break;
-                case Tab.Availability: if (_availRef    is not null) await _availRef.RefreshAsync();    break;
+                case Tab.Overview: if (_overviewRef is not null) await _overviewRef.RefreshAsync(); break;
+                case Tab.Failures: if (_failuresRef is not null) await _failuresRef.RefreshAsync(); break;
+                case Tab.Performance: if (_perfRef is not null) await _perfRef.RefreshAsync(); break;
+                case Tab.Availability: if (_availRef is not null) await _availRef.RefreshAsync(); break;
             }
             StateHasChanged();
         });
@@ -260,8 +357,67 @@
         StateHasChanged();
     });
 
+    // OBS-7: Auto-refresh toggle
+    private void ToggleAutoRefresh()
+    {
+        _autoRefreshEnabled = !_autoRefreshEnabled;
+        if (_autoRefreshEnabled)
+            StartAutoRefreshLoop();
+        else
+            StopAutoRefreshLoop();
+        StateHasChanged();
+    }
+
+    private void OnAutoRefreshIntervalChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var seconds))
+        {
+            _autoRefreshSeconds = seconds;
+            if (_autoRefreshEnabled)
+            {
+                StopAutoRefreshLoop();
+                StartAutoRefreshLoop();
+            }
+        }
+    }
+
+    private void StartAutoRefreshLoop()
+    {
+        StopAutoRefreshLoop();
+        _autoRefreshCts = new CancellationTokenSource();
+        _autoRefreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(_autoRefreshSeconds));
+        var ct = _autoRefreshCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _autoRefreshTimer.WaitForNextTickAsync(ct))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshAsync();
+                    });
+                }
+            }
+            catch (OperationCanceledException) { /* expected on dispose */ }
+        }, ct);
+    }
+
+    private void StopAutoRefreshLoop()
+    {
+        _autoRefreshCts?.Cancel();
+        _autoRefreshCts?.Dispose();
+        _autoRefreshCts = null;
+        _autoRefreshTimer?.Dispose();
+        _autoRefreshTimer = null;
+    }
+
     public void Dispose()
     {
+        StopAutoRefreshLoop();
+        foreach (var id in new[] { "obs-refresh", "obs-run-query", "obs-show-logs", "obs-show-failures", "obs-show-overview" })
+            Commands.Unregister(id);
+        Selection.SetSelection("observability", null);
         AppState.DemoModeChanged -= OnDemoModeChanged;
         _cts.Cancel();
         _cts.Dispose();

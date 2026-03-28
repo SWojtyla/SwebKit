@@ -27,6 +27,10 @@ public class ComponentTests : TestContext
         {
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
         }
+
+        var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
+        Services.AddSingleton<IAppEventBus>(events);
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
     }
 
     [Fact]
@@ -64,20 +68,21 @@ public class ComponentTests : TestContext
     }
 
     [Fact]
-    public void CommandPalette_EmptyRegistry_ShowsNoCommandsMessage()
+    public void CommandPalette_EmptyRegistry_ShowsNoResults()
     {
-        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>();
 
-        Assert.Contains("No commands found", cut.Markup);
+        // New palette shows empty results area when no commands are registered and query is empty
+        Assert.DoesNotContain("command-item", cut.Markup);
     }
 
     [Fact]
     public void CommandPalette_WithCommands_ShowsResults()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandRegistry(new UiStateRepository());
         registry.Register(new AppCommand
         {
             Id = "nav-projects",
@@ -96,7 +101,7 @@ public class ComponentTests : TestContext
     [Fact]
     public void CommandPalette_FilterByQuery_NarrowsResults()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandRegistry(new UiStateRepository());
         registry.Register(new AppCommand
         {
             Id = "nav-projects",
@@ -124,17 +129,11 @@ public class ComponentTests : TestContext
     public void CommandPalette_Enter_ExecutesFocusedCommand()
     {
         var executed = 0;
-        var registry = new CommandRegistry();
+        var registry = new CommandRegistry(new UiStateRepository());
         registry.Register(new AppCommand
         {
             Id = "first",
             Label = "First",
-            Execute = () => Task.CompletedTask
-        });
-        registry.Register(new AppCommand
-        {
-            Id = "second",
-            Label = "Second",
             Execute = () =>
             {
                 executed++;
@@ -147,16 +146,16 @@ public class ComponentTests : TestContext
 
         var cut = RenderComponent<CommandPalette>();
         var input = cut.Find("input");
-        input.KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+        // Focus is on index 0 (first command) by default; press Enter to execute it
         input.KeyDown(new KeyboardEventArgs { Key = "Enter" });
 
-        Assert.Equal(1, executed);
+        cut.WaitForAssertion(() => Assert.Equal(1, executed));
     }
 
     [Fact]
     public void CommandPalette_ArrowKeys_MovesFocus()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandRegistry(new UiStateRepository());
         registry.Register(new AppCommand
         {
             Id = "first",
@@ -183,7 +182,7 @@ public class ComponentTests : TestContext
     public void CommandPalette_Escape_Closes()
     {
         var closeCalls = 0;
-        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>(ps => ps
@@ -198,7 +197,7 @@ public class ComponentTests : TestContext
     public void CommandPalette_ClickOverlay_Closes()
     {
         var closeCalls = 0;
-        Services.AddSingleton(new CommandRegistry());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<IAppEventBus>(new AppEventBus(NullLogger<AppEventBus>.Instance));
 
         var cut = RenderComponent<CommandPalette>(ps => ps
@@ -267,8 +266,8 @@ public class ComponentTests : TestContext
 
         Services.AddSingleton(appState);
         Services.AddSingleton<IAppEventBus>(bus);
-        Services.AddSingleton(new CommandRegistry());
-        Services.AddSingleton<INotificationService>(new NotificationService());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
 
         var cut = RenderComponent<TopBar>();
         cut.Find("button.cmd-palette-btn").Click();
@@ -279,7 +278,7 @@ public class ComponentTests : TestContext
     [Fact]
     public void ServiceBusConfigForm_NoLinks_ShowsEmptyMessage()
     {
-        var env = new ProjectEnvironment();
+        var env = new AppConfig();
 
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance)));
 

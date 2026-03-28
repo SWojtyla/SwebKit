@@ -1,4 +1,5 @@
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 
 namespace SwebKit.App.Services;
@@ -7,6 +8,12 @@ public class NotificationService : INotificationService
 {
     private readonly List<Notification> _notifications = [];
     private readonly object _lock = new();
+    private readonly UiStateRepository _uiState;
+
+    public NotificationService(UiStateRepository uiState)
+    {
+        _uiState = uiState;
+    }
 
     public IReadOnlyList<Notification> All
     {
@@ -50,6 +57,28 @@ public class NotificationService : INotificationService
         var notification = new Notification(Guid.NewGuid(), severity, message, detail, DateTimeOffset.UtcNow);
         lock (_lock)
             _notifications.Add(notification);
+
+        _ = PersistAsync(severity, message, detail);
+
         NotificationsChanged?.Invoke();
+    }
+
+    private async Task PersistAsync(NotificationSeverity severity, string message, string? detail)
+    {
+        try
+        {
+            var history = _uiState.State.NotificationHistory;
+            history.Insert(0, new PersistedNotification
+            {
+                Severity = severity.ToString(),
+                Message = message,
+                Detail = detail,
+                Timestamp = DateTimeOffset.UtcNow
+            });
+            if (history.Count > 50)
+                history.RemoveRange(50, history.Count - 50);
+            await _uiState.SaveAsync();
+        }
+        catch { /* best-effort persistence */ }
     }
 }

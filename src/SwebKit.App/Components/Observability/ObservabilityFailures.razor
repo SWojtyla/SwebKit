@@ -4,7 +4,9 @@
 <div class="obs-failures">
     @if (_isLoading && !_exceptions.Any())
     {
-        <div class="obs-loading"><FluentProgressRing /> Loading failures…</div>
+        <div class="obs-loading">
+            <FluentProgressRing /> Loading failures…
+        </div>
     }
     else if (_error is not null)
     {
@@ -72,17 +74,27 @@
                     <div class="obs-detail-section-title">Recent Occurrences</div>
                     @if (_samplesLoading)
                     {
-                        <div class="obs-loading-inline"><FluentProgressRing Style="width:14px;height:14px" /></div>
+                        <div class="obs-loading-inline">
+                            <FluentProgressRing Style="width:14px;height:14px" />
+                        </div>
                     }
                     else
                     {
                         <div class="obs-samples">
                             @foreach (var row in _samples)
                             {
+                                var opId = GetCol(row, "operationId");
                                 <div class="obs-sample-row">
                                     <span class="obs-sample-time">@FormatTimestamp(row)</span>
                                     <span class="obs-sample-op">@GetCol(row, "operationName")</span>
-                                    <span class="obs-sample-id">@GetCol(row, "operationId")</span>
+                                    <span class="obs-sample-id">@opId</span>
+                                    @if (!string.IsNullOrEmpty(opId))
+                                    {
+                                        <button class="obs-drill-link" style="margin:0;font-size:var(--font-size-xs);"
+                                                @onclick="() => DrillToTrace(opId)" title="View full trace">
+                                            → Trace
+                                        </button>
+                                    }
                                 </div>
                             }
                         </div>
@@ -98,11 +110,13 @@
 </div>
 
 @inject IJSRuntime JS
+@inject INotificationService Notifications
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
     [Parameter] public EventCallback<string> OnDrillToLogs { get; set; }
+    [Parameter] public int TzOffsetMinutes { get; set; }
 
     private readonly List<ExceptionGroup> _exceptions = [];
     private ExceptionGroup? _selected;
@@ -144,7 +158,7 @@
             _selected = null;
             _samples = [];
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
@@ -177,12 +191,19 @@
     {
         if (_selected?.SampleStackTrace is null) return;
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selected.SampleStackTrace);
+        Notifications.ShowSuccess("Copied!");
     }
 
     private async Task DrillToLogs()
     {
         if (_selected is null) return;
         var kql = $"exceptions\n| where type == '{_selected.ExceptionType}'\n| order by timestamp desc\n| take 50";
+        await OnDrillToLogs.InvokeAsync(kql);
+    }
+
+    private async Task DrillToTrace(string operationId)
+    {
+        var kql = SwebKit.Observability.KqlPresets.TraceByOperationId(operationId);
         await OnDrillToLogs.InvokeAsync(kql);
     }
 
@@ -201,10 +222,15 @@
             : $"{(int)age.TotalDays}d ago";
     }
 
-    private static string FormatTimestamp(LogRow row)
+    private string FormatTimestamp(LogRow row)
     {
         var ts = GetCol(row, "timestamp");
-        return DateTimeOffset.TryParse(ts, out var dto) ? dto.ToLocalTime().ToString("HH:mm:ss") : ts;
+        if (DateTimeOffset.TryParse(ts, out var dto))
+        {
+            var local = dto.ToOffset(TimeSpan.FromMinutes(TzOffsetMinutes));
+            return local.ToString("HH:mm:ss");
+        }
+        return ts;
     }
 
     private static string GetCol(LogRow row, string col) =>

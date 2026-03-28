@@ -1,6 +1,7 @@
 @inject AppStateService AppState
 @inject ITaskQueue TaskQueue
 @inject IJSRuntime JS
+@inject ILogger<DlqView> Logger
 
 <div style="display:flex; flex-direction:column; height:100%;">
     <div
@@ -12,7 +13,7 @@
     <div style="display:flex; flex:1; overflow:hidden;">
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
-                             MultiSelect="true"                             SelectedMessage="SelectedMessage"
+                             MultiSelect="true" SelectedMessage="SelectedMessage"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
@@ -30,6 +31,10 @@
                     <FluentButton Appearance="Appearance.Stealth" @onclick="ClearBatchSelection">
                         Clear
                     </FluentButton>
+                    @if (_batchProgressMessage is not null)
+                    {
+                        <span style="font-size:12px; color:var(--color-text-muted);">@_batchProgressMessage</span>
+                    }
                 </div>
             }
             else
@@ -54,8 +59,9 @@
     </div>
 </div>
 
-<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"               IsProduction="false"
-               ConfirmLabel="Proceed"               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
+               IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
+               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
@@ -63,6 +69,7 @@
 
     private SbMessage? SelectedMessage;
     private bool IsWorking;
+    private string? _batchProgressMessage;
     private bool ShowConfirm;
     private string ConfirmTitle = "";
     private string ConfirmMessage = "";
@@ -82,7 +89,7 @@
                     "SwebKitSplitter.init", _dlqSplitterRef, _dlqDetailRef,
                     new { minWidth = 200, maxWidth = 700 });
             }
-            catch { }
+            catch (Exception ex) { Logger.LogDebug(ex, "JS interop failed: {Method}", "SwebKitSplitter.init"); }
         }
     }
 
@@ -195,7 +202,22 @@
         var task = TaskQueue.Enqueue($"Resubmitting {seqNumbers.Count} messages", EntityPath);
         try
         {
-            await Client.ResubmitDeadLetterAsync(EntityPath, seqNumbers, null);
+            if (seqNumbers.Count > 5)
+            {
+                var chunks = seqNumbers.Chunk(10).ToList();
+                int done = 0;
+                foreach (var chunk in chunks)
+                {
+                    await Client.ResubmitDeadLetterAsync(EntityPath, chunk, null);
+                    done += chunk.Length;
+                    _batchProgressMessage = $"Resubmitting message {done} of {seqNumbers.Count}\u2026";
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            else
+            {
+                await Client.ResubmitDeadLetterAsync(EntityPath, seqNumbers, null);
+            }
             TaskQueue.Complete(task.Id);
             _batchSelected.Clear();
             SelectedMessage = null;
@@ -205,7 +227,7 @@
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; StateHasChanged(); }
+        finally { IsWorking = false; _batchProgressMessage = null; StateHasChanged(); }
     }
 
     private async Task DoBatchComplete()
@@ -221,7 +243,22 @@
         var task = TaskQueue.Enqueue($"Completing {seqNumbers.Count} DLQ messages", EntityPath);
         try
         {
-            await Client.CompleteDeadLetterAsync(EntityPath, seqNumbers);
+            if (seqNumbers.Count > 5)
+            {
+                var chunks = seqNumbers.Chunk(10).ToList();
+                int done = 0;
+                foreach (var chunk in chunks)
+                {
+                    await Client.CompleteDeadLetterAsync(EntityPath, chunk);
+                    done += chunk.Length;
+                    _batchProgressMessage = $"Deleting message {done} of {seqNumbers.Count}\u2026";
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            else
+            {
+                await Client.CompleteDeadLetterAsync(EntityPath, seqNumbers);
+            }
             TaskQueue.Complete(task.Id);
             _batchSelected.Clear();
             SelectedMessage = null;
@@ -231,6 +268,6 @@
             TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
             TaskQueue.Complete(task.Id, false);
         }
-        finally { IsWorking = false; StateHasChanged(); }
+        finally { IsWorking = false; _batchProgressMessage = null; StateHasChanged(); }
     }
 }

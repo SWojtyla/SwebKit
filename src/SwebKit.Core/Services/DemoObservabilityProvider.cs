@@ -107,11 +107,11 @@ public sealed class DemoObservabilityProvider : IObservabilityProvider
         {
             var dict = new Dictionary<string, object?>
             {
-                ["timestamp"]     = DateTimeOffset.UtcNow.AddMinutes(-i * 3 - 1).ToString("O"),
-                ["type"]          = exceptionType,
+                ["timestamp"] = DateTimeOffset.UtcNow.AddMinutes(-i * 3 - 1).ToString("O"),
+                ["type"] = exceptionType,
                 ["operationName"] = i % 2 == 0 ? "GET /api/orders/{id}" : "POST /api/orders",
-                ["operationId"]   = Guid.NewGuid().ToString("N")[..16],
-                ["cloud_RoleName"]= "orders-api",
+                ["operationId"] = Guid.NewGuid().ToString("N")[..16],
+                ["cloud_RoleName"] = "orders-api",
                 ["severityLevel"] = "3",
             };
             return new LogRow(dict);
@@ -166,12 +166,12 @@ public sealed class DemoObservabilityProvider : IObservabilityProvider
         var rows = Enumerable.Range(0, Math.Min(50, maxRows)).Select(i => new LogRow(
             new Dictionary<string, object?>
             {
-                ["timestamp"]      = DateTimeOffset.UtcNow.AddSeconds(-i * 18).ToString("O"),
-                ["message"]        = messages[i % messages.Length],
-                ["severityLevel"]  = severities[i % severities.Length],
-                ["operationName"]  = operations[i % operations.Length],
+                ["timestamp"] = DateTimeOffset.UtcNow.AddSeconds(-i * 18).ToString("O"),
+                ["message"] = messages[i % messages.Length],
+                ["severityLevel"] = severities[i % severities.Length],
+                ["operationName"] = operations[i % operations.Length],
                 ["cloud_RoleName"] = services[i % services.Length],
-                ["itemId"]         = Guid.NewGuid().ToString("N")[..12],
+                ["itemId"] = Guid.NewGuid().ToString("N")[..12],
             })).ToList();
 
         var result = new LogQueryResult(
@@ -207,6 +207,29 @@ public sealed class DemoObservabilityProvider : IObservabilityProvider
             .ToList();
 
         return Task.FromResult(results);
+    }
+
+    // ── Latency trend ─────────────────────────────────────────────────────────
+
+    public Task<IReadOnlyList<LatencyDataPoint>> GetOperationLatencyTrendAsync(
+        string operationName, TimeRange range, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var buckets = BuildTimeBuckets(range, 24);
+
+        IReadOnlyList<LatencyDataPoint> points = buckets.Select((t, i) =>
+        {
+            var baseP50 = 80 + 30 * Math.Sin(i * 0.5);
+            var baseP95 = 300 + 120 * Math.Sin(i * 0.4 + 1);
+            var baseP99 = 600 + 200 * Math.Sin(i * 0.3 + 2);
+            return new LatencyDataPoint(
+                Timestamp: t,
+                P50Ms: Math.Max(10, baseP50 + Random.Shared.Next(-10, 10)),
+                P95Ms: Math.Max(50, baseP95 + Random.Shared.Next(-30, 30)),
+                P99Ms: Math.Max(100, baseP99 + Random.Shared.Next(-50, 50)));
+        }).ToList();
+
+        return Task.FromResult(points);
     }
 
     // ── Presets ───────────────────────────────────────────────────────────────

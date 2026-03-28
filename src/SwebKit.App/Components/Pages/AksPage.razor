@@ -6,98 +6,22 @@
 @inject IAppEventBus EventBus
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
+@inject CommandRegistry Commands
+@inject ISelectionContext Selection
+@inject PageDataCache Cache
+@inject ILogger<AksPage> Logger
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     @* ── Toolbar ── *@
-    <div class="aks-toolbar">
-
-        @* ── Row 1: connection + actions ── *@
-        <div class="aks-toolbar-row">
-            <span class="connection-dot @(Client is not null ? "dot-ok" : "dot-unknown")"></span>
-
-            @* ── Context dropdown ── *@
-            <label class="aks-ns-label">Context</label>
-            <select class="aks-ns-select" value="@ActiveContext" @onchange="OnContextChanged">
-                @if (Contexts.Count == 0)
-                {
-                    <option value="">@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</option>
-                }
-                @foreach (var ctx in Contexts)
-                {
-                    <option value="@ctx.Name" selected="@(ctx.Name == ActiveContext)">
-                        @ctx.Name @(ctx.IsCurrent ? "(current)" : "")
-                    </option>
-                }
-            </select>
-
-            <span class="aks-toolbar-divider"></span>
-
-            @* ── Namespace searchable picker ── *@
-            @if (NsDropOpen)
-            {
-                <div class="aks-ns-backdrop" @onclick="CloseNsDrop"></div>
-            }
-            <label class="aks-ns-label">Namespace</label>
-            <div class="aks-ns-picker">
-                <input class="aks-ns-select aks-ns-search" value="@(NsDropOpen? NsSearchText : CurrentNamespace)"
-                       placeholder="@(NsDropOpen ? "Filter…" : CurrentNamespace)" @onfocus="OpenNsDrop"
-                       @oninput="OnNsSearchInput" readonly="@(!NsDropOpen)" />
-                @if (NsDropOpen)
-                {
-                    <div class="aks-ns-dropdown">
-                        @foreach (var ns in NsFiltered)
-                        {
-                            var nsLocal = ns;
-                            <div class="aks-ns-option @(nsLocal == CurrentNamespace ? "current" : "")"
-                                 @onclick="() => SelectNs(nsLocal)">
-                                @nsLocal
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-
-            <span class="aks-toolbar-spacer"></span>
-
-            @{
-                var warnCount = Events.Count(e => e.Type == "Warning");
-            }
-            <button class="aks-events-toggle @(ShowEvents ? "active" : "")"
-                    @onclick="() => { ShowEvents = !ShowEvents; StateHasChanged(); }" title="Toggle events panel">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
-                @(warnCount > 0 ? $" {warnCount}" : " Events")
-            </button>
-
-            @{
-                var pfCount = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
-            }
-            <button class="aks-events-toggle @(ShowPortForwardSessions ? "active" : "")"
-                    @onclick="() => { ShowPortForwardSessions = !ShowPortForwardSessions; StateHasChanged(); }"
-                    title="Toggle port-forward sessions panel">
-                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="14px" style="vertical-align:middle;" />
-                @(pfCount > 0 ? $" {pfCount} pf" : " Sessions")
-            </button>
-
-            <AutoRefreshToggle OnRefresh="LoadAsync" Paused="@HasAnyPanel" />
-
-            <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="LoadAsync"
-                          Title="Refresh (F5)">
-                @(IsLoading ? "Loading…" : "↻ Refresh")
-            </FluentButton>
-        </div>
-
-        @* ── Row 2: resource type tabs ── *@
-        <div class="aks-tab-bar">
-            @foreach (var rt in ResourceTypes)
-            {
-                <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
-                        @onclick="() => SwitchResourceType(rt)">
-                    @rt
-                </button>
-            }
-        </div>
-
-    </div>
+    <AksConnectionBar Contexts="Contexts" ActiveContext="@ActiveContext" Namespaces="Namespaces"
+                      CurrentNamespace="@CurrentNamespace" IsLoading="@IsLoading" IsConnected="@(Client is not null)"
+                      ActiveResourceType="@ActiveResourceType" ShowEvents="@ShowEvents"
+                      ShowPortForwardSessions="@ShowPortForwardSessions" EventWarningCount="@(Events.Count(e => e.Type == "Warning"))"
+                      ActivePortForwardCount="@(SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active))"
+                      AutoRefreshPaused="@HasAnyPanel" OnContextChanged="HandleContextChangedAsync"
+                      OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
+                      OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
+                      OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
 
     @* ── Error ── *@
     @if (ErrorMessage is not null)
@@ -136,68 +60,87 @@
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
                                 ValueChanged="OnFilterChanged" />
-                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault
-                     tabindex="0" @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
+                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault tabindex="0"
+                     @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
                     @switch (ActiveResourceType)
                     {
                         case "Deployments":
                             <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
                                             SelectedDeployment="@SelectedDeployment"
                                             OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                            OnSelectRow="@((d) => { SelectedDeployment = d; StateHasChanged(); })" OnOpenHpa="@OpenHpaDetail"
+                                            OnSelectRow="@((d) => { SelectedDeployment = d; Selection.SetSelection("aks", d); StateHasChanged(); })"
+                                            OnOpenHpa="@OpenHpaDetail"
                                             OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "StatefulSets":
                             <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
                                              SelectedStatefulSet="@SelectedStatefulSet"
-                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; StateHasChanged(); })"
+                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
                                              OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
                                              OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "ConfigMaps":
-                            <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
-                                           SelectedConfigMap="@SelectedConfigMap"
-                                           OnSelectRow="@((cm) => { SelectedConfigMap = cm; StateHasChanged(); })"
-                                           OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
+                            @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
+                            {
+                                <div class="aks-mns-notice">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                                style="vertical-align:middle;" />
+                                    ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
+                                </div>
+                            }
+                            else
+                            {
+                                <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
+                                               SelectedConfigMap="@SelectedConfigMap"
+                                               OnSelectRow="@((cm) => { SelectedConfigMap = cm; Selection.SetSelection("aks", cm); StateHasChanged(); })"
+                                               OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
+                            }
                             break;
 
                         case "Secrets":
                             <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
                                         SelectedSecret="@SelectedSecret"
-                                        OnSelectRow="@((s) => { SelectedSecret = s; StateHasChanged(); })"
+                                        OnSelectRow="@((s) => { SelectedSecret = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
                                         OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "Pods":
+                            @if (_metricsUnavailable)
+                            {
+                                <div class="aks-mns-notice" style="margin-bottom:8px;">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                                style="vertical-align:middle;" />
+                                    Metrics unavailable — metrics-server may not be installed on this cluster.
+                                </div>
+                            }
                             <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
-                                     IsMultiNamespace="@IsMultiNamespace"
-                                     SelectedPod="@SelectedPod"
-                                     OnSelectRow="@((p) => { SelectedPod = p; StateHasChanged(); })"
+                                     IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
+                                     CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
+                                     MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)"
+                                     OnSelectRow="@((p) => { SelectedPod = p; Selection.SetSelection("aks", p); StateHasChanged(); })"
                                      OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
                                      OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
 
                         case "Ingresses":
-                            <IngressGrid FilteredItems="@FilteredIngresses"
-                                         SelectedIngress="@SelectedIngress"
-                                         OnSelectRow="@((i) => { SelectedIngress = i; StateHasChanged(); })"
+                            <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
+                                         OnSelectRow="@((i) => { SelectedIngress = i; Selection.SetSelection("aks", i); StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
                                          OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
                             break;
 
                         case "Helm":
-                            <HelmGrid FilteredItems="@FilteredHelmReleases"
-                                      SelectedHelm="@SelectedHelmRelease"
-                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; StateHasChanged(); })"
+                            <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
+                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; Selection.SetSelection("aks", h); StateHasChanged(); })"
                                       OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
                             break;
 
                         case "CronJobs":
                             <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
                                          SelectedCronJob="@SelectedCronJob"
-                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; StateHasChanged(); })"
+                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; Selection.SetSelection("aks", cj); StateHasChanged(); })"
                                          OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
                                          OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
                             break;
@@ -212,7 +155,7 @@
                         <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                        or "Ingresses" or "Pods" or "CronJobs")
+                                                                                                                                                                                                            or "Ingresses" or "Pods" or "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -240,486 +183,142 @@
                 </div>
             </div>
 
-            @* ── Side column: all panels (incl. events) ── *@
-            @if (HasAnyPanel)
-            {
-                <ResizablePanel DefaultWidth="420" MinWidth="280" MaxWidth="900">
-                    <div class="aks-panels-col">
+            @* ── Side column: all detail panels ── *@
+            <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
+                             Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments"
+                             StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
+                             OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged" />
 
-                        @* ── YAML viewer / editor ── *@
-                        @if (YamlTarget is not null)
-                        {
-                            <div class="aks-panel-pane">
-                                <div class="aks-section-header">
-                                    <span class="aks-section-title" title="@YamlTarget.Value.Kind/@YamlTarget.Value.Name">
-                                        @(YamlEditMode ? "Edit" : "") @YamlTarget.Value.Kind: @YamlTarget.Value.Name
-                                    </span>
-                                    @if (!YamlLoading && YamlError is null && YamlIsEditable && !YamlEditMode)
-                                    {
-                                        <FluentButton Appearance="Appearance.Stealth" @onclick="OnEditYamlToggle" Title="Edit YAML">
-                                            <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="16px" />
-                                        </FluentButton>
-                                    }
-                                    @if (!YamlEditMode && !YamlLoading && YamlError is null)
-                                    {
-                                        <button class="aks-search-toggle-btn @(_showYamlSearch ? "active" : "")"
-                                                @onclick="() => { _showYamlSearch = !_showYamlSearch; if (!_showYamlSearch) _ = ClearYamlSearch(); StateHasChanged(); }"
-                                                title="Search in YAML">
-                                            <FluentIcon Value="@(new Icons.Regular.Size16.Search())" Width="16px" />
-                                        </button>
-                                    }
-                                    @if (YamlEditMode)
-                                    {
-                                        <FluentButton Appearance="Appearance.Accent" Disabled="@YamlApplying" @onclick="OnSaveYaml"
-                                                      Title="Apply YAML">
-                                            @(YamlApplying ? "Saving…" : "Save")
-                                        </FluentButton>
-                                        <FluentButton Appearance="Appearance.Stealth" Disabled="@YamlApplying"
-                                                      @onclick="OnCancelYamlEdit" Title="Cancel edit">Cancel</FluentButton>
-                                    }
-                                    <FluentButton Appearance="Appearance.Stealth" @onclick="CloseYaml" Title="Close">
-                                        <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                    </FluentButton>
-                                </div>
-                                @if (_showYamlSearch && !YamlEditMode)
-                                {
-                                    <div class="aks-yaml-search-bar">
-                                        <input type="text" class="aks-yaml-search-input" placeholder="Search in YAML…"
-                                               value="@_yamlSearch" @oninput="OnYamlSearchInput" autofocus />
-                                        @if (!string.IsNullOrEmpty(_yamlSearch))
-                                        {
-                                            <span class="aks-yaml-search-count">@_yamlSearchCount match@(_yamlSearchCount != 1 ? "es" :
-                                                                            "")</span>
-                                                <button class="aks-yaml-search-clear" @onclick="ClearYamlSearch" title="Clear">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
-                                                </button>
-                                            }
-                                        </div>
-                                    }
-                                    <div class="aks-yaml-content">
-                                        @if (YamlLoading)
-                                        {
-                                            <LoadingSpinner Message="Loading YAML…" />
-                                        }
-                                        else if (YamlError is not null)
-                                        {
-                                            <div class="aks-yaml-error">@YamlError</div>
-                                        }
-                                        else if (YamlEditMode)
-                                        {
-                                            <div class="aks-yaml-edit-wrap" @key="_editKey">
-                                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre">@_yamlEditHighlighted</pre>
-                                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"
-                                                          @oninput="OnYamlEditInput">@YamlEditText</textarea>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <pre class="aks-yaml-pre" @ref="_yamlViewPre">@_yamlHighlighted</pre>
-                                        }
-                                    </div>
-                                </div>
-                            }
+        </div>
+    }
 
-                            @* ── Helm History ── *@
-                            @if (HelmHistoryTarget is not null && YamlTarget is null)
-                            {
-                                <div class="aks-panel-pane">
-                                    <div class="aks-section-header">
-                                        <span class="aks-section-title">@(HelmRollbackMode ? "Rollback" : "History"):
-                                            @HelmHistoryTarget</span>
-                                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmHistory" Title="Close">
-                                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                            </FluentButton>
-                                        </div>
-                                        @if (HelmRollbackMode)
-                                        {
-                                            <div class="aks-rollback-hint">Select a revision to rollback to:</div>
-                                        }
-                                        <div class="aks-yaml-content">
-                                            @if (HelmHistoryLoading)
-                                            {
-                                                <LoadingSpinner Message="Loading history…" />
-                                            }
-                                            else
-                                            {
-                                                <table class="aks-history-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Rev</th>
-                                                            <th>Status</th>
-                                                            <th>Chart</th>
-                                                            <th>App Version</th>
-                                                            <th>Updated</th>
-                                                            <th>Description</th>
-                                                            @if (HelmRollbackMode)
-                                                            {
-                                                                <th></th>
-                                                            }
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        @foreach (var rev in HelmHistory.OrderByDescending(r => r.Revision))
-                                                        {
-                                                            <tr class="@(rev.Status == "deployed" ? "aks-rev-current" : "")">
-                                                                <td>@rev.Revision</td>
-                                                                <td><span
-                                                                    class="aks-status @(rev.Status == "deployed" ? "running" : rev.Status == "failed" ? "error" : "other")">@rev.Status</span>
-                                                                </td>
-                                                                <td>@rev.Chart</td>
-                                                                <td>@rev.AppVersion</td>
-                                                                <td>@rev.Updated?.ToString("yyyy-MM-dd HH:mm")</td>
-                                                                <td>@rev.Description</td>
-                                                                @if (HelmRollbackMode)
-                                                                {
-                                                                    <td>
-                                                                        @if (rev.Status == "superseded")
-                                                                        {
-                                                                            var r = rev;
-                                                                            <button class="ctx-item destructive aks-rollback-btn"
-                                                                                    style="display:inline-flex; align-items:center; gap:4px;"
-                                                                                    @onclick="() => OnRollbackToRevision(r)">
-                                                                                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())"
-                                                                                            Width="14px" /> Rollback
-                                                                            </button>
-                                                                        }
-                                                                    </td>
-                                                                }
-                                                            </tr>
-                                                        }
-                                                    </tbody>
-                                                </table>
-                                            }
-                                        </div>
-                                    </div>
-                                }
+    @* ── Context menus ── *@
+    <ContextMenu @ref="DeploymentMenu">
+        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxDeployment?.Name)"><span
+            class="ctx-item-icon">📋</span> Copy name</button>
+            <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View
+                YAML</button>
+                <button class="ctx-item" @onclick="() => OnCtxEditYaml('D')"><span class="ctx-item-icon">✎</span> Edit
+                    YAML</button>
+                    <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View
+                        Logs</button>
+                        <button class="ctx-item" @onclick="OnCtxAllPodsLogs"><span class="ctx-item-icon">&#9782;</span> Logs for all
+                            pods</button>
+                            <button class="ctx-item" @onclick="OnCtxContainerDetailsDeployment"><span class="ctx-item-icon">&#9881;</span>
+                                Container Details</button>
+                                <div class="ctx-separator"></div>
+                                <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
+                                    Deployment</button>
+                                    <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
+                                        Scale...</button>
+                                    </ContextMenu>
 
-                                @* ── Helm Values ── *@
-                                @if (HelmValuesTarget is not null && YamlTarget is null && HelmHistoryTarget is null)
-                                {
-                                    <div class="aks-panel-pane">
-                                        <div class="aks-section-header">
-                                            <span class="aks-section-title">Values: @HelmValuesTarget</span>
-                                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmValues" Title="Close">
-                                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                            </FluentButton>
-                                        </div>
-                                        <div class="aks-yaml-content">
-                                            @if (HelmValuesLoading)
-                                            {
-                                                <LoadingSpinner Message="Loading values…" />
-                                            }
-                                            else
-                                            {
-                                                <pre class="aks-yaml-pre">@_helmValuesHighlighted</pre>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-
-                                @* ── Scale ── *@
-                                @if (ScaleTarget is not null && YamlTarget is null && LogPodName is null)
-                                {
-                                    <div class="aks-panel-pane">
-                                        <div class="aks-section-header">
-                                            <span class="aks-section-title" title="@ScaleTarget">Scale: @ScaleTarget</span>
-                                            <FluentButton Appearance="Appearance.Stealth" @onclick="OnScaleCancel" Title="Cancel">
-                                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                            </FluentButton>
-                                        </div>
-                                        <div class="aks-scale-panel">
-                                            <div class="aks-scale-label">Desired replicas</div>
-                                            <div class="aks-scale-stepper">
-                                                <button class="aks-scale-step-btn"
-                                                        @onclick="() => ScaleReplicas = Math.Max(0, ScaleReplicas - 1)">−</button>
-                                                <input type="number" class="aks-scale-input" min="0" max="100" @bind="ScaleReplicas"
-                                                       @bind:event="oninput" />
-                                                <button class="aks-scale-step-btn"
-                                                        @onclick="() => ScaleReplicas = Math.Min(100, ScaleReplicas + 1)">+</button>
-                                            </div>
-                                            <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet ? (StatefulSets.FirstOrDefault(s
-                                                                            => s.Name == ScaleTarget)?.Replicas ?? 0) : (Deployments.FirstOrDefault(d => d.Name ==
-                                                                            ScaleTarget)?.Replicas ?? 0)) replicas</div>
-                                                <div class="aks-scale-actions">
-                                                    <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
-                                                    <button class="confirm-btn confirm-no" @onclick="OnScaleCancel">Cancel</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-
-                                    @* ── Pod logs ── *@
-                                    @if (LogPodName is not null && YamlTarget is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header aks-log-header">
-                                                <span class="aks-section-title" title="@LogPodName">Logs: @TruncatePodName(LogPodName)</span>
-                                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseLogs" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <PodLogView Client="Client" Namespace="@CurrentNamespace" PodName="@LogPodName" />
-                                        </div>
-                                    }
-
-                                    @* ── Multi-pod logs ── *@
-                                    @if (LogDeploymentName is not null && LogPodName is null && YamlTarget is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header aks-log-header">
-                                                <span class="aks-section-title">All-pod logs: @LogDeploymentName</span>
-                                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseDeploymentLogs" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <MultiPodLogView Client="Client" Namespace="@CurrentNamespace"
-                                                             DeploymentName="@LogDeploymentName" />
-                                        </div>
-                                    }
-
-                                    @* ── Container details ── *@
-                                    @if (ContainerDetailPodName is not null && YamlTarget is null && LogPodName is null && LogDeploymentName
-                                                    is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header">
-                                                <span class="aks-section-title">Containers: @TruncatePodName(ContainerDetailPodName)</span>
-                                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseContainerDetail" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <div class="aks-yaml-content">
-                                                <ContainerDetailPanel Client="Client" Namespace="@CurrentNamespace"
-                                                                      PodName="@ContainerDetailPodName" />
-                                            </div>
-                                        </div>
-                                    }
-
-                                    @* ── ConfigMap detail ── *@
-                                    @if (ConfigMapDetailTarget is not null && YamlTarget is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header">
-                                                <span class="aks-section-title">ConfigMap: @ConfigMapDetailTarget.Name</span>
-                                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseConfigMapDetail" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <ConfigMapDetailPanel ConfigMap="ConfigMapDetailTarget" />
-                                        </div>
-                                    }
-
-                                    @* ── Secret detail ── *@
-                                    @if (SecretDetailTarget is not null && YamlTarget is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header">
-                                                <span class="aks-section-title">Secret: @SecretDetailTarget.Name</span>
-                                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseSecretDetail" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <SecretDetailPanel Client="Client" Namespace="@CurrentNamespace" Secret="SecretDetailTarget" />
-                                        </div>
-                                    }
-
-                                    @* ── HPA detail ── *@
-                                    @if (HpaDetailTarget is not null && YamlTarget is null)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header">
-                                                <span class="aks-section-title">HPA: @HpaDetailTarget.Name</span>
-                                                <FluentButton Appearance="Appearance.Stealth"
-                                                              @onclick="() => { HpaDetailTarget = null; StateHasChanged(); }" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <HpaPanel Hpa="HpaDetailTarget" />
-                                        </div>
-                                    }
-
-                                    @* ── Events panel (full peer pane) ── *@
-                                    @if (ShowEvents)
-                                    {
-                                        <div class="aks-panel-pane">
-                                            <div class="aks-section-header">
-                                                <span class="aks-section-title">Events</span>
-                                                <span class="aks-section-count">@Events.Count</span>
-                                                @if (Events.Any(e => e.Type == "Warning"))
-                                                {
-                                                    <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
-                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e =>
-                                                                                    e.Type == "Warning")
-                                                    </span>
-                                                }
-                                                <span class="aks-toolbar-spacer"></span>
-                                                <FluentButton Appearance="Appearance.Stealth"
-                                                              @onclick="() => { ShowEvents = false; StateHasChanged(); }" Title="Close">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                                                </FluentButton>
-                                            </div>
-                                            <div class="aks-events-list">
-                                                @if (Events.Count == 0)
-                                                {
-                                                    <div class="aks-events-empty">No recent events</div>
-                                                }
-                                                else
-                                                {
-                                                    @foreach (var evt in Events)
-                                                    {
-                                                        <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
-                                                            <div class="aks-event-header">
-                                                                @if (evt.Type == "Warning")
-                                                                {
-                                                                    <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
-                                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
-                                                                    </span>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
-                                                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                                                                    </span>
-                                                                }
-                                                                <span class="aks-event-reason">@evt.Reason</span>
-                                                                @if (evt.Count > 1)
-                                                                {
-                                                                    <span class="aks-event-count">×@evt.Count</span>
-                                                                }
-                                                                <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
-                                                            </div>
-                                                            <div class="aks-event-detail">
-                                                                <span class="aks-event-object">@evt.InvolvedObjectName</span>
-                                                                @evt.Message
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-
-                                </div>
-                            </ResizablePanel>
-                        }
-
-                    </div>
-                }
-
-                @* ── Context menus ── *@
-                <ContextMenu @ref="DeploymentMenu">
-                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View
-                        YAML</button>
-                        <button class="ctx-item" @onclick="() => OnCtxEditYaml('D')"><span class="ctx-item-icon">✎</span> Edit
-                            YAML</button>
-                            <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View
-                                Logs</button>
-                                <button class="ctx-item" @onclick="OnCtxAllPodsLogs"><span class="ctx-item-icon">&#9782;</span> Logs for all
-                                    pods</button>
-                                    <button class="ctx-item" @onclick="OnCtxContainerDetailsDeployment"><span class="ctx-item-icon">&#9881;</span>
-                                        Container Details</button>
-                                        <div class="ctx-separator"></div>
-                                        <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
-                                            Deployment</button>
-                                            <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
-                                                Scale...</button>
-                                            </ContextMenu>
-
-                                            <ContextMenu @ref="PodMenu">
-                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
-                                                    YAML</button>
-                                                    <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
-                                                        Logs</button>
-                                                        <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
-                                                            Container Details</button>
-                                                            <div class="ctx-separator"></div>
-                                                            <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
-                                                                pod</button>
-                                                                <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span> Port-forward…</button>
+                                    <ContextMenu @ref="PodMenu">
+                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxPod?.Name)"><span
+                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
+                                                YAML</button>
+                                                <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
+                                                    Logs</button>
+                                                    <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
+                                                        Container Details</button>
+                                                        <div class="ctx-separator"></div>
+                                                        <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
+                                                            pod</button>
+                                                            <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span>
+                                                                Port-forward…</button>
                                                                 <div class="ctx-separator"></div>
                                                                 <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
                                                                     Pod</button>
                                                                 </ContextMenu>
 
                                                                 <ContextMenu @ref="IngressMenu">
-                                                                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
-                                                                        YAML</button>
-                                                                        <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
+                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxIngress?.Name)"><span
+                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
                                                                             YAML</button>
-                                                                            <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
-                                                                                browser</button>
-                                                                                <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
-                                                                                    URL</button>
-                                                                                </ContextMenu>
+                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                YAML</button>
+                                                                                <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
+                                                                                    browser</button>
+                                                                                    <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
+                                                                                        URL</button>
+                                                                                    </ContextMenu>
 
-                                                                                <ContextMenu @ref="HelmMenu">
-                                                                                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
-                                                                                        YAML</button>
-                                                                                        <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
-                                                                                            Values</button>
-                                                                                            <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
-                                                                                                History</button>
-                                                                                                <div class="ctx-separator"></div>
-                                                                                                <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
-                                                                                                    Rollback...</button>
-                                                                                                </ContextMenu>
+                                                                                    <ContextMenu @ref="HelmMenu">
+                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
+                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
+                                                                                                YAML</button>
+                                                                                                <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
+                                                                                                    Values</button>
+                                                                                                    <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
+                                                                                                        History</button>
+                                                                                                        <div class="ctx-separator"></div>
+                                                                                                        <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
+                                                                                                            Rollback...</button>
+                                                                                                        </ContextMenu>
 
-                                                                                                <ContextMenu @ref="StatefulSetMenu">
-                                                                                                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                        YAML</button>
-                                                                                                        <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
-                                                                                                            YAML</button>
-                                                                                                            <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
-                                                                                                                for all pods</button>
-                                                                                                                <div class="ctx-separator"></div>
-                                                                                                                <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
-                                                                                                                    Restart</button>
-                                                                                                                    <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
-                                                                                                                        Scale...</button>
-                                                                                                                    </ContextMenu>
-
-                                                                                                                    <ContextMenu @ref="ConfigMapMenu">
-                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                            YAML</button>
-                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
-                                                                                                                                YAML</button>
-                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
-                                                                                                                                    Keys</button>
+                                                                                                        <ContextMenu @ref="StatefulSetMenu">
+                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxStatefulSet?.Name)"><span
+                                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                    YAML</button>
+                                                                                                                    <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                        YAML</button>
+                                                                                                                        <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
+                                                                                                                            for all pods</button>
+                                                                                                                            <div class="ctx-separator"></div>
+                                                                                                                            <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
+                                                                                                                                Restart</button>
+                                                                                                                                <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
+                                                                                                                                    Scale...</button>
                                                                                                                                 </ContextMenu>
 
-                                                                                                                                <ContextMenu @ref="SecretMenu">
-                                                                                                                                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                        YAML</button>
-                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                <ContextMenu @ref="ConfigMapMenu">
+                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxConfigMap?.Name)"><span
+                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                             YAML</button>
-                                                                                                                                            <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
-                                                                                                                                                Keys</button>
-                                                                                                                                            </ContextMenu>
-
-                                                                                                                                            <ContextMenu @ref="CronJobMenu">
-                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                    YAML</button>
+                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                YAML</button>
+                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
+                                                                                                                                                    Keys</button>
                                                                                                                                                 </ContextMenu>
 
-                                                                                                                                            </div>
+                                                                                                                                                <ContextMenu @ref="SecretMenu">
+                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxSecret?.Name)"><span
+                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                            YAML</button>
+                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                YAML</button>
+                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
+                                                                                                                                                                    Keys</button>
+                                                                                                                                                                </ContextMenu>
 
-@* ── Port-forward sessions panel ── *@
-@if (ShowPortForwardSessions)
-{
-    <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
-}
+                                                                                                                                                                <ContextMenu @ref="CronJobMenu">
+                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                            YAML</button>
+                                                                                                                                                                        </ContextMenu>
+
+                                                                                                                                                                    </div>
+
+                                                                                                                                                                    @* ── Port-forward sessions panel ── *@
+                                                                                                                                                                    @if (ShowPortForwardSessions)
+                                                                                                                                                                    {
+                                                                                                                                                                        <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+                                                                                                                                                                    }
 
 @* ── Port-forward start dialog ── *@
-<PortForwardStartDialog Visible="@ShowPortForwardDialog"
-                        PodName="@(_pfDialogPod?.Name ?? "")"
-                        Namespace="@(_pfDialogPod?.Namespace ?? "")"
-                        RemotePort="@_pfDialogRemotePort"
-                        OnStart="OnStartPortForward"
+<PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
+                        Namespace="@(_pfDialogPod?.Namespace ?? "")" RemotePort="@_pfDialogRemotePort" OnStart="OnStartPortForward"
                         OnCancel="@(() => { ShowPortForwardDialog = false; StateHasChanged(); })" />
 
 @code {
-    private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
-"Ingresses", "Helm", "CronJobs"];
+
 
     private IAksClient? Client;
     private List<DeploymentInfo> Deployments = [];
@@ -744,60 +343,10 @@
     private CronJobInfo? SelectedCronJob;
     private bool IsLoading;
     private string? ErrorMessage;
-    private string? LogPodName;
-    private string? LogDeploymentName;
-    private string? ContainerDetailPodName;
-    private ConfigMapInfo? ConfigMapDetailTarget;
-    private SecretInfo? SecretDetailTarget;
-    private HpaInfo? HpaDetailTarget;
-    private bool _scaleIsStatefulSet;
+    private CancellationTokenSource _cts = new();
 
-    // YAML viewer/editor state
-    private (string Kind, string Name)? YamlTarget;
-    private string? YamlText;
-    private string? YamlError;
-    private bool YamlLoading;
-    private bool YamlEditMode;
-    private string YamlEditText = string.Empty;
-    private bool YamlApplying;
-
-    // Highlighted markup for YAML panels
-    private MarkupString _yamlHighlighted;
-    private MarkupString _yamlEditHighlighted;
-    private MarkupString _helmValuesHighlighted;
-
-    // Edit overlay refs & lifecycle flags
-    private ElementReference _editTextarea;
-    private ElementReference _editPre;
-    private ElementReference _yamlViewPre;
-    private bool _initEditOverlay;
-    private int _editKey;
-
-    // YAML search state
-    private string _yamlSearch = string.Empty;
-    private int _yamlSearchCount;
-    private bool _showYamlSearch;
-
-    // Only these resource types are editable
-    private bool YamlIsEditable => YamlTarget?.Kind is "Deployment" or "Ingress" or "StatefulSet" or "ConfigMap" or
-    "Secret";
-
-    // Scale state
-    private string? ScaleTarget;
-    private int ScaleReplicas;
-
-    // Helm History state
-    private string? HelmHistoryTarget;
-    private List<HelmRevisionInfo> HelmHistory = [];
-    private bool HelmHistoryLoading;
-
-    // Helm rollback mode (history panel shows rollback buttons)
-    private bool HelmRollbackMode;
-
-    // Helm Values state
-    private string? HelmValuesTarget;
-    private string? HelmValuesText;
-    private bool HelmValuesLoading;
+    // Detail panels component (hosts YAML viewer, Helm panel, logs, scale, etc.)
+    private AksDetailPanels _detailPanels = default!;
 
     // Filter state (per-tab)
     private string DeploymentFilter = string.Empty;
@@ -851,6 +400,7 @@
     private IQueryable<PodInfo> FilteredPods => string.IsNullOrWhiteSpace(PodFilter)
     ? Pods.AsQueryable()
     : Pods.Where(p => p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+    || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
     || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
     || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false)).AsQueryable();
 
@@ -881,6 +431,21 @@
 
     // Pod metrics
     private List<PodMetrics> PodMetricsList = [];
+    private bool _metricsUnavailable;
+
+    // PERF-18: Snapshot record for PageDataCache
+    private sealed record AksPageSnapshot(
+        List<DeploymentInfo> Deployments,
+        List<StatefulSetInfo> StatefulSets,
+        List<PodInfo> Pods,
+        List<IngressInfo> Ingresses,
+        List<HelmReleaseInfo> HelmReleases,
+        List<ConfigMapInfo> ConfigMaps,
+        List<SecretInfo> Secrets,
+        List<HpaInfo> Hpas,
+        List<KubernetesEvent> Events,
+        List<CronJobInfo> CronJobs,
+        List<PodMetrics> PodMetricsList);
 
     private string CurrentNamespace = "default";
     private string ActiveContext = string.Empty;
@@ -894,48 +459,7 @@
     private PodInfo? _pfDialogPod;
     private int _pfDialogRemotePort;
 
-    // Namespace picker state
-    private bool NsDropOpen;
-    private string NsSearchText = string.Empty;
 
-    private IEnumerable<string> NsFiltered
-    {
-        get
-        {
-            var all = Enumerable.Repeat("*", 1).Concat(Namespaces);
-            return string.IsNullOrWhiteSpace(NsSearchText)
-            ? all
-            : all.Where(n => n.Contains(NsSearchText, StringComparison.OrdinalIgnoreCase));
-        }
-    }
-
-    private void OpenNsDrop()
-    {
-        NsSearchText = string.Empty;
-        NsDropOpen = true;
-        StateHasChanged();
-    }
-
-    private void CloseNsDrop()
-    {
-        NsDropOpen = false;
-        NsSearchText = string.Empty;
-        StateHasChanged();
-    }
-
-    private void OnNsSearchInput(ChangeEventArgs e)
-    {
-        NsSearchText = e.Value?.ToString() ?? string.Empty;
-        StateHasChanged();
-    }
-
-    private async Task SelectNs(string ns)
-    {
-        NsDropOpen = false;
-        NsSearchText = string.Empty;
-        CurrentNamespace = ns;
-        await LoadAsync();
-    }
 
     // Context menu refs and targets
     private ContextMenu DeploymentMenu = default!;
@@ -973,26 +497,94 @@
         _ => 0
     };
 
-    private bool HasOpenPanel =>
-    LogPodName is not null ||
-    LogDeploymentName is not null ||
-    YamlTarget is not null ||
-    ScaleTarget is not null ||
-    HelmHistoryTarget is not null ||
-    HelmValuesTarget is not null ||
-    ConfigMapDetailTarget is not null ||
-    SecretDetailTarget is not null ||
-    ContainerDetailPodName is not null ||
-    HpaDetailTarget is not null ||
-    YamlEditMode;
+    private bool HasOpenPanel => _detailPanels?.IsOpen == true;
 
     private bool HasAnyPanel => HasOpenPanel || ShowEvents || ShowPortForwardSessions;
 
-    private bool IsProduction => false;
+    private bool IsProduction => AppState.Config.IsProduction;
 
     protected override void OnInitialized()
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        RegisterAksCommands();
+    }
+
+    private void RegisterAksCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-refresh",
+            Label = "Refresh",
+            Category = "AKS",
+            AreaScope = "aks",
+            Shortcut = "F5",
+            Execute = () => LoadAsync()
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-restart-deployment",
+            Label = "Restart Deployment",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null,
+            Execute = async () =>
+            {
+                if (SelectedDeployment is not null)
+                {
+                    CtxDeployment = SelectedDeployment; await
+OnCtxRestartDeployment();
+                }
+            }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-scale-deployment",
+            Label = "Scale Deployment",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null,
+            Execute = () =>
+            {
+                if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxScaleDeployment(); }
+                return Task.CompletedTask;
+            }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-view-logs",
+            Label = "View Logs",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedDeployment is not null || SelectedPod is not null,
+            Execute = () =>
+            {
+                if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxViewPodLogs(); }
+                else if (SelectedDeployment is not null) { CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); }
+                return Task.CompletedTask;
+            }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-open-pod-shell",
+            Label = "Open Pod Shell",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedPod is not null,
+            Execute = async () => { if (SelectedPod is not null) { CtxPod = SelectedPod; await OnCtxOpenPodShell(); } }
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "aks-port-forward",
+            Label = "Port-forward Pod",
+            Category = "AKS",
+            AreaScope = "aks",
+            IsAvailable = () => SelectedPod is not null,
+            Execute = () =>
+            {
+                if (SelectedPod is not null) { CtxPod = SelectedPod; OnCtxPortForward(); }
+                return Task.CompletedTask;
+            }
+        });
     }
 
     private void OnOpenPortForwardPanel(OpenPortForwardPanelEvent _)
@@ -1062,7 +654,10 @@
                 if (current is not null) ActiveContext = current.Name;
             }
         }
-        catch { /* keep empty */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"LoadContextsAsync failed: {ex.Message}");
+        }
     }
 
     private async Task LoadNamespacesAsync()
@@ -1078,7 +673,10 @@
                     CurrentNamespace = Namespaces.Contains("default") ? "default" : Namespaces[0];
             }
         }
-        catch { /* keep default list */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"LoadNamespacesAsync failed: {ex.Message}");
+        }
     }
 
     private bool IsMultiNamespace => CurrentNamespace == "*";
@@ -1086,21 +684,65 @@
     private async Task LoadAsync()
     {
         if (Client is null) return;
-        IsLoading = true; ErrorMessage = null; StateHasChanged();
+
+        // PERF-18: Restore cached data for instant back-navigation rendering
+        var cacheKey = !string.IsNullOrEmpty(ActiveContext) && !string.IsNullOrEmpty(CurrentNamespace)
+            ? $"aks:{ActiveContext}:{CurrentNamespace}" : null;
+        var cached = cacheKey is not null ? Cache.Get<AksPageSnapshot>(cacheKey) : null;
+        if (cached is not null)
+        {
+            Deployments = cached.Deployments;
+            StatefulSets = cached.StatefulSets;
+            Pods = cached.Pods;
+            Ingresses = cached.Ingresses;
+            HelmReleases = cached.HelmReleases;
+            ConfigMaps = cached.ConfigMaps;
+            Secrets = cached.Secrets;
+            Hpas = cached.Hpas;
+            Events = cached.Events;
+            CronJobs = cached.CronJobs;
+            PodMetricsList = cached.PodMetricsList;
+            IsLoading = false;
+            StateHasChanged();
+            // Continue to background-refresh (stale-while-revalidate)
+        }
+
+        // PERF-16: Cancel any in-flight load before starting a new one
+        var newCts = new CancellationTokenSource();
+        var oldCts = Interlocked.Exchange(ref _cts, newCts);
+        oldCts?.Cancel();
+        oldCts?.Dispose();
+        var ct = newCts.Token;
+
+        IsLoading = cached is null; ErrorMessage = null; StateHasChanged();
         try
         {
+            // PERF-7: Incremental rendering — each dataset renders as it completes
+            // PERF2-8: Batch StateHasChanged via dirty flag + debounced flush loop
+            bool datasetDirty = false;
+
+            async Task LoadDataset<T>(Func<Task<IReadOnlyList<T>>> fetch, Action<List<T>> assign)
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    var result = await fetch();
+                    ct.ThrowIfCancellationRequested();
+                    assign(result.ToList());
+                    datasetDirty = true;
+                }
+                catch (OperationCanceledException) { throw; } // CS-2
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Dataset load failed: {ex.Message}");
+                }
+            }
+
             if (IsMultiNamespace)
             {
                 var allNs = Namespaces.Where(n => n != "default" || Namespaces.Count <= 3).ToList();
-                var deploymentsTask = Client.GetDeploymentsAsync(allNs);
-                var podsTask = Client.GetPodsAsync(allNs);
-                var statefulSetsTask = Client.GetStatefulSetsAsync(allNs);
 
-                await Task.WhenAll(deploymentsTask, podsTask, statefulSetsTask);
-
-                Deployments = deploymentsTask.Result.ToList();
-                Pods = podsTask.Result.ToList();
-                StatefulSets = statefulSetsTask.Result.ToList();
+                // Clear non-loaded lists synchronously
                 Ingresses = [];
                 HelmReleases = [];
                 ConfigMaps = [];
@@ -1109,46 +751,113 @@
                 Events = [];
                 PodMetricsList = [];
                 CronJobs = [];
+
+                var tasks = new List<Task>
+                {
+                    LoadDataset(() => Client.GetDeploymentsAsync(allNs), r => Deployments = r),
+                    LoadDataset(() => Client.GetPodsAsync(allNs), r => Pods = r),
+                    LoadDataset(() => Client.GetStatefulSetsAsync(allNs), r => StatefulSets = r),
+                };
+
+                // PERF2-8: Render flush loop — batch renders at ~150ms intervals
+                var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var flushTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!flushCts.Token.IsCancellationRequested)
+                        {
+                            await Task.Delay(150, flushCts.Token);
+                            if (datasetDirty)
+                            {
+                                datasetDirty = false;
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
+                await Task.WhenAll(tasks);
+                flushCts.Cancel();
+                flushCts.Dispose();
+
+                // Final flush — render any remaining dirty state
+                datasetDirty = false;
+                await InvokeAsync(StateHasChanged);
             }
             else
             {
                 var ns = CurrentNamespace;
-                var deploymentsTask = Client.GetDeploymentsAsync(ns);
-                var statefulSetsTask = Client.GetStatefulSetsAsync(ns);
-                var podsTask = Client.GetPodsAsync(ns);
-                var ingressesTask = Client.GetIngressesAsync(ns);
-                var helmTask = Client.GetHelmReleasesAsync(ns);
-                var eventsTask = Client.GetEventsAsync(ns);
-                var metricsTask = Client.GetPodMetricsAsync(ns);
-                var configMapsTask = Client.GetConfigMapsAsync(ns);
-                var secretsTask = Client.GetSecretsAsync(ns);
-                var hpasTask = Client.GetHpasAsync(ns);
-                var cronJobsTask = Client.GetCronJobsAsync(ns);
 
-                await Task.WhenAll(deploymentsTask, statefulSetsTask, podsTask, ingressesTask,
-                helmTask, eventsTask, metricsTask, configMapsTask, secretsTask, hpasTask, cronJobsTask);
+                var tasks = new List<Task>
+                {
+                    LoadDataset(() => Client.GetDeploymentsAsync(ns), r => Deployments = r),
+                    LoadDataset(() => Client.GetStatefulSetsAsync(ns), r => StatefulSets = r),
+                    LoadDataset(() => Client.GetPodsAsync(ns), r => Pods = r),
+                    LoadDataset(() => Client.GetIngressesAsync(ns), r => Ingresses = r),
+                    LoadDataset(() => Client.GetHelmReleasesAsync(ns), r => HelmReleases = r),
+                    LoadDataset(async () => (IReadOnlyList<KubernetesEvent>)(await Client.GetEventsAsync(ns)).Take(50).ToList(), r => Events
+= r),
+                    LoadDataset(() => Client.GetPodMetricsAsync(ns), r => PodMetricsList = r),
+                    LoadDataset(() => Client.GetConfigMapsAsync(ns), r => ConfigMaps = r),
+                    LoadDataset(() => Client.GetSecretsAsync(ns), r => Secrets = r),
+                    LoadDataset(() => Client.GetHpasAsync(ns), r => Hpas = r),
+                    LoadDataset(() => Client.GetCronJobsAsync(ns), r => CronJobs = r),
+                };
 
-                Deployments = deploymentsTask.Result.ToList();
-                StatefulSets = statefulSetsTask.Result.ToList();
-                Pods = podsTask.Result.ToList();
-                Ingresses = ingressesTask.Result.ToList();
-                HelmReleases = helmTask.Result.ToList();
-                Events = eventsTask.Result.Take(50).ToList();
-                PodMetricsList = metricsTask.Result.ToList();
-                ConfigMaps = configMapsTask.Result.ToList();
-                Secrets = secretsTask.Result.ToList();
-                Hpas = hpasTask.Result.ToList();
-                CronJobs = cronJobsTask.Result.ToList();
+                // PERF2-8: Render flush loop — batch renders at ~150ms intervals
+                var flushCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var flushTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!flushCts.Token.IsCancellationRequested)
+                        {
+                            await Task.Delay(150, flushCts.Token);
+                            if (datasetDirty)
+                            {
+                                datasetDirty = false;
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
+                await Task.WhenAll(tasks);
+                flushCts.Cancel();
+                flushCts.Dispose();
+
+                // Final flush — render any remaining dirty state
+                datasetDirty = false;
+                await InvokeAsync(StateHasChanged);
             }
         }
+        catch (OperationCanceledException) { return; } // CS-2: cancelled — new load takes over
         catch (Exception ex) { ErrorMessage = ex.Message; }
-        finally { IsLoading = false; StateHasChanged(); }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                // PERF-18: Save fresh data to cache
+                if (cacheKey is not null)
+                {
+                    Cache.Set(cacheKey, new AksPageSnapshot(
+                        Deployments, StatefulSets, Pods, Ingresses, HelmReleases,
+                        ConfigMaps, Secrets, Hpas, Events, CronJobs, PodMetricsList));
+                }
+
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged); // BL-2
+            }
+        }
     }
 
-    private async Task OnContextChanged(ChangeEventArgs e)
+    private async Task HandleContextChangedAsync(string newContext)
     {
-        var newContext = e.Value?.ToString() ?? "";
         if (newContext == ActiveContext) return;
+        Cache.InvalidateByPrefix("aks:"); // PERF-18: context switch — invalidate stale cache
         ActiveContext = newContext;
 
         if (!AppState.UseDemoData)
@@ -1167,10 +876,23 @@
         await LoadAsync();
     }
 
-    private async Task OnNamespaceChanged(ChangeEventArgs e)
+    private async Task HandleNamespaceChangedAsync(string ns)
     {
-        CurrentNamespace = e.Value?.ToString() ?? "default";
+        CurrentNamespace = ns;
+        // PERF-18: namespace switch does NOT invalidate — each ns has its own cache key
         await LoadAsync();
+    }
+
+    private void HandleToggleEvents(bool value)
+    {
+        ShowEvents = value;
+        StateHasChanged();
+    }
+
+    private void HandleTogglePortForwardSessions(bool value)
+    {
+        ShowPortForwardSessions = value;
+        StateHasChanged();
     }
 
     private void SwitchResourceType(string type)
@@ -1195,12 +917,21 @@
         switch (e.Key)
         {
             case "ArrowDown": SelectRelative(+1); return;
-            case "ArrowUp":   SelectRelative(-1); return;
-            case "Escape":    ClearSelection();   return;
-            case "/":         _ = FocusFilterAsync(); return;
+            case "ArrowUp": SelectRelative(-1); return;
+            case "Escape": ClearSelection(); return;
+            case "/": _ = FocusFilterAsync(); return;
         }
 
         _ = HandleLetterActionAsync(e.Key);
+    }
+
+    private static T? NavigateInList<T>(IEnumerable<T> items, T? current, int delta, Func<T, string> getName) where T :
+class
+    {
+        var list = items.ToList();
+        if (list.Count == 0) return current;
+        var idx = current is null ? -1 : list.FindIndex(item => getName(item) == getName(current));
+        return list[Math.Clamp(idx + delta, 0, list.Count - 1)];
     }
 
     private void SelectRelative(int delta)
@@ -1208,71 +939,39 @@
         switch (ActiveResourceType)
         {
             case "Deployments":
-            {
-                var items = FilteredDeployments.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedDeployment is null ? -1 : items.FindIndex(d => d.Name == SelectedDeployment.Name);
-                SelectedDeployment = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                SelectedDeployment = NavigateInList(FilteredDeployments, SelectedDeployment, delta, d => d.Name);
                 break;
-            }
-            case "Pods":
-            {
-                var items = FilteredPods.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedPod is null ? -1 : items.FindIndex(p => p.Name == SelectedPod.Name);
-                SelectedPod = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
+            case "Pods": SelectedPod = NavigateInList(FilteredPods, SelectedPod, delta, p => p.Name); break;
             case "StatefulSets":
-            {
-                var items = FilteredStatefulSets.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedStatefulSet is null ? -1 : items.FindIndex(s => s.Name == SelectedStatefulSet.Name);
-                SelectedStatefulSet = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
+                SelectedStatefulSet = NavigateInList(FilteredStatefulSets, SelectedStatefulSet, delta, s =>
+s.Name); break;
             case "ConfigMaps":
-            {
-                var items = FilteredConfigMaps.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedConfigMap is null ? -1 : items.FindIndex(cm => cm.Name == SelectedConfigMap.Name);
-                SelectedConfigMap = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
+                SelectedConfigMap = NavigateInList(FilteredConfigMaps, SelectedConfigMap, delta, cm => cm.Name);
                 break;
-            }
-            case "Secrets":
-            {
-                var items = FilteredSecrets.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedSecret is null ? -1 : items.FindIndex(s => s.Name == SelectedSecret.Name);
-                SelectedSecret = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
-            case "Ingresses":
-            {
-                var items = FilteredIngresses.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedIngress is null ? -1 : items.FindIndex(i => i.Name == SelectedIngress.Name);
-                SelectedIngress = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
-            case "Helm":
-            {
-                var items = FilteredHelmReleases.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedHelmRelease is null ? -1 : items.FindIndex(h => h.Name == SelectedHelmRelease.Name);
-                SelectedHelmRelease = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
-            case "CronJobs":
-            {
-                var items = FilteredCronJobs.ToList();
-                if (items.Count == 0) return;
-                var idx = SelectedCronJob is null ? -1 : items.FindIndex(cj => cj.Name == SelectedCronJob.Name);
-                SelectedCronJob = items[Math.Clamp(idx + delta, 0, items.Count - 1)];
-                break;
-            }
+            case "Secrets": SelectedSecret = NavigateInList(FilteredSecrets, SelectedSecret, delta, s => s.Name); break;
+            case "Ingresses": SelectedIngress = NavigateInList(FilteredIngresses, SelectedIngress, delta, i => i.Name); break;
+            case "Helm": SelectedHelmRelease = NavigateInList(FilteredHelmReleases, SelectedHelmRelease, delta, h => h.Name); break;
+            case "CronJobs": SelectedCronJob = NavigateInList(FilteredCronJobs, SelectedCronJob, delta, cj => cj.Name); break;
         }
+        PushAksSelection();
         StateHasChanged();
+    }
+
+    private void PushAksSelection()
+    {
+        object? selected = ActiveResourceType switch
+        {
+            "Deployments" => SelectedDeployment,
+            "Pods" => SelectedPod,
+            "StatefulSets" => SelectedStatefulSet,
+            "ConfigMaps" => SelectedConfigMap,
+            "Secrets" => SelectedSecret,
+            "Ingresses" => SelectedIngress,
+            "Helm" => SelectedHelmRelease,
+            "CronJobs" => SelectedCronJob,
+            _ => null
+        };
+        Selection.SetSelection("aks", selected);
     }
 
     private void ClearSelection()
@@ -1285,6 +984,7 @@
         SelectedIngress = null;
         SelectedHelmRelease = null;
         SelectedCronJob = null;
+        Selection.SetSelection("aks", null);
         StateHasChanged();
     }
 
@@ -1301,7 +1001,7 @@
                 switch (key)
                 {
                     case "l": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
-                    case "y": await OpenYaml("Deployment", SelectedDeployment.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("Deployment", SelectedDeployment.Name); break;
                     case "r": CtxDeployment = SelectedDeployment; await OnCtxRestartDeployment(); break;
                     case "Enter": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
                 }
@@ -1311,7 +1011,7 @@
                 switch (key)
                 {
                     case "l": CtxPod = SelectedPod; OnCtxViewPodLogs(); break;
-                    case "y": await OpenYaml("Pod", SelectedPod.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("Pod", SelectedPod.Name); break;
                     case "s": CtxPod = SelectedPod; await OnCtxOpenPodShell(); break;
                     case "p": CtxPod = SelectedPod; OnCtxPortForward(); break;
                     case "d": CtxPod = SelectedPod; await OnCtxKillPod(); break;
@@ -1323,7 +1023,7 @@
                 switch (key)
                 {
                     case "l": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
-                    case "y": await OpenYaml("StatefulSet", SelectedStatefulSet.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("StatefulSet", SelectedStatefulSet.Name); break;
                     case "r": CtxStatefulSet = SelectedStatefulSet; await OnCtxRestartStatefulSet(); break;
                     case "Enter": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
                 }
@@ -1332,7 +1032,7 @@
             case "ConfigMaps" when SelectedConfigMap is not null:
                 switch (key)
                 {
-                    case "y": await OpenYaml("ConfigMap", SelectedConfigMap.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("ConfigMap", SelectedConfigMap.Name); break;
                     case "Enter": CtxConfigMap = SelectedConfigMap; OnCtxViewConfigMapKeys(); break;
                 }
                 break;
@@ -1340,7 +1040,7 @@
             case "Secrets" when SelectedSecret is not null:
                 switch (key)
                 {
-                    case "y": await OpenYaml("Secret", SelectedSecret.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("Secret", SelectedSecret.Name); break;
                     case "Enter": CtxSecret = SelectedSecret; OnCtxViewSecretKeys(); break;
                 }
                 break;
@@ -1348,7 +1048,7 @@
             case "Ingresses" when SelectedIngress is not null:
                 switch (key)
                 {
-                    case "y": await OpenYaml("Ingress", SelectedIngress.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("Ingress", SelectedIngress.Name); break;
                     case "Enter": CtxIngress = SelectedIngress; await OnCtxOpenIngressUrl(); break;
                 }
                 break;
@@ -1446,7 +1146,7 @@
         };
         CloseAllMenus();
         if (kind is not null && name is not null)
-            await OpenYaml(kind, name);
+            await _detailPanels.OpenYamlAsync(kind, name);
     }
 
     private void OnCtxViewDeploymentLogs()
@@ -1454,9 +1154,9 @@
         var deployment = CtxDeployment;
         CloseAllMenus();
         if (deployment is null) return;
-        CloseYaml();
+        _detailPanels?.CloseYaml();
         var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
-        if (pod is not null) { LogPodName = pod.Name; StateHasChanged(); }
+        if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name);
     }
 
     private void OnCtxViewPodLogs()
@@ -1464,9 +1164,8 @@
         var pod = CtxPod;
         CloseAllMenus();
         if (pod is null) return;
-        CloseYaml();
-        LogPodName = pod.Name;
-        StateHasChanged();
+        _detailPanels?.CloseYaml();
+        _detailPanels?.ShowPodLogs(pod.Name);
     }
 
     private async Task OnCtxRestartDeployment()
@@ -1505,7 +1204,7 @@
         try
         {
             await Client.DeletePodAsync(CurrentNamespace, pod.Name);
-            if (LogPodName == pod.Name) CloseLogs();
+            _detailPanels?.CloseLogs();
             await LoadAsync();
             Notifications.ShowSuccess("Pod deleted", pod.Name);
         }
@@ -1525,7 +1224,7 @@
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
             Notifications.ShowSuccess("URL copied", url);
         }
-        catch { /* clipboard unavailable */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "JS clipboard write failed"); }
     }
 
     private async Task OnCtxOpenIngressUrl()
@@ -1559,7 +1258,7 @@
         var cj = CtxCronJob;
         CloseAllMenus();
         if (cj is null) return;
-        await OpenYaml("CronJob", cj.Name);
+        await _detailPanels.OpenYamlAsync("CronJob", cj.Name);
     }
 
     private void OnCtxScaleDeployment()
@@ -1567,133 +1266,36 @@
         var deployment = CtxDeployment;
         CloseAllMenus();
         if (deployment is null) return;
-        CloseYaml();
-        CloseLogs();
-        _scaleIsStatefulSet = false;
-        ScaleTarget = deployment.Name;
-        ScaleReplicas = deployment.Replicas;
-        StateHasChanged();
+        _detailPanels.ShowScale(deployment.Name, deployment.Replicas, false);
     }
 
-    private async Task OnScaleConfirm()
-    {
-        if (ScaleTarget is null || Client is null) return;
-        var name = ScaleTarget;
-        var replicas = ScaleReplicas;
-        var isStatefulSet = _scaleIsStatefulSet;
-        ScaleTarget = null;
-        StateHasChanged();
-
-        if (IsProduction)
-        {
-            var confirmed = await Confirm.ShowAsync(
-            $"Scale \"{name}\" to {replicas} replicas in production?",
-            name,
-            requireTypedName: true);
-            if (!confirmed) return;
-        }
-
-        try
-        {
-            if (isStatefulSet)
-                await Client.ScaleStatefulSetAsync(CurrentNamespace, name, replicas);
-            else
-                await Client.ScaleDeploymentAsync(CurrentNamespace, name, replicas);
-            await LoadAsync();
-            Notifications.ShowSuccess("Scaled", $"{name} → {replicas} replica{(replicas == 1 ? "" : "s")}");
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to scale", ex: ex); }
-    }
-
-    private void OnScaleCancel()
-    {
-        ScaleTarget = null;
-        ScaleReplicas = 0;
-        StateHasChanged();
-    }
+    // (OnScaleConfirm and OnScaleCancel moved to AksDetailPanels)
 
     private async Task OnCtxViewHelmHistory()
     {
         var helm = CtxHelm;
         CloseAllMenus();
-        if (helm is null || Client is null) return;
-        CloseYaml();
-        CloseHelmValues();
-        HelmHistoryTarget = helm.Name;
-        HelmHistoryLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            HelmHistory = (await Client.GetHelmReleaseHistoryAsync(CurrentNamespace, helm.Name)).ToList();
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
-        finally { HelmHistoryLoading = false; StateHasChanged(); }
-    }
-
-    private void CloseHelmHistory()
-    {
-        HelmHistoryTarget = null;
-        HelmHistory = [];
-        HelmRollbackMode = false;
-        StateHasChanged();
+        if (helm is null) return;
+        _detailPanels?.CloseYaml();
+        await _detailPanels!.ShowHelmHistoryAsync(helm.Name);
     }
 
     private async Task OnCtxViewHelmValues()
     {
         var helm = CtxHelm;
         CloseAllMenus();
-        if (helm is null || Client is null) return;
-        CloseYaml();
-        CloseHelmHistory();
-        HelmValuesTarget = helm.Name;
-        HelmValuesLoading = true;
-        HelmValuesText = null;
-        StateHasChanged();
-
-        try
-        {
-            HelmValuesText = await Client.GetHelmReleaseValuesAsync(CurrentNamespace, helm.Name);
-            _helmValuesHighlighted = await HighlightAsync(HelmValuesText);
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
-        finally { HelmValuesLoading = false; StateHasChanged(); }
-    }
-
-    private void CloseHelmValues()
-    {
-        HelmValuesTarget = null;
-        HelmValuesText = null;
-        StateHasChanged();
+        if (helm is null) return;
+        _detailPanels?.CloseYaml();
+        await _detailPanels!.ShowHelmValuesAsync(helm.Name);
     }
 
     private async Task OnCtxRollbackHelm()
     {
         var helm = CtxHelm;
         CloseAllMenus();
-        if (helm is null || Client is null) return;
-
-        // Open history panel in rollback mode so user can pick a revision
-        CloseYaml();
-        CloseHelmValues();
-        HelmHistoryTarget = helm.Name;
-        HelmRollbackMode = true;
-        HelmHistoryLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            HelmHistory = (await Client.GetHelmReleaseHistoryAsync(CurrentNamespace, helm.Name)).ToList();
-            var hasPrevious = HelmHistory.Any(r => r.Status == "superseded");
-            if (!hasPrevious)
-            {
-                ErrorMessage = $"No previous revisions available for \"{helm.Name}\".";
-                CloseHelmHistory();
-                return;
-            }
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; CloseHelmHistory(); return; }
-        finally { HelmHistoryLoading = false; StateHasChanged(); }
+        if (helm is null) return;
+        _detailPanels?.CloseYaml();
+        await _detailPanels!.ShowHelmRollbackAsync(helm.Name);
     }
 
     // ── New feature handlers ──
@@ -1704,9 +1306,7 @@
         var d = CtxDeployment;
         CloseAllMenus();
         if (d is null) return;
-        LogPodName = null;
-        LogDeploymentName = d.Name;
-        StateHasChanged();
+        _detailPanels.ShowDeploymentLogs(d.Name);
     }
 
     private void OnCtxAllPodsLogsStatefulSet()
@@ -1714,9 +1314,7 @@
         var s = CtxStatefulSet;
         CloseAllMenus();
         if (s is null) return;
-        LogPodName = null;
-        LogDeploymentName = s.Name;
-        StateHasChanged();
+        _detailPanels.ShowDeploymentLogs(s.Name);
     }
 
     // Feature 2: StatefulSet actions
@@ -1746,12 +1344,7 @@
         var ss = CtxStatefulSet;
         CloseAllMenus();
         if (ss is null) return;
-        CloseYaml();
-        CloseLogs();
-        _scaleIsStatefulSet = true;
-        ScaleTarget = ss.Name;
-        ScaleReplicas = ss.Replicas;
-        StateHasChanged();
+        _detailPanels.ShowScale(ss.Name, ss.Replicas, true);
     }
 
     // Feature 3: ConfigMap / Secret viewer
@@ -1760,8 +1353,7 @@
         var cm = CtxConfigMap;
         CloseAllMenus();
         if (cm is null) return;
-        ConfigMapDetailTarget = cm;
-        StateHasChanged();
+        _detailPanels.ShowConfigMapDetail(cm);
     }
 
     private void OnCtxViewSecretKeys()
@@ -1769,8 +1361,7 @@
         var secret = CtxSecret;
         CloseAllMenus();
         if (secret is null) return;
-        SecretDetailTarget = secret;
-        StateHasChanged();
+        _detailPanels.ShowSecretDetail(secret);
     }
 
     // Feature 4: Container details
@@ -1779,8 +1370,7 @@
         var pod = CtxPod;
         CloseAllMenus();
         if (pod is null) return;
-        ContainerDetailPodName = pod.Name;
-        StateHasChanged();
+        _detailPanels.ShowContainerDetails(pod.Name);
     }
 
     private void OnCtxContainerDetailsDeployment()
@@ -1791,15 +1381,13 @@
         var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(d.Name) && p.Ready)
         ?? Pods.FirstOrDefault(p => p.Name.StartsWith(d.Name));
         if (pod is null) return;
-        ContainerDetailPodName = pod.Name;
-        StateHasChanged();
+        _detailPanels.ShowContainerDetails(pod.Name);
     }
 
     // Feature 5: HPA detail
     private void OpenHpaDetail(HpaInfo hpa)
     {
-        HpaDetailTarget = hpa;
-        StateHasChanged();
+        _detailPanels.ShowHpaDetail(hpa);
     }
 
     // Feature 6: Open shell in pod
@@ -1851,46 +1439,14 @@
         catch (Exception ex) { Notifications.ShowError("Failed to stop session", ex.Message, ex: ex); }
     }
 
-    private async Task OnRollbackToRevision(HelmRevisionInfo rev)
+    private void HandleToggleEventsOff()
     {
-        if (HelmHistoryTarget is null || Client is null) return;
-        var releaseName = HelmHistoryTarget;
-
-        var confirmed = await Confirm.ShowAsync(
-        $"Rollback \"{releaseName}\" to revision {rev.Revision} ({rev.Chart})?",
-        releaseName,
-        requireTypedName: IsProduction);
-        if (!confirmed) return;
-
-        try
-        {
-            await Client.RollbackHelmReleaseAsync(CurrentNamespace, releaseName, rev.Revision);
-            CloseHelmHistory();
-            await LoadAsync();
-            Notifications.ShowSuccess("Helm rollback complete", $"{releaseName} → revision {rev.Revision}");
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Helm rollback failed", ex: ex); }
+        ShowEvents = false;
+        StateHasChanged();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_initEditOverlay)
-        {
-            _initEditOverlay = false;
-            await JS.InvokeVoidAsync("yamlHighlight.initEditOverlay", _editTextarea, _editPre);
-        }
-    }
-
-    private async Task<MarkupString> HighlightAsync(string? text)
-    {
-        if (string.IsNullOrEmpty(text)) return default;
-        // Normalize line endings and strip blank lines before passing to the highlighter
-        var clean = string.Join('\n', text.ReplaceLineEndings("\n")
-        .Split('\n')
-        .Where(static l => !string.IsNullOrWhiteSpace(l)));
-        var html = await JS.InvokeAsync<string>("yamlHighlight.highlight", clean);
-        return (MarkupString)html;
-    }
+    private static string TruncatePodName(string name)
+    => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
 
     private void CloseAllMenus()
     {
@@ -1905,134 +1461,8 @@
     }
 
     // ── Side panel helpers ──
-
-    private void CloseLogs() { LogPodName = null; LogDeploymentName = null; StateHasChanged(); }
-    private void CloseDeploymentLogs() { LogDeploymentName = null; StateHasChanged(); }
-    private void CloseContainerDetail() { ContainerDetailPodName = null; StateHasChanged(); }
-    private void CloseConfigMapDetail() { ConfigMapDetailTarget = null; StateHasChanged(); }
-    private void CloseSecretDetail() { SecretDetailTarget = null; StateHasChanged(); }
-
-    private async Task OpenYaml(string kind, string name, bool startInEditMode = false)
-    {
-        LogPodName = null;
-        ScaleTarget = null;
-        YamlTarget = (kind, name);
-        YamlText = null;
-        YamlError = null;
-        YamlLoading = true;
-        YamlEditMode = false;
-        YamlEditText = string.Empty;
-        YamlApplying = false;
-        StateHasChanged();
-
-        try
-        {
-            YamlText = await Client!.GetResourceYamlAsync(CurrentNamespace, kind, name);
-            _yamlHighlighted = await HighlightAsync(YamlText);
-            if (startInEditMode && YamlIsEditable)
-            {
-                YamlEditMode = true;
-                YamlEditText = YamlText ?? string.Empty;
-                _yamlEditHighlighted = _yamlHighlighted;
-                _editKey++;
-                _initEditOverlay = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            YamlError = ex.Message;
-        }
-        finally
-        {
-            YamlLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void CloseYaml()
-    {
-        YamlTarget = null;
-        YamlText = null;
-        YamlError = null;
-        YamlEditMode = false;
-        YamlEditText = string.Empty;
-        YamlApplying = false;
-        _yamlSearch = string.Empty;
-        _yamlSearchCount = 0;
-        _showYamlSearch = false;
-        StateHasChanged();
-    }
-
-    private async Task OnYamlSearchInput(ChangeEventArgs e)
-    {
-        _yamlSearch = e.Value?.ToString() ?? string.Empty;
-        if (_yamlViewPre.Id is null) { StateHasChanged(); return; }
-        _yamlSearchCount = await JS.InvokeAsync<int>("yamlHighlight.searchInPre", _yamlViewPre, _yamlSearch);
-        StateHasChanged();
-    }
-
-    private async Task ClearYamlSearch()
-    {
-        _yamlSearch = string.Empty;
-        _yamlSearchCount = 0;
-        if (_yamlViewPre.Id is not null)
-            await JS.InvokeVoidAsync("yamlHighlight.clearSearch", _yamlViewPre);
-        StateHasChanged();
-    }
-
-    private async Task OnEditYamlToggle()
-    {
-        YamlEditMode = true;
-        YamlEditText = YamlText ?? string.Empty;
-        _yamlEditHighlighted = _yamlHighlighted;
-        _editKey++;
-        _initEditOverlay = true;
-        StateHasChanged();
-        await Task.CompletedTask;
-    }
-
-    private void OnCancelYamlEdit()
-    {
-        YamlEditMode = false;
-        YamlEditText = string.Empty;
-        StateHasChanged();
-    }
-
-    private async Task OnYamlEditInput(ChangeEventArgs e)
-    {
-        YamlEditText = e.Value?.ToString() ?? string.Empty;
-        _yamlEditHighlighted = await HighlightAsync(YamlEditText);
-        StateHasChanged();
-    }
-
-    private async Task OnSaveYaml()
-    {
-        if (YamlTarget is null || Client is null) return;
-        YamlApplying = true;
-        StateHasChanged();
-
-        try
-        {
-            if (IsProduction)
-            {
-                var confirmed = await Confirm.ShowAsync(
-                $"Apply YAML changes to {YamlTarget.Value.Kind} \"{YamlTarget.Value.Name}\" in production?",
-                YamlTarget.Value.Name,
-                requireTypedName: true);
-                if (!confirmed) { YamlApplying = false; StateHasChanged(); return; }
-            }
-
-            await Client.ApplyResourceYamlAsync(CurrentNamespace, YamlTarget.Value.Kind, YamlTarget.Value.Name, YamlEditText);
-            YamlText = YamlEditText;
-            _yamlHighlighted = await HighlightAsync(YamlText);
-            YamlEditMode = false;
-            YamlEditText = string.Empty;
-            StateHasChanged();
-            Notifications.ShowSuccess("YAML applied", $"{YamlTarget.Value.Kind} {YamlTarget.Value.Name}");
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; Notifications.ShowError("Failed to apply YAML", ex: ex); }
-        finally { YamlApplying = false; StateHasChanged(); }
-    }
+    // (CloseLogs, CloseDeploymentLogs, CloseContainerDetail, CloseConfigMapDetail,
+    // CloseSecretDetail moved to AksDetailPanels)
 
     private async Task OnCtxEditYaml(char source)
     {
@@ -2047,14 +1477,26 @@
         };
         CloseAllMenus();
         if (kind is not null && name is not null)
-            await OpenYaml(kind, name, startInEditMode: true);
+            await _detailPanels.OpenYamlAsync(kind, name, editMode: true);
     }
 
-    private static string TruncatePodName(string name)
-    => name.Length > 36 ? name[..18] + "…" + name[^14..] : name;
+    private async Task CopyToClipboardAsync(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        CloseAllMenus();
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        Notifications.ShowSuccess("Copied!");
+    }
 
     public void Dispose()
     {
+        var cts = Interlocked.Exchange(ref _cts, null!);
+        cts?.Cancel();
+        cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
+                                   "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
+            Commands.Unregister(id);
+        Selection.SetSelection("aks", null);
     }
 }

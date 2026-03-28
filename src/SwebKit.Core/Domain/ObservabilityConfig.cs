@@ -12,6 +12,11 @@ public class ObservabilityConfig
     public int MaxRowsPerQuery { get; set; } = 500;
 
     public List<SavedQuery> SavedQueries { get; set; } = [];
+
+    public double FailureRateRedThreshold { get; set; } = 0.05;
+    public double FailureRateAmberThreshold { get; set; } = 0.01;
+    public double LatencyRedThresholdMs { get; set; } = 2000;
+    public double LatencyAmberThresholdMs { get; set; } = 500;
 }
 
 public class SavedQuery

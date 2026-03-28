@@ -18,12 +18,24 @@ namespace SwebKit.Kubernetes.AksClient;
 public class KubernetesAksClient : IAksClient, IAsyncDisposable
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
-    private readonly k8s.Kubernetes _client;
+
+    private static readonly DefaultAzureCredentialOptions AzureCredentialOptions = new()
+    {
+        ExcludeEnvironmentCredential = true,
+        ExcludeWorkloadIdentityCredential = true,
+        ExcludeManagedIdentityCredential = true,
+        ExcludeAzureDeveloperCliCredential = true,
+        ExcludeInteractiveBrowserCredential = true,
+    };
+
+    private k8s.Kubernetes _client;
     private readonly string? _kubeconfigPath;
     private readonly string? _kubeconfigContext;
 
     private readonly Dictionary<Guid, Process> _portForwardProcesses = [];
     private readonly Lock _portForwardLock = new();
+    private readonly Lock _rebuildLock = new();
+    private DateTime _lastRebuild = DateTime.MinValue;
 
     public KubernetesAksClient(
         string? kubeconfigContext = null,
@@ -36,6 +48,46 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         TryApplyAzureCredentialFallback(config, kubeconfigPath);
 
         _client = new k8s.Kubernetes(config);
+    }
+
+    private void RebuildClient()
+    {
+        lock (_rebuildLock)
+        {
+            if ((DateTime.UtcNow - _lastRebuild).TotalSeconds < 30)
+                return;
+
+            var config = BuildClientConfiguration(_kubeconfigContext, _kubeconfigPath);
+            TryApplyAzureCredentialFallback(config, _kubeconfigPath);
+            _client = new k8s.Kubernetes(config);
+            _lastRebuild = DateTime.UtcNow;
+        }
+    }
+
+    private async Task<T> WithAuthRetryAsync<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            RebuildClient();
+            return await action();
+        }
+    }
+
+    private async Task WithAuthRetryAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            RebuildClient();
+            await action();
+        }
     }
 
     internal static KubernetesClientConfiguration BuildClientConfiguration(string? kubeconfigContext, string? kubeconfigPath)
@@ -71,8 +123,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         {
             try
             {
-                var credential = new DefaultAzureCredential();
-                var accessToken = credential.GetToken(new TokenRequestContext([scope]), default);
+                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
                 if (!string.IsNullOrWhiteSpace(accessToken.Token))
                 {
                     config.AccessToken = accessToken.Token;
@@ -88,84 +141,164 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.AppsV1.ListNamespacedDeploymentAsync(ns, cancellationToken: ct);
-        return result.Items.Select(d => new DeploymentInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = d.Metadata.Name,
-            Namespace = d.Metadata.NamespaceProperty ?? ns,
-            Replicas = d.Spec?.Replicas ?? 0,
-            ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
-            Status = d.Status?.Conditions?.FirstOrDefault(c => c.Type == "Available")?.Status ?? "Unknown",
-            Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : []
-        }).ToList();
+            var result = await _client.AppsV1.ListNamespacedDeploymentAsync(ns, cancellationToken: ct);
+            return result.Items.Select(d => new DeploymentInfo
+            {
+                Name = d.Metadata.Name,
+                Namespace = d.Metadata.NamespaceProperty ?? ns,
+                Replicas = d.Spec?.Replicas ?? 0,
+                ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
+                Status = d.Status?.Conditions?.FirstOrDefault(c => c.Type == "Available")?.Status ?? "Unknown",
+                Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : []
+            }).ToList();
+        });
     }
 
     public async Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
     {
-        var result = await _client.CoreV1.ListNamespacedPodAsync(ns, labelSelector: labelSelector, cancellationToken: ct);
-        return result.Items.Select(p => new PodInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = p.Metadata.Name,
-            Namespace = p.Metadata.NamespaceProperty ?? ns,
-            Phase = p.Status?.Phase ?? "Unknown",
-            Ready = p.Status?.ContainerStatuses?.All(c => c.Ready) ?? false,
-            NodeName = p.Spec?.NodeName,
-            StartTime = p.Status?.StartTime.HasValue == true ? new DateTimeOffset(p.Status.StartTime.Value) : null,
-            Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
-            Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
-        }).ToList();
+            var result = await _client.CoreV1.ListNamespacedPodAsync(ns, labelSelector: labelSelector, cancellationToken: ct);
+            return result.Items.Select(p =>
+            {
+                var containerStatuses = p.Status?.ContainerStatuses;
+                var lastTerminated = containerStatuses?
+                    .Select(c => c.LastState?.Terminated)
+                    .Where(t => t?.FinishedAt is not null)
+                    .OrderByDescending(t => t!.FinishedAt)
+                    .FirstOrDefault();
+
+                return new PodInfo
+                {
+                    Name = p.Metadata.Name,
+                    Namespace = p.Metadata.NamespaceProperty ?? ns,
+                    Phase = p.Status?.Phase ?? "Unknown",
+                    Status = DeriveDisplayStatus(p),
+                    Ready = containerStatuses?.All(c => c.Ready) ?? false,
+                    ReadyContainers = containerStatuses?.Count(c => c.Ready) ?? 0,
+                    TotalContainers = p.Spec?.Containers?.Count ?? 0,
+                    RestartCount = containerStatuses?.Sum(c => c.RestartCount) ?? 0,
+                    LastRestartTime = lastTerminated?.FinishedAt is { } fin ? new DateTimeOffset(fin) : null,
+                    LastRestartReason = lastTerminated?.Reason,
+                    PodIP = p.Status?.PodIP,
+                    NodeName = p.Spec?.NodeName,
+                    StartTime = p.Status?.StartTime.HasValue == true ? new DateTimeOffset(p.Status.StartTime.Value) : null,
+                    Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
+                    Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
+                };
+            }).ToList();
+        });
+    }
+
+    /// <summary>
+    /// Derives the display status matching kubectl output from container states.
+    /// Priority: DeletionTimestamp → init container waiting reason → container waiting reason →
+    /// container terminated reason → pod phase.
+    /// </summary>
+    private static string DeriveDisplayStatus(V1Pod pod)
+    {
+        if (pod.Metadata?.DeletionTimestamp is not null)
+            return "Terminating";
+
+        var phase = pod.Status?.Phase ?? "Unknown";
+
+        if (pod.Status?.InitContainerStatuses is { } initStatuses)
+        {
+            foreach (var cs in initStatuses)
+            {
+                if (cs.State?.Waiting?.Reason is { } initWaitReason)
+                    return $"Init:{initWaitReason}";
+                if (cs.State?.Terminated is { } initTerm && initTerm.ExitCode != 0)
+                    return initTerm.Reason ?? $"Init:ExitCode:{initTerm.ExitCode}";
+            }
+        }
+
+        if (pod.Status?.ContainerStatuses is { } statuses)
+        {
+            foreach (var cs in statuses)
+            {
+                if (cs.State?.Waiting?.Reason is { } waitReason)
+                    return waitReason;
+            }
+
+            foreach (var cs in statuses)
+            {
+                if (cs.State?.Terminated is { } term)
+                {
+                    if (term.Reason is { Length: > 0 } reason)
+                        return reason;
+                    if (term.Signal is not null and not 0)
+                        return $"Signal:{term.Signal}";
+                    if (term.ExitCode != 0)
+                        return $"ExitCode:{term.ExitCode}";
+                }
+            }
+        }
+
+        return phase;
     }
 
     public async Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null, CancellationToken ct = default)
     {
-        var fieldSelector = involvedObjectName is not null
-            ? $"involvedObject.name={involvedObjectName}"
-            : null;
-        var result = await _client.CoreV1.ListNamespacedEventAsync(ns, fieldSelector: fieldSelector, cancellationToken: ct);
-        return result.Items
-            .OrderByDescending(e => e.LastTimestamp)
-            .Select(e => new KubernetesEvent
-            {
-                Name = e.Metadata.Name,
-                Namespace = e.Metadata.NamespaceProperty ?? ns,
-                Type = e.Type ?? "Normal",
-                Reason = e.Reason,
-                Message = e.Message,
-                InvolvedObjectName = e.InvolvedObject?.Name,
-                InvolvedObjectKind = e.InvolvedObject?.Kind,
-                LastTimestamp = e.LastTimestamp.HasValue ? new DateTimeOffset(e.LastTimestamp.Value) : null,
-                Count = e.Count ?? 1
-            }).ToList();
+        return await WithAuthRetryAsync(async () =>
+        {
+            var fieldSelector = involvedObjectName is not null
+                ? $"involvedObject.name={involvedObjectName}"
+                : null;
+            var result = await _client.CoreV1.ListNamespacedEventAsync(ns, fieldSelector: fieldSelector, cancellationToken: ct);
+            return result.Items
+                .OrderByDescending(e => e.LastTimestamp)
+                .Select(e => new KubernetesEvent
+                {
+                    Name = e.Metadata.Name,
+                    Namespace = e.Metadata.NamespaceProperty ?? ns,
+                    Type = e.Type ?? "Normal",
+                    Reason = e.Reason,
+                    Message = e.Message,
+                    InvolvedObjectName = e.InvolvedObject?.Name,
+                    InvolvedObjectKind = e.InvolvedObject?.Kind,
+                    LastTimestamp = e.LastTimestamp.HasValue ? new DateTimeOffset(e.LastTimestamp.Value) : null,
+                    Count = e.Count ?? 1
+                }).ToList();
+        });
     }
 
     public async Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct);
-        return result.Items.Select(ing => new IngressInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = ing.Metadata.Name,
-            Namespace = ing.Metadata.NamespaceProperty ?? ns,
-            IngressClass = ing.Spec?.IngressClassName,
-            Rules = ing.Spec?.Rules?.Select(r => new IngressRule
+            var result = await _client.NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct);
+            return result.Items.Select(ing => new IngressInfo
             {
-                Host = r.Host,
-                Paths = r.Http?.Paths?.Select(p => new IngressPath
+                Name = ing.Metadata.Name,
+                Namespace = ing.Metadata.NamespaceProperty ?? ns,
+                IngressClass = ing.Spec?.IngressClassName,
+                Rules = ing.Spec?.Rules?.Select(r => new IngressRule
                 {
-                    Path = p.Path ?? "/",
-                    PathType = p.PathType,
-                    ServiceName = p.Backend?.Service?.Name,
-                    ServicePort = p.Backend?.Service?.Port?.Number
-                }).ToList() ?? []
-            }).ToList() ?? [],
-            Addresses = ing.Status?.LoadBalancer?.Ingress?.Select(i => i.Ip ?? i.Hostname ?? "").Where(a => a != "").ToList() ?? [],
-            Labels = ing.Metadata.Labels is not null ? new Dictionary<string, string>(ing.Metadata.Labels) : []
-        }).ToList();
+                    Host = r.Host,
+                    Paths = r.Http?.Paths?.Select(p => new IngressPath
+                    {
+                        Path = p.Path ?? "/",
+                        PathType = p.PathType,
+                        ServiceName = p.Backend?.Service?.Name,
+                        ServicePort = p.Backend?.Service?.Port?.Number
+                    }).ToList() ?? []
+                }).ToList() ?? [],
+                Addresses = ing.Status?.LoadBalancer?.Ingress?.Select(i => i.Ip ?? i.Hostname ?? "").Where(a => a != "").ToList() ?? [],
+                Labels = ing.Metadata.Labels is not null ? new Dictionary<string, string>(ing.Metadata.Labels) : []
+            }).ToList();
+        });
     }
 
     public async Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
-        var result = await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct);
-        return result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await _client.CoreV1.ListNamespaceAsync(cancellationToken: ct);
+            return result.Items.Select(n => n.Metadata.Name).OrderBy(n => n).ToList();
+        });
     }
 
     public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
@@ -198,40 +331,43 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
     {
-        // Helm stores releases as Secrets with type=helm.sh/release.v1 and label owner=helm
-        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
-            ns, labelSelector: "owner=helm", cancellationToken: ct);
-
-        var releases = new Dictionary<string, HelmReleaseInfo>();
-        foreach (var secret in secrets.Items)
+        return await WithAuthRetryAsync(async () =>
         {
-            var labels = secret.Metadata.Labels;
-            var name = (labels is not null && labels.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
-            var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
-            var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
-            var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
+            // Helm stores releases as Secrets with type=helm.sh/release.v1 and label owner=helm
+            var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+                ns, labelSelector: "owner=helm", cancellationToken: ct);
 
-            // Keep only the latest revision per release name
-            if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
-                continue;
-
-            var chartVersion = TryParseChartVersion(chart);
-
-            releases[name] = new HelmReleaseInfo
+            var releases = new Dictionary<string, HelmReleaseInfo>();
+            foreach (var secret in secrets.Items)
             {
-                Name = name,
-                Namespace = ns,
-                Chart = chart,
-                ChartVersion = chartVersion,
-                Revision = version,
-                Status = status,
-                Updated = secret.Metadata.CreationTimestamp.HasValue
-                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
-                    : null
-            };
-        }
+                var labels = secret.Metadata.Labels;
+                var name = (labels is not null && labels.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
+                var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+                var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+                var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
 
-        return releases.Values.OrderBy(r => r.Name).ToList();
+                // Keep only the latest revision per release name
+                if (releases.TryGetValue(name, out var existing) && existing.Revision >= version)
+                    continue;
+
+                var chartVersion = TryParseChartVersion(chart);
+
+                releases[name] = new HelmReleaseInfo
+                {
+                    Name = name,
+                    Namespace = ns,
+                    Chart = chart,
+                    ChartVersion = chartVersion,
+                    Revision = version,
+                    Status = status,
+                    Updated = secret.Metadata.CreationTimestamp.HasValue
+                        ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                        : null
+                };
+            }
+
+            return releases.Values.OrderBy(r => r.Name).ToList();
+        });
     }
 
     /// <summary>
@@ -257,28 +393,29 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         if (kind.Equals("helm", StringComparison.OrdinalIgnoreCase))
             return await GetHelmManifestAsync(ns, name, ct);
 
-        object resource = kind.ToLowerInvariant() switch
+        return await WithAuthRetryAsync(async () =>
         {
-            "deployment" => await _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct),
-            "pod" => await _client.CoreV1.ReadNamespacedPodAsync(name, ns, cancellationToken: ct),
-            "ingress" => await _client.NetworkingV1.ReadNamespacedIngressAsync(name, ns, cancellationToken: ct),
-            "service" => await _client.CoreV1.ReadNamespacedServiceAsync(name, ns, cancellationToken: ct),
-            "statefulset" => await _client.AppsV1.ReadNamespacedStatefulSetAsync(name, ns, cancellationToken: ct),
-            "configmap" => await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct),
-            "secret" => await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct),
-            "horizontalpodautoscaler" or "hpa" => await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct),
-            "cronjob" => await _client.BatchV1.ReadNamespacedCronJobAsync(name, ns, cancellationToken: ct),
-            _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
-        };
+            object resource = kind.ToLowerInvariant() switch
+            {
+                "deployment" => await _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct),
+                "pod" => await _client.CoreV1.ReadNamespacedPodAsync(name, ns, cancellationToken: ct),
+                "ingress" => await _client.NetworkingV1.ReadNamespacedIngressAsync(name, ns, cancellationToken: ct),
+                "service" => await _client.CoreV1.ReadNamespacedServiceAsync(name, ns, cancellationToken: ct),
+                "statefulset" => await _client.AppsV1.ReadNamespacedStatefulSetAsync(name, ns, cancellationToken: ct),
+                "configmap" => await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct),
+                "secret" => await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct),
+                "horizontalpodautoscaler" or "hpa" => await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct),
+                "cronjob" => await _client.BatchV1.ReadNamespacedCronJobAsync(name, ns, cancellationToken: ct),
+                _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
+            };
 
-        return KubernetesYaml.Serialize(resource);
+            return KubernetesYaml.Serialize(resource);
+        });
     }
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
     {
-        var args = $"get manifest {releaseName} --namespace {ns}";
-        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
-            args += $" --kubeconfig \"{_kubeconfigPath}\"";
+        var args = $"get manifest {releaseName} --namespace {ns}{BuildKubeconfigArgs()}";
 
         var psi = new ProcessStartInfo("helm")
         {
@@ -296,7 +433,36 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         await process.WaitForExitAsync(ct);
 
         if (process.ExitCode != 0)
+        {
+            if (IsForbiddenError(stderr))
+            {
+                var token = TryAcquireFreshAzureToken();
+                if (token is not null)
+                {
+                    var retryPsi = new ProcessStartInfo("helm")
+                    {
+                        Arguments = $"get manifest {releaseName} --namespace {ns}{BuildKubeconfigArgs()} --kube-token {token}",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                    var retryProcess = Process.Start(retryPsi)
+                        ?? throw new InvalidOperationException("Failed to start helm process.");
+                    var retryStdout = await retryProcess.StandardOutput.ReadToEndAsync(ct);
+                    var retryStderr = await retryProcess.StandardError.ReadToEndAsync(ct);
+                    await retryProcess.WaitForExitAsync(ct);
+
+                    if (retryProcess.ExitCode != 0)
+                        throw new InvalidOperationException($"helm get manifest failed after credential refresh (exit {retryProcess.ExitCode}): {retryStderr}");
+
+                    return retryStdout;
+                }
+            }
+
             throw new InvalidOperationException($"helm get manifest failed (exit {process.ExitCode}): {stderr}");
+        }
 
         return stdout;
     }
@@ -337,7 +503,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
         var psi = new ProcessStartInfo("kubectl")
         {
-            Arguments = $"port-forward {resourceName} {localPort}:{remotePort} -n {ns}",
+            Arguments = $"port-forward {resourceName} {localPort}:{remotePort} -n {ns}{BuildKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -413,7 +579,8 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
     {
-        var args = $"exec -it {podName} -n {ns} -c {container} -- /bin/sh";
+        var kubeconfigArgs = BuildKubeconfigArgs();
+        var args = $"exec -it {podName} -n {ns} -c {container}{kubeconfigArgs} -- /bin/sh";
         try
         {
             Process.Start(new ProcessStartInfo("wt.exe", $"kubectl {args}") { UseShellExecute = true });
@@ -433,132 +600,147 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
     {
-        // Equivalent to `kubectl rollout restart deployment/<name> -n <ns>`
-        // Patches the pod template annotation with a restart timestamp.
-        var patch = new k8s.Models.V1Deployment
+        await WithAuthRetryAsync(async () =>
         {
-            Spec = new k8s.Models.V1DeploymentSpec
+            // Equivalent to `kubectl rollout restart deployment/<name> -n <ns>`
+            // Patches the pod template annotation with a restart timestamp.
+            var patch = new k8s.Models.V1Deployment
             {
-                Template = new k8s.Models.V1PodTemplateSpec
+                Spec = new k8s.Models.V1DeploymentSpec
                 {
-                    Metadata = new k8s.Models.V1ObjectMeta
+                    Template = new k8s.Models.V1PodTemplateSpec
                     {
-                        Annotations = new Dictionary<string, string>
+                        Metadata = new k8s.Models.V1ObjectMeta
                         {
-                            ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                            Annotations = new Dictionary<string, string>
+                            {
+                                ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                            }
                         }
                     }
                 }
-            }
-        };
-        await _client.AppsV1.PatchNamespacedDeploymentAsync(
-            new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
-            deploymentName, ns, cancellationToken: ct);
+            };
+            await _client.AppsV1.PatchNamespacedDeploymentAsync(
+                new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
+                deploymentName, ns, cancellationToken: ct);
+        });
     }
 
     public async Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
     {
-        await _client.CoreV1.DeleteNamespacedPodAsync(podName, ns, cancellationToken: ct);
+        await WithAuthRetryAsync(async () =>
+        {
+            await _client.CoreV1.DeleteNamespacedPodAsync(podName, ns, cancellationToken: ct);
+        });
     }
 
     public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
     {
-        var patch = new k8s.Models.V1Deployment
+        await WithAuthRetryAsync(async () =>
         {
-            Spec = new k8s.Models.V1DeploymentSpec
+            var patch = new k8s.Models.V1Deployment
             {
-                Replicas = replicas
-            }
-        };
-        await _client.AppsV1.PatchNamespacedDeploymentAsync(
-            new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
-            deploymentName, ns, cancellationToken: ct);
+                Spec = new k8s.Models.V1DeploymentSpec
+                {
+                    Replicas = replicas
+                }
+            };
+            await _client.AppsV1.PatchNamespacedDeploymentAsync(
+                new k8s.Models.V1Patch(patch, k8s.Models.V1Patch.PatchType.StrategicMergePatch),
+                deploymentName, ns, cancellationToken: ct);
+        });
     }
 
     public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default)
     {
-        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
-            ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
-
-        var revisions = new List<HelmRevisionInfo>();
-        foreach (var secret in secrets.Items)
+        return await WithAuthRetryAsync(async () =>
         {
-            var labels = secret.Metadata.Labels;
-            var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
-            var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
-            var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
-            var chartVersion = TryParseChartVersion(chart);
+            var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+                ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
 
-            revisions.Add(new HelmRevisionInfo
+            var revisions = new List<HelmRevisionInfo>();
+            foreach (var secret in secrets.Items)
             {
-                Revision = version,
-                Status = status,
-                Chart = chart,
-                AppVersion = chartVersion,
-                Updated = secret.Metadata.CreationTimestamp.HasValue
-                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
-                    : null,
-                Description = status switch
-                {
-                    "deployed" => "Upgrade complete",
-                    "superseded" => "Superseded by new release",
-                    "failed" => "Upgrade failed",
-                    _ => null
-                }
-            });
-        }
+                var labels = secret.Metadata.Labels;
+                var version = labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+                var status = (labels is not null && labels.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+                var chart = labels is not null && labels.TryGetValue("chart", out var c) ? c : null;
+                var chartVersion = TryParseChartVersion(chart);
 
-        return revisions.OrderBy(r => r.Revision).ToList();
+                revisions.Add(new HelmRevisionInfo
+                {
+                    Revision = version,
+                    Status = status,
+                    Chart = chart,
+                    AppVersion = chartVersion,
+                    Updated = secret.Metadata.CreationTimestamp.HasValue
+                        ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                        : null,
+                    Description = status switch
+                    {
+                        "deployed" => "Upgrade complete",
+                        "superseded" => "Superseded by new release",
+                        "failed" => "Upgrade failed",
+                        _ => null
+                    }
+                });
+            }
+
+            return revisions.OrderBy(r => r.Revision).ToList();
+        });
     }
 
     public async Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
     {
-        // Find the latest release secret
-        var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
-            ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
+        return await WithAuthRetryAsync(async () =>
+        {
+            // Find the latest release secret
+            var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+                ns, labelSelector: $"owner=helm,name={releaseName}", cancellationToken: ct);
 
-        var latest = secrets.Items
-            .OrderByDescending(s =>
+            var latest = secrets.Items
+                .OrderByDescending(s =>
+                {
+                    var labels = s.Metadata.Labels;
+                    return labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 0;
+                })
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException($"Helm release '{releaseName}' not found in namespace '{ns}'.");
+
+            if (latest.Data is null || !latest.Data.TryGetValue("release", out var releaseData))
+                return "# No values found";
+
+            // Helm stores release data as base64 -> gzip -> base64 -> protobuf/json
+            // The outer base64 is already decoded by the K8s client into byte[].
+            // Inner layer is base64-encoded gzip data.
+            var innerBase64 = Encoding.UTF8.GetString(releaseData);
+            try
             {
-                var labels = s.Metadata.Labels;
-                return labels is not null && labels.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 0;
-            })
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException($"Helm release '{releaseName}' not found in namespace '{ns}'.");
+                var gzipBytes = Convert.FromBase64String(innerBase64);
+                using var gzipStream = new GZipStream(
+                    new MemoryStream(gzipBytes), CompressionMode.Decompress);
+                using var reader = new StreamReader(gzipStream, Encoding.UTF8);
+                var json = await reader.ReadToEndAsync(ct);
 
-        if (latest.Data is null || !latest.Data.TryGetValue("release", out var releaseData))
-            return "# No values found";
+                // Extract the "config" field which contains the user-supplied values
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("config", out var config))
+                    return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
 
-        // Helm stores release data as base64 -> gzip -> base64 -> protobuf/json
-        // The outer base64 is already decoded by the K8s client into byte[].
-        // Inner layer is base64-encoded gzip data.
-        var innerBase64 = Encoding.UTF8.GetString(releaseData);
-        try
-        {
-            var gzipBytes = Convert.FromBase64String(innerBase64);
-            using var gzipStream = new GZipStream(
-                new MemoryStream(gzipBytes), CompressionMode.Decompress);
-            using var reader = new StreamReader(gzipStream, Encoding.UTF8);
-            var json = await reader.ReadToEndAsync(ct);
-
-            // Extract the "config" field which contains the user-supplied values
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("config", out var config))
-                return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-
-            return json;
-        }
-        catch
-        {
-            return "# Unable to decode release values";
-        }
+                return json;
+            }
+            catch
+            {
+                return "# Unable to decode release values";
+            }
+        });
     }
 
     public async Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
     {
         var psi = new ProcessStartInfo("helm")
         {
-            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait",
+            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -568,11 +750,38 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
 
+        var stderr = await process.StandardError.ReadToEndAsync(ct);
         await process.WaitForExitAsync(ct);
 
         if (process.ExitCode != 0)
         {
-            var stderr = await process.StandardError.ReadToEndAsync(ct);
+            if (IsForbiddenError(stderr))
+            {
+                var token = TryAcquireFreshAzureToken();
+                if (token is not null)
+                {
+                    var retryPsi = new ProcessStartInfo("helm")
+                    {
+                        Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildKubeconfigArgs()} --kube-token {token}",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                    var retryProcess = Process.Start(retryPsi)
+                        ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
+
+                    var retryStderr = await retryProcess.StandardError.ReadToEndAsync(ct);
+                    await retryProcess.WaitForExitAsync(ct);
+
+                    if (retryProcess.ExitCode != 0)
+                        throw new InvalidOperationException($"Helm rollback failed after credential refresh (exit code {retryProcess.ExitCode}): {retryStderr}");
+
+                    return;
+                }
+            }
+
             throw new InvalidOperationException($"Helm rollback failed (exit code {process.ExitCode}): {stderr}");
         }
     }
@@ -583,24 +792,28 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         await File.WriteAllTextAsync(tempFile, yaml, ct);
         try
         {
-            var psi = new ProcessStartInfo("kubectl")
+            var (exitCode, stderr) = await RunKubectlApplyAsync(tempFile, ns, ct);
+
+            if (exitCode != 0)
             {
-                Arguments = $"apply -f \"{tempFile}\" --namespace {ns}",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
-
-            await process.WaitForExitAsync(ct);
-
-            if (process.ExitCode != 0)
-            {
-                var stderr = await process.StandardError.ReadToEndAsync(ct);
-                throw new InvalidOperationException($"kubectl apply failed (exit {process.ExitCode}): {stderr}");
+                if (IsForbiddenError(stderr))
+                {
+                    var token = TryAcquireFreshAzureToken();
+                    if (token is not null)
+                    {
+                        var (retryExit, retryStderr) = await RunKubectlApplyWithTokenAsync(tempFile, ns, token, ct);
+                        if (retryExit != 0)
+                            throw new InvalidOperationException($"kubectl apply failed after credential refresh (exit {retryExit}): {retryStderr}");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"kubectl apply failed (exit {exitCode}): {stderr}");
+                }
             }
         }
         finally
@@ -609,58 +822,150 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
     }
 
+    private async Task<(int ExitCode, string Stderr)> RunKubectlApplyAsync(string tempFile, string ns, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("kubectl")
+        {
+            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()}",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        await process.WaitForExitAsync(ct);
+
+        var stderr = process.ExitCode != 0
+            ? await process.StandardError.ReadToEndAsync(ct)
+            : string.Empty;
+
+        return (process.ExitCode, stderr);
+    }
+
+    private static bool IsForbiddenError(string stderr)
+        => stderr.Contains("Forbidden", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildKubeconfigArgs()
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
+            sb.Append($" --kubeconfig \"{_kubeconfigPath}\"");
+        if (!string.IsNullOrWhiteSpace(_kubeconfigContext))
+            sb.Append($" --context {_kubeconfigContext}");
+        return sb.ToString();
+    }
+
+    private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("kubectl")
+        {
+            Arguments = $"apply -f \"{tempFile}\" --namespace {ns}{BuildKubeconfigArgs()} --token {token}",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start kubectl. Ensure 'kubectl' is on PATH.");
+
+        await process.WaitForExitAsync(ct);
+
+        var stderr = process.ExitCode != 0
+            ? await process.StandardError.ReadToEndAsync(ct)
+            : string.Empty;
+
+        return (process.ExitCode, stderr);
+    }
+
+    private string? TryAcquireFreshAzureToken()
+    {
+        string? serverId = null;
+        var effectiveKubeconfigPath = string.IsNullOrWhiteSpace(_kubeconfigPath)
+            ? KubernetesClientConfiguration.KubeConfigDefaultLocation
+            : _kubeconfigPath;
+
+        if (!string.IsNullOrWhiteSpace(effectiveKubeconfigPath) && File.Exists(effectiveKubeconfigPath))
+        {
+            var kubeconfigContent = File.ReadAllText(effectiveKubeconfigPath);
+            serverId = AksAzureAuthHelpers.TryExtractServerIdFromKubeconfig(kubeconfigContent);
+        }
+
+        foreach (var scope in AksAzureAuthHelpers.BuildAksTokenScopes(serverId ?? DefaultAksServerAppId))
+        {
+            try
+            {
+                var credential = new DefaultAzureCredential(AzureCredentialOptions);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var accessToken = credential.GetToken(new TokenRequestContext([scope]), cts.Token);
+                if (!string.IsNullOrWhiteSpace(accessToken.Token))
+                    return accessToken.Token;
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
     public async Task<IReadOnlyList<Core.Models.PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
     {
-        try
+        return await WithAuthRetryAsync(async () =>
         {
-            var result = await _client.CustomObjects.ListNamespacedCustomObjectAsync(
-                "metrics.k8s.io", "v1beta1", ns, "pods", cancellationToken: ct);
-
-            var json = System.Text.Json.JsonSerializer.Serialize(result);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-
-            var metrics = new List<Core.Models.PodMetrics>();
-            if (!doc.RootElement.TryGetProperty("items", out var items))
-                return metrics;
-
-            foreach (var item in items.EnumerateArray())
+            try
             {
-                var podName = item.GetProperty("metadata").GetProperty("name").GetString()!;
-                var podNs = item.GetProperty("metadata").GetProperty("namespace").GetString()!;
-                var containers = new List<Core.Models.ContainerMetrics>();
+                var result = await _client.CustomObjects.ListNamespacedCustomObjectAsync(
+                    "metrics.k8s.io", "v1beta1", ns, "pods", cancellationToken: ct);
 
-                if (item.TryGetProperty("containers", out var containersEl))
+                var json = System.Text.Json.JsonSerializer.Serialize(result);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+                var metrics = new List<Core.Models.PodMetrics>();
+                if (!doc.RootElement.TryGetProperty("items", out var items))
+                    return metrics;
+
+                foreach (var item in items.EnumerateArray())
                 {
-                    foreach (var c in containersEl.EnumerateArray())
-                    {
-                        var name = c.GetProperty("name").GetString()!;
-                        var cpuStr = c.GetProperty("usage").GetProperty("cpu").GetString() ?? "0";
-                        var memStr = c.GetProperty("usage").GetProperty("memory").GetString() ?? "0";
+                    var podName = item.GetProperty("metadata").GetProperty("name").GetString()!;
+                    var podNs = item.GetProperty("metadata").GetProperty("namespace").GetString()!;
+                    var containers = new List<Core.Models.ContainerMetrics>();
 
-                        containers.Add(new Core.Models.ContainerMetrics
+                    if (item.TryGetProperty("containers", out var containersEl))
+                    {
+                        foreach (var c in containersEl.EnumerateArray())
                         {
-                            Name = name,
-                            CpuCores = ParseCpuToMillicores(cpuStr),
-                            MemoryBytes = ParseMemoryToBytes(memStr)
-                        });
+                            var name = c.GetProperty("name").GetString()!;
+                            var cpuStr = c.GetProperty("usage").GetProperty("cpu").GetString() ?? "0";
+                            var memStr = c.GetProperty("usage").GetProperty("memory").GetString() ?? "0";
+
+                            containers.Add(new Core.Models.ContainerMetrics
+                            {
+                                Name = name,
+                                CpuCores = ParseCpuToMillicores(cpuStr),
+                                MemoryBytes = ParseMemoryToBytes(memStr)
+                            });
+                        }
                     }
+
+                    metrics.Add(new Core.Models.PodMetrics
+                    {
+                        PodName = podName,
+                        Namespace = podNs,
+                        Containers = containers
+                    });
                 }
 
-                metrics.Add(new Core.Models.PodMetrics
-                {
-                    PodName = podName,
-                    Namespace = podNs,
-                    Containers = containers
-                });
+                return metrics;
             }
-
-            return metrics;
-        }
-        catch
-        {
-            // Metrics API not installed or unavailable — return empty list
-            return [];
-        }
+            catch (k8s.Autorest.HttpOperationException) { throw; }
+            catch
+            {
+                // Metrics API not installed or unavailable — return empty list
+                return [];
+            }
+        });
     }
 
     // ── Feature 1: Multi-pod log aggregation ─────────────────────────────────
@@ -682,23 +987,39 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var channel = Channel.CreateUnbounded<AggregatedLogLine>();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var fanOutTasks = pods.Select(pod => Task.Run(async () =>
-        {
-            try
-            {
-                var container = pod.Containers.FirstOrDefault() ?? string.Empty;
-                await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
-                {
-                    await channel.Writer.WriteAsync(
-                        new AggregatedLogLine { PodName = pod.Name, Line = line },
-                        linkedCts.Token);
-                }
-            }
-            catch (OperationCanceledException) { }
-            catch { /* per-pod error — don't break other streams */ }
-        }, linkedCts.Token)).ToList();
+        int remainingCount = pods.Count;
 
-        _ = Task.WhenAll(fanOutTasks).ContinueWith(_ => channel.Writer.TryComplete(), CancellationToken.None);
+        foreach (var pod in pods)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var container = pod.Containers.FirstOrDefault() ?? string.Empty;
+                    await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
+                    {
+                        await channel.Writer.WriteAsync(
+                            new AggregatedLogLine { PodName = pod.Name, Line = line },
+                            linkedCts.Token);
+                    }
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // Pod-specific stream ended (e.g. pod restarted) — not overall cancellation.
+                    // Let the countdown handle completion.
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[StreamDeploymentLogs] Pod '{pod.Name}' stream failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                finally
+                {
+                    if (Interlocked.Decrement(ref remainingCount) == 0)
+                        channel.Writer.TryComplete();
+                }
+            }, linkedCts.Token);
+        }
 
         await foreach (var item in channel.Reader.ReadAllAsync(ct))
             yield return item;
@@ -708,92 +1029,110 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.AppsV1.ListNamespacedStatefulSetAsync(ns, cancellationToken: ct);
-        return result.Items.Select(s => new StatefulSetInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = s.Metadata.Name,
-            Namespace = s.Metadata.NamespaceProperty ?? ns,
-            Replicas = s.Spec?.Replicas ?? 0,
-            ReadyReplicas = s.Status?.ReadyReplicas ?? 0,
-            CurrentRevision = s.Status?.CurrentRevision,
-            UpdateRevision = s.Status?.UpdateRevision,
-            Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
-        }).ToList();
+            var result = await _client.AppsV1.ListNamespacedStatefulSetAsync(ns, cancellationToken: ct);
+            return result.Items.Select(s => new StatefulSetInfo
+            {
+                Name = s.Metadata.Name,
+                Namespace = s.Metadata.NamespaceProperty ?? ns,
+                Replicas = s.Spec?.Replicas ?? 0,
+                ReadyReplicas = s.Status?.ReadyReplicas ?? 0,
+                CurrentRevision = s.Status?.CurrentRevision,
+                UpdateRevision = s.Status?.UpdateRevision,
+                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+            }).ToList();
+        });
     }
 
     public async Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default)
     {
-        var patch = new V1StatefulSet
+        await WithAuthRetryAsync(async () =>
         {
-            Spec = new V1StatefulSetSpec
+            var patch = new V1StatefulSet
             {
-                Template = new V1PodTemplateSpec
+                Spec = new V1StatefulSetSpec
                 {
-                    Metadata = new V1ObjectMeta
+                    Template = new V1PodTemplateSpec
                     {
-                        Annotations = new Dictionary<string, string>
+                        Metadata = new V1ObjectMeta
                         {
-                            ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                            Annotations = new Dictionary<string, string>
+                            {
+                                ["kubectl.kubernetes.io/restartedAt"] = DateTime.UtcNow.ToString("O")
+                            }
                         }
                     }
                 }
-            }
-        };
-        await _client.AppsV1.PatchNamespacedStatefulSetAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
-            name, ns, cancellationToken: ct);
+            };
+            await _client.AppsV1.PatchNamespacedStatefulSetAsync(
+                new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+                name, ns, cancellationToken: ct);
+        });
     }
 
     public async Task ScaleStatefulSetAsync(string ns, string name, int replicas, CancellationToken ct = default)
     {
-        var patch = new V1StatefulSet
+        await WithAuthRetryAsync(async () =>
         {
-            Spec = new V1StatefulSetSpec { Replicas = replicas }
-        };
-        await _client.AppsV1.PatchNamespacedStatefulSetAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
-            name, ns, cancellationToken: ct);
+            var patch = new V1StatefulSet
+            {
+                Spec = new V1StatefulSetSpec { Replicas = replicas }
+            };
+            await _client.AppsV1.PatchNamespacedStatefulSetAsync(
+                new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+                name, ns, cancellationToken: ct);
+        });
     }
 
     // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────
 
     public async Task<IReadOnlyList<ConfigMapInfo>> GetConfigMapsAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.CoreV1.ListNamespacedConfigMapAsync(ns, cancellationToken: ct);
-        return result.Items.Select(cm => new ConfigMapInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = cm.Metadata.Name,
-            Namespace = cm.Metadata.NamespaceProperty ?? ns,
-            Data = cm.Data is not null ? new Dictionary<string, string>(cm.Data) : [],
-            Labels = cm.Metadata.Labels is not null ? new Dictionary<string, string>(cm.Metadata.Labels) : []
-        }).ToList();
+            var result = await _client.CoreV1.ListNamespacedConfigMapAsync(ns, cancellationToken: ct);
+            return result.Items.Select(cm => new ConfigMapInfo
+            {
+                Name = cm.Metadata.Name,
+                Namespace = cm.Metadata.NamespaceProperty ?? ns,
+                Data = cm.Data is not null ? new Dictionary<string, string>(cm.Data) : [],
+                Labels = cm.Metadata.Labels is not null ? new Dictionary<string, string>(cm.Metadata.Labels) : []
+            }).ToList();
+        });
     }
 
     public async Task<IReadOnlyList<SecretInfo>> GetSecretsAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct);
-        return result.Items
-            // Exclude Helm release secrets and service-account token secrets
-            .Where(s =>
-                s.Type != "kubernetes.io/service-account-token" &&
-                !(s.Metadata.Labels?.TryGetValue("owner", out var owner) == true && owner == "helm"))
-            .Select(s => new SecretInfo
-            {
-                Name = s.Metadata.Name,
-                Namespace = s.Metadata.NamespaceProperty ?? ns,
-                Type = s.Type ?? "Opaque",
-                Keys = s.Data?.Keys.ToList() ?? [],
-                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
-            }).ToList();
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await _client.CoreV1.ListNamespacedSecretAsync(ns, cancellationToken: ct);
+            return result.Items
+                // Exclude Helm release secrets and service-account token secrets
+                .Where(s =>
+                    s.Type != "kubernetes.io/service-account-token" &&
+                    !(s.Metadata.Labels?.TryGetValue("owner", out var owner) == true && owner == "helm"))
+                .Select(s => new SecretInfo
+                {
+                    Name = s.Metadata.Name,
+                    Namespace = s.Metadata.NamespaceProperty ?? ns,
+                    Type = s.Type ?? "Opaque",
+                    Keys = s.Data?.Keys.ToList() ?? [],
+                    Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+                }).ToList();
+        });
     }
 
     public async Task<Dictionary<string, string>> GetSecretValuesAsync(string ns, string name, CancellationToken ct = default)
     {
-        var secret = await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct);
-        if (secret.Data is null) return [];
-        return secret.Data.ToDictionary(
-            kv => kv.Key,
-            kv => Encoding.UTF8.GetString(kv.Value));
+        return await WithAuthRetryAsync(async () =>
+        {
+            var secret = await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct);
+            if (secret.Data is null) return [];
+            return secret.Data.ToDictionary(
+                kv => kv.Key,
+                kv => Encoding.UTF8.GetString(kv.Value));
+        });
     }
 
     // ── Feature 4: Container details ─────────────────────────────────────────
@@ -801,69 +1140,72 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     public async Task<IReadOnlyList<ContainerDetail>> GetContainerDetailsAsync(
         string ns, string podName, CancellationToken ct = default)
     {
-        var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct);
-        var containers = pod.Spec?.Containers ?? [];
-
-        // Batch ConfigMap fetches — one API call per unique ConfigMap name
-        var configMapNames = containers
-            .SelectMany(c => c.Env ?? [])
-            .Where(e => e.ValueFrom?.ConfigMapKeyRef is not null)
-            .Select(e => e.ValueFrom!.ConfigMapKeyRef!.Name)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        var configMapCache = new Dictionary<string, V1ConfigMap>(StringComparer.Ordinal);
-        foreach (var cmName in configMapNames)
+        return await WithAuthRetryAsync(async () =>
         {
-            try
-            {
-                var cm = await _client.CoreV1.ReadNamespacedConfigMapAsync(cmName, ns, cancellationToken: ct);
-                configMapCache[cmName] = cm;
-            }
-            catch { /* ConfigMap might not exist — skip resolution */ }
-        }
+            var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct);
+            var containers = pod.Spec?.Containers ?? [];
 
-        return containers.Select(c =>
-        {
-            var imageParts = (c.Image ?? string.Empty).Split(':', 2);
-            var envVars = (c.Env ?? []).Select(e => MapEnvVar(e, configMapCache)).ToList();
+            // Batch ConfigMap fetches — one API call per unique ConfigMap name
+            var configMapNames = containers
+                .SelectMany(c => c.Env ?? [])
+                .Where(e => e.ValueFrom?.ConfigMapKeyRef is not null)
+                .Select(e => e.ValueFrom!.ConfigMapKeyRef!.Name)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
 
-            // Synthetic flag rows for envFrom sources
-            foreach (var envFrom in c.EnvFrom ?? [])
+            var configMapCache = new Dictionary<string, V1ConfigMap>(StringComparer.Ordinal);
+            foreach (var cmName in configMapNames)
             {
-                if (envFrom.ConfigMapRef is not null)
-                    envVars.Add(new EnvVarDetail
-                    {
-                        Name = $"<all keys from configmap: {envFrom.ConfigMapRef.Name}>",
-                        Source = EnvVarSourceKind.ConfigMapRef,
-                        SourceName = envFrom.ConfigMapRef.Name,
-                        IsResolved = false
-                    });
-                else if (envFrom.SecretRef is not null)
-                    envVars.Add(new EnvVarDetail
-                    {
-                        Name = $"<all keys from secret: {envFrom.SecretRef.Name}>",
-                        Source = EnvVarSourceKind.SecretRef,
-                        SourceName = envFrom.SecretRef.Name,
-                        IsResolved = false
-                    });
-            }
-
-            return new ContainerDetail
-            {
-                Name = c.Name,
-                Image = c.Image ?? string.Empty,
-                ImageTag = imageParts.Length == 2 ? imageParts[1] : null,
-                Resources = new ResourceRequirements
+                try
                 {
-                    CpuRequest = GetResourceValue(c.Resources?.Requests, "cpu"),
-                    MemoryRequest = GetResourceValue(c.Resources?.Requests, "memory"),
-                    CpuLimit = GetResourceValue(c.Resources?.Limits, "cpu"),
-                    MemoryLimit = GetResourceValue(c.Resources?.Limits, "memory")
-                },
-                EnvVars = envVars
-            };
-        }).ToList();
+                    var cm = await _client.CoreV1.ReadNamespacedConfigMapAsync(cmName, ns, cancellationToken: ct);
+                    configMapCache[cmName] = cm;
+                }
+                catch { /* ConfigMap might not exist — skip resolution */ }
+            }
+
+            return containers.Select(c =>
+            {
+                var imageParts = (c.Image ?? string.Empty).Split(':', 2);
+                var envVars = (c.Env ?? []).Select(e => MapEnvVar(e, configMapCache)).ToList();
+
+                // Synthetic flag rows for envFrom sources
+                foreach (var envFrom in c.EnvFrom ?? [])
+                {
+                    if (envFrom.ConfigMapRef is not null)
+                        envVars.Add(new EnvVarDetail
+                        {
+                            Name = $"<all keys from configmap: {envFrom.ConfigMapRef.Name}>",
+                            Source = EnvVarSourceKind.ConfigMapRef,
+                            SourceName = envFrom.ConfigMapRef.Name,
+                            IsResolved = false
+                        });
+                    else if (envFrom.SecretRef is not null)
+                        envVars.Add(new EnvVarDetail
+                        {
+                            Name = $"<all keys from secret: {envFrom.SecretRef.Name}>",
+                            Source = EnvVarSourceKind.SecretRef,
+                            SourceName = envFrom.SecretRef.Name,
+                            IsResolved = false
+                        });
+                }
+
+                return new ContainerDetail
+                {
+                    Name = c.Name,
+                    Image = c.Image ?? string.Empty,
+                    ImageTag = imageParts.Length == 2 ? imageParts[1] : null,
+                    Resources = new ResourceRequirements
+                    {
+                        CpuRequest = GetResourceValue(c.Resources?.Requests, "cpu"),
+                        MemoryRequest = GetResourceValue(c.Resources?.Requests, "memory"),
+                        CpuLimit = GetResourceValue(c.Resources?.Limits, "cpu"),
+                        MemoryLimit = GetResourceValue(c.Resources?.Limits, "memory")
+                    },
+                    EnvVars = envVars
+                };
+            }).ToList();
+        });
     }
 
     private static string? GetResourceValue(IDictionary<string, ResourceQuantity>? dict, string key)
@@ -928,29 +1270,32 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
     {
-        try
+        return await WithAuthRetryAsync(async () =>
         {
-            var result = await _client.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
-            return result.Items.Select(MapHpaV2).ToList();
-        }
-        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
-        {
-            // Fall back to autoscaling/v1 on older clusters
-            var result = await _client.AutoscalingV1.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
-            return result.Items.Select(hpa => new HpaInfo
+            try
             {
-                Name = hpa.Metadata.Name,
-                Namespace = hpa.Metadata.NamespaceProperty ?? ns,
-                TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
-                TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
-                MinReplicas = hpa.Spec?.MinReplicas ?? 1,
-                MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
-                CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
-                DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
-                CurrentCpuUtilizationPercent = hpa.Status?.CurrentCPUUtilizationPercentage,
-                TargetCpuUtilizationPercent = hpa.Spec?.TargetCPUUtilizationPercentage
-            }).ToList();
-        }
+                var result = await _client.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
+                return result.Items.Select(MapHpaV2).ToList();
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Fall back to autoscaling/v1 on older clusters
+                var result = await _client.AutoscalingV1.ListNamespacedHorizontalPodAutoscalerAsync(ns, cancellationToken: ct);
+                return result.Items.Select(hpa => new HpaInfo
+                {
+                    Name = hpa.Metadata.Name,
+                    Namespace = hpa.Metadata.NamespaceProperty ?? ns,
+                    TargetKind = hpa.Spec?.ScaleTargetRef?.Kind ?? "Deployment",
+                    TargetName = hpa.Spec?.ScaleTargetRef?.Name ?? string.Empty,
+                    MinReplicas = hpa.Spec?.MinReplicas ?? 1,
+                    MaxReplicas = hpa.Spec?.MaxReplicas ?? 1,
+                    CurrentReplicas = hpa.Status?.CurrentReplicas ?? 0,
+                    DesiredReplicas = hpa.Status?.DesiredReplicas ?? 0,
+                    CurrentCpuUtilizationPercent = hpa.Status?.CurrentCPUUtilizationPercentage,
+                    TargetCpuUtilizationPercent = hpa.Spec?.TargetCPUUtilizationPercentage
+                }).ToList();
+            }
+        });
     }
 
     private HpaInfo MapHpaV2(V2HorizontalPodAutoscaler hpa)
@@ -1020,22 +1365,25 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
-        var result = await _client.BatchV1.ListNamespacedCronJobAsync(ns, cancellationToken: ct);
-        return result.Items.Select(cj => new CronJobInfo
+        return await WithAuthRetryAsync(async () =>
         {
-            Name = cj.Metadata.Name,
-            Namespace = cj.Metadata.NamespaceProperty ?? ns,
-            Schedule = cj.Spec?.Schedule,
-            Suspend = cj.Spec?.Suspend ?? false,
-            ActiveCount = cj.Status?.Active?.Count ?? 0,
-            LastScheduleTime = cj.Status?.LastScheduleTime.HasValue == true
-                ? new DateTimeOffset(cj.Status.LastScheduleTime.Value)
-                : null,
-            LastSuccessfulTime = cj.Status?.LastSuccessfulTime.HasValue == true
-                ? new DateTimeOffset(cj.Status.LastSuccessfulTime.Value)
-                : null,
-            Labels = cj.Metadata.Labels is not null ? new Dictionary<string, string>(cj.Metadata.Labels) : []
-        }).ToList();
+            var result = await _client.BatchV1.ListNamespacedCronJobAsync(ns, cancellationToken: ct);
+            return result.Items.Select(cj => new CronJobInfo
+            {
+                Name = cj.Metadata.Name,
+                Namespace = cj.Metadata.NamespaceProperty ?? ns,
+                Schedule = cj.Spec?.Schedule,
+                Suspend = cj.Spec?.Suspend ?? false,
+                ActiveCount = cj.Status?.Active?.Count ?? 0,
+                LastScheduleTime = cj.Status?.LastScheduleTime.HasValue == true
+                    ? new DateTimeOffset(cj.Status.LastScheduleTime.Value)
+                    : null,
+                LastSuccessfulTime = cj.Status?.LastSuccessfulTime.HasValue == true
+                    ? new DateTimeOffset(cj.Status.LastSuccessfulTime.Value)
+                    : null,
+                Labels = cj.Metadata.Labels is not null ? new Dictionary<string, string>(cj.Metadata.Labels) : []
+            }).ToList();
+        });
     }
 }
 

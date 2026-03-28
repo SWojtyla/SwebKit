@@ -59,4 +59,15 @@ public static class RedisValueHelpers
         "stream" => "t-stream",
         _ => "t-unknown"
     };
+
+    public static bool IsBinaryContent(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        var sample = value.Length > 512 ? value.AsSpan(0, 512) : value.AsSpan();
+        int nonPrintable = 0;
+        foreach (var c in sample)
+            if (c < 32 && c != '\t' && c != '\r' && c != '\n') nonPrintable++;
+            else if (c >= 127 && c <= 159) nonPrintable++;
+        return nonPrintable > sample.Length * 0.05;
+    }
 }
