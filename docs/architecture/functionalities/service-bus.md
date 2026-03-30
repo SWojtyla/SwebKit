@@ -5,8 +5,8 @@
 - Add/remove global Service Bus namespaces in the UI.
 - Connect namespaces from stored credentials.
 - Browse queues, topics, and subscriptions with status surfaced as Active/Disabled.
-- Enable/disable queues, topics, and subscriptions from the entity tree.
-- Open entity tabs for active queue/topic and DLQ views.
+- Entity rows surface message amount metrics plus pin/unpin only; operational actions are handled outside the row.
+- Open Active, Open DLQ, and Enable/Disable actions from the selected-entity action bar (Active/DLQ are not applicable to topics).
 - Peek active and dead-letter messages.
 - Delete a single selected active message from `MessageListView`.
 - Build advanced multi-field filters (Application Property, Enqueued Time, Delivery Count, Sequence Number) with explicit operators and logical AND composition.
@@ -70,6 +70,8 @@
 - Filtered export for parity Wave 2 is JSON-only; CSV export is intentionally deferred.
 - Production protections rely on current environment and are enforced by `ConfirmDialog` at UI interaction level.
 - Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
+- Entity names in the entity list wrap to full visibility (no single-line truncation/horizontal-scroll pattern).
+- Topic rows retain expand/collapse behavior; queue/subscription operational actions are centralized in the selected-entity action bar.
 - Message list row density and column profiles are persisted in `UiStateRepository` per `{namespaceId}:{entityPath}:{mode}` scope and can be reset to defaults from the column chooser.
 - Namespace pane collapsed/expanded state remains persisted in local storage.
 

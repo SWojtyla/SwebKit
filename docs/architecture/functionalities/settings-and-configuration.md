@@ -32,6 +32,7 @@
 
 - Settings are project-level data with environment-level nested configs.
 - Secrets are expected in credential store and not in profile JSON.
+- DevOps settings accept organization slug input or supported Azure DevOps URL forms; saving applies updated DevOps client configuration immediately, while the PAT remains stored in the credential store.
 - Service Bus settings here focus on pinned entities, while namespace registration happens on the Service Bus page.
 
 ## Validation Pointers

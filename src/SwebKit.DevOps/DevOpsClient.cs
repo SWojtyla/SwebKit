@@ -17,7 +17,8 @@ public class DevOpsClient : IDevOpsClient
     private static readonly JsonSerializerOptions JsonOptions = SwebKitJsonOptions.Default;
 
     private volatile string? _orgUrl;
-    private volatile bool _configured;
+    private const string DevAzureHost = "dev.azure.com";
+    private const string VisualStudioHostSuffix = ".visualstudio.com";
 
     public DevOpsClient(IHttpClientFactory httpClientFactory, DevOpsAuthHandler authHandler, ILogger<DevOpsClient> logger)
     {
@@ -29,15 +30,14 @@ public class DevOpsClient : IDevOpsClient
     /// <summary>
     /// Configures the client with org-level connection details.
     /// All project-scoped calls accept the project name as a parameter.
-    /// Must only be called once; throws <see cref="InvalidOperationException"/> on repeated calls.
+    /// Can be called multiple times to apply updated organization/PAT settings.
     /// </summary>
     public void Configure(DevOpsConfig config)
     {
-        if (_configured)
-            throw new InvalidOperationException("DevOpsClient.Configure() must only be called once.");
-        _orgUrl = $"https://dev.azure.com/{config.Organization}";
+        ArgumentNullException.ThrowIfNull(config);
+
+        _orgUrl = NormalizeOrganizationUrl(config.Organization);
         _authHandler.SetCredentialKey(config.PatCredentialKey);
-        _configured = true;
     }
 
     private string OrgUrl => _orgUrl
@@ -46,6 +46,84 @@ public class DevOpsClient : IDevOpsClient
     private string OrgApi => $"{OrgUrl}/_apis";
 
     private string ProjectApi(string project) => $"{OrgUrl}/{project}/_apis";
+
+    private static string NormalizeOrganizationUrl(string organizationInput)
+    {
+        if (string.IsNullOrWhiteSpace(organizationInput))
+            throw new InvalidOperationException($"{nameof(DevOpsConfig)}.{nameof(DevOpsConfig.Organization)} is required.");
+
+        var input = organizationInput.Trim();
+
+        var absoluteUri = ParseAbsoluteUri(input);
+        if (absoluteUri is not null)
+            return NormalizeFromAbsoluteUri(absoluteUri);
+
+        if (input.StartsWith($"{DevAzureHost}/", StringComparison.OrdinalIgnoreCase))
+        {
+            absoluteUri = ParseAbsoluteUri($"https://{input}");
+            if (absoluteUri is not null)
+                return NormalizeFromAbsoluteUri(absoluteUri);
+        }
+
+        if (input.EndsWith(VisualStudioHostSuffix, StringComparison.OrdinalIgnoreCase)
+            || input.Contains($"{VisualStudioHostSuffix}/", StringComparison.OrdinalIgnoreCase))
+        {
+            absoluteUri = ParseAbsoluteUri($"https://{input.TrimStart('/')}");
+            if (absoluteUri is not null)
+                return NormalizeFromAbsoluteUri(absoluteUri);
+        }
+
+        var organizationSlug = ExtractOrganizationSlug(input);
+        return $"https://{DevAzureHost}/{organizationSlug}";
+    }
+
+    private static Uri? ParseAbsoluteUri(string input)
+    {
+        if (!Uri.TryCreate(input, UriKind.Absolute, out var absoluteUri))
+            return null;
+
+        return absoluteUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || absoluteUri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            ? absoluteUri
+            : null;
+    }
+
+    private static string NormalizeFromAbsoluteUri(Uri absoluteUri)
+    {
+        var host = absoluteUri.Host.TrimEnd('.');
+
+        if (host.Equals(DevAzureHost, StringComparison.OrdinalIgnoreCase))
+        {
+            var organizationSlug = ExtractOrganizationSlug(absoluteUri.AbsolutePath);
+            return $"https://{DevAzureHost}/{organizationSlug}";
+        }
+
+        if (host.EndsWith(VisualStudioHostSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            var organizationSlug = host[..^VisualStudioHostSuffix.Length];
+            organizationSlug = ExtractOrganizationSlug(organizationSlug);
+            return $"https://{organizationSlug}{VisualStudioHostSuffix}";
+        }
+
+        return absoluteUri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+    }
+
+    private static string ExtractOrganizationSlug(string input)
+    {
+        var slug = input.Trim().Trim('/');
+
+        if (slug.StartsWith($"{DevAzureHost}/", StringComparison.OrdinalIgnoreCase))
+            slug = slug[(DevAzureHost.Length + 1)..];
+
+        if (slug.Contains('/'))
+            slug = slug.Split('/', StringSplitOptions.RemoveEmptyEntries)[0];
+
+        if (string.IsNullOrWhiteSpace(slug) || slug.Any(char.IsWhiteSpace))
+            throw new InvalidOperationException(
+                "Azure DevOps organization is invalid. Use an organization slug or supported URL.");
+
+        return slug;
+    }
 
     // ── Connection ──
 

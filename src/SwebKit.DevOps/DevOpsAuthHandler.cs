@@ -12,7 +12,7 @@ namespace SwebKit.DevOps;
 public class DevOpsAuthHandler : DelegatingHandler
 {
     private readonly ICredentialStore _credentialStore;
-    private string? _patCredentialKey;
+    private volatile string? _patCredentialKey;
 
     public DevOpsAuthHandler(ICredentialStore credentialStore)
     {

@@ -27,10 +27,10 @@
 
 `DevOpsConfig` (part of `AppConfig`, stored in `profiles.json`) holds:
 
-| Field | Purpose |
-|---|---|
-| `Organization` | Azure DevOps organization name (e.g. `mycompany`) |
-| `PatCredentialKey` | Logical key in `ICredentialStore` for the Personal Access Token |
+| Field              | Purpose                                                                                                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Organization`     | Azure DevOps organization input (slug like `mycompany`, or full URL forms like `https://dev.azure.com/mycompany` and `https://mycompany.visualstudio.com`) |
+| `PatCredentialKey` | Logical key in `ICredentialStore` for the Personal Access Token                                                                                            |
 
 The PAT is never written to disk — it lives in Windows Credential Manager. `PipelinesPage` checks
 `IsConfigured` before showing content (`Organization` must be non-empty, or demo mode active).
@@ -80,17 +80,18 @@ Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Local data model
 
-| Type | Storage | Purpose |
-|---|---|---|
-| `ReleaseRecord` | `releases.json` in AppData | Named grouping of pipeline/repo pairs |
-| `ComponentScope` | (nested in ReleaseRecord) | One pipeline binding per release component |
-| `DeploymentSnapshot` | `releases.json` in AppData | Audit trail of deployments |
-| `PipelineEnvironmentStatus` | In-memory only | Latest stage status per env for a pipeline |
+| Type                        | Storage                    | Purpose                                    |
+| --------------------------- | -------------------------- | ------------------------------------------ |
+| `ReleaseRecord`             | `releases.json` in AppData | Named grouping of pipeline/repo pairs      |
+| `ComponentScope`            | (nested in ReleaseRecord)  | One pipeline binding per release component |
+| `DeploymentSnapshot`        | `releases.json` in AppData | Audit trail of deployments                 |
+| `PipelineEnvironmentStatus` | In-memory only             | Latest stage status per env for a pipeline |
 
 ## Key implementation notes
 
-- `DevOpsClient.Configure()` may only be called once per singleton lifetime. `PipelinesPage`
-  wraps the call in `try/catch(InvalidOperationException)` to tolerate re-navigation.
+- `DevOpsClient.Configure()` is idempotent and may be called multiple times to apply updated
+  settings; organization input is normalized across slug, `dev.azure.com`, and
+  `visualstudio.com` forms before use.
 - `ApprovalCenter` is now global — it calls `GetPendingApprovalsAsync` per project to load all
   approvals, not per release component. The `OnCountChanged` callback updates the tab badge count.
 - `GetEnvironmentStatusAsync` in `DevOpsClient` calls `GetPipelineRunAsync` (which fetches the
@@ -101,32 +102,32 @@ Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Main code locations
 
-| File | Role |
-|---|---|
-| `Pages/PipelinesPage.razor` | Page shell: tabs, split panels, client setup, modals |
-| `Pages/PipelinesPage.razor.css` | All layout CSS for Pipelines hub |
-| `Pipelines/PipelineTree.razor` | Left panel: project/pipeline tree with run status |
-| `Pipelines/PipelinesOverview.razor` | Right panel: project summary cards (no selection) |
-| `Pipelines/PipelineDetail.razor` | Right panel: env status, recent runs, trigger |
-| `Pipelines/PipelineActivity.razor` | Activity tab: chronological run feed |
-| `Releases/ReleaseList.razor` | Left panel: release record list |
-| `Releases/ReleaseDetail.razor` | Right panel: component × env matrix + action bar |
-| `Releases/ApprovalCenter.razor` | Approvals tab: global across all projects |
-| `Releases/TagManager.razor` | Tag creation (accessible from ReleaseDetail) |
-| `Releases/ReleaseEditor.razor` | Modal: create/edit release record |
-| `Releases/ComponentScopeEditor.razor` | Modal: manage pipeline scope per release |
-| `SwebKit.Core/Abstractions/IDevOpsClient.cs` | Interface |
-| `SwebKit.Core/Models/DevOpsModels.cs` | ADO domain models + `PipelineEnvironmentStatus` |
-| `SwebKit.Core/Models/ReleaseModels.cs` | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot` |
-| `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (JSON) |
-| `SwebKit.Core/Services/DemoDevOpsClient.cs` | Demo data |
-| `SwebKit.DevOps/DevOpsClient.cs` | Real ADO REST implementation |
+| File                                              | Role                                                    |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `Pages/PipelinesPage.razor`                       | Page shell: tabs, split panels, client setup, modals    |
+| `Pages/PipelinesPage.razor.css`                   | All layout CSS for Pipelines hub                        |
+| `Pipelines/PipelineTree.razor`                    | Left panel: project/pipeline tree with run status       |
+| `Pipelines/PipelinesOverview.razor`               | Right panel: project summary cards (no selection)       |
+| `Pipelines/PipelineDetail.razor`                  | Right panel: env status, recent runs, trigger           |
+| `Pipelines/PipelineActivity.razor`                | Activity tab: chronological run feed                    |
+| `Releases/ReleaseList.razor`                      | Left panel: release record list                         |
+| `Releases/ReleaseDetail.razor`                    | Right panel: component × env matrix + action bar        |
+| `Releases/ApprovalCenter.razor`                   | Approvals tab: global across all projects               |
+| `Releases/TagManager.razor`                       | Tag creation (accessible from ReleaseDetail)            |
+| `Releases/ReleaseEditor.razor`                    | Modal: create/edit release record                       |
+| `Releases/ComponentScopeEditor.razor`             | Modal: manage pipeline scope per release                |
+| `SwebKit.Core/Abstractions/IDevOpsClient.cs`      | Interface                                               |
+| `SwebKit.Core/Models/DevOpsModels.cs`             | ADO domain models + `PipelineEnvironmentStatus`         |
+| `SwebKit.Core/Models/ReleaseModels.cs`            | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot` |
+| `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (JSON)                                |
+| `SwebKit.Core/Services/DemoDevOpsClient.cs`       | Demo data                                               |
+| `SwebKit.DevOps/DevOpsClient.cs`                  | Real ADO REST implementation                            |
 
 ## Removed in pipelines-revamp
 
-| File | Replaced by |
-|---|---|
-| `Pages/ReleasesPage.razor` | `Pages/PipelinesPage.razor` (route `/pipelines` + redirect `/releases`) |
-| `Releases/ReleaseBoard.razor` | `Releases/ReleaseDetail.razor` |
-| `Releases/ReadinessGate.razor` | Inline readiness computation in `ReleaseDetail` |
-| `Releases/PipelineTriggerHub.razor` | Inline trigger panel in `Pipelines/PipelineDetail.razor` |
+| File                                | Replaced by                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `Pages/ReleasesPage.razor`          | `Pages/PipelinesPage.razor` (route `/pipelines` + redirect `/releases`) |
+| `Releases/ReleaseBoard.razor`       | `Releases/ReleaseDetail.razor`                                          |
+| `Releases/ReadinessGate.razor`      | Inline readiness computation in `ReleaseDetail`                         |
+| `Releases/PipelineTriggerHub.razor` | Inline trigger panel in `Pipelines/PipelineDetail.razor`                |

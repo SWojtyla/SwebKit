@@ -13,120 +13,129 @@
         }
     </div>
 
-    <div class="sb-entity-panel-body" style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+    <div class="sb-entity-panel-body">
         <!-- Namespace panel header -->
         <div class="sb-ns-panel-header">
             <span class="sb-ns-panel-label">Namespaces</span>
             <div class="sb-ns-header-actions">
-                <button
-                style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
-                @onclick="ToggleAddForm">+ Add</button>
-                <button type="button" class="namespace-pane-toggle" title="Collapse namespace panel"
-                        aria-label="Collapse namespace panel" aria-expanded="true" @onclick="() => SetCollapsedAsync(true)">
-                    ◀
-                </button>
+                <button type="button" class="sb-ns-header-btn sb-ns-header-btn-primary" @onclick="ToggleAddForm">+
+                    Add</button>
+                    <button type="button" class="namespace-pane-toggle sb-ns-header-btn sb-ns-header-btn-toggle"
+                            title="Collapse namespace panel" aria-label="Collapse namespace panel" aria-expanded="true"
+                            @onclick="() => SetCollapsedAsync(true)">
+                        ◀
+                    </button>
+                </div>
             </div>
-        </div>
 
-        <!-- Add namespace form -->
-        @if (_showAddForm)
-        {
-            <div class="sb-add-form">
-                <div style="font-size:11px; color:var(--color-text-muted); margin-bottom:6px;">Paste a connection
-                    string:
-                </div>
-                @if (_showConnStr)
-                {
-                    <textarea @bind="_addConnStr" rows="3"
-                              placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                              style="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:none; font-family:monospace;" />
-                }
-                else
-                {
-                    <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
-                                   Label="Connection string" Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                                   InputStyle="width:100%; box-sizing:border-box; padding:6px; font-size:11px; background:var(--color-surface-2); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; font-family:monospace;" />
-                }
-                @if (!string.IsNullOrWhiteSpace(_addError))
-                {
-                    <div style="font-size:11px; color:var(--color-error); margin-top:4px;">@_addError</div>
-                }
-                <div style="display:flex; gap:6px; margin-top:6px;">
-                    <button
-                    style="flex:1; padding:4px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;"
-                    @onclick="HandleAddAsync">Add</button>
-                    <button class="sb-btn-secondary-sm" @onclick="() => _showConnStr = !_showConnStr"
-                            title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
-                                                                                                                                                         "🙈" : "👁️")</button>
-                        <button class="sb-btn-secondary-sm" @onclick="CancelAdd">Cancel</button>
-                    </div>
-                </div>
-            }
-
-            <!-- Namespace list -->
-            <div class="sb-ns-list">
-                @if (!NamespaceStates.Any())
-                {
-                    <div class="sb-empty-hint">
-                        No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
-                    </div>
-                }
-
-                @foreach (var ns in NamespaceStates)
-                {
-                    <!-- Namespace header row -->
-                    <div class="sb-ns-row" @onclick="() => ToggleNamespace(ns.Namespace.Id)">
-                        <span style="margin-right:6px; font-size:10px;">@(ns.IsExpanded ? "▼" : "▶")</span>
-                        <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                              title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
-                        @if (ns.IsConnecting)
+            <!-- Add namespace form -->
+            @if (_showAddForm)
+            {
+                <div class="sb-add-form">
+                    <div class="sb-add-form-field form-group">
+                        <label class="sb-add-form-label form-label">Connection string</label>
+                        @if (_showConnStr)
                         {
-                            <span style="font-size:10px; color:var(--color-text-muted);">...</span>
-                        }
-                        else if (ns.Client is not null)
-                        {
-                            <span class="sb-status-success">
-                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                            </span>
+                            <textarea @bind="_addConnStr" rows="3"
+                                      placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                      class="sb-add-form-input sb-add-form-textarea form-input" aria-label="Connection string" />
                         }
                         else
                         {
-                            <span class="sb-status-error" title="@ns.ConnectionError">
-                                <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                            </span>
+                            <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
+                                           Label="Connection string"
+                                           Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                           InputClass="sb-add-form-input form-input" />
                         }
-                        <button
-                            style="margin-left:4px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 3px; display:inline-flex; align-items:center;"
-                            title="View scheduled messages for this namespace" @onclick:stopPropagation="true"
-                            @onclick="() => OnScheduledTabOpen.InvokeAsync(ns)">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
-                        </button>
-                        <button
-                            style="margin-left:2px; background:transparent; border:none; color:var(--color-text-muted); cursor:pointer; padding:0 2px; display:inline-flex; align-items:center;"
-                            title="Remove namespace" @onclick:stopPropagation="true"
-                            @onclick="() => OnRemoveNamespace.InvokeAsync(ns.Namespace.Id)">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
-                        </button>
+                        <div class="sb-add-form-hint">Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...</div>
                     </div>
-
-                    @if (ns.IsExpanded)
+                    @if (!string.IsNullOrWhiteSpace(_addError))
                     {
-                        @if (ns.ConnectionError is not null && ns.Client is null)
+                        <div class="sb-add-form-error">@_addError</div>
+                    }
+                    <div class="sb-add-form-actions">
+                        <button type="button" class="sb-add-form-btn sb-add-form-btn-primary"
+                                @onclick="HandleAddAsync">Add</button>
+                        <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
+                                @onclick="() => _showConnStr = !_showConnStr"
+                                title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
+                                                    "Hide" : "Show")</button>
+                            <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
+                                    @onclick="CancelAdd">Cancel</button>
+                        </div>
+                    </div>
+                }
+
+                <!-- Namespace list -->
+                <div class="sb-ns-list">
+                    @if (!NamespaceStates.Any())
+                    {
+                        <div class="sb-empty-hint">
+                            No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
+                        </div>
+                    }
+
+                    @foreach (var ns in NamespaceStates)
+                    {
+                        <!-- Namespace header row -->
+                        <div class="sb-ns-row" @onclick="() => ToggleNamespace(ns.Namespace.Id)">
+                            <div class="sb-ns-row-main">
+                                <span class="sb-ns-row-chevron">@(ns.IsExpanded ? "▼" : "▶")</span>
+                                <span class="sb-ns-row-alias"
+                                      title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
+                            </div>
+
+                            <div class="sb-ns-row-meta">
+                                @if (ns.IsConnecting)
+                                {
+                                    <span class="sb-ns-row-status sb-ns-row-status-connecting">Connecting...</span>
+                                }
+                                else if (ns.Client is not null)
+                                {
+                                    <span class="sb-ns-row-status sb-ns-row-status-success" title="Connected">
+                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" /> Connected
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="sb-ns-row-status sb-ns-row-status-error" title="@ns.ConnectionError">
+                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" /> Error
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="sb-ns-row-actions">
+                                <button type="button" class="sb-ns-row-icon-btn" title="View scheduled messages for this namespace"
+                                        aria-label="View scheduled messages for @ns.Namespace.Alias" @onclick:stopPropagation="true"
+                                        @onclick="() => OnScheduledTabOpen.InvokeAsync(ns)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
+                                </button>
+                                <button type="button" class="sb-ns-row-icon-btn sb-ns-row-icon-btn-danger" title="Remove namespace"
+                                        aria-label="Remove namespace @ns.Namespace.Alias" @onclick:stopPropagation="true"
+                                        @onclick="() => OnRemoveNamespace.InvokeAsync(ns.Namespace.Id)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (ns.IsExpanded)
                         {
-                            <div style="padding:8px 12px; font-size:11px; color:var(--color-error);">@ns.ConnectionError</div>
-                        }
-                        else
-                        {
-                            <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="LinkedEntities"
-                                        OnEntitySelected="entity => OnEntityTabOpen.InvokeAsync((ns, entity, false))"
-                                        OnEntityModeSelected="selection => OnEntityTabOpen.InvokeAsync((ns, selection.Entity, selection.IsDlq))"
-                                        OnEntityLinkToggled="link => OnEntityLinkToggled.InvokeAsync(link)" />
+                            @if (ns.ConnectionError is not null && ns.Client is null)
+                            {
+                                <div class="sb-ns-error-message">@ns.ConnectionError</div>
+                            }
+                            else
+                            {
+                                <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="LinkedEntities"
+                                            OnEntitySelected="entity => OnEntityTabOpen.InvokeAsync((ns, entity, false))"
+                                            OnEntityModeSelected="selection => OnEntityTabOpen.InvokeAsync((ns, selection.Entity, selection.IsDlq))"
+                                            OnEntityLinkToggled="link => OnEntityLinkToggled.InvokeAsync(link)" />
+                            }
                         }
                     }
-                }
+                </div>
             </div>
         </div>
-    </div>
 
 @code {
     [Parameter] public List<NsState> NamespaceStates { get; set; } = [];

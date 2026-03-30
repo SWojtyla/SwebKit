@@ -13,7 +13,7 @@
     {
         @if (!Queues.Any() && !Topics.Any())
         {
-            <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">
+            <div class="entity-tree-empty-hint">
                 No queues or topics found. If you expect entities here, verify the namespace and that your connection string has
                 Manage rights.
             </div>
@@ -21,115 +21,147 @@
 
         @if (!string.IsNullOrWhiteSpace(OperationMessage))
         {
-            <div
-                style="padding:6px 12px; font-size:11px; color:var(--color-text-muted); border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border);">
+            <div class="entity-tree-operation-message">
                 @OperationMessage
             </div>
         }
 
-        <Virtualize Items="@_flatRows" Context="row" ItemSize="36">
-            @switch (row.Kind)
+        <div class="entity-tree-action-bar @(SelectedEntity is null ? "empty" : string.Empty)" role="region" aria-label="Entity actions">
+            @if (SelectedEntity is null)
             {
-                case TreeRowKind.QueueHeader:
-                    <div
-                        style="padding:6px 12px; font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px;">
-                        Queues</div>
-                        <div style="padding:0 12px 6px; font-size:10px; color:var(--color-text-muted);">
-                            Click row to open Active. Use Active/DLQ actions to pick a mode explicitly.
+                <div class="entity-tree-action-empty">Select an entity to access actions.</div>
+            }
+            else
+            {
+                var selected = SelectedEntity;
+                var statusLabel = GetStatusLabel(selected);
+                var supportsMessageModes = SupportsMessageModes(selected);
+
+                <div class="entity-tree-selected-name" title="@selected.Name">@selected.Name</div>
+                <div class="entity-tree-selected-meta">
+                    <span class="entity-status-dot @(selected.IsDisabled ? "disabled" : "active")"
+                          role="img"
+                          title="@($"Status: {statusLabel}")"
+                          aria-label="@($"Status: {statusLabel}")"></span>
+                    <span class="entity-tree-selected-status">@statusLabel</span>
+                </div>
+                <div class="entity-tree-action-buttons">
+                    <button type="button"
+                            class="entity-tree-action-btn"
+                            disabled="@(IsMutating || IsLoading || !supportsMessageModes)"
+                            title="@(supportsMessageModes ? $"Open active messages for '{selected.Name}'" : "Active mode is not available for topics")"
+                            aria-label="@(supportsMessageModes ? $"Open active messages for {selected.Name}" : "Active mode is not available for topics")"
+                            @onclick="() => OpenEntity(selected)">
+                        Open Active
+                    </button>
+                    <button type="button"
+                            class="entity-tree-action-btn"
+                            disabled="@(IsMutating || IsLoading || !supportsMessageModes)"
+                            title="@(supportsMessageModes ? $"Open dead-letter messages for '{selected.Name}'" : "Dead-letter mode is not available for topics")"
+                            aria-label="@(supportsMessageModes ? $"Open dead-letter messages for {selected.Name}" : "Dead-letter mode is not available for topics")"
+                            @onclick="() => OpenEntity(selected, true)">
+                        Open DLQ
+                    </button>
+                    <button type="button"
+                            class="entity-tree-action-btn"
+                            disabled="@(IsMutating || IsLoading)"
+                            title="@(selected.IsDisabled ? $"Enable '{selected.Name}'" : $"Disable '{selected.Name}'")"
+                            aria-label="@(selected.IsDisabled ? $"Enable {selected.Name}" : $"Disable {selected.Name}")"
+                            @onclick="() => ToggleEntityEnabledAsync(selected)">
+                        @(selected.IsDisabled ? "Enable" : "Disable")
+                    </button>
+                </div>
+            }
+        </div>
+
+        <div class="entity-tree-list">
+            @foreach (var row in _flatRows)
+            {
+                @switch (row.Kind)
+                {
+                    case TreeRowKind.QueueHeader:
+                        <div class="entity-tree-section-label">
+                            Queues
+                        </div>
+                        <div class="entity-tree-section-help">
+                            Click a queue or subscription to open Active messages. Use the selected action bar for DLQ and enable/disable.
                         </div>
                         break;
 
-                case TreeRowKind.Queue:
-                            {
-                                var q = row.Entity!;
-                                var isLinked = IsEntityLinked(q.EntityPath);
-                                <div @key="q.EntityPath" class="entity-tree-item" @onclick="() => OpenEntity(q)">
-                                    <span class="entity-tree-glyph" style="font-size:14px;">Q</span>
-                                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@q.Name</span>
-                                    <span class="entity-status-badge @(q.IsDisabled ? "disabled" : "active")">@GetStatusLabel(q)</span>
-                                    <div class="entity-mode-actions" aria-label="Open queue mode">
-                                        <button type="button" class="entity-mode-btn active" title="Open active messages"
-                                                @onclick:stopPropagation="true" @onclick="() => OpenEntity(q)">
-                                            Active @FormatCount(q.Stats?.ActiveMessageCount)
-                                        </button>
-                                        <button type="button" class="entity-mode-btn dlq" title="Open dead-letter messages"
-                                                @onclick:stopPropagation="true" @onclick="() => OpenEntity(q, true)">
-                                            DLQ @FormatCount(q.Stats?.DeadLetterMessageCount)
-                                        </button>
-                                    </div>
-                                    <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
-                                            title="@(q.IsDisabled ? $"Enable queue '{q.Name}'" : $"Disable queue '{q.Name}'")"
-                                            @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(q)">
-                                        @(q.IsDisabled ? "Enable" : "Disable")
+                    case TreeRowKind.Queue:
+                        {
+                            var q = row.Entity!;
+                            var isLinked = IsEntityLinked(q.EntityPath);
+                            <div @key="q.EntityPath" class="@GetEntityRowClass(q)" @onclick="() => OnEntityRowClickedAsync(q)">
+                                <span class="entity-tree-glyph entity-tree-glyph-queue">Q</span>
+                                <span class="entity-tree-name" title="@q.Name">@q.Name</span>
+                                <div class="entity-row-actions">
+                                    <span class="entity-active-chip"
+                                          title="@($"Active messages in '{q.Name}'")"
+                                          aria-label="@($"Active messages in {q.Name}: {FormatCount(q.Stats?.ActiveMessageCount)}")">
+                                        <span class="entity-active-label">A</span>
+                                        <span class="entity-active-count">@FormatCount(q.Stats?.ActiveMessageCount)</span>
+                                    </span>
+                                    <button type="button"
+                                            class="entity-pin-btn entity-icon-btn @(isLinked ? "pinned" : string.Empty)"
+                                            title="@(isLinked ? "Unpin from project" : "Pin to project")"
+                                            aria-label="@(isLinked ? $"Unpin queue {q.Name} from project" : $"Pin queue {q.Name} to project")"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => ToggleLink(q.EntityPath)">
+                                        <span aria-hidden="true">@(isLinked ? "*" : "o")</span>
                                     </button>
-                                    <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
-                                          style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
-                                          @onclick:stopPropagation="true" @onclick="() => ToggleLink(q.EntityPath)">@(isLinked ? "📌" :
-                                        "📍")</span>
-                                    </div>
-                                    break;
-                                }
+                                </div>
+                            </div>
+                            break;
+                        }
 
-                case TreeRowKind.TopicHeader:
-                                    <div
-                                        style="padding:6px 12px; font-size:10px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">
-                                        Topics</div>
-                                        break;
+                    case TreeRowKind.TopicHeader:
+                        <div class="entity-tree-section-label entity-tree-section-label-topics">
+                            Topics
+                        </div>
+                        break;
 
-                case TreeRowKind.Topic:
-                                            {
-                                                var t = row.Entity!;
-                                                <div @key="t.EntityPath" class="entity-tree-item entity-tree-topic" @onclick="() => ToggleTopic(t.Name)">
-                                                    <span class="entity-tree-glyph" style="font-size:14px;">@(ExpandedTopics.Contains(t.Name) ? "▼" :
-                                                                                                                                                                                                                                      "▶")</span>
-                                                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">@t.Name</span>
-                                                        <div class="entity-row-actions">
-                                                            <span class="entity-status-badge @(t.IsDisabled ? "disabled" : "active")">@GetStatusLabel(t)</span>
-                                                            <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
-                                                                    title="@(t.IsDisabled ? $"Enable topic '{t.Name}'" : $"Disable topic '{t.Name}'")"
-                                                                    @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(t)">
-                                                                @(t.IsDisabled ? "Enable" : "Disable")
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    break;
-                                                }
+                    case TreeRowKind.Topic:
+                        {
+                            var t = row.Entity!;
+                            <div @key="t.EntityPath" class="@GetEntityRowClass(t, "entity-tree-item entity-tree-topic")" @onclick="() => OnTopicRowClickedAsync(t)">
+                                <span class="entity-tree-glyph entity-tree-glyph-topic">@(ExpandedTopics.Contains(t.Name) ? "-" : "+")</span>
+                                <span class="entity-tree-name" title="@t.Name">@t.Name</span>
+                            </div>
+                            break;
+                        }
 
-                case TreeRowKind.Subscription:
-                                                    {
-                                                        var s = row.Entity!;
-                                                        var isLinked = IsEntityLinked(s.EntityPath);
-                                                        <div @key="s.EntityPath" class="entity-tree-item entity-tree-subscription" style="padding-left:28px;"
-                                                             @onclick="() => OpenEntity(s)">
-                                                            <span class="entity-tree-glyph" style="font-size:13px;">↳</span>
-                                                            <span style="flex:1;">@s.Name</span>
-                                                            <span class="entity-status-badge @(s.IsDisabled ? "disabled" : "active")">@GetStatusLabel(s)</span>
-                                                            <div class="entity-mode-actions" aria-label="Open subscription mode">
-                                                                <button type="button" class="entity-mode-btn active" title="Open active messages"
-                                                                        @onclick:stopPropagation="true" @onclick="() => OpenEntity(s)">
-                                                                    Active @FormatCount(s.Stats?.ActiveMessageCount)
-                                                                </button>
-                                                                <button type="button" class="entity-mode-btn dlq" title="Open dead-letter messages"
-                                                                        @onclick:stopPropagation="true" @onclick="() => OpenEntity(s, true)">
-                                                                    DLQ @FormatCount(s.Stats?.DeadLetterMessageCount)
-                                                                </button>
-                                                            </div>
-                                                            <button type="button" class="entity-toggle-btn" disabled="@(IsMutating || IsLoading)"
-                                                                    title="@(s.IsDisabled ? $"Enable subscription '{s.Name}'" : $"Disable subscription '{s.Name}'")"
-                                                                    @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(s)">
-                                                                @(s.IsDisabled ? "Enable" : "Disable")
-                                                            </button>
-                                                            <span title="@(isLinked ? "Unpin from project" : "Pin to project")"
-                                                                  style="margin-left:4px; cursor:pointer; font-size:12px; color:@(isLinked ? "var(--color-accent)" : "var(--color-text-muted)");"
-                                                                  @onclick:stopPropagation="true" @onclick="() => ToggleLink(s.EntityPath)">@(isLinked ? "📌" :
-                                                                "📍")</span>
-                                                            </div>
-                                                            break;
-                                                        }
-                                                    }
-                                                </Virtualize>
-                                            }
-                                        </div>
+                    case TreeRowKind.Subscription:
+                        {
+                            var s = row.Entity!;
+                            var isLinked = IsEntityLinked(s.EntityPath);
+                            <div @key="s.EntityPath" class="@GetEntityRowClass(s, "entity-tree-item entity-tree-subscription")" @onclick="() => OnEntityRowClickedAsync(s)">
+                                <span class="entity-tree-glyph entity-tree-glyph-subscription">&gt;</span>
+                                <span class="entity-tree-name" title="@s.Name">@s.Name</span>
+                                <div class="entity-row-actions">
+                                    <span class="entity-active-chip"
+                                          title="@($"Active messages in '{s.Name}'")"
+                                          aria-label="@($"Active messages in {s.Name}: {FormatCount(s.Stats?.ActiveMessageCount)}")">
+                                        <span class="entity-active-label">A</span>
+                                        <span class="entity-active-count">@FormatCount(s.Stats?.ActiveMessageCount)</span>
+                                    </span>
+                                    <button type="button"
+                                            class="entity-pin-btn entity-icon-btn @(isLinked ? "pinned" : string.Empty)"
+                                            title="@(isLinked ? "Unpin from project" : "Pin to project")"
+                                            aria-label="@(isLinked ? $"Unpin subscription {s.Name} from project" : $"Pin subscription {s.Name} to project")"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => ToggleLink(s.EntityPath)">
+                                        <span aria-hidden="true">@(isLinked ? "*" : "o")</span>
+                                    </button>
+                                </div>
+                            </div>
+                            break;
+                        }
+                }
+            }
+        </div>
+    }
+</div>
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
@@ -150,6 +182,8 @@
     private bool _needsRender = true;
     private bool IsMutating;
     private string? OperationMessage;
+    private string? _selectedEntityPath;
+    private SbEntityInfo? SelectedEntity;
 
     protected override bool ShouldRender()
     {
@@ -172,6 +206,8 @@
             ExpandedTopics = [];
             _flatRows = [];
             _loadedClient = null;
+            _selectedEntityPath = null;
+            SelectedEntity = null;
             _needsRender = true;
             return;
         }
@@ -205,6 +241,8 @@
                 }
             }
         }
+
+        RefreshSelectedEntity();
     }
 
     private async Task LoadAsync()
@@ -220,11 +258,11 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            // Load queues first — show them immediately
+            // Load queues first - show them immediately
             Queues = (await Client.ListQueuesAsync()).ToList();
             RebuildFlatRows();
             _needsRender = true;
-            await InvokeAsync(StateHasChanged); // BL-2: progressive update — queues visible before topics load
+            await InvokeAsync(StateHasChanged); // BL-2: progressive update - queues visible before topics load
 
             // Then load topics
             Topics = (await Client.ListTopicsAsync()).ToList();
@@ -317,6 +355,71 @@ ex.Message.Contains("Forbidden")
         }
     }
 
+    private async Task OnEntityRowClickedAsync(SbEntityInfo entity)
+    {
+        SelectEntity(entity);
+        await OpenEntity(entity);
+    }
+
+    private async Task OnTopicRowClickedAsync(SbEntityInfo topic)
+    {
+        SelectEntity(topic);
+        await ToggleTopic(topic.Name);
+    }
+
+    private void SelectEntity(SbEntityInfo entity)
+    {
+        _selectedEntityPath = entity.EntityPath;
+        SelectedEntity = entity;
+        _needsRender = true;
+    }
+
+    private void RefreshSelectedEntity()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedEntityPath))
+        {
+            SelectedEntity = null;
+            return;
+        }
+
+        SelectedEntity = FindEntityByPath(_selectedEntityPath);
+        if (SelectedEntity is null)
+        {
+            _selectedEntityPath = null;
+        }
+    }
+
+    private SbEntityInfo? FindEntityByPath(string entityPath)
+    {
+        var queue = Queues.FirstOrDefault(q => q.EntityPath == entityPath);
+        if (queue is not null)
+        {
+            return queue;
+        }
+
+        var topic = Topics.FirstOrDefault(t => t.EntityPath == entityPath);
+        if (topic is not null)
+        {
+            return topic;
+        }
+
+        foreach (var subs in Subscriptions.Values)
+        {
+            var subscription = subs.FirstOrDefault(s => s.EntityPath == entityPath);
+            if (subscription is not null)
+            {
+                return subscription;
+            }
+        }
+
+        return null;
+    }
+
+    private string GetEntityRowClass(SbEntityInfo entity, string baseClass = "entity-tree-item") =>
+        string.Equals(_selectedEntityPath, entity.EntityPath, StringComparison.Ordinal)
+            ? $"{baseClass} selected"
+            : baseClass;
+
     private async Task OpenEntity(SbEntityInfo entity, bool isDlq = false)
     {
         if (OnEntityModeSelected.HasDelegate)
@@ -331,6 +434,8 @@ ex.Message.Contains("Forbidden")
     private static string FormatCount(long? count) => (count ?? 0).ToString();
 
     private static string GetStatusLabel(SbEntityInfo entity) => entity.IsDisabled ? "Disabled" : "Active";
+
+    private static bool SupportsMessageModes(SbEntityInfo entity) => !entity.IsTopic;
 
     private static bool TryResolveSubscription(SbEntityInfo entity, out string topicName, out string subscriptionName)
     {

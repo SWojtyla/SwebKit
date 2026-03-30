@@ -176,6 +176,7 @@
     private string ActiveTab = "pipelines";
     private int _pendingApprovalCount;
     private bool _showProjectPicker;
+    private bool _hasValidDevOpsConfig = true;
     private List<string> _demoPinnedProjects = [];
     private CancellationTokenSource _cts = new();
 
@@ -197,7 +198,8 @@
 
     private bool IsConfigured =>
         AppState.UseDemoData ||
-        (AppState.Config.DevOpsConfig is not null
+        (_hasValidDevOpsConfig
+         && AppState.Config.DevOpsConfig is not null
          && !string.IsNullOrEmpty(AppState.Config.DevOpsConfig.Organization));
 
     private List<string> PinnedProjects =>
@@ -237,8 +239,14 @@
             var config = AppState.Config.DevOpsConfig;
             if (config is not null)
             {
-                try { RealDevOpsClient.Configure(config); }
-                catch (InvalidOperationException) { /* already configured on prior visit */ }
+                try
+                {
+                    RealDevOpsClient.Configure(config);
+                }
+                catch (InvalidOperationException)
+                {
+                    _hasValidDevOpsConfig = false;
+                }
             }
         }
 

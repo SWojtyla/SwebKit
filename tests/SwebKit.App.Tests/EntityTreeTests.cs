@@ -19,7 +19,7 @@ public sealed class EntityTreeTests : TestContext
     }
 
     [Fact]
-    public void QueueRow_ShowsActiveAndDlqCounts_AndExplicitModeButtons()
+    public void QueueRow_UsesCompactModeLabels_AndKeepsEntityNameVisible()
     {
         var client = new FakeServiceBusClient();
 
@@ -29,10 +29,17 @@ public sealed class EntityTreeTests : TestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Active 42", cut.Markup);
-            Assert.Contains("DLQ 3", cut.Markup);
-            Assert.NotEmpty(cut.FindAll(".entity-mode-btn.active"));
-            Assert.NotEmpty(cut.FindAll(".entity-mode-btn.dlq"));
+            var queueName = cut.Find(".entity-tree-name");
+            Assert.Equal("orders", queueName.TextContent.Trim());
+            Assert.Equal("orders", queueName.GetAttribute("title"));
+
+            var activeButton = cut.Find(".entity-mode-btn.active");
+            var dlqButton = cut.Find(".entity-mode-btn.dlq");
+
+            Assert.Equal("A", activeButton.QuerySelector(".entity-mode-short")!.TextContent.Trim());
+            Assert.Equal("42", activeButton.QuerySelector(".entity-mode-count")!.TextContent.Trim());
+            Assert.Equal("D", dlqButton.QuerySelector(".entity-mode-short")!.TextContent.Trim());
+            Assert.Equal("3", dlqButton.QuerySelector(".entity-mode-count")!.TextContent.Trim());
         });
     }
 
