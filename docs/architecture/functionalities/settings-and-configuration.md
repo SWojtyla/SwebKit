@@ -34,6 +34,8 @@
 - Secrets are expected in credential store and not in profile JSON.
 - DevOps settings accept organization slug input or supported Azure DevOps URL forms; saving applies updated DevOps client configuration immediately, while the PAT remains stored in the credential store.
 - Service Bus settings here focus on pinned entities, while namespace registration happens on the Service Bus page.
+- AKS monitoring persistence (`MonitoringEnabled`, `MonitoredNamespaces`) remains in existing AKS config and is not altered by window hide/restore transitions.
+- On Windows, Minimize and Close now route to system tray by default; explicit Exit from tray menu is required for full app termination. This behavior is currently fixed (not user-toggleable in Settings).
 
 ## Validation Pointers
 

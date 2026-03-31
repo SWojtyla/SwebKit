@@ -22,6 +22,7 @@
 - YAML viewer includes inline search (highlight + scroll to match).
 - Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
 - CronJob visibility — schedule, active count, last schedule/success times, suspended state badge.
+- Windows tray continuity for monitoring — Minimize and Close hide the app to tray, monitoring continues in the existing `PodHealthMonitorService`, and hidden pod alerts increment tray unread state.
 
 ## Core Runtime Flow
 
@@ -30,6 +31,7 @@
 3. Table actions call `IAksClient` operations for mutations and diagnostics.
 4. Long-running and side-panel operations keep the main grid responsive.
 5. Auto-refresh pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
+6. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes
 
@@ -60,6 +62,8 @@
 - `src/SwebKit.Core/Services/PortForwardSessionService.cs`
 - `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`
 - `src/SwebKit.Core/Services/DemoAksClient.cs`
+- `src/SwebKit.App/Platforms/Windows/WindowsTrayLifecycleService.cs`
+- `src/SwebKit.App/Services/TrayLifecycleState.cs`
 
 ## Validation Pointers
 

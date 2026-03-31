@@ -1,4 +1,5 @@
 ﻿using SwebKit.Core.Abstractions;
+using SwebKit.App.Services;
 #if WINDOWS
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
@@ -9,6 +10,7 @@ namespace SwebKit.App;
 public partial class App : Application
 {
     private const string AppAumid = "SwebKit.App";
+    private readonly ITrayLifecycleService _trayLifecycle;
 
 #if WINDOWS
     // Registers the AppUserModelId for the process so unpackaged WinRT toast notifications work.
@@ -35,25 +37,31 @@ public partial class App : Application
     }
 #endif
 
-	public App()
-	{
-		InitializeComponent();
+    public App(ITrayLifecycleService trayLifecycle)
+    {
+        _trayLifecycle = trayLifecycle;
+        InitializeComponent();
 #if WINDOWS
         RegisterAumidInRegistry(AppAumid, "SwebKit");
         SetCurrentProcessExplicitAppUserModelID(AppAumid);
 #endif
-		AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-	}
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+    }
 
-	protected override Window CreateWindow(IActivationState? activationState)
-	{
-		return new Window(new MainPage()) { Title = "SwebKit.App" };
-	}
+    protected override Window CreateWindow(IActivationState? activationState)
+    {
+        var window = new Window(new MainPage()) { Title = "SwebKit.App" };
+        _trayLifecycle.Initialize(window);
+        return window;
+    }
 
-	private static void OnProcessExit(object? sender, EventArgs e)
-	{
-		var sessions = IPlatformApplication.Current?.Services.GetService<IPortForwardSessionService>();
-		if (sessions is not null)
-			Task.Run(() => sessions.StopAllAsync()).GetAwaiter().GetResult();
-	}
+    private static void OnProcessExit(object? sender, EventArgs e)
+    {
+        var tray = IPlatformApplication.Current?.Services.GetService<ITrayLifecycleService>();
+        tray?.Dispose();
+
+        var sessions = IPlatformApplication.Current?.Services.GetService<IPortForwardSessionService>();
+        if (sessions is not null)
+            Task.Run(() => sessions.StopAllAsync()).GetAwaiter().GetResult();
+    }
 }

@@ -48,12 +48,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
+        builder.Services.AddSingleton<TrayLifecycleState>();
 
         // Pod Health Monitor
 #if WINDOWS
         builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
+        builder.Services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
 #else
         builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
+        builder.Services.AddSingleton<ITrayLifecycleService, NullTrayLifecycleService>();
 #endif
         builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
 
