@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/SwebKit.App/SwebKit.App.csproj" />
+    <Project Path="src/SwebKit.App/SwebKit.App.csproj">
+      <Deploy Solution="Debug|*" />
+    </Project>
     <Project Path="src/SwebKit.Azure/SwebKit.Azure.csproj" />
     <Project Path="src/SwebKit.Core/SwebKit.Core.csproj" />
     <Project Path="src/SwebKit.Kubernetes/SwebKit.Kubernetes.csproj" />

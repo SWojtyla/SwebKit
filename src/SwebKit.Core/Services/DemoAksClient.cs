@@ -532,21 +532,33 @@ public class DemoAksClient : IAksClient
         return Task.FromResult(yaml);
     }
 
+    private static int ResolveLogStartIndex(LogStreamOptions opts)
+    {
+        if (opts.SinceSeconds is int sinceSeconds && sinceSeconds >= 0)
+            return Math.Max(0, LogLines.Length - sinceSeconds);
+
+        if (opts.TailLines is int tailLines && tailLines >= 0)
+            return Math.Max(0, LogLines.Length - tailLines);
+
+        return 0;
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         // Emit initial batch
-        var start = Math.Max(0, LogLines.Length - (opts.TailLines ?? 20));
+        var start = ResolveLogStartIndex(opts);
         for (var i = start; i < LogLines.Length; i++)
         {
             var ts = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)).ToString("yyyy-MM-dd HH:mm:ss.fff");
-            var line = $"{ts}  {LogLines[i]}";
+            var payload = opts.PreviousContainer ? $"[PREVIOUS] {LogLines[i]}" : LogLines[i];
+            var line = $"{ts}  {payload}";
             if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
                 yield return line;
         }
 
-        if (!opts.Follow) yield break;
+        if (!opts.Follow || opts.PreviousContainer) yield break;
 
         // Simulate live tail
         var idx = 0;
@@ -714,17 +726,20 @@ public class DemoAksClient : IAksClient
             var offset = idx * 7; // stagger starting lines per pod
             var lineIdx = offset;
             // Emit initial batch
-            var start = Math.Max(0, LogLines.Length - (opts.TailLines ?? 20));
+            var start = ResolveLogStartIndex(opts);
             for (var i = start; i < LogLines.Length; i++)
             {
                 if (linkedCts.Token.IsCancellationRequested) break;
                 var ts = DateTimeOffset.UtcNow.AddSeconds(-(LogLines.Length - i)).ToString("yyyy-MM-dd HH:mm:ss.fff");
-                var line = $"{ts}  {LogLines[(i + offset) % LogLines.Length]}";
+                var payload = LogLines[(i + offset) % LogLines.Length];
+                if (opts.PreviousContainer)
+                    payload = $"[PREVIOUS] {payload}";
+                var line = $"{ts}  {payload}";
                 if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
                     await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
             }
 
-            if (!opts.Follow) return;
+            if (!opts.Follow || opts.PreviousContainer) return;
 
             while (!linkedCts.Token.IsCancellationRequested)
             {

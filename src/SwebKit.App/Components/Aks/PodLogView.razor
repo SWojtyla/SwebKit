@@ -6,7 +6,7 @@
 <div class="log-viewer">
     <div class="log-toolbar">
         <label class="log-live-toggle">
-            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" />
+            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" disabled="@IsPreviousContainerSelected" />
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
@@ -19,6 +19,13 @@
                 }
             </select>
         }
+        <select class="log-range-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+            <option value="@LogRange.Last5m">Last 5m</option>
+            <option value="@LogRange.Last10m">Last 10m</option>
+            <option value="@LogRange.Last1h">Last 1h</option>
+            <option value="@LogRange.All">All</option>
+            <option value="@LogRange.PreviousContainer">Previous container</option>
+        </select>
         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
                class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
@@ -32,10 +39,6 @@
                 @(_paused ? "▶ Resume" : "⏸ Pause")
             </FluentButton>
         }
-        <label class="log-live-toggle" style="margin-left:auto;">
-            <input type="checkbox" @bind="_tailEnabled" />
-            ↓ Tail
-        </label>
     </div>
 
     <div class="log-output" @ref="_logContainer">
@@ -66,6 +69,7 @@
     [Parameter] public int BufferSize { get; set; } = 10_000;
 
     private readonly record struct LogEntry(string Line, string CssClass);
+    private enum LogRange { Last5m, Last10m, Last1h, All, PreviousContainer }
 
     private List<string> Lines = [];
     private bool IsLive = true;
@@ -74,9 +78,10 @@
     private CancellationTokenSource? _cts;
     private ElementReference _logContainer;
     private Task? _streamTask;
-    private bool _tailEnabled = true;
+    private LogRange _selectedRange = LogRange.Last5m;
     private string _selectedContainer = string.Empty;
     private bool _paused;
+    private bool IsPreviousContainerSelected => _selectedRange == LogRange.PreviousContainer;
 
     // PERF2-3: Cached filtered lines — recomputed only when dirty
     private List<LogEntry> _filteredLinesCache = [];
@@ -123,6 +128,13 @@
 
     private async Task OnLiveToggle()
     {
+        if (IsPreviousContainerSelected)
+        {
+            IsLive = false;
+            _paused = false;
+            return;
+        }
+
         if (IsLive) await StartTailingAsync();
         else { StopTailing(); IsLoading = false; _paused = false; }
     }
@@ -130,6 +142,21 @@
     private async Task OnContainerChanged(ChangeEventArgs e)
     {
         _selectedContainer = e.Value?.ToString() ?? string.Empty;
+        if (Client is null || Namespace is null || PodName is null)
+            return;
+        await StartTailingAsync();
+    }
+
+    private async Task OnRangeChanged()
+    {
+        if (IsPreviousContainerSelected)
+        {
+            IsLive = false;
+            _paused = false;
+        }
+
+        if (Client is null || Namespace is null || PodName is null)
+            return;
         await StartTailingAsync();
     }
 
@@ -152,8 +179,9 @@
         IsLoading = true;
         _paused = false;
         Lines.Clear();
+        _linesDirty = false;
         _filterDirty = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
 
         StopRenderTimer();
         StartRenderTimer(token);
@@ -172,39 +200,42 @@
     // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
     private void StartRenderTimer(CancellationToken token)
     {
-        _renderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        _renderTimer = timer;
         _renderTimerTask = Task.Run(async () =>
         {
             try
             {
-                while (await _renderTimer.WaitForNextTickAsync(token))
+                while (await timer.WaitForNextTickAsync(token))
                 {
                     if (_paused || !_linesDirty) continue;
                     _linesDirty = false;
                     _filterDirty = true;
                     await InvokeAsync(StateHasChanged);
-                    if (_tailEnabled)
+                    if (IsLive)
                         await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
                 }
             }
             catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
         });
     }
 
     private void StopRenderTimer()
     {
-        _renderTimer?.Dispose();
-        _renderTimer = null;
+        var timer = Interlocked.Exchange(ref _renderTimer, null);
+        timer?.Dispose();
     }
 
     private async Task StreamLogsAsync(CancellationToken token)
     {
         try
         {
-            var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
+            var opts = BuildLogStreamOptions();
             var container = _selectedContainer;
             await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, token))
             {
+                if (!IsCurrentSession(token)) break;
                 Lines.Add(line);
                 if (Lines.Count > BufferSize) Lines.RemoveAt(0);
                 _linesDirty = true;
@@ -213,12 +244,44 @@
         catch (OperationCanceledException) { }
         finally
         {
-            // Final flush after stream ends
-            _linesDirty = false;
-            _filterDirty = true;
-            StopRenderTimer();
-            await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+            if (IsCurrentSession(token))
+            {
+                // Final flush after stream ends
+                _linesDirty = false;
+                _filterDirty = true;
+                StopRenderTimer();
+                await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+            }
         }
+    }
+
+    private bool IsCurrentSession(CancellationToken token)
+        => _cts?.Token.Equals(token) == true;
+
+    private LogStreamOptions BuildLogStreamOptions()
+    {
+        var opts = new LogStreamOptions { Follow = IsLive };
+
+        switch (_selectedRange)
+        {
+            case LogRange.Last5m:
+                opts.SinceSeconds = 5 * 60;
+                break;
+            case LogRange.Last10m:
+                opts.SinceSeconds = 10 * 60;
+                break;
+            case LogRange.Last1h:
+                opts.SinceSeconds = 60 * 60;
+                break;
+            case LogRange.All:
+                break;
+            case LogRange.PreviousContainer:
+                opts.PreviousContainer = true;
+                opts.Follow = false;
+                break;
+        }
+
+        return opts;
     }
 
     private void ClearLogs() { Lines.Clear(); _filterDirty = true; StateHasChanged(); }

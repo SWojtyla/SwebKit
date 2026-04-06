@@ -4,10 +4,17 @@
 <div class="log-viewer">
     <div class="log-toolbar">
         <label class="log-live-toggle">
-            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" />
+            <input type="checkbox" @bind="IsLive" @bind:after="OnLiveToggle" disabled="@IsPreviousContainerSelected" />
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
+        <select class="log-range-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+            <option value="@LogRange.Last5m">Last 5m</option>
+            <option value="@LogRange.Last10m">Last 10m</option>
+            <option value="@LogRange.Last1h">Last 1h</option>
+            <option value="@LogRange.All">All</option>
+            <option value="@LogRange.PreviousContainer">Previous container</option>
+        </select>
         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
                class="log-filter-input" />
         <span class="log-line-count">@FilteredLines.Count lines</span>
@@ -70,6 +77,7 @@
 
     // PERF2-3: Precomputed display record for Virtualize
     private readonly record struct MultiLogEntry(string PodName, string PodTag, int ColorIndex, string Line);
+    private enum LogRange { Last5m, Last10m, Last1h, All, PreviousContainer }
 
     private List<AggregatedLogLine> Lines = [];
     private bool IsLive = true;
@@ -80,8 +88,10 @@
     private Task? _streamTask;
     private readonly Dictionary<string, int> _podColorIndex = [];
     private int _nextColorIdx;
+    private LogRange _selectedRange = LogRange.Last5m;
     private bool _mergeSort;
     private bool _paused;
+    private bool IsPreviousContainerSelected => _selectedRange == LogRange.PreviousContainer;
 
     // PERF2-3: Cached filtered lines — recomputed only when dirty
     private List<MultiLogEntry> _filteredLinesCache = [];
@@ -139,8 +149,28 @@ _lastMergeSort)
 
     private async Task OnLiveToggle()
     {
+        if (IsPreviousContainerSelected)
+        {
+            IsLive = false;
+            _paused = false;
+            return;
+        }
+
         if (IsLive) await StartTailingAsync();
         else { StopTailing(); IsLoading = false; _paused = false; }
+    }
+
+    private async Task OnRangeChanged()
+    {
+        if (IsPreviousContainerSelected)
+        {
+            IsLive = false;
+            _paused = false;
+        }
+
+        if (Client is null || Namespace is null || DeploymentName is null)
+            return;
+        await StartTailingAsync();
     }
 
     private void TogglePause()
@@ -164,8 +194,9 @@ _lastMergeSort)
         Lines.Clear();
         _podColorIndex.Clear();
         _nextColorIdx = 0;
+        _linesDirty = false;
         _filterDirty = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
 
         StopRenderTimer();
         StartRenderTimer(token);
@@ -184,12 +215,13 @@ _lastMergeSort)
     // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
     private void StartRenderTimer(CancellationToken token)
     {
-        _renderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        _renderTimer = timer;
         _renderTimerTask = Task.Run(async () =>
         {
             try
             {
-                while (await _renderTimer.WaitForNextTickAsync(token))
+                while (await timer.WaitForNextTickAsync(token))
                 {
                     if (_paused || !_linesDirty) continue;
                     _linesDirty = false;
@@ -198,22 +230,24 @@ _lastMergeSort)
                 }
             }
             catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
         });
     }
 
     private void StopRenderTimer()
     {
-        _renderTimer?.Dispose();
-        _renderTimer = null;
+        var timer = Interlocked.Exchange(ref _renderTimer, null);
+        timer?.Dispose();
     }
 
     private async Task StreamLogsAsync(CancellationToken token)
     {
         try
         {
-            var opts = new LogStreamOptions { Follow = true, TailLines = 200 };
+            var opts = BuildLogStreamOptions();
             await foreach (var line in Client!.StreamDeploymentLogsAsync(Namespace!, DeploymentName!, opts, token))
             {
+                if (!IsCurrentSession(token)) break;
                 if (!_podColorIndex.ContainsKey(line.PodName))
                     _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
 
@@ -240,13 +274,45 @@ _lastMergeSort)
         catch (OperationCanceledException) { }
         finally
         {
-            // Final flush after stream ends
-            _linesDirty = false;
-            _filterDirty = true;
-            StopRenderTimer();
-            await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+            if (IsCurrentSession(token))
+            {
+                // Final flush after stream ends
+                _linesDirty = false;
+                _filterDirty = true;
+                StopRenderTimer();
+                await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
+            }
         }
     }
+
+    private LogStreamOptions BuildLogStreamOptions()
+    {
+        var opts = new LogStreamOptions { Follow = IsLive };
+
+        switch (_selectedRange)
+        {
+            case LogRange.Last5m:
+                opts.SinceSeconds = 5 * 60;
+                break;
+            case LogRange.Last10m:
+                opts.SinceSeconds = 10 * 60;
+                break;
+            case LogRange.Last1h:
+                opts.SinceSeconds = 60 * 60;
+                break;
+            case LogRange.All:
+                break;
+            case LogRange.PreviousContainer:
+                opts.PreviousContainer = true;
+                opts.Follow = false;
+                break;
+        }
+
+        return opts;
+    }
+
+    private bool IsCurrentSession(CancellationToken token)
+        => _cts?.Token.Equals(token) == true;
 
     private void ClearLogs()
     {

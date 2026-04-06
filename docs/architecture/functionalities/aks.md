@@ -8,6 +8,7 @@
 - View Kubernetes events with warning highlighting.
 - Stream pod logs with filtering.
 - Multi-pod log aggregation — stream logs from all pods of a deployment simultaneously; lines are prefixed with pod name and color-coded per pod.
+- Pod and multi-pod log viewers include a range selector (`Last 5m`, `Last 10m`, `Last 1h`, `All`, `Previous container`). `Live` maps directly to follow mode; selecting `Previous container` forces `Live` off and disables it until another range is selected.
 - View resource YAML.
 - **Port-forward sessions panel** — tracked, observable sessions with `Starting / Active / Stopping / Stopped / Error` lifecycle; dialog to configure local port; sticky sessions panel; status bar count badge; all sessions cancelled on app exit.
 - Pod shell launch (externally via `wt.exe` or `cmd.exe` with `kubectl exec`).

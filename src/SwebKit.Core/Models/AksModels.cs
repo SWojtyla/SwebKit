@@ -6,6 +6,7 @@ public class LogStreamOptions
     public bool Follow { get; set; } = true;
     public int? SinceSeconds { get; set; }
     public string? TextFilter { get; set; }
+    public bool PreviousContainer { get; set; }
 }
 
 public enum PortForwardStatus { Starting, Active, Stopping, Stopped, Error }

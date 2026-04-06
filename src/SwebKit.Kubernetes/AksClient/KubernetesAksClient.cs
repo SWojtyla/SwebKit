@@ -474,6 +474,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         var stream = await _client.CoreV1.ReadNamespacedPodLogAsync(
             podName, ns,
             container: string.IsNullOrEmpty(container) ? null : container,
+            previous: opts.PreviousContainer,
             follow: opts.Follow,
             tailLines: opts.TailLines,
             sinceSeconds: opts.SinceSeconds,

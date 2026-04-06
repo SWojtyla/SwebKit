@@ -339,6 +339,55 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task StreamPodLogsAsync_SinceSeconds_ReturnsRecentWindow()
+    {
+        var lines = new List<string>();
+        var opts = new LogStreamOptions { Follow = false, SinceSeconds = 5 };
+
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.Equal(5, lines.Count);
+    }
+
+    [Fact]
+    public async Task StreamPodLogsAsync_PreviousContainer_EmitsMarkedLines_AndDoesNotFollow()
+    {
+        var lines = new List<string>();
+        var opts = new LogStreamOptions
+        {
+            Follow = true,
+            TailLines = 3,
+            PreviousContainer = true
+        };
+
+        await foreach (var line in _client.StreamPodLogsAsync("default", "order-api-pod", "order-api", opts))
+            lines.Add(line);
+
+        Assert.Equal(3, lines.Count);
+        Assert.All(lines, line => Assert.Contains("[PREVIOUS]", line));
+    }
+
+    [Fact]
+    public async Task StreamDeploymentLogsAsync_PreviousContainer_EmitsMarkedLines_AndDoesNotFollow()
+    {
+        var lines = new List<AggregatedLogLine>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var opts = new LogStreamOptions
+        {
+            Follow = true,
+            TailLines = 1,
+            PreviousContainer = true
+        };
+
+        await foreach (var line in _client.StreamDeploymentLogsAsync("default", "order-api", opts, cts.Token))
+            lines.Add(line);
+
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.Contains("[PREVIOUS]", line.Line));
+    }
+
+    [Fact]
     public async Task RestartStatefulSetAsync_CompletesWithoutError()
     {
         await _client.RestartStatefulSetAsync("default", "order-queue");
