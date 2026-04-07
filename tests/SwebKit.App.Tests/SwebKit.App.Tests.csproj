@@ -71,6 +71,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConfirmBar.razor" Link="Components\Aks\AksConfirmBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AutoRefreshToggle.razor" Link="Components\Aks\AutoRefreshToggle.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\ResizablePanel.razor" Link="Components\Aks\ResizablePanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\NamespaceMonitorSelector.razor" Link="Components\Aks\NamespaceMonitorSelector.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityFailures.razor" Link="Components\Observability\ObservabilityFailures.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityLogs.razor" Link="Components\Observability\ObservabilityLogs.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityPerformance.razor" Link="Components\Observability\ObservabilityPerformance.razor" />

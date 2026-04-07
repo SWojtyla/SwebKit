@@ -6,7 +6,7 @@ title: "Test Plan - windows-tray-aks-monitoring"
 owner: "GitHub Copilot"
 status: "Not started"
 created: "2026-03-31"
-updated: "2026-03-31"
+updated: "2026-04-07"
 
 ---
 
@@ -31,6 +31,7 @@ Validate that minimizing or closing the window sends the app to Windows system t
 8. Scenario: Hide and restore repeated 20+ times - Expected result: no duplicate tray icons, no leaked handles, stable memory growth profile.
 9. Scenario: Monitoring disabled before hide - Expected result: no background polling starts implicitly because of tray transition.
 10. Scenario: App restart after monitoring enabled persisted in config - Expected result: monitoring resumes from persisted config as before; tray feature does not regress startup behavior.
+11. Scenario: Monitor namespace selector contains many namespaces - Expected result: typing in filter input narrows visible namespaces case-insensitively, selected namespaces remain selected, and a clear no-match message appears when nothing matches.
 
 ## Automated coverage
 
@@ -40,6 +41,7 @@ Validate that minimizing or closing the window sends the app to Windows system t
 - Validate event-to-indicator state transitions and restore/reset behavior through testable services.
 - Integration tests: targeted app-layer tests for tray/window service behavior where abstraction allows simulation.
 - CI gates: build passes and all newly added tests pass.
+- Component tests: `NamespaceMonitorSelector` filter input render, case-insensitive narrowing, and no-match message behavior.
 
 ## Test data and setup
 

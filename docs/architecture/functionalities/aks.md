@@ -4,6 +4,7 @@
 
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Context switching and namespace filtering (single and all namespaces).
+- Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, ingresses, Helm releases, and CronJobs.
 - View Kubernetes events with warning highlighting.
 - Stream pod logs with filtering.
@@ -50,6 +51,7 @@
 
 - `src/SwebKit.App/Components/Pages/AksPage.razor`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
+- `src/SwebKit.App/Components/Aks/NamespaceMonitorSelector.razor`
 - `src/SwebKit.App/Components/Aks/PodLogView.razor`
 - `src/SwebKit.App/Components/Aks/MultiPodLogView.razor`
 - `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor`

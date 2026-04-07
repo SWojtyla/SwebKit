@@ -31,22 +31,36 @@
         }
         else
         {
-            <div class="ns-monitor-list" role="group" aria-label="Namespaces to monitor">
-                @foreach (var ns in _availableNamespaces)
-                {
-                    var nsCapture = ns;
-                    var isChecked = _selectedNamespaces.Contains(nsCapture);
-                    <label class="ns-monitor-item">
-                        <input type="checkbox" checked="@isChecked" @onchange="e => ToggleNamespace(nsCapture, e.Value is true)"
-                               aria-label="@nsCapture" />
-                        <span class="ns-monitor-item-label">@nsCapture</span>
-                        @if (Monitor.MonitoredNamespaces.Contains(nsCapture))
-                        {
-                            <span class="ns-monitor-badge">active</span>
-                        }
-                    </label>
-                }
+            <div class="ns-monitor-filter">
+                <input class="ns-monitor-filter-input" type="text" placeholder="Filter namespaces..." aria-label="Filter namespaces"
+                       @bind="_namespaceFilter" @bind:event="oninput" autocomplete="off" />
             </div>
+
+            @if (VisibleNamespaces.Count == 0)
+            {
+                <div class="ns-monitor-list ns-monitor-list-empty" role="status" aria-live="polite">
+                    <span class="ns-monitor-empty">No namespaces match the current filter.</span>
+                </div>
+            }
+            else
+            {
+                <div class="ns-monitor-list" role="group" aria-label="Namespaces to monitor">
+                    @foreach (var ns in VisibleNamespaces)
+                    {
+                        var nsCapture = ns;
+                        var isChecked = _selectedNamespaces.Contains(nsCapture);
+                        <label class="ns-monitor-item">
+                            <input type="checkbox" checked="@isChecked" @onchange="e => ToggleNamespace(nsCapture, e.Value is true)"
+                                   aria-label="@nsCapture" />
+                            <span class="ns-monitor-item-label">@nsCapture</span>
+                            @if (Monitor.MonitoredNamespaces.Contains(nsCapture))
+                            {
+                                <span class="ns-monitor-badge">active</span>
+                            }
+                        </label>
+                    }
+                </div>
+            }
         }
 
         @* ── Actions ── *@
@@ -80,6 +94,7 @@
     private bool _initialized;
     private List<string> _availableNamespaces = [];
     private HashSet<string> _selectedNamespaces = [];
+    private string _namespaceFilter = string.Empty;
     private bool _loading = true;
 
     protected override void OnInitialized()
@@ -141,6 +156,19 @@
         if (check) _selectedNamespaces.Add(ns);
         else _selectedNamespaces.Remove(ns);
     }
+
+    private IReadOnlyList<string> GetVisibleNamespaces()
+    {
+        if (string.IsNullOrWhiteSpace(_namespaceFilter))
+            return _availableNamespaces;
+
+        var filter = _namespaceFilter.Trim();
+        return _availableNamespaces
+            .Where(ns => ns.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private IReadOnlyList<string> VisibleNamespaces => GetVisibleNamespaces();
 
     private async Task StartMonitoringAsync()
     {

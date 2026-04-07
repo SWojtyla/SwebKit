@@ -60,6 +60,29 @@
     font-style: italic;
 }
 
+/* ── Namespace filter ── */
+.ns-monitor-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ns-monitor-filter-input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+}
+
+.ns-monitor-filter-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(62, 138, 255, 0.15);
+}
+
 /* ── Namespace scrollable list ── */
 .ns-monitor-list {
     display: flex;
@@ -71,6 +94,15 @@
     border-radius: 4px;
     padding: 4px;
     background: var(--color-bg);
+}
+
+.ns-monitor-list-empty {
+    padding: var(--spacing-sm);
+    max-height: none;
+}
+
+.ns-monitor-list-empty .ns-monitor-empty {
+    padding: 0;
 }
 
 .ns-monitor-item {

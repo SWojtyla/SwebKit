@@ -8,13 +8,15 @@ state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-03-31"
-last_updated: "2026-03-31"
+last_updated: "2026-04-07"
 
 ---
 
 ## Quick summary
 
 Windows tray lifecycle behavior is implemented for Minimize and Close (hide to tray), with tray Restore and Exit actions and pod-alert unread indicator updates while hidden.
+
+Namespace monitor selection in AKS monitor panel now includes a case-insensitive text filter to handle large namespace lists, without changing start/stop monitoring behavior.
 
 Jira: not linked
 
@@ -67,6 +69,8 @@ Current focus: finish final validation sweep (build/tests/manual tray checks) an
 - Wired tray unread-alert indicator to existing `PodHealthMonitorService.PodHealthDetected` events.
 - Added tray state unit coverage in app tests (`TrayLifecycleStateTests`).
 - Preserved monitor lifecycle ownership in existing `PodHealthMonitorService` (no second loop).
+- Added namespace-filter input to `NamespaceMonitorSelector` and no-match empty-state messaging for long namespace lists.
+- Added targeted bUnit coverage for selector filter rendering and filtering behavior.
 
 ## Remaining
 
@@ -80,10 +84,11 @@ Current focus: finish final validation sweep (build/tests/manual tray checks) an
 ## Validation
 
 - Test Plan: test-plan.md
-- Validation status: Tray-targeted automated checks passed; full app suite has unrelated existing failures; manual tray smoke checks pending
+- Validation status: Tray-targeted and namespace-selector automated checks passed; full app suite has unrelated existing failures; manual tray smoke checks pending
 - Automated checks run:
 - `MSBuild src/SwebKit.App/SwebKit.App.csproj -t:Build -p:Configuration=Debug -p:Platform=x64` (pass)
 - `dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --filter FullyQualifiedName~TrayLifecycleStateTests` (pass)
+- `dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj --filter FullyQualifiedName~NamespaceMonitorSelectorTests` (pass)
 - `dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj` (fails: 14 tests outside tray scope)
 
 ## Notes
