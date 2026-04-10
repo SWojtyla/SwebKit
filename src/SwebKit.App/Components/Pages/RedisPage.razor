@@ -51,7 +51,7 @@
                         @if (_hasMoreKeys)
                         {
                             <div class="load-more-bar">
-                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more (@Keys.Count loaded)
+                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count loaded)
                                 </FluentButton>
                             </div>
                         }
@@ -102,11 +102,15 @@
     private readonly List<string> Keys = [];
     private readonly Dictionary<string, string> KeyTypes = new(StringComparer.Ordinal);
     private readonly RedisKeyspaceHealthAnalyzer _healthAnalyzer = new();
+    private readonly RedisScanPageAccumulator _scanPageAccumulator = new(ScanPageSize);
 
     // RDS-1: Key scan pagination
     private long _scanCursor;
+    private long _scanSessionVersion;
     private bool _hasMoreKeys;
-    private const int ScanPageSize = 1000;
+    private const int ScanPageSize = 250;
+    private const int ScanBatchSize = 250;
+    private const int KeyTypeBatchSize = 25;
 
     // RDS-4: Item pagination
     private long _itemsOffset;
@@ -191,7 +195,7 @@
             Label = "Scan Keys",
             Category = "Redis",
             AreaScope = "redis",
-            Execute = () => ScanAsync(_cts.Token)
+            Execute = StartFreshScanAsync
         });
         Commands.Register(new AppCommand
         {
@@ -224,7 +228,11 @@
         {
             case "ArrowDown": SelectKeyRelative(+1); break;
             case "ArrowUp": SelectKeyRelative(-1); break;
-            case "Escape": SelectedKey = null; Selection.SetSelection("redis", null); StateHasChanged(); break;
+            case "Escape":
+                SelectedKey = null;
+                Selection.SetSelection("redis", null);
+                await InvokeAsync(StateHasChanged);
+                break;
             case "Enter": if (SelectedKey is not null) await RefreshSelectedAsync(); break;
         }
     }
@@ -240,6 +248,29 @@
     }
 
     private string? _loadedCacheId;
+
+    private (long SessionVersion, CancellationToken Token) BeginNewScanSession()
+    {
+        _scanSessionVersion++;
+        _cts.Cancel();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+        return (_scanSessionVersion, _cts.Token);
+    }
+
+    private bool IsCurrentScanSession(long sessionVersion) => sessionVersion == _scanSessionVersion;
+
+    private Task StartFreshScanAsync()
+    {
+        var (sessionVersion, token) = BeginNewScanSession();
+        return ScanAsync(sessionVersion, token);
+    }
+
+    private Task StartReconnectAndScanAsync()
+    {
+        var (sessionVersion, token) = BeginNewScanSession();
+        return ConnectAndScanAsync(sessionVersion, token);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -260,16 +291,14 @@
 
         _loadedCacheId = SelectedCacheId; // Set guard BEFORE await (BL-3)
 
-        // PERF-16: Cancel any in-flight scan before starting new connection
-        _cts.Cancel();
-        _cts.Dispose();
-        _cts = new CancellationTokenSource();
-
-        await ConnectAndScanAsync(_cts.Token);
+        await StartReconnectAndScanAsync();
     }
 
-    private async Task ConnectAndScanAsync(CancellationToken ct = default)
+    private async Task ConnectAndScanAsync(long scanSession, CancellationToken ct = default)
     {
+        if (!IsCurrentScanSession(scanSession))
+            return;
+
         InvalidateHealthReport();
 
         // PERF-18: Stale-while-revalidate — restore cached snapshot for instant back-navigation
@@ -292,27 +321,43 @@
         await InvokeAsync(StateHasChanged); // Show spinner before connection attempt
         try
         {
-            await ConnectAsync();
+            await ConnectAsync(scanSession, ct);
             ct.ThrowIfCancellationRequested();
-            await ScanAsync(ct);
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
+            await ScanAsync(scanSession, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         finally
         {
-            IsLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (IsCurrentScanSession(scanSession))
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
-    private async Task ConnectAsync()
+    private async Task ConnectAsync(long scanSession, CancellationToken ct)
     {
         DisposeClient();
+        IRedisClient? nextClient = null;
 
         try
         {
             if (AppState.UseDemoData)
             {
                 var db = ActiveCacheEntry?.Database ?? 0;
-                Client = new DemoRedisClient(db);
+                nextClient = new DemoRedisClient(db);
+                if (!IsCurrentScanSession(scanSession))
+                    return;
+
+                Client = nextClient;
+                nextClient = null;
                 ConnectionState.SetConnected("redis");
                 return;
             }
@@ -320,23 +365,42 @@
             var entry = ActiveCacheEntry;
             if (entry is null || string.IsNullOrWhiteSpace(entry.ConnectionString))
             {
-                ConnectionState.SetNotConfigured("redis");
+                if (IsCurrentScanSession(scanSession))
+                    ConnectionState.SetNotConfigured("redis");
                 return;
             }
 
-            Client = await SwebKit.Redis.RedisClient.CreateAsync(entry);
-            await Client.TestConnectionAsync();
+            nextClient = await SwebKit.Redis.RedisClient.CreateAsync(entry);
+            ct.ThrowIfCancellationRequested();
+            await nextClient.TestConnectionAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
+            Client = nextClient;
+            nextClient = null;
             ConnectionState.SetConnected("redis");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
             ErrorMessage = ex.Message;
             DisposeClient();
             ConnectionState.SetError("redis", ex.Message);
         }
+        finally
+        {
+            nextClient?.Dispose();
+        }
     }
 
-    private async Task ScanAsync(CancellationToken ct = default)
+    private async Task ScanAsync(long scanSession, CancellationToken ct = default)
     {
         if (Client is null)
             return;
@@ -348,6 +412,7 @@
         ScannedKeyInfos.Clear();
         PrefixMemoryBuckets.Clear();
         InvalidateHealthReport();
+        _scanPageAccumulator.Reset();
         await InvokeAsync(StateHasChanged);
 
         try
@@ -356,43 +421,45 @@
             if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
             _scanCursor = 0;
             _hasMoreKeys = false;
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var loaded = 0;
+            var newKeys = new List<string>(ScanPageSize);
 
             do
             {
                 ct.ThrowIfCancellationRequested();
-                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
-                var newKeys = result.Keys.Where(k => seen.Add(k)).ToList();
-                Keys.AddRange(newKeys);
-                loaded += newKeys.Count;
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, ScanBatchSize, ct);
+                ct.ThrowIfCancellationRequested();
+                if (!IsCurrentScanSession(scanSession))
+                    return;
+
                 _scanCursor = result.Cursor;
+                var appended = _scanPageAccumulator.AppendBatch(result.Keys, newKeys.Count);
+                newKeys.AddRange(appended.VisibleKeys);
+                _hasMoreKeys = _scanPageAccumulator.HasOverflow || (!result.IsComplete && _scanCursor != 0);
 
-                if (result.IsComplete || _scanCursor == 0)
-                {
-                    _hasMoreKeys = false;
+                if (_scanPageAccumulator.HasOverflow || newKeys.Count >= ScanPageSize || result.IsComplete || _scanCursor == 0)
                     break;
-                }
-
-                if (loaded >= ScanPageSize)
-                {
-                    _hasMoreKeys = true;
-                    break;
-                }
             } while (true);
 
             ct.ThrowIfCancellationRequested();
-            await LoadVisibleKeyTypesAsync(Keys);
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
+            Keys.AddRange(newKeys);
             RebuildNamespaceTree();
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+
+            await LoadVisibleKeyTypesAsync(Keys, scanSession, ct);
         }
         catch (OperationCanceledException) { return; } // CS-2: cancelled — silently abort
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            if (IsCurrentScanSession(scanSession))
+                ErrorMessage = ex.Message;
         }
         finally
         {
-            if (!ct.IsCancellationRequested)
+            if (IsCurrentScanSession(scanSession) && !ct.IsCancellationRequested)
             {
                 // PERF-18: Save snapshot to cache after successful scan
                 var cacheKey = $"redis:{SelectedCacheId}";
@@ -408,25 +475,53 @@
         }
     }
 
-    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys)
+    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys, long scanSession, CancellationToken ct = default)
     {
-        if (Client is null || targetKeys.Count == 0)
+        if (Client is null || targetKeys.Count == 0 || !IsCurrentScanSession(scanSession))
             return;
 
-        var tasks = targetKeys.Select(async key =>
+        var batches = targetKeys.Chunk(KeyTypeBatchSize).ToList();
+        for (var index = 0; index < batches.Count; index++)
         {
-            try
-            {
-                var info = await Client.GetKeyInfoAsync(key);
-                KeyTypes[key] = info.Type;
-            }
-            catch
-            {
-                KeyTypes[key] = "?";
-            }
-        });
+            ct.ThrowIfCancellationRequested();
+            if (!IsCurrentScanSession(scanSession))
+                return;
 
-        await Task.WhenAll(tasks);
+            var batch = batches[index];
+            var resolvedTypes = await Task.WhenAll(batch.Select(key => LoadKeyTypeAsync(key, ct)));
+
+            ct.ThrowIfCancellationRequested();
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
+            foreach (var (key, type) in resolvedTypes)
+            {
+                if (Keys.Contains(key))
+                    KeyTypes[key] = type;
+            }
+
+            if (index == batches.Count - 1 || (index + 1) % 2 == 0)
+                await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<(string Key, string Type)> LoadKeyTypeAsync(string key, CancellationToken ct)
+    {
+        if (Client is null)
+            return (key, "?");
+
+        try
+        {
+            return (key, await Client.GetKeyTypeAsync(key, ct));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return (key, "?");
+        }
     }
 
     private async Task SelectKeyAsync(string key)
@@ -600,50 +695,65 @@
     {
         if (Client is null || !_hasMoreKeys) return;
 
+        var ct = _cts.Token;
+        var scanSession = _scanSessionVersion;
         IsLoading = true;
+        ErrorMessage = null;
         await InvokeAsync(StateHasChanged);
 
         try
         {
+            ct.ThrowIfCancellationRequested();
+            if (!IsCurrentScanSession(scanSession))
+                return;
+
             var pattern = _toolbar?.Pattern ?? "*";
             if (string.IsNullOrWhiteSpace(pattern)) pattern = "*";
-            var existing = new HashSet<string>(Keys, StringComparer.Ordinal);
-            var loaded = 0;
+            var newKeys = _scanPageAccumulator.TakeOverflowPage(0).ToList();
 
-            do
+            while (newKeys.Count < ScanPageSize && _scanCursor != 0)
             {
-                var result = await Client.ScanKeysAsync(pattern, _scanCursor, 500);
-                var newKeys = result.Keys.Where(k => existing.Add(k)).ToList();
-                Keys.AddRange(newKeys);
-                loaded += newKeys.Count;
+                ct.ThrowIfCancellationRequested();
+                var result = await Client.ScanKeysAsync(pattern, _scanCursor, ScanBatchSize, ct);
+                ct.ThrowIfCancellationRequested();
+                if (!IsCurrentScanSession(scanSession))
+                    return;
+
                 _scanCursor = result.Cursor;
+                var appended = _scanPageAccumulator.AppendBatch(result.Keys, newKeys.Count);
+                newKeys.AddRange(appended.VisibleKeys);
+                _hasMoreKeys = _scanPageAccumulator.HasOverflow || (!result.IsComplete && _scanCursor != 0);
 
-                if (result.IsComplete || _scanCursor == 0)
-                {
-                    _hasMoreKeys = false;
+                if (_scanPageAccumulator.HasOverflow || newKeys.Count >= ScanPageSize || result.IsComplete || _scanCursor == 0)
                     break;
-                }
+            }
 
-                if (loaded >= ScanPageSize)
-                {
-                    _hasMoreKeys = true;
-                    break;
-                }
-            } while (true);
+            if (!IsCurrentScanSession(scanSession))
+                return;
 
-            await LoadVisibleKeyTypesAsync(Keys.Skip(Keys.Count - loaded).ToList());
+            Keys.AddRange(newKeys);
+            _hasMoreKeys = _scanPageAccumulator.HasOverflow || _scanCursor != 0;
+
             RebuildNamespaceTree();
             InvalidateHealthReport();
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+
+            await LoadVisibleKeyTypesAsync(newKeys, scanSession, ct);
         }
-        catch (OperationCanceledException) { throw; } // CS-2
+        catch (OperationCanceledException) { return; } // CS-2
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            if (IsCurrentScanSession(scanSession))
+                ErrorMessage = ex.Message;
         }
         finally
         {
-            IsLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (IsCurrentScanSession(scanSession))
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -722,6 +832,7 @@
                 Keys[idx] = newKey;
             if (KeyTypes.Remove(oldKey, out var type))
                 KeyTypes[newKey] = type;
+            _scanPageAccumulator.RegisterVisibleKey(newKey);
             SelectedKey = newKey;
             Selection.SetSelection("redis", newKey);
             RebuildNamespaceTree();
@@ -906,12 +1017,12 @@
     private async Task HandleCacheChanged(string newCacheId)
     {
         SelectedCacheId = newCacheId;
+        _loadedCacheId = newCacheId;
         var config = CurrentRedisConfig;
         if (config is not null)
             config.ActiveCacheId = SelectedCacheId;
 
-        await ConnectAsync();
-        await ScanAsync();
+        await StartReconnectAndScanAsync();
     }
 
     private async Task HandleCacheNameChanged(string name)
@@ -922,7 +1033,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private Task HandleScan(string _) => ScanAsync(_cts.Token);
+    private Task HandleScan(string _) => StartFreshScanAsync();
 
     // ── Namespace tree ──
 
@@ -950,7 +1061,7 @@
     private async Task OnPrefixSelectedAsync(string prefix)
     {
         if (_toolbar is not null) _toolbar.Pattern = $"{prefix}{CurrentSeparator}*";
-        await ScanAsync(_cts.Token);
+        await StartFreshScanAsync();
     }
 
     private void InvalidateHealthReport()

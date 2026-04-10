@@ -59,6 +59,13 @@ public sealed class DemoRedisClient : IRedisClient
         });
     }
 
+    public Task<string> GetKeyTypeAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        return Task.FromResult(TryGetValue(db, key, out var value) ? value.Type : "none");
+    }
+
     public Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

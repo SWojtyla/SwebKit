@@ -8,6 +8,7 @@ public interface IRedisClient : IDisposable
 
     Task<KeyScanResult> ScanKeysAsync(string pattern = "*", long cursor = 0, int pageSize = 100, CancellationToken ct = default);
 
+    Task<string> GetKeyTypeAsync(string key, CancellationToken ct = default);
     Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default);
     Task<string?> GetKeyValueAsync(string key, CancellationToken ct = default);
     Task<IReadOnlyList<RedisHashField>> GetHashFieldsAsync(string key, CancellationToken ct = default);

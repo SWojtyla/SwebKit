@@ -58,6 +58,32 @@ public class RedisNamespaceTreeNodeTests : TestContext
         Assert.Equal(["app:alpha", "app:child:beta", "app:child:gamma"], clearedKeys);
     }
 
+    [Fact]
+    public void NamespaceNode_SelectedLeaf_RendersActiveAndSelectedState()
+    {
+        var selectedKeys = new HashSet<string>(StringComparer.Ordinal) { "app:alpha" };
+
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, new NamespaceNode
+            {
+                Name = "alpha",
+                FullPrefix = "app:alpha",
+                KeyCount = 1,
+                IsKey = true,
+                FullKey = "app:alpha"
+            })
+            .Add(p => p.SelectedKey, "app:alpha")
+            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.SelectedKeys, selectedKeys)
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal)));
+
+        var row = cut.Find(".ns-row");
+
+        Assert.Contains("active", row.ClassName, StringComparison.Ordinal);
+        Assert.Contains("selected", row.ClassName, StringComparison.Ordinal);
+        Assert.Equal("true", row.GetAttribute("data-selected"));
+    }
+
     private static NamespaceNode CreateNamespaceNode() => new()
     {
         Name = "app",

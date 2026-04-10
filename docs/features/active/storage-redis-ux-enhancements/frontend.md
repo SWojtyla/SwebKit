@@ -34,7 +34,11 @@ Capture the delivered UX changes with minimal surface expansion: one shared prog
 - The page-level `Purge All` affordance is removed from the main toolbar.
 - Delete remains an explicit two-step flow: selection first, confirmation second.
 - The toolbar exposes `Select all loaded`, and tree nodes expose `All` / `None` helpers for loaded descendant keys.
+- The pattern helper now states that filtering is applied across the full Redis keyspace while the tree is limited to the currently loaded matches.
+- The initial Redis loaded-match page stays intentionally bounded, oversized SCAN batches are buffered for the next `Load more matches` action, and key-type badges are filled in with lightweight batched lookups so the tree can render before all badge metadata arrives.
+- New scan, filter, or cache contexts supersede older badge batches so stale type writes do not leak into the next tree state.
 - Selection stays reversible and the selected-key count remains visible while multi-select mode is active.
+- Selected key rows use a stronger border, accent rail, and weight treatment so the current selection is obvious at a glance.
 
 ## API / contract changes
 
@@ -42,6 +46,7 @@ Capture the delivered UX changes with minimal surface expansion: one shared prog
 - `IRedisClient.DeleteKeysAsync` remains the only destructive primitive used by the page.
 - No new prefix-delete or wildcard-delete APIs were added for Redis.
 - `IRedisClient.FlushDatabaseAsync` remains out of the main Redis page UX.
+- `IRedisClient` now exposes a lightweight `GetKeyTypeAsync` call so the tree can resolve badges without forcing full key metadata reads for every loaded match.
 
 ## Workstreams
 
@@ -64,10 +69,15 @@ Recommended implementing agent: UI-capable .NET agent.
 - [x] Added node-level callbacks so a namespace prefix can select or clear all loaded descendant keys.
 - [x] Reused `_toolbar.SelectedKeys` plus `DeleteSelectedKeysAsync` chunked deletion instead of adding a new delete path.
 - [x] Kept selected counts explicit when scan pagination means not all keys are loaded.
+- [x] Bounded the initial Redis loaded-match page and kept `Load more` on the same filtered cursor to prevent large key scans from freezing the tree.
+- [x] Strictly capped each loaded match page even when Redis returns an oversized SCAN batch, carrying overflow into the next `Load more` action instead of dropping it or rendering it early.
+- [x] Switched tree badge loading to lightweight batched key-type calls so scan completion no longer waits on full key metadata fan-out.
+- [x] Tied batched badge writes to the current scan/filter/cache context so stale work is canceled or ignored before it mutates the next tree state.
+- [x] Strengthened the selected-row visual treatment in the namespace tree.
 
 ## Validation
 
-- Targeted automated validation passed in `RedisToolbarTests.cs`, `RedisNamespaceTreeNodeTests.cs`, `StorageDownloadProgressTests.cs`, and `AzureStorageClientTests.cs` (16/16).
+- Targeted automated validation passed in `RedisToolbarTests.cs`, `RedisNamespaceTreeNodeTests.cs`, `DemoRedisClientTests.cs`, and `RedisScanPageAccumulatorTests.cs` (28/28).
 - `dotnet build .\SwebKit.slnx -nologo` succeeded.
 - Manual UI spot-checks remain optional before ship if a final visual pass is requested.
 
@@ -75,3 +85,5 @@ Recommended implementing agent: UI-capable .NET agent.
 
 - Storage progress updates should avoid high-frequency `StateHasChanged` churn; coalesce updates if needed.
 - Redis selection helpers must operate on the loaded tree only; hidden unscanned keys must never be silently included.
+- Redis scan copy must keep the distinction explicit: the filter is keyspace-wide, but the tree and bulk helpers operate on the currently loaded matches.
+- Redis scan-session boundaries must stay authoritative so older badge batches cannot repopulate the next cache or filter state.

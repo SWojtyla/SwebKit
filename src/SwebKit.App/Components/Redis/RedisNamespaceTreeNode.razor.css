@@ -9,14 +9,29 @@
     width: 100%;
     color: var(--color-text);
     padding: var(--spacing-xs) 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
 }
 
 .ns-row:hover {
     background: rgba(64, 170, 255, 0.10);
 }
 
+.ns-row.selected {
+    background: rgba(64, 170, 255, 0.18);
+    border-color: rgba(64, 170, 255, 0.32);
+    box-shadow: inset 4px 0 0 var(--color-accent, #40aaff);
+}
+
 .ns-row.active {
-    background: rgba(64, 170, 255, 0.16);
+    background: rgba(64, 170, 255, 0.26);
+    border-color: rgba(64, 170, 255, 0.44);
+    box-shadow: inset 4px 0 0 var(--color-accent, #40aaff), 0 0 0 1px rgba(64, 170, 255, 0.22);
+}
+
+.ns-row.active .ns-name,
+.ns-row.selected .ns-name {
+    font-weight: 600;
 }
 
 .ns-toggle {

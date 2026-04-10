@@ -5,6 +5,9 @@
         <div class="pattern-help">
             Examples: <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
         </div>
+        <div class="pattern-scope">
+            Pattern applies to the full Redis keyspace. The tree shows the currently loaded matches.
+        </div>
     </div>
 
     <FluentButton Appearance="Appearance.Accent" @onclick="HandleScan" Disabled="@IsLoading">Scan
@@ -22,7 +25,7 @@
     @if (_multiSelectMode)
     {
         <span class="selection-summary">
-            Selected @_selectedKeys.Count of @KeyCount loaded key(s)@((HasMoreKeys && KeyCount > 0) ? " (more keys not loaded)" : string.Empty)
+            Selected @_selectedKeys.Count of @KeyCount loaded matching key(s)@((HasMoreKeys && KeyCount > 0) ? " (more matching keys not loaded yet)" : string.Empty)
         </span>
         <FluentButton @onclick="ClearSelection" Disabled="@(_selectedKeys.Count == 0)">Clear Selection</FluentButton>
         @if (_selectedKeys.Count > 0)

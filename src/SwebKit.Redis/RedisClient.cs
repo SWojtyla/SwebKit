@@ -86,6 +86,13 @@ public sealed class RedisClient : IRedisClient
         };
     }
 
+    public async Task<string> GetKeyTypeAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var keyType = await _db.KeyTypeAsync(key);
+        return ToTypeString(keyType);
+    }
+
     public async Task<RedisKeyInfo> GetKeyInfoAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

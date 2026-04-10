@@ -30,6 +30,12 @@
     margin-top: 2px;
 }
 
+.pattern-scope {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    max-width: 320px;
+}
+
 .pattern-help code {
     background: rgba(127, 127, 127, 0.15);
     padding: 1px 4px;

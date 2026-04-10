@@ -66,6 +66,15 @@ public class RedisToolbarTests : TestContext
     }
 
     [Fact]
+    public void RedisToolbar_PatternScope_ExplainsFullKeyspaceFiltering()
+    {
+        var cut = RenderComponent<RedisToolbar>();
+
+        Assert.Contains("Pattern applies to the full Redis keyspace.", cut.Markup);
+        Assert.Contains("currently loaded matches", cut.Markup);
+    }
+
+    [Fact]
     public void RedisToolbar_SelectAllLoaded_InvokesCallback()
     {
         var calls = 0;
@@ -92,7 +101,7 @@ public class RedisToolbarTests : TestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Selected 2 of 5 loaded key(s) (more keys not loaded)", cut.Markup);
+            Assert.Contains("Selected 2 of 5 loaded matching key(s) (more matching keys not loaded yet)", cut.Markup);
             Assert.Contains("Clear Selection", cut.Markup);
             Assert.Contains("Delete 2 key(s)", cut.Markup);
         });

@@ -39,6 +39,21 @@ public class DemoRedisClientTests
     }
 
     [Fact]
+    public async Task ScanKeysAsync_WithPatternAndPagination_ReturnsMatchesBeyondFirstLoadedPage()
+    {
+        using var client = new DemoRedisClient();
+
+        var first = await client.ScanKeysAsync("user:*", cursor: 0, pageSize: 1);
+        var second = await client.ScanKeysAsync("user:*", cursor: first.Cursor, pageSize: 1);
+
+        Assert.Single(first.Keys);
+        Assert.Single(second.Keys);
+        Assert.NotEqual(first.Keys[0], second.Keys[0]);
+        Assert.StartsWith("user:", first.Keys[0], StringComparison.Ordinal);
+        Assert.StartsWith("user:", second.Keys[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetKeyInfoAsync_ForStringKey_ReturnsExpectedType()
     {
         using var client = new DemoRedisClient();

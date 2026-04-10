@@ -14,11 +14,11 @@ last_updated: "2026-04-10"
 
 ## Quick summary
 
-Implementation is complete for the requested storage and Redis UX changes. Storage downloads now show inline in-flight progress in the blob list and detail pane, version downloads surface completion state in the shared detail-pane message area, and Redis bulk cleanup now starts from explicit selection helpers instead of a page-level purge CTA.
+Implementation is complete for the requested storage and Redis UX changes, including the Redis hardening follow-up. Storage downloads still expose inline progress, and the Redis page now keeps large filtered key sets responsive by strictly capping each loaded match page, carrying SCAN overflow forward, canceling stale badge batches on scan/filter/cache changes, stating full-keyspace filter behavior explicitly, and using a stronger selected-row treatment in the tree.
 
 Jira: not linked
 
-Current focus: keep the feature in a review-ready state while it awaits the normal ship or archive workflow.
+Current focus: keep the feature in a review-ready state with the Redis follow-up validated and the docs aligned to the delivered behavior.
 
 ## Progress checklist
 
@@ -26,7 +26,7 @@ Current focus: keep the feature in a review-ready state while it awaits the norm
 - [x] Scope, non-goals, risks, and decisions captured
 - [x] Add progress-aware storage download contract and UI state
 - [x] Replace Redis purge-all toolbar action with safer full-select helpers
-- [x] Add focused tests and align functionality docs with delivered behavior
+- [x] Add focused follow-up tests and align Redis docs with the delivered behavior
 
 ## Completed
 
@@ -36,7 +36,13 @@ Current focus: keep the feature in a review-ready state while it awaits the norm
 - Reused the existing selected-key delete flow for Redis bulk cleanup instead of adding a new destructive path.
 - Repaired the Redis toolbar imperative selection helpers so they queue renders on the Blazor dispatcher instead of calling `StateHasChanged()` directly.
 - Tightened the focused storage progress tests to run on the renderer dispatcher and assert localized size formatting.
-- Passed the targeted storage/Redis validation subset and a solution build.
+- Reduced the initial Redis loaded-match page size and resumed `Load more` from the same filtered cursor so large keyspaces do not freeze the UI.
+- Hardened Redis scan paging so advisory SCAN overshoot cannot render more than one loaded page at a time; overflow keys are buffered for the next `Load more matches` step.
+- Replaced the Redis tree badge hot path with lightweight batched key-type lookups instead of loading full key metadata for every scanned match up front.
+- Bound batched key-type writes to the active scan/filter/cache session so stale badge results are canceled or ignored before they mutate the next tree state.
+- Made the toolbar copy explicit that the scan pattern is applied across the full Redis keyspace while the tree shows currently loaded matches only.
+- Strengthened the Redis tree selected-row treatment so the current selection is visibly distinct during single-select and multi-select workflows.
+- Passed the focused Redis hardening validation slice and a solution build.
 
 ## Remaining
 
@@ -50,8 +56,8 @@ Current focus: keep the feature in a review-ready state while it awaits the norm
 ## Validation
 
 - Test Plan: test-plan.md
-- Validation status: Targeted automated validation passed; the feature is review-ready.
-- Automated: `runTests` on `RedisToolbarTests.cs`, `RedisNamespaceTreeNodeTests.cs`, `StorageDownloadProgressTests.cs`, and `AzureStorageClientTests.cs` passed (16/16).
+- Validation status: Targeted Redis hardening validation passed; the feature is review-ready.
+- Automated: `runTests` on `RedisToolbarTests.cs`, `RedisNamespaceTreeNodeTests.cs`, `DemoRedisClientTests.cs`, and `RedisScanPageAccumulatorTests.cs` passed (28/28).
 - Build: `dotnet build .\SwebKit.slnx -nologo` succeeded.
 - Manual: not run for this validation slice.
 
@@ -59,3 +65,5 @@ Current focus: keep the feature in a review-ready state while it awaits the norm
 
 - Redis selection helpers must stay explicitly reviewable before delete; no hidden wildcard delete behavior should be introduced.
 - Storage progress is a functional acceptance criterion for large downloads, not cosmetic polish.
+- Redis scan filtering remains keyspace-wide at the backend; only the currently loaded match page is rendered and selectable in the tree at any moment.
+- Redis scan-session resets must remain authoritative so cache, filter, and manual rescan flows cannot leak stale badge writes into the next page state.
