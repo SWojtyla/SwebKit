@@ -41,7 +41,7 @@
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -102,6 +102,7 @@
     private bool _editMode;
     private string _editText = string.Empty;
     private bool _applying;
+    private string? _targetNamespace;
 
     // Highlighted markup for YAML panels
     private MarkupString _highlighted;
@@ -132,20 +133,22 @@
     "Secret";
 
     /// <summary>Opens the YAML viewer for the given resource, optionally starting in edit mode.</summary>
-    public async Task OpenAsync(string kind, string name, bool startInEditMode = false)
+    public async Task OpenAsync(string kind, string name, string? targetNamespace = null, bool startInEditMode = false)
     {
         _target = (kind, name);
+        _targetNamespace = targetNamespace;
         _text = null;
         _error = null;
         _loading = true;
         _editMode = false;
         _editText = string.Empty;
         _applying = false;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
 
         try
         {
-            _text = await Client!.GetResourceYamlAsync(Namespace, kind, name);
+            var resourceNamespace = _targetNamespace ?? Namespace;
+            _text = await Client!.GetResourceYamlAsync(resourceNamespace, kind, name);
             _highlighted = await HighlightAsync(_text);
             if (startInEditMode && IsEditable)
             {
@@ -163,7 +166,7 @@
         finally
         {
             _loading = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -171,6 +174,7 @@
     public void Close()
     {
         _target = null;
+        _targetNamespace = null;
         _text = null;
         _error = null;
         _editMode = false;
@@ -267,7 +271,8 @@
                 if (!confirmed) { _applying = false; StateHasChanged(); return; }
             }
 
-            await Client.ApplyResourceYamlAsync(Namespace, _target.Value.Kind, _target.Value.Name, _editText);
+            var resourceNamespace = _targetNamespace ?? Namespace;
+            await Client.ApplyResourceYamlAsync(resourceNamespace, _target.Value.Kind, _target.Value.Name, _editText);
             _text = _editText;
             _highlighted = await HighlightAsync(_text);
             _editMode = false;

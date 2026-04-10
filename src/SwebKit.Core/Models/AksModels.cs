@@ -251,7 +251,23 @@ public class HpaCondition
     public string? Message { get; set; }
 }
 
-// ── CronJobs ─────────────────────────────────────────────────────────────────
+// ── Jobs and CronJobs ───────────────────────────────────────────────────────
+
+public class JobInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string Status { get; set; } = "Unknown";
+    public int Active { get; set; }
+    public int Succeeded { get; set; }
+    public int Failed { get; set; }
+    public int? DesiredCompletions { get; set; }
+    public DateTimeOffset? StartTime { get; set; }
+    public DateTimeOffset? CompletionTime { get; set; }
+    public string? SourceKind { get; set; }
+    public string? SourceName { get; set; }
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
 
 public class CronJobInfo
 {

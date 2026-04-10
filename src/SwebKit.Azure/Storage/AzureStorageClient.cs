@@ -6,6 +6,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using AzureBlobProperties = Azure.Storage.Blobs.Models.BlobProperties;
 using BlobDownloadOptions = Azure.Storage.Blobs.Models.BlobDownloadOptions;
+using BlobDownloadToOptions = Azure.Storage.Blobs.Models.BlobDownloadToOptions;
 using BlobStates = Azure.Storage.Blobs.Models.BlobStates;
 using BlobTraits = Azure.Storage.Blobs.Models.BlobTraits;
 
@@ -204,10 +205,20 @@ public class AzureStorageClient : IStorageClient
         string containerName,
         string blobName,
         Stream destination,
+        IProgress<long>? progress = null,
+        string? versionId = null,
         CancellationToken ct = default)
     {
         var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
-        await blobClient.DownloadToAsync(destination, cancellationToken: ct);
+        if (!string.IsNullOrWhiteSpace(versionId))
+            blobClient = blobClient.WithVersion(versionId);
+
+        var options = new BlobDownloadToOptions
+        {
+            ProgressHandler = progress
+        };
+
+        await blobClient.DownloadToAsync(destination, options, ct);
     }
 
     public async Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(

@@ -58,4 +58,12 @@ public class AksConnectionBarTests : TestContext
 
         Assert.True(invokedWith);
     }
+
+    [Fact]
+    public void AksConnectionBar_RendersJobsResourceTab()
+    {
+        var cut = RenderComponent<AksConnectionBar>();
+
+        Assert.Contains(">Jobs<", cut.Markup, StringComparison.Ordinal);
+    }
 }

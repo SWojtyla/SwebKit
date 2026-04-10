@@ -1,7 +1,7 @@
 @* Renders the CronJobs FluentDataGrid. *@
 
 <FluentDataGrid Items="@FilteredItems" TGridItem="CronJobInfo" Virtualize="true" ItemSize="36"
-                RowClass="@(cj => cj.Name == SelectedCronJob?.Name ? "selected-row" : "")"
+                RowClass="@(cj => cj.Name == SelectedCronJob?.Name && cj.Namespace == SelectedCronJob?.Namespace ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name" SortBy="@(GridSort<CronJobInfo>.ByAscending(cj => cj.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"

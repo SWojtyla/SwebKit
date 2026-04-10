@@ -3,36 +3,49 @@
 <div class="ns-node" style="padding-left: @($"{Depth * 16}px")">
     @if (Node.IsKey)
     {
-        <button class="ns-row @(IsActive ? "active" : "")" @onclick="SelectKey" title="@Node.FullKey">
+        <div class="ns-row @(IsActive ? "active" : "")">
             @if (MultiSelectMode)
             {
                 <input type="checkbox" checked="@(SelectedKeys.Contains(Node.FullKey ?? ""))" @onclick="ToggleSelection"
                        @onclick:stopPropagation="true" class="ns-checkbox" />
             }
-            <span class="ns-toggle-placeholder"></span>
-            <span class="ns-name">@Node.Name</span>
-            @if (KeyType is not null)
-            {
-                <span class="type-badge @RedisValueHelpers.TypeToBadgeClass(KeyType)">@KeyType</span>
-            }
-        </button>
+            <button type="button" class="ns-row-main" @onclick="SelectKey" title="@Node.FullKey">
+                <span class="ns-toggle-placeholder"></span>
+                <span class="ns-name">@Node.Name</span>
+                @if (KeyType is not null)
+                {
+                    <span class="type-badge @RedisValueHelpers.TypeToBadgeClass(KeyType)">@KeyType</span>
+                }
+            </button>
+        </div>
     }
     else
     {
-        <button class="ns-row" @onclick="Toggle">
-            @if (Node.Children.Count > 0)
-            {
-                <span class="ns-toggle">@(IsExpanded ? "▾" : "▸")</span>
-            }
-            else
-            {
-                <span class="ns-toggle-placeholder"></span>
-            }
-            <span class="ns-name">@Node.Name</span>
+        <div class="ns-row">
+            <button type="button" class="ns-row-main" @onclick="Toggle">
+                @if (Node.Children.Count > 0)
+                {
+                    <span class="ns-toggle">@(IsExpanded ? "▾" : "▸")</span>
+                }
+                else
+                {
+                    <span class="ns-toggle-placeholder"></span>
+                }
+                <span class="ns-name">@Node.Name</span>
+            </button>
             <span class="ns-count">@Node.KeyCount</span>
-            <button class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true"
-                    title="Filter by this prefix">&#x229e;</button>
-        </button>
+            <div class="ns-row-actions">
+                @if (MultiSelectMode && Node.KeyCount > 0)
+                {
+                    <button type="button" class="ns-subtree-action" @onclick="SelectSubtree" @onclick:stopPropagation="true"
+                            title="Select @Node.KeyCount loaded descendant key(s)">All</button>
+                    <button type="button" class="ns-subtree-action" @onclick="ClearSubtree" @onclick:stopPropagation="true"
+                            title="Clear @Node.KeyCount loaded descendant key(s)">None</button>
+                }
+                <button type="button" class="ns-filter" @onclick="FilterPrefix" @onclick:stopPropagation="true"
+                        title="Filter by this prefix">&#x229e;</button>
+            </div>
+        </div>
     }
 
     @if (IsExpanded)
@@ -41,7 +54,8 @@
         {
             <RedisNamespaceTreeNode Node="@child" OnPrefixSelected="OnPrefixSelected" OnKeySelected="OnKeySelected"
                                     SelectedKey="@SelectedKey" KeyTypes="@KeyTypes" MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys"
-                                    OnKeyToggled="OnKeyToggled" Depth="@(Depth + 1)" />
+                                    OnKeyToggled="OnKeyToggled" OnSubtreeSelected="OnSubtreeSelected" OnSubtreeCleared="OnSubtreeCleared"
+                                    Depth="@(Depth + 1)" />
         }
     }
 </div>
@@ -55,6 +69,8 @@
     [Parameter] public bool MultiSelectMode { get; set; }
     [Parameter] public HashSet<string> SelectedKeys { get; set; } = new();
     [Parameter] public EventCallback<string> OnKeyToggled { get; set; }
+    [Parameter] public EventCallback<List<string>> OnSubtreeSelected { get; set; }
+    [Parameter] public EventCallback<List<string>> OnSubtreeCleared { get; set; }
     [Parameter] public int Depth { get; set; }
 
     private bool IsExpanded;
@@ -80,5 +96,30 @@
     private Task ToggleSelection()
     {
         return Node.FullKey is not null ? OnKeyToggled.InvokeAsync(Node.FullKey) : Task.CompletedTask;
+    }
+
+    private Task SelectSubtree() => OnSubtreeSelected.InvokeAsync(GetLoadedDescendantKeys(Node));
+
+    private Task ClearSubtree() => OnSubtreeCleared.InvokeAsync(GetLoadedDescendantKeys(Node));
+
+    private static List<string> GetLoadedDescendantKeys(NamespaceNode node)
+    {
+        var result = new List<string>();
+        CollectDescendantKeys(node, result);
+        return result;
+    }
+
+    private static void CollectDescendantKeys(NamespaceNode node, List<string> keys)
+    {
+        foreach (var child in node.Children)
+        {
+            if (child.IsKey && child.FullKey is not null)
+            {
+                keys.Add(child.FullKey);
+                continue;
+            }
+
+            CollectDescendantKeys(child, keys);
+        }
     }
 }

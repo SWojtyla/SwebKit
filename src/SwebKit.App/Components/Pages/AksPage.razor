@@ -160,6 +160,13 @@
                                       OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
                             break;
 
+                        case "Jobs":
+                            <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace" SelectedJob="@SelectedJob"
+                                     OnSelectRow="@((job) => { SelectedJob = job; Selection.SetSelection("aks", job); StateHasChanged(); })"
+                                     OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                                     OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                            break;
+
                         case "CronJobs":
                             <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
                                          SelectedCronJob="@SelectedCronJob"
@@ -178,7 +185,7 @@
                         <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                    or "Ingresses" or "Pods" or "CronJobs")
+                                                                                                                                                                                                                                                                        or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -320,20 +327,33 @@
                                                                                                                                                                     Keys</button>
                                                                                                                                                                 </ContextMenu>
 
-                                                                                                                                                                <ContextMenu @ref="CronJobMenu">
-                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                <ContextMenu @ref="JobMenu">
+                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxJob?.Name)"><span
                                                                                                                                                                         class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlJob"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                                                             YAML</button>
-                                                                                                                                                                        </ContextMenu>
+                                                                                                                                                                            <div class="ctx-separator"></div>
+                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
+                                                                                                                                                                                job</button>
+                                                                                                                                                                            </ContextMenu>
 
-                                                                                                                                                                    </div>
+                                                                                                                                                                            <ContextMenu @ref="CronJobMenu">
+                                                                                                                                                                                <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                                    class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                        YAML</button>
+                                                                                                                                                                                        <div class="ctx-separator"></div>
+                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
+                                                                                                                                                                                            now</button>
+                                                                                                                                                                                        </ContextMenu>
 
-                                                                                                                                                                    @* ── Port-forward sessions panel ── *@
-                                                                                                                                                                    @if (ShowPortForwardSessions)
-                                                                                                                                                                    {
-                                                                                                                                                                        <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
-                                                                                                                                                                    }
+                                                                                                                                                                                    </div>
+
+                                                                                                                                                                                    @* ── Port-forward sessions panel ── *@
+                                                                                                                                                                                    @if (ShowPortForwardSessions)
+                                                                                                                                                                                    {
+                                                                                                                                                                                        <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+                                                                                                                                                                                    }
 
 @* ── Port-forward start dialog ── *@
 <PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
@@ -353,6 +373,7 @@
     private List<SecretInfo> Secrets = [];
     private List<HpaInfo> Hpas = [];
     private List<KubernetesEvent> Events = [];
+    private List<JobInfo> Jobs = [];
     private List<CronJobInfo> CronJobs = [];
     private List<string> Namespaces = ["default"];
     private List<KubeContextInfo> Contexts = [];
@@ -363,6 +384,7 @@
     private SecretInfo? SelectedSecret;
     private IngressInfo? SelectedIngress;
     private HelmReleaseInfo? SelectedHelmRelease;
+    private JobInfo? SelectedJob;
     private CronJobInfo? SelectedCronJob;
     private bool IsLoading;
     private string? ErrorMessage;
@@ -379,6 +401,7 @@
     private string HelmFilter = string.Empty;
     private string ConfigMapFilter = string.Empty;
     private string SecretFilter = string.Empty;
+    private string JobFilter = string.Empty;
     private string CronJobFilter = string.Empty;
 
     private string ActiveFilter
@@ -392,6 +415,7 @@
             "Helm" => HelmFilter,
             "ConfigMaps" => ConfigMapFilter,
             "Secrets" => SecretFilter,
+            "Jobs" => JobFilter,
             "CronJobs" => CronJobFilter,
             _ => string.Empty
         };
@@ -406,6 +430,7 @@
                 case "Helm": HelmFilter = value; break;
                 case "ConfigMaps": ConfigMapFilter = value; break;
                 case "Secrets": SecretFilter = value; break;
+                case "Jobs": JobFilter = value; break;
                 case "CronJobs": CronJobFilter = value; break;
             }
         }
@@ -447,6 +472,13 @@
     : Secrets.Where(s => s.Name.Contains(SecretFilter, StringComparison.OrdinalIgnoreCase)
     || s.Type.Contains(SecretFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
 
+    private IQueryable<JobInfo> FilteredJobs => string.IsNullOrWhiteSpace(JobFilter)
+    ? Jobs.AsQueryable()
+    : Jobs.Where(job => job.Name.Contains(JobFilter, StringComparison.OrdinalIgnoreCase)
+    || job.Status.Contains(JobFilter, StringComparison.OrdinalIgnoreCase)
+    || (job.SourceKind?.Contains(JobFilter, StringComparison.OrdinalIgnoreCase) ?? false)
+    || (job.SourceName?.Contains(JobFilter, StringComparison.OrdinalIgnoreCase) ?? false)).AsQueryable();
+
     private IQueryable<CronJobInfo> FilteredCronJobs => string.IsNullOrWhiteSpace(CronJobFilter)
     ? CronJobs.AsQueryable()
     : CronJobs.Where(c => c.Name.Contains(CronJobFilter, StringComparison.OrdinalIgnoreCase)
@@ -467,6 +499,7 @@
         List<SecretInfo> Secrets,
         List<HpaInfo> Hpas,
         List<KubernetesEvent> Events,
+        List<JobInfo> Jobs,
         List<CronJobInfo> CronJobs,
         List<PodMetrics> PodMetricsList);
 
@@ -496,6 +529,7 @@
     private ContextMenu StatefulSetMenu = default!;
     private ContextMenu ConfigMapMenu = default!;
     private ContextMenu SecretMenu = default!;
+    private ContextMenu JobMenu = default!;
     private ContextMenu CronJobMenu = default!;
     private AksConfirmBar Confirm = default!;
 
@@ -506,10 +540,12 @@
     private StatefulSetInfo? CtxStatefulSet;
     private ConfigMapInfo? CtxConfigMap;
     private SecretInfo? CtxSecret;
+    private JobInfo? CtxJob;
     private CronJobInfo? CtxCronJob;
 
     private bool HasAnyData => Deployments.Count > 0 || StatefulSets.Count > 0 || Pods.Count > 0
-    || Ingresses.Count > 0 || HelmReleases.Count > 0 || ConfigMaps.Count > 0 || Secrets.Count > 0 || CronJobs.Count > 0;
+    || Ingresses.Count > 0 || HelmReleases.Count > 0 || ConfigMaps.Count > 0 || Secrets.Count > 0 || Jobs.Count > 0
+    || CronJobs.Count > 0;
 
     private int ActiveResourceCount => ActiveResourceType switch
     {
@@ -520,15 +556,22 @@
         "Helm" => FilteredHelmReleases.Count(),
         "ConfigMaps" => FilteredConfigMaps.Count(),
         "Secrets" => FilteredSecrets.Count(),
+        "Jobs" => FilteredJobs.Count(),
         "CronJobs" => FilteredCronJobs.Count(),
         _ => 0
     };
+
+    private string? CurrentCacheKey => !string.IsNullOrEmpty(ActiveContext) && !string.IsNullOrEmpty(CurrentNamespace)
+        ? $"aks:{ActiveContext}:{CurrentNamespace}"
+        : null;
 
     private bool HasOpenPanel => _detailPanels?.IsOpen == true;
 
     private bool HasAnyPanel => HasOpenPanel || ShowEvents || ShowPortForwardSessions;
 
     private bool IsProduction => AppState.Config.IsProduction;
+
+    [Parameter] public IAksClient? ClientOverride { get; set; }
 
     protected override void OnInitialized()
     {
@@ -653,6 +696,16 @@ OnCtxRestartDeployment();
         IsLoading = true;
         await InvokeAsync(StateHasChanged);
 
+        if (ClientOverride is not null)
+        {
+            Client = ClientOverride;
+            await LoadContextsAsync();
+            await LoadNamespacesAsync();
+            await LoadAsync();
+            ConnectionState.SetConnected("aks");
+            return;
+        }
+
         if (AppState.UseDemoData)
         {
             Client = new SwebKit.Core.Services.DemoAksClient();
@@ -710,7 +763,7 @@ OnCtxRestartDeployment();
             if (ns.Count > 0)
             {
                 Namespaces = ns.ToList();
-                if (!Namespaces.Contains(CurrentNamespace))
+                if (CurrentNamespace != "*" && !Namespaces.Contains(CurrentNamespace))
                     CurrentNamespace = Namespaces.Contains("default") ? "default" : Namespaces[0];
             }
         }
@@ -722,13 +775,59 @@ OnCtxRestartDeployment();
 
     private bool IsMultiNamespace => CurrentNamespace == "*";
 
+    private List<string> GetScopedNamespaces()
+        => Namespaces
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private void StoreSnapshot(string? cacheKey = null)
+    {
+        cacheKey ??= CurrentCacheKey;
+        if (cacheKey is null)
+            return;
+
+        Cache.Set(cacheKey, new AksPageSnapshot(
+            Deployments, StatefulSets, Pods, Ingresses, HelmReleases,
+            ConfigMaps, Secrets, Hpas, Events, Jobs, CronJobs, PodMetricsList));
+    }
+
+    private async Task RefreshJobsAsync()
+    {
+        if (Client is null)
+            return;
+
+        var requestedContext = ActiveContext;
+        var requestedNamespace = CurrentNamespace;
+
+        try
+        {
+            IReadOnlyList<JobInfo> refreshedJobs = requestedNamespace == "*"
+                ? await Client.GetJobsAsync(GetScopedNamespaces())
+                : await Client.GetJobsAsync(requestedNamespace);
+
+            if (requestedContext != ActiveContext || requestedNamespace != CurrentNamespace)
+                return;
+
+            Jobs = refreshedJobs.ToList();
+            StoreSnapshot();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to refresh AKS jobs for {Namespace}", requestedNamespace);
+        }
+    }
+
     private async Task LoadAsync()
     {
         if (Client is null) return;
 
         // PERF-18: Restore cached data for instant back-navigation rendering
-        var cacheKey = !string.IsNullOrEmpty(ActiveContext) && !string.IsNullOrEmpty(CurrentNamespace)
-            ? $"aks:{ActiveContext}:{CurrentNamespace}" : null;
+        var cacheKey = CurrentCacheKey;
         var cached = cacheKey is not null ? Cache.Get<AksPageSnapshot>(cacheKey) : null;
         if (cached is not null)
         {
@@ -741,6 +840,7 @@ OnCtxRestartDeployment();
             Secrets = cached.Secrets;
             Hpas = cached.Hpas;
             Events = cached.Events;
+            Jobs = cached.Jobs;
             CronJobs = cached.CronJobs;
             PodMetricsList = cached.PodMetricsList;
             IsLoading = false;
@@ -781,7 +881,7 @@ OnCtxRestartDeployment();
 
             if (IsMultiNamespace)
             {
-                var allNs = Namespaces.Where(n => n != "default" || Namespaces.Count <= 3).ToList();
+                var allNs = GetScopedNamespaces();
 
                 // Clear non-loaded lists synchronously
                 Ingresses = [];
@@ -791,13 +891,14 @@ OnCtxRestartDeployment();
                 Hpas = [];
                 Events = [];
                 PodMetricsList = [];
-                CronJobs = [];
 
                 var tasks = new List<Task>
                 {
                     LoadDataset(() => Client.GetDeploymentsAsync(allNs), r => Deployments = r),
                     LoadDataset(() => Client.GetPodsAsync(allNs), r => Pods = r),
                     LoadDataset(() => Client.GetStatefulSetsAsync(allNs), r => StatefulSets = r),
+                    LoadDataset(() => Client.GetJobsAsync(allNs), r => Jobs = r),
+                    LoadDataset(() => Client.GetCronJobsAsync(allNs), r => CronJobs = r),
                 };
 
                 // PERF2-8: Render flush loop — batch renders at ~150ms intervals
@@ -844,6 +945,7 @@ OnCtxRestartDeployment();
                     LoadDataset(() => Client.GetConfigMapsAsync(ns), r => ConfigMaps = r),
                     LoadDataset(() => Client.GetSecretsAsync(ns), r => Secrets = r),
                     LoadDataset(() => Client.GetHpasAsync(ns), r => Hpas = r),
+                    LoadDataset(() => Client.GetJobsAsync(ns), r => Jobs = r),
                     LoadDataset(() => Client.GetCronJobsAsync(ns), r => CronJobs = r),
                 };
 
@@ -884,9 +986,7 @@ OnCtxRestartDeployment();
                 // PERF-18: Save fresh data to cache
                 if (cacheKey is not null)
                 {
-                    Cache.Set(cacheKey, new AksPageSnapshot(
-                        Deployments, StatefulSets, Pods, Ingresses, HelmReleases,
-                        ConfigMaps, Secrets, Hpas, Events, CronJobs, PodMetricsList));
+                    StoreSnapshot(cacheKey);
                 }
 
                 IsLoading = false;
@@ -992,7 +1092,12 @@ s.Name); break;
             case "Secrets": SelectedSecret = NavigateInList(FilteredSecrets, SelectedSecret, delta, s => s.Name); break;
             case "Ingresses": SelectedIngress = NavigateInList(FilteredIngresses, SelectedIngress, delta, i => i.Name); break;
             case "Helm": SelectedHelmRelease = NavigateInList(FilteredHelmReleases, SelectedHelmRelease, delta, h => h.Name); break;
-            case "CronJobs": SelectedCronJob = NavigateInList(FilteredCronJobs, SelectedCronJob, delta, cj => cj.Name); break;
+            case "Jobs":
+                SelectedJob = NavigateInList(FilteredJobs, SelectedJob, delta, job => $"{job.Namespace}/{job.Name}");
+                break;
+            case "CronJobs":
+                SelectedCronJob = NavigateInList(FilteredCronJobs, SelectedCronJob, delta, cj =>
+$"{cj.Namespace}/{cj.Name}"); break;
         }
         PushAksSelection();
         StateHasChanged();
@@ -1009,6 +1114,7 @@ s.Name); break;
             "Secrets" => SelectedSecret,
             "Ingresses" => SelectedIngress,
             "Helm" => SelectedHelmRelease,
+            "Jobs" => SelectedJob,
             "CronJobs" => SelectedCronJob,
             _ => null
         };
@@ -1024,6 +1130,7 @@ s.Name); break;
         SelectedSecret = null;
         SelectedIngress = null;
         SelectedHelmRelease = null;
+        SelectedJob = null;
         SelectedCronJob = null;
         Selection.SetSelection("aks", null);
         StateHasChanged();
@@ -1104,6 +1211,14 @@ s.Name); break;
                 }
                 break;
 
+            case "Jobs" when SelectedJob is not null:
+                switch (key)
+                {
+                    case "y": CtxJob = SelectedJob; await OnCtxViewYamlJob(); break;
+                    case "Enter": CtxJob = SelectedJob; await OnCtxViewYamlJob(); break;
+                }
+                break;
+
             case "CronJobs" when SelectedCronJob is not null:
                 switch (key)
                 {
@@ -1161,6 +1276,12 @@ s.Name); break;
     {
         CtxSecret = s;
         SecretMenu.Show(e.ClientX, e.ClientY);
+    }
+
+    private void ShowJobMenu(MouseEventArgs e, JobInfo job)
+    {
+        CtxJob = job;
+        JobMenu.Show(e.ClientX, e.ClientY);
     }
 
     private void ShowCronJobMenu(MouseEventArgs e, CronJobInfo cj)
@@ -1288,10 +1409,22 @@ s.Name); break;
         return $"https://{host}";
     }
 
-    private async Task OpenUrlAsync(string url)
+    private static Task OpenUrlAsync(string url)
     {
-        try { await Microsoft.Maui.ApplicationModel.Launcher.Default.OpenAsync(new Uri(url)); }
-        catch { /* launcher unavailable */ }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Shell launch can be unavailable in tests or restricted environments.
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task OnCtxViewYamlCronJob()
@@ -1299,7 +1432,53 @@ s.Name); break;
         var cj = CtxCronJob;
         CloseAllMenus();
         if (cj is null) return;
-        await _detailPanels.OpenYamlAsync("CronJob", cj.Name);
+        await _detailPanels.OpenYamlAsync("CronJob", cj.Name, targetNamespace: cj.Namespace);
+    }
+
+    private async Task OnCtxViewYamlJob()
+    {
+        var job = CtxJob;
+        CloseAllMenus();
+        if (job is null) return;
+        await _detailPanels.OpenYamlAsync("Job", job.Name, targetNamespace: job.Namespace);
+    }
+
+    private async Task OnCtxRunCronJob()
+    {
+        var cronJob = CtxCronJob;
+        CloseAllMenus();
+        if (cronJob is null || Client is null) return;
+
+        try
+        {
+            var createdJobName = await Client.TriggerCronJobAsync(cronJob.Namespace, cronJob.Name);
+            Notifications.ShowSuccess("CronJob triggered", createdJobName);
+            _ = RefreshJobsAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to trigger CronJob", ex: ex);
+        }
+    }
+
+    private async Task OnCtxRerunJob()
+    {
+        var job = CtxJob;
+        CloseAllMenus();
+        if (job is null || Client is null) return;
+
+        try
+        {
+            var createdJobName = await Client.RerunJobAsync(job.Namespace, job.Name);
+            Notifications.ShowSuccess("Job rerun started", createdJobName);
+            _ = RefreshJobsAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            Notifications.ShowError("Failed to rerun job", ex: ex);
+        }
     }
 
     private void OnCtxScaleDeployment()
@@ -1498,6 +1677,7 @@ s.Name); break;
         StatefulSetMenu.Close();
         ConfigMapMenu.Close();
         SecretMenu.Close();
+        JobMenu.Close();
         CronJobMenu.Close();
     }
 

@@ -24,8 +24,8 @@
         <RedisToolbar @ref="_toolbar" IsLoading="@IsLoading" SelectedKey="@SelectedKey" KeyCount="@Keys.Count"
                       HasMoreKeys="@_hasMoreKeys" IsProduction="@IsProduction" HasAnyPanel="@(SelectedInfo is not null)"
                       BatchProgressMessage="@_batchProgressMessage" OnScan="HandleScan" OnRefreshKey="RefreshSelectedAsync"
-                      OnDeleteKey="DeleteSelectedKeyAsync" OnPurgeAll="PurgeAllAsync" OnExportJson="ExportKeysToJsonAsync"
-                      OnBatchDelete="DeleteSelectedKeysAsync" />
+                      OnDeleteKey="DeleteSelectedKeyAsync" OnSelectAllLoaded="SelectAllLoadedAsync"
+                      OnExportJson="ExportKeysToJsonAsync" OnBatchDelete="DeleteSelectedKeysAsync" />
 
         @if (ErrorMessage is not null)
         {
@@ -46,7 +46,8 @@
                                             KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
                                             OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
                                             MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
-                                            SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled" />
+                                            SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled"
+                                            OnSubtreeSelected="HandleSubtreeSelected" OnSubtreeCleared="HandleSubtreeCleared" />
                         @if (_hasMoreKeys)
                         {
                             <div class="load-more-bar">
@@ -70,7 +71,7 @@
 
                     <div class="panel health-panel">
                         <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
-                                                    OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
+                                                     OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
                     </div>
 
                     <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
@@ -517,35 +518,6 @@
             });
     }
 
-    private Task PurgeAllAsync()
-    {
-        return ShowConfirmationAsync(
-            title: "Purge All",
-            message: "Purge all keys from the active Redis database? This action is irreversible.",
-            label: "Purge",
-            action: async () =>
-            {
-                if (Client is null)
-                    return;
-
-                await Client.FlushDatabaseAsync();
-                Keys.Clear();
-                KeyTypes.Clear();
-
-                SelectedKey = null;
-                SelectedInfo = null;
-                SelectedStringValue = null;
-                SelectedHashFields = [];
-                SelectedItems = [];
-                SelectedSortedSetItems = [];
-                NamespaceNodes = [];
-                PrefixMemoryBuckets = [];
-                ScannedKeyInfos.Clear();
-                InvalidateHealthReport();
-                Notifications.ShowWarning("Database purged", "All keys have been removed.");
-            });
-    }
-
     private async Task SetTtlAsync(int ttlSeconds)
     {
         if (Client is null || string.IsNullOrWhiteSpace(SelectedKey))
@@ -772,6 +744,33 @@
         _toolbar?.ToggleKeySelection(key);
     }
 
+    private Task SelectAllLoadedAsync()
+    {
+        if (Keys.Count == 0)
+            return Task.CompletedTask;
+
+        _toolbar?.ReplaceSelection(Keys);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleSubtreeSelected(List<string> keys)
+    {
+        if (keys.Count == 0)
+            return Task.CompletedTask;
+
+        _toolbar?.AddSelection(keys);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task HandleSubtreeCleared(List<string> keys)
+    {
+        if (keys.Count == 0)
+            return Task.CompletedTask;
+
+        _toolbar?.RemoveSelection(keys);
+        return InvokeAsync(StateHasChanged);
+    }
+
     private Task DeleteSelectedKeysAsync()
     {
         if (_toolbar is null || _toolbar.SelectedKeys.Count == 0) return Task.CompletedTask;
@@ -801,7 +800,7 @@
                         Keys.Remove(key);
                         KeyTypes.Remove(key);
                     }
-                    _toolbar.ClearMultiSelect();
+                    _toolbar.ExitMultiSelect();
 
                     if (keyList.Contains(SelectedKey ?? ""))
                     {
@@ -930,6 +929,7 @@
     private void RebuildNamespaceTree()
     {
         NamespaceNodes = RedisKeyGrouper.BuildNamespaceTree(Keys, CurrentSeparator);
+        _toolbar?.PruneSelection(Keys);
     }
 
     private async Task OnSeparatorChangedAsync(string separator)

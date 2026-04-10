@@ -202,7 +202,7 @@
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
                 "Downloads", fileName);
             await using var fs = System.IO.File.OpenWrite(destPath);
-            await _storageClient.DownloadBlobAsync(_selectedContainer, _selectedBlob.Name, fs, ct);
+            await _storageClient.DownloadBlobAsync(_selectedContainer, _selectedBlob.Name, fs, ct: ct);
             Notifications.ShowSuccess("Blob downloaded", fileName);
         }
         catch (OperationCanceledException) { return; }

@@ -57,6 +57,8 @@ public interface IStorageClient
         string containerName,
         string blobName,
         Stream destination,
+        IProgress<long>? progress = null,
+        string? versionId = null,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(

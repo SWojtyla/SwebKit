@@ -286,10 +286,22 @@
         catch { /* clipboard unavailable */ }
     }
 
-    private static async Task OpenInBrowser(string url)
+    private static Task OpenInBrowser(string url)
     {
-        try { await Microsoft.Maui.ApplicationModel.Launcher.Default.OpenAsync(new Uri(url)); }
-        catch { /* launcher unavailable */ }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Shell launch can be unavailable in tests or restricted environments.
+        }
+
+        return Task.CompletedTask;
     }
 
     private static string FormatAge(DateTimeOffset ts)

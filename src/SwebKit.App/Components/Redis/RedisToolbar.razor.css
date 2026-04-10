@@ -36,3 +36,8 @@
     border-radius: 3px;
     font-size: 10px;
 }
+
+.selection-summary {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}

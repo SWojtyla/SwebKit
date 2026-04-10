@@ -11,7 +11,7 @@
 - Inline content preview for text, JSON, and XML blobs.
   - JSON pretty-printed via `System.Text.Json`; fallback to raw text on malformed input.
   - Size-gated: warn at 512 KB; hard cap at 2 MB with "Load anyway" escape.
-- Download blob to the user's Downloads folder.
+- Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
 - Copy blob direct URL to clipboard (no SAS expiry).
 - Copy SAS URL with 24-hour expiry generated client-side via the SDK.
 - Storage config form in Settings page (Account Name, Use AAD, Connection String Ref, Test Connection).
@@ -24,7 +24,8 @@
 4. `StorageContainerTree` calls `ListContainersAsync` on first render; selection fires `SelectedContainerChanged`.
 5. `StorageBlobList` calls `ListBlobsAsync` with current prefix and pagination token; breadcrumb segments drive prefix navigation.
 6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently.
-7. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
+7. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
+8. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
 
 ## Credential Modes
 
@@ -53,6 +54,7 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 - Pagination: `ListBlobsAsync` returns one page (default 100 items) with a continuation token. "Load more" appends the next page in the UI.
 - Binary detection: `GetBlobContentAsync` checks content-type before issuing a byte-range read. Binary blobs return `IsBinary = true` without downloading content.
 - Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). Both calls are made concurrently via `Task.WhenAll`.
+- Download progress is local to the initiating surface; there is no background transfer manager or cross-page download queue.
 
 ## Validation Pointers
 

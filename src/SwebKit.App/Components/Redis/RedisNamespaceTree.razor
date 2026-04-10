@@ -24,7 +24,8 @@
             {
                 <RedisNamespaceTreeNode @key="node.FullPrefix" Node="@node" OnPrefixSelected="OnPrefixSelected"
                                         OnKeySelected="OnKeySelected" SelectedKey="@SelectedKey" KeyTypes="@KeyTypes"
-                                        MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys" OnKeyToggled="OnKeyToggled" />
+                                        MultiSelectMode="@MultiSelectMode" SelectedKeys="@SelectedKeys" OnKeyToggled="OnKeyToggled"
+                                        OnSubtreeSelected="OnSubtreeSelected" OnSubtreeCleared="OnSubtreeCleared" />
             }
         </div>
     }
@@ -42,6 +43,8 @@
     [Parameter] public bool MultiSelectMode { get; set; }
     [Parameter] public HashSet<string> SelectedKeys { get; set; } = new();
     [Parameter] public EventCallback<string> OnKeyToggled { get; set; }
+    [Parameter] public EventCallback<List<string>> OnSubtreeSelected { get; set; }
+    [Parameter] public EventCallback<List<string>> OnSubtreeCleared { get; set; }
 
     private Task OnSepChanged(ChangeEventArgs e)
     {

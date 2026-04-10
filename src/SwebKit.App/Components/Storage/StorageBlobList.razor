@@ -74,130 +74,157 @@
                     </div>
                 }
 
-                <ContextMenu @ref="_ctxMenu">
-                    <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy
-                        URL</button>
-                        <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(1))"><span
-                            class="ctx-item-icon">🔑</span> Copy SAS URL (1 h)</button>
-                            <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(8))"><span
-                                class="ctx-item-icon">🔑</span> Copy SAS URL (8 h)</button>
-                                <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(24))"><span
-                                    class="ctx-item-icon">🔑</span> Copy SAS URL (24 h)</button>
-                                    <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromDays(7))"><span
-                                        class="ctx-item-icon">🔑</span> Copy SAS URL (7 d)</button>
-                                        <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromDays(30))"><span
-                                            class="ctx-item-icon">🔑</span> Copy SAS URL (30 d)</button>
-                                            <button class="ctx-item" @onclick="() => ShowCustomSasDialog(_ctxItem!)"><span
-                                                class="ctx-item-icon">🔑</span> Copy SAS URL (custom…)</button>
-                                                <button class="ctx-item" @onclick="() => CopyRelativePathAsync(_ctxItem!)"><span
-                                                    class="ctx-item-icon">📋</span> Copy
-                                                    path</button>
-                                                    <div class="ctx-separator"></div>
-                                                    <button class="ctx-item" @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span>
-                                                        Download</button>
-                                                    </ContextMenu>
+                @if (_downloadState is not null)
+                {
+                    <div style="padding:8px 12px; border-bottom:1px solid var(--color-border); background:rgba(0,120,212,0.06);">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; margin-bottom:6px;">
+                            <span style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Downloading
+                                @GetDisplayName(_downloadState.BlobName)</span>
+                                <span
+                                style="color:var(--color-text-muted); white-space:nowrap;">@FormatDownloadProgress(_downloadState)</span>
+                            </div>
+                            @if (TryGetDownloadPercent(_downloadState, out var downloadPercent))
+                            {
+                                <div style="height:6px; border-radius:999px; overflow:hidden; background:rgba(127,127,127,0.16);">
+                                    <div style="height:100%; width:@($"{downloadPercent:F1}%"); background:var(--color-accent);"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="display:flex; align-items:center; gap:8px; color:var(--color-text-muted); font-size:11px;">
+                                    <FluentProgressRing Width="14px" Height="14px" />
+                                    <span>Waiting for total size…</span>
+                                </div>
+                            }
+                        </div>
+                    }
 
-                                                    @* ── Custom SAS dialog ── *@
-                                                    @if (_showCustomSasDialog)
-                                                    {
-                                                        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.3); z-index:1000; display:flex; align-items:center; justify-content:center;"
-                                                             @onclick="() => _showCustomSasDialog = false">
-                                                            <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; padding:16px; min-width:260px;"
-                                                                 @onclick:stopPropagation="true">
-                                                                <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Custom SAS expiry</div>
-                                                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-                                                                    <input type="number" min="1" max="8760" @bind="_customSasHours"
-                                                                           style="width:80px; padding:4px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                                                    <span style="font-size:12px;">hours</span>
-                                                                </div>
-                                                                <div style="display:flex; gap:8px; justify-content:flex-end;">
-                                                                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _showCustomSasDialog = false">
-                                                                        Cancel</FluentButton>
-                                                                        <FluentButton Appearance="Appearance.Accent" @onclick="ApplyCustomSasAsync">Copy SAS</FluentButton>
+                    <ContextMenu @ref="_ctxMenu">
+                        <button class="ctx-item" @onclick="() => CopyUrlAsync(_ctxItem!)"><span class="ctx-item-icon">🔗</span> Copy
+                            URL</button>
+                            <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(1))"><span
+                                class="ctx-item-icon">🔑</span> Copy SAS URL (1 h)</button>
+                                <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(8))"><span
+                                    class="ctx-item-icon">🔑</span> Copy SAS URL (8 h)</button>
+                                    <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromHours(24))"><span
+                                        class="ctx-item-icon">🔑</span> Copy SAS URL (24 h)</button>
+                                        <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromDays(7))"><span
+                                            class="ctx-item-icon">🔑</span> Copy SAS URL (7 d)</button>
+                                            <button class="ctx-item" @onclick="() => CopySasWithExpiryAsync(_ctxItem!, TimeSpan.FromDays(30))"><span
+                                                class="ctx-item-icon">🔑</span> Copy SAS URL (30 d)</button>
+                                                <button class="ctx-item" @onclick="() => ShowCustomSasDialog(_ctxItem!)"><span
+                                                    class="ctx-item-icon">🔑</span> Copy SAS URL (custom…)</button>
+                                                    <button class="ctx-item" @onclick="() => CopyRelativePathAsync(_ctxItem!)"><span
+                                                        class="ctx-item-icon">📋</span> Copy
+                                                        path</button>
+                                                        <div class="ctx-separator"></div>
+                                                        <button class="ctx-item" disabled="@(_downloadState is not null)"
+                                                                @onclick="() => DownloadAsync(_ctxItem!)"><span class="ctx-item-icon">⬇</span>
+                                                            @(_downloadState is null ? "Download" : "Downloading...")</button>
+                                                        </ContextMenu>
+
+                                                        @* ── Custom SAS dialog ── *@
+                                                        @if (_showCustomSasDialog)
+                                                        {
+                                                            <div style="position:fixed; inset:0; background:rgba(0,0,0,0.3); z-index:1000; display:flex; align-items:center; justify-content:center;"
+                                                                 @onclick="() => _showCustomSasDialog = false">
+                                                                <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; padding:16px; min-width:260px;"
+                                                                     @onclick:stopPropagation="true">
+                                                                    <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Custom SAS expiry</div>
+                                                                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                                                                        <input type="number" min="1" max="8760" @bind="_customSasHours"
+                                                                               style="width:80px; padding:4px 6px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                                                        <span style="font-size:12px;">hours</span>
+                                                                    </div>
+                                                                    <div style="display:flex; gap:8px; justify-content:flex-end;">
+                                                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _showCustomSasDialog = false">
+                                                                            Cancel</FluentButton>
+                                                                            <FluentButton Appearance="Appearance.Accent" @onclick="ApplyCustomSasAsync">Copy SAS</FluentButton>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        }
+                                                            }
 
-                                                        <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                                                            <thead>
-                                                                <tr style="border-bottom:1px solid var(--color-border);">
-                                                                    @if (_multiSelectMode)
-                                                                    {
-                                                                        <th style="padding:6px 4px; width:28px;"></th>
-                                                                    }
-                                                                    <th
-                                                                        style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted); width:24px;">
-                                                                    </th>
-                                                                    <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); cursor:pointer; user-select:none;"
-                                                                        @onclick='() => SetSort("name")'>
-                                                                        Name @SortIndicator("name")
-                                                                    </th>
-                                                                    <th style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap; cursor:pointer; user-select:none;"
-                                                                        @onclick='() => SetSort("size")'>
-                                                                        Size @SortIndicator("size")
-                                                                    </th>
-                                                                    <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">
-                                                                        Content-Type</th>
-                                                                        <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap; cursor:pointer; user-select:none;"
-                                                                            @onclick='() => SetSort("modified")'>
-                                                                            Last Modified @SortIndicator("modified")
-                                                                        </th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    @foreach (var item in SortedFilteredItems)
-                                                                    {
-                                                                        var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
-                                                                        var displayName = GetDisplayName(item.Name);
-                                                                        <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
-                                                                            @onclick="() => OnRowClickAsync(item)" @oncontextmenu="e => OnRowContextMenu(e, item)"
-                                                                            @oncontextmenu:preventDefault="true">
-                                                                            @if (_multiSelectMode)
-                                                                            {
-                                                                                <td style="padding:6px 4px; text-align:center;">
-                                                                                    @if (!item.IsPrefix)
-                                                                                    {
-                                                                                        <input type="checkbox" checked="@_selectedBlobs.Contains(item.Name)"
-                                                                                               @onclick:stopPropagation="true" @onchange="() => ToggleBlobSelection(item.Name)" />
-                                                                                    }
-                                                                                </td>
-                                                                            }
-                                                                            <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
-                                                                            <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
-                                                                            <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">
-                                                                                @(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
-                                                                                <td
-                                                                                    style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                                                                                    @(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
-                                                                                    <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ?
-                                                                                                                            "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
-                                                                                    </tr>
-                                                                                }
-                                                                            </tbody>
-                                                                        </table>
-
-                                                                        @if (_hasMore)
+                                                            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                                                                <thead>
+                                                                    <tr style="border-bottom:1px solid var(--color-border);">
+                                                                        @if (_multiSelectMode)
                                                                         {
-                                                                            <div style="padding:12px; text-align:center;">
-                                                                                <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loading" @onclick="LoadMoreAsync">
-                                                                                    @(_loading ? "Loading..." : "Load more")
-                                                                                </FluentButton>
-                                                                            </div>
+                                                                            <th style="padding:6px 4px; width:28px;"></th>
                                                                         }
-                                                                    }
-                                                                </div>
-                                                            }
+                                                                        <th
+                                                                            style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted); width:24px;">
+                                                                        </th>
+                                                                        <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); cursor:pointer; user-select:none;"
+                                                                            @onclick='() => SetSort("name")'>
+                                                                            Name @SortIndicator("name")
+                                                                        </th>
+                                                                        <th style="padding:6px 12px; text-align:right; font-weight:600; color:var(--color-text-muted); white-space:nowrap; cursor:pointer; user-select:none;"
+                                                                            @onclick='() => SetSort("size")'>
+                                                                            Size @SortIndicator("size")
+                                                                        </th>
+                                                                        <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted);">
+                                                                            Content-Type</th>
+                                                                            <th style="padding:6px 12px; text-align:left; font-weight:600; color:var(--color-text-muted); white-space:nowrap; cursor:pointer; user-select:none;"
+                                                                                @onclick='() => SetSort("modified")'>
+                                                                                Last Modified @SortIndicator("modified")
+                                                                            </th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        @foreach (var item in SortedFilteredItems)
+                                                                        {
+                                                                            var isSelected = !item.IsPrefix && item.Name == SelectedBlob?.Name;
+                                                                            var displayName = GetDisplayName(item.Name);
+                                                                            <tr style="border-bottom:1px solid var(--color-border); background:@(isSelected ? "rgba(0,120,212,0.12)" : "transparent"); cursor:pointer;"
+                                                                                @onclick="() => OnRowClickAsync(item)" @oncontextmenu="e => OnRowContextMenu(e, item)"
+                                                                                @oncontextmenu:preventDefault="true">
+                                                                                @if (_multiSelectMode)
+                                                                                {
+                                                                                    <td style="padding:6px 4px; text-align:center;">
+                                                                                        @if (!item.IsPrefix)
+                                                                                        {
+                                                                                            <input type="checkbox" checked="@_selectedBlobs.Contains(item.Name)"
+                                                                                                   @onclick:stopPropagation="true" @onchange="() => ToggleBlobSelection(item.Name)" />
+                                                                                        }
+                                                                                    </td>
+                                                                                }
+                                                                                <td style="padding:6px 8px; text-align:center;">@(item.IsPrefix ? "📁" : "📄")</td>
+                                                                                <td style="padding:6px 12px;" title="@item.Name">@displayName</td>
+                                                                                <td style="padding:6px 12px; text-align:right; white-space:nowrap; color:var(--color-text-muted);">
+                                                                                    @(item.IsPrefix ? "" : FormatSize(item.SizeBytes))</td>
+                                                                                    <td
+                                                                                        style="padding:6px 12px; color:var(--color-text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                                                                        @(item.IsPrefix ? "" : (item.ContentType ?? ""))</td>
+                                                                                        <td style="padding:6px 12px; white-space:nowrap; color:var(--color-text-muted);">@(item.IsPrefix ?
+                                                                                                                                                                                                                        "" : item.LastModified?.ToString("yyyy-MM-dd HH:mm"))</td>
+                                                                                        </tr>
+                                                                                    }
+                                                                                </tbody>
+                                                                            </table>
 
-                                                            @if (_actionMessage is not null)
-                                                            {
-                                                                <div
-                                                                    style="padding:6px 12px; font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)"); border-top:1px solid var(--color-border); flex-shrink:0;">
-                                                                    @_actionMessage
-                                                                </div>
-                                                            }
+                                                                            @if (_hasMore)
+                                                                            {
+                                                                                <div style="padding:12px; text-align:center;">
+                                                                                    <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loading" @onclick="LoadMoreAsync">
+                                                                                        @(_loading ? "Loading..." : "Load more")
+                                                                                    </FluentButton>
+                                                                                </div>
+                                                                            }
+                                                                        }
+                                                                    </div>
+                                                                }
 
-                                                        </div>
+                                                                @if (_actionMessage is not null)
+                                                                {
+                                                                    <div
+                                                                        style="padding:6px 12px; font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)"); border-top:1px solid var(--color-border); flex-shrink:0;">
+                                                                        @_actionMessage
+                                                                    </div>
+                                                                }
+
+                                                            </div>
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -230,9 +257,21 @@
     private int _customSasHours = 1;
     private StorageBlobItem? _customSasItem;
 
+    private DownloadUiState? _downloadState;
+    private long _lastDownloadUiBytes = -1;
+    private DateTimeOffset _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+
     // STG-9: Sorting
     private string _sortColumn = "name";
     private bool _sortAscending = true;
+
+    private sealed class DownloadUiState
+    {
+        public required string BlobName { get; init; }
+        public required string DestinationPath { get; init; }
+        public long? TotalBytes { get; init; }
+        public long BytesTransferred { get; set; }
+    }
 
     private IReadOnlyList<StorageBlobItem> FilteredItems => string.IsNullOrEmpty(_blobFilter)
         ? _items
@@ -572,18 +611,32 @@
 
     private async Task DownloadAsync(StorageBlobItem item)
     {
+        if (_downloadState is not null)
+            return;
+
+        var destPath = BuildDownloadPath(item.Name);
+        var downloadState = new DownloadUiState
+        {
+            BlobName = item.Name,
+            DestinationPath = destPath,
+            TotalBytes = item.SizeBytes > 0 ? item.SizeBytes : null,
+            BytesTransferred = 0
+        };
+
         try
         {
-            var fileName = System.IO.Path.GetFileName(item.Name.TrimEnd('/'));
-            if (string.IsNullOrEmpty(fileName)) fileName = item.Name.Replace('/', '_');
-            var destPath = System.IO.Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads", fileName);
-            await using var fs = System.IO.File.OpenWrite(destPath);
-            await Client.DownloadBlobAsync(ContainerName, item.Name, fs);
+            _downloadState = downloadState;
+            _actionMessage = null;
+            _lastDownloadUiBytes = -1;
+            _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+            await InvokeAsync(StateHasChanged);
+
+            var progress = new Progress<long>(bytes => ReportDownloadProgress(downloadState, bytes));
+            await using var fs = System.IO.File.Create(destPath);
+            await Client.DownloadBlobAsync(ContainerName, item.Name, fs, progress: progress);
             _actionOk = true;
             _actionMessage = $"Downloaded to: {destPath}";
-            Notifications.ShowSuccess("Blob downloaded", fileName);
+            Notifications.ShowSuccess("Blob downloaded", System.IO.Path.GetFileName(destPath));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -592,6 +645,72 @@
             _actionMessage = $"Download failed: {ex.Message}";
             Notifications.ShowError("Download failed", ex: ex);
         }
+        finally
+        {
+            _downloadState = null;
+        }
         await InvokeAsync(StateHasChanged);
+    }
+
+    private static string BuildDownloadPath(string blobName)
+    {
+        var fileName = System.IO.Path.GetFileName(blobName.TrimEnd('/'));
+        if (string.IsNullOrWhiteSpace(fileName))
+            fileName = blobName.Replace('/', '_');
+
+        foreach (var invalidChar in System.IO.Path.GetInvalidFileNameChars())
+            fileName = fileName.Replace(invalidChar, '_');
+
+        var downloadsPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Downloads");
+        Directory.CreateDirectory(downloadsPath);
+        return System.IO.Path.Combine(downloadsPath, fileName);
+    }
+
+    private void ReportDownloadProgress(DownloadUiState state, long bytesTransferred)
+    {
+        state.BytesTransferred = bytesTransferred;
+
+        if (!ShouldRefreshDownloadUi(state))
+            return;
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShouldRefreshDownloadUi(DownloadUiState state)
+    {
+        if (state.BytesTransferred == _lastDownloadUiBytes)
+            return false;
+
+        var now = DateTimeOffset.UtcNow;
+        var isComplete = state.TotalBytes is long total && total > 0 && state.BytesTransferred >= total;
+        if (!isComplete && now - _lastDownloadUiUpdate < TimeSpan.FromMilliseconds(125))
+            return false;
+
+        _lastDownloadUiBytes = state.BytesTransferred;
+        _lastDownloadUiUpdate = now;
+        return true;
+    }
+
+    private static bool TryGetDownloadPercent(DownloadUiState state, out double percent)
+    {
+        if (state.TotalBytes is not long total || total <= 0)
+        {
+            percent = 0;
+            return false;
+        }
+
+        percent = Math.Clamp((double)state.BytesTransferred / total * 100d, 0d, 100d);
+        return true;
+    }
+
+    private static string FormatDownloadProgress(DownloadUiState state)
+    {
+        var transferred = FormatSize(state.BytesTransferred);
+        if (state.TotalBytes is not long total || total <= 0)
+            return transferred;
+
+        return $"{transferred} / {FormatSize(total)}";
     }
 }

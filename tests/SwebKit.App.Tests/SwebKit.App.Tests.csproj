@@ -31,7 +31,9 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\SwebKit.Core\SwebKit.Core.csproj" />
         <ProjectReference Include="..\..\src\SwebKit.Azure\SwebKit.Azure.csproj" />
+        <ProjectReference Include="..\..\src\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
         <ProjectReference Include="..\..\src\SwebKit.Observability\SwebKit.Observability.csproj" />
+        <ProjectReference Include="..\..\src\SwebKit.Redis\SwebKit.Redis.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -46,6 +48,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\EmptyState.razor" Link="Components\Shared\EmptyState.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ContextMenu.razor" Link="Components\Shared\ContextMenu.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Modal.razor" Link="Components\Shared\Modal.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Dropdown.razor" Link="Components\Shared\Dropdown.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PasswordField.razor" Link="Components\Shared\PasswordField.razor" />
@@ -62,21 +65,18 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ScheduledMessages.razor" Link="Components\ServiceBus\ScheduledMessages.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor" Link="Components\Pages\AksPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ServiceBus\NsState.cs" Link="Components\ServiceBus\NsState.cs" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConnectionBar.razor" Link="Components\Aks\AksConnectionBar.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksYamlViewer.razor" Link="Components\Aks\AksYamlViewer.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksHelmPanel.razor" Link="Components\Aks\AksHelmPanel.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksDetailPanels.razor" Link="Components\Aks\AksDetailPanels.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AksConfirmBar.razor" Link="Components\Aks\AksConfirmBar.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\AutoRefreshToggle.razor" Link="Components\Aks\AutoRefreshToggle.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\ResizablePanel.razor" Link="Components\Aks\ResizablePanel.razor" />
-        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\NamespaceMonitorSelector.razor" Link="Components\Aks\NamespaceMonitorSelector.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\*.razor" Link="Components\Aks\%(Filename)%(Extension)" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityFailures.razor" Link="Components\Observability\ObservabilityFailures.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityLogs.razor" Link="Components\Observability\ObservabilityLogs.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityPerformance.razor" Link="Components\Observability\ObservabilityPerformance.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisNamespaceTreeNode.razor" Link="Components\Redis\RedisNamespaceTreeNode.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisKeyspaceHealthExplorer.razor" Link="Components\Redis\RedisKeyspaceHealthExplorer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageBlobList.razor" Link="Components\Storage\StorageBlobList.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobDetailPane.razor" Link="Components\Storage\BlobDetailPane.razor" />
     </ItemGroup>
 </Project>

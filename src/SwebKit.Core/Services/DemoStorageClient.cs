@@ -200,12 +200,18 @@ public sealed class DemoStorageClient : IStorageClient
         Task.FromResult($"https://devstore.blob.core.windows.net/{containerName}/{blobName}?sv=demo&se={DateTimeOffset.UtcNow.Add(expiry):O}&sp=r");
 
     public Task DownloadBlobAsync(
-        string containerName, string blobName, Stream destination, CancellationToken ct = default)
+        string containerName,
+        string blobName,
+        Stream destination,
+        IProgress<long>? progress = null,
+        string? versionId = null,
+        CancellationToken ct = default)
     {
         var key = $"{containerName}/{blobName}";
         var content = BlobContents.TryGetValue(key, out var c) ? c : $"(Demo content for {blobName})";
         var bytes = Encoding.UTF8.GetBytes(content);
-        return destination.WriteAsync(bytes, ct).AsTask();
+
+        return WriteAsync(destination, bytes, progress, ct);
     }
 
     public Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(
@@ -223,4 +229,22 @@ public sealed class DemoStorageClient : IStorageClient
     public Task<string> GetContainerSasUrlAsync(
         string containerName, TimeSpan expiry, CancellationToken ct = default) =>
         Task.FromResult($"https://devstore.blob.core.windows.net/{containerName}?sv=demo&se={DateTimeOffset.UtcNow.Add(expiry):O}&sp=rl");
+
+    private static async Task WriteAsync(
+        Stream destination,
+        byte[] bytes,
+        IProgress<long>? progress,
+        CancellationToken ct)
+    {
+        const int chunkSize = 8 * 1024;
+        var written = 0;
+
+        while (written < bytes.Length)
+        {
+            var count = Math.Min(chunkSize, bytes.Length - written);
+            await destination.WriteAsync(bytes.AsMemory(written, count), ct);
+            written += count;
+            progress?.Report(written);
+        }
+    }
 }

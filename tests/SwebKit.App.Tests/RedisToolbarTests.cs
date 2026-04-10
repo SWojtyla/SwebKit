@@ -54,4 +54,47 @@ public class RedisToolbarTests : TestContext
 
         Assert.False(cut.Instance.MultiSelectMode);
     }
+
+    [Fact]
+    public void RedisToolbar_RendersSelectAllLoadedInsteadOfPurgeAll()
+    {
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 3));
+
+        Assert.Contains("Select All Loaded", cut.Markup);
+        Assert.DoesNotContain("Purge All", cut.Markup);
+    }
+
+    [Fact]
+    public void RedisToolbar_SelectAllLoaded_InvokesCallback()
+    {
+        var calls = 0;
+
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 3)
+            .Add(p => p.OnSelectAllLoaded, () => calls++));
+
+        cut.FindAll("fluent-button")
+            .First(button => button.TextContent.Contains("Select All Loaded", StringComparison.Ordinal))
+            .Click();
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void RedisToolbar_AddSelection_ShowsLoadedSelectionSummary()
+    {
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 5)
+            .Add(p => p.HasMoreKeys, true));
+
+        cut.Instance.AddSelection(["alpha", "beta"]);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Selected 2 of 5 loaded key(s) (more keys not loaded)", cut.Markup);
+            Assert.Contains("Clear Selection", cut.Markup);
+            Assert.Contains("Delete 2 key(s)", cut.Markup);
+        });
+    }
 }

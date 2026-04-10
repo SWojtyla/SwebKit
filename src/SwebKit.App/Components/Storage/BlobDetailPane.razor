@@ -19,94 +19,94 @@
     {
         @* ── Tab bar ── *@
         <div style="display:flex; border-bottom:1px solid var(--color-border); flex-shrink:0;">
-            <button style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "properties" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "properties" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "properties" ? "2px solid var(--color-accent)" : "2px solid transparent");"
-                    @onclick='() => _activeTab = "properties"'>Properties</button>
-            <button style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "versions" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "versions" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "versions" ? "2px solid var(--color-accent)" : "2px solid transparent");"
-                    @onclick="SelectVersionsTabAsync">Versions</button>
+            <button
+            style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "properties" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "properties" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "properties" ? "2px solid var(--color-accent)" : "2px solid transparent");"
+            @onclick='() => _activeTab = "properties"'>Properties</button>
+            <button
+            style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "versions" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "versions" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "versions" ? "2px solid var(--color-accent)" : "2px solid transparent");"
+            @onclick="SelectVersionsTabAsync">Versions</button>
         </div>
+
+        @if (_downloadState is not null)
+        {
+            <div style="padding:10px 16px; border-bottom:1px solid var(--color-border); background:rgba(0,120,212,0.06);">
+                <div
+                    style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; margin-bottom:6px;">
+                    <span
+                    style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@_downloadState.Label</span>
+                    <span
+                    style="color:var(--color-text-muted); white-space:nowrap;">@FormatDownloadProgress(_downloadState)</span>
+                </div>
+                @if (TryGetDownloadPercent(_downloadState, out var downloadPercent))
+                {
+                    <div style="height:6px; border-radius:999px; overflow:hidden; background:rgba(127,127,127,0.16);">
+                        <div style="height:100%; width:@($"{downloadPercent:F1}%"); background:var(--color-accent);"></div>
+                    </div>
+                }
+                else
+                {
+                    <div style="display:flex; align-items:center; gap:8px; color:var(--color-text-muted); font-size:11px;">
+                        <FluentProgressRing Width="14px" Height="14px" />
+                        <span>Waiting for total size…</span>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_actionMessage is not null)
+        {
+            <div
+                style="padding:8px 16px; border-bottom:1px solid var(--color-border); font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)");">
+                @_actionMessage
+            </div>
+        }
 
         @if (_activeTab == "properties")
         {
-        <div style="overflow-y:auto; flex:1; padding:16px;">
+            <div style="overflow-y:auto; flex:1; padding:16px;">
 
-            @* ── Action bar ── *@
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
-                <FluentButton Appearance="Appearance.Accent" @onclick="DownloadAsync">Download</FluentButton>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
-                @if (_actionMessage is not null)
-                {
-                    <span
-                    style="font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)")">@_actionMessage</span>
-                }
-            </div>
+                @* ── Action bar ── *@
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@(_downloadState is not null)"
+                                  @onclick="DownloadAsync">@(_downloadState is null ? "Download" : "Downloading...")</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
+                </div>
 
-            @* ── Properties table ── *@
-            <div
-                style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
-                Properties</div>
-                <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
-                    @foreach (var row in GetPropertyRows(_properties))
-                    {
-                        <tr style="border-bottom:1px solid var(--color-border);">
-                            <td
-                                style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">
-                                @row.Key</td>
-                                <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
-                            </tr>
-                        }
-                    </table>
-
-                    @* ── Metadata ── *@
-                    <div style="margin-bottom:12px;">
-                        <button
-                            style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                            @onclick="() => _showMetadata = !_showMetadata">
-                            <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
-                        </button>
-                        @if (_showMetadata)
+                @* ── Properties table ── *@
+                <div
+                    style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
+                    Properties</div>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+                        @foreach (var row in GetPropertyRows(_properties))
                         {
-                            <div style="margin-top:6px; padding-left:12px;">
-                                @if (_properties.Metadata.Count == 0)
-                                {
-                                    <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
-                                }
-                                else
-                                {
-                                    <table style="width:100%; border-collapse:collapse;">
-                                        @foreach (var kv in _properties.Metadata)
-                                        {
-                                            <tr style="border-bottom:1px solid var(--color-border);">
-                                                <td
-                                                    style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
-                                                    @kv.Key</td>
-                                                    <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
-                                                </tr>
-                                            }
-                                        </table>
-                                    }
-                                </div>
+                            <tr style="border-bottom:1px solid var(--color-border);">
+                                <td
+                                    style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">
+                                    @row.Key</td>
+                                    <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
+                                </tr>
                             }
-                        </div>
+                        </table>
 
-                        @* ── Tags ── *@
-                        <div style="margin-bottom:16px;">
+                        @* ── Metadata ── *@
+                        <div style="margin-bottom:12px;">
                             <button
                                 style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                                @onclick="() => _showTags = !_showTags">
-                                <span>@(_showTags ? "▼" : "▶")</span> Tags
+                                @onclick="() => _showMetadata = !_showMetadata">
+                                <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
                             </button>
-                            @if (_showTags)
+                            @if (_showMetadata)
                             {
                                 <div style="margin-top:6px; padding-left:12px;">
-                                    @if (_properties.Tags.Count == 0)
+                                    @if (_properties.Metadata.Count == 0)
                                     {
-                                        <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
+                                        <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
                                     }
                                     else
                                     {
                                         <table style="width:100%; border-collapse:collapse;">
-                                            @foreach (var kv in _properties.Tags)
+                                            @foreach (var kv in _properties.Metadata)
                                             {
                                                 <tr style="border-bottom:1px solid var(--color-border);">
                                                     <td
@@ -121,27 +121,61 @@
                                 }
                             </div>
 
-                            @* ── Content preview ── *@
-                            <div
-                                style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
-                                Content Preview</div>
+                            @* ── Tags ── *@
+                            <div style="margin-bottom:16px;">
+                                <button
+                                    style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
+                                    @onclick="() => _showTags = !_showTags">
+                                    <span>@(_showTags ? "▼" : "▶")</span> Tags
+                                </button>
+                                @if (_showTags)
+                                {
+                                    <div style="margin-top:6px; padding-left:12px;">
+                                        @if (_properties.Tags.Count == 0)
+                                        {
+                                            <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
+                                        }
+                                        else
+                                        {
+                                            <table style="width:100%; border-collapse:collapse;">
+                                                @foreach (var kv in _properties.Tags)
+                                                {
+                                                    <tr style="border-bottom:1px solid var(--color-border);">
+                                                        <td
+                                                            style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
+                                                            @kv.Key</td>
+                                                            <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
+                                                        </tr>
+                                                    }
+                                                </table>
+                                            }
+                                        </div>
+                                    }
+                                </div>
 
-                                @if (_loadingContent)
-                                {
-                                    <div style="display:flex; justify-content:center; padding:12px;">
-                                        <FluentProgressRing />
-                                    </div>
-                                }
-                                else if (_content is null)
-                                {
-                                    <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
-                                }
-                                else if (_content.IsBinary || _binaryOverride)
-                                {
-                                    <div
-                                        style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);"
-                                        title="@_binaryDetectionMethod">
-                                        Binary content — use Download to inspect this blob. @if (_binaryDetectionMethod is not null) { <span style="font-size:10px; color:var(--color-text-muted);">(@_binaryDetectionMethod)</span> }
+                                @* ── Content preview ── *@
+                                <div
+                                    style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                                    Content Preview</div>
+
+                                    @if (_loadingContent)
+                                    {
+                                        <div style="display:flex; justify-content:center; padding:12px;">
+                                            <FluentProgressRing />
+                                        </div>
+                                    }
+                                    else if (_content is null)
+                                    {
+                                        <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
+                                    }
+                                    else if (_content.IsBinary || _binaryOverride)
+                                    {
+                                        <div style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);"
+                                             title="@_binaryDetectionMethod">
+                                            Binary content — use Download to inspect this blob. @if (_binaryDetectionMethod is not null) {
+                                            <span
+                                            style="font-size:10px; color:var(--color-text-muted);">(@_binaryDetectionMethod)</span>
+                                        }
                                     </div>
                                 }
                                 else
@@ -170,57 +204,68 @@
                                 }
 
                             </div>
-        }
-        else @* versions tab *@
-        {
-            <div style="overflow-y:auto; flex:1; padding:16px;">
-                @if (_loadingVersions)
-                {
-                    <div style="display:flex; justify-content:center; padding:20px;">
-                        <FluentProgressRing />
-                    </div>
-                }
-                else if (_versionsError is not null)
-                {
-                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">@_versionsError</div>
-                }
-                else if (_versions is not null && _versions.Count > 0)
-                {
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                        <thead>
-                            <tr style="border-bottom:1px solid var(--color-border);">
-                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">Version ID</th>
-                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">Created</th>
-                                <th style="padding:6px 8px; text-align:right; font-weight:600; color:var(--color-text-muted);">Size</th>
-                                <th style="padding:6px 8px; text-align:center; font-weight:600; color:var(--color-text-muted);">Current</th>
-                                <th style="padding:6px 8px; width:80px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var v in _versions)
-                            {
-                                <tr style="border-bottom:1px solid var(--color-border);">
-                                    <td style="padding:5px 8px; font-size:11px; font-family:Consolas,monospace; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@v.VersionId">@v.VersionId</td>
-                                    <td style="padding:5px 8px; white-space:nowrap;">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
-                                    <td style="padding:5px 8px; text-align:right; white-space:nowrap;">@FormatSize(v.ContentLength ?? 0)</td>
-                                    <td style="padding:5px 8px; text-align:center;">@(v.IsCurrentVersion ? "✔" : "")</td>
-                                    <td style="padding:5px 8px;">
-                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="() => DownloadVersionAsync(v)">⬇</FluentButton>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
+                        }
+        else
+                        @* versions tab *@
+                        {
+                            <div style="overflow-y:auto; flex:1; padding:16px;">
+                                @if (_loadingVersions)
+                                {
+                                    <div style="display:flex; justify-content:center; padding:20px;">
+                                        <FluentProgressRing />
+                                    </div>
+                                }
+                                else if (_versionsError is not null)
+                                {
+                                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">@_versionsError</div>
+                                }
+                                else if (_versions is not null && _versions.Count > 0)
+                                {
+                                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                                        <thead>
+                                            <tr style="border-bottom:1px solid var(--color-border);">
+                                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">
+                                                    Version ID</th>
+                                                    <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">
+                                                        Created</th>
+                                                        <th style="padding:6px 8px; text-align:right; font-weight:600; color:var(--color-text-muted);">Size
+                                                        </th>
+                                                        <th style="padding:6px 8px; text-align:center; font-weight:600; color:var(--color-text-muted);">
+                                                            Current</th>
+                                                            <th style="padding:6px 8px; width:80px;"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var v in _versions)
+                                                        {
+                                                            <tr style="border-bottom:1px solid var(--color-border);">
+                                                                <td style="padding:5px 8px; font-size:11px; font-family:Consolas,monospace; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                                                    title="@v.VersionId">@v.VersionId</td>
+                                                                <td style="padding:5px 8px; white-space:nowrap;">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")
+                                                                </td>
+                                                                <td style="padding:5px 8px; text-align:right; white-space:nowrap;">@FormatSize(v.ContentLength ?? 0)
+                                                                </td>
+                                                                <td style="padding:5px 8px; text-align:center;">@(v.IsCurrentVersion ? "✔" : "")</td>
+                                                                <td style="padding:5px 8px;">
+                                                                    <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
+                                                                                  @onclick="() => DownloadVersionAsync(v)">@(IsDownloadingVersion(v) ? "Downloading..." : "⬇")
+                                                                    </FluentButton>
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            }
                 else
-                {
-                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">Versioning is not enabled on this container.</div>
-                }
-            </div>
-        }
-    }
+                                            {
+                                                <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">Versioning is not enabled on this
+                                                    container.</div>
+                                                }
+                                            </div>
+                                        }
+                                    }
 
-</div>
+                                </div>
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -248,6 +293,19 @@
     // STG-7: Binary detection override
     private bool _binaryOverride;
     private string? _binaryDetectionMethod;
+
+    private DownloadUiState? _downloadState;
+    private long _lastDownloadUiBytes = -1;
+    private DateTimeOffset _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+
+    private sealed class DownloadUiState
+    {
+        public required string Label { get; init; }
+        public required string DestinationPath { get; init; }
+        public string? VersionId { get; init; }
+        public long? TotalBytes { get; init; }
+        public long BytesTransferred { get; set; }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -373,19 +431,34 @@
 
     private async Task DownloadVersionAsync(BlobVersionItem version)
     {
+        if (_downloadState is not null)
+            return;
+
+        var destPath = BuildDownloadPath(Blob.Name, version.VersionId);
+        var label = $"Downloading version {ShortVersionId(version.VersionId)}";
+        var downloadState = new DownloadUiState
+        {
+            Label = label,
+            DestinationPath = destPath,
+            VersionId = version.VersionId,
+            TotalBytes = version.ContentLength > 0 ? version.ContentLength : null,
+            BytesTransferred = 0
+        };
+
         try
         {
-            var fileName = $"{System.IO.Path.GetFileName(Blob.Name)}_{version.VersionId}";
-            if (string.IsNullOrEmpty(fileName)) fileName = Blob.Name.Replace('/', '_');
-            var destPath = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                "Downloads", fileName);
-            // Download the versioned blob by appending versionId to the blob name request
-            await using var fs = System.IO.File.OpenWrite(destPath);
-            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs);
+            _downloadState = downloadState;
+            _actionMessage = null;
+            _lastDownloadUiBytes = -1;
+            _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+            await InvokeAsync(StateHasChanged);
+
+            var progress = new Progress<long>(bytes => ReportDownloadProgress(downloadState, bytes));
+            await using var fs = System.IO.File.Create(destPath);
+            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs, progress: progress, versionId: version.VersionId);
             _actionOk = true;
             _actionMessage = $"Downloaded version to: {destPath}";
-            Notifications.ShowSuccess("Version downloaded", fileName);
+            Notifications.ShowSuccess("Version downloaded", System.IO.Path.GetFileName(destPath));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -393,6 +466,10 @@
             _actionOk = false;
             _actionMessage = $"Download failed: {ex.Message}";
             Notifications.ShowError("Download failed", ex: ex);
+        }
+        finally
+        {
+            _downloadState = null;
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -498,18 +575,33 @@
 
     private async Task DownloadAsync()
     {
+        if (_downloadState is not null)
+            return;
+
+        var totalBytes = _properties?.SizeBytes > 0 ? _properties.SizeBytes : Blob.SizeBytes;
+        var destPath = BuildDownloadPath(Blob.Name);
+        var downloadState = new DownloadUiState
+        {
+            Label = $"Downloading {System.IO.Path.GetFileName(destPath)}",
+            DestinationPath = destPath,
+            TotalBytes = totalBytes > 0 ? totalBytes : null,
+            BytesTransferred = 0
+        };
+
         try
         {
-            var fileName = System.IO.Path.GetFileName(Blob.Name);
-            if (string.IsNullOrEmpty(fileName)) fileName = Blob.Name.Replace('/', '_');
-            var destPath = System.IO.Path.Combine(
-            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-            "Downloads", fileName);
-            await using var fs = System.IO.File.OpenWrite(destPath);
-            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs);
+            _downloadState = downloadState;
+            _actionMessage = null;
+            _lastDownloadUiBytes = -1;
+            _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+            await InvokeAsync(StateHasChanged);
+
+            var progress = new Progress<long>(bytes => ReportDownloadProgress(downloadState, bytes));
+            await using var fs = System.IO.File.Create(destPath);
+            await Client.DownloadBlobAsync(ContainerName, Blob.Name, fs, progress: progress);
             _actionOk = true;
             _actionMessage = $"Downloaded to: {destPath}";
-            Notifications.ShowSuccess("Blob downloaded", fileName);
+            Notifications.ShowSuccess("Blob downloaded", System.IO.Path.GetFileName(destPath));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -518,6 +610,97 @@
             _actionMessage = $"Download failed: {ex.Message}";
             Notifications.ShowError("Download failed", ex: ex);
         }
+        finally
+        {
+            _downloadState = null;
+        }
         await InvokeAsync(StateHasChanged);
+    }
+
+    private static string BuildDownloadPath(string blobName, string? versionId = null)
+    {
+        var baseName = System.IO.Path.GetFileName(blobName.TrimEnd('/'));
+        if (string.IsNullOrWhiteSpace(baseName))
+            baseName = blobName.Replace('/', '_');
+
+        var extension = System.IO.Path.GetExtension(baseName);
+        var stem = string.IsNullOrEmpty(extension)
+            ? baseName
+            : baseName[..^extension.Length];
+
+        if (!string.IsNullOrWhiteSpace(versionId))
+            stem = $"{stem}_{SanitizeFileNameSegment(versionId)}";
+
+        var fileName = SanitizeFileNameSegment(stem) + extension;
+        var downloadsPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Downloads");
+        Directory.CreateDirectory(downloadsPath);
+        return System.IO.Path.Combine(downloadsPath, fileName);
+    }
+
+    private static string SanitizeFileNameSegment(string value)
+    {
+        var sanitized = value;
+        foreach (var invalidChar in System.IO.Path.GetInvalidFileNameChars())
+            sanitized = sanitized.Replace(invalidChar, '_');
+        return sanitized;
+    }
+
+    private void ReportDownloadProgress(DownloadUiState state, long bytesTransferred)
+    {
+        state.BytesTransferred = bytesTransferred;
+
+        if (!ShouldRefreshDownloadUi(state))
+            return;
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShouldRefreshDownloadUi(DownloadUiState state)
+    {
+        if (state.BytesTransferred == _lastDownloadUiBytes)
+            return false;
+
+        var now = DateTimeOffset.UtcNow;
+        var isComplete = state.TotalBytes is long total && total > 0 && state.BytesTransferred >= total;
+        if (!isComplete && now - _lastDownloadUiUpdate < TimeSpan.FromMilliseconds(125))
+            return false;
+
+        _lastDownloadUiBytes = state.BytesTransferred;
+        _lastDownloadUiUpdate = now;
+        return true;
+    }
+
+    private static bool TryGetDownloadPercent(DownloadUiState state, out double percent)
+    {
+        if (state.TotalBytes is not long total || total <= 0)
+        {
+            percent = 0;
+            return false;
+        }
+
+        percent = Math.Clamp((double)state.BytesTransferred / total * 100d, 0d, 100d);
+        return true;
+    }
+
+    private static string FormatDownloadProgress(DownloadUiState state)
+    {
+        var transferred = FormatSize(state.BytesTransferred);
+        if (state.TotalBytes is not long total || total <= 0)
+            return transferred;
+
+        return $"{transferred} / {FormatSize(total)}";
+    }
+
+    private bool IsDownloadingVersion(BlobVersionItem version) =>
+        _downloadState is not null && string.Equals(_downloadState.VersionId, version.VersionId, StringComparison.Ordinal);
+
+    private static string ShortVersionId(string versionId)
+    {
+        if (string.IsNullOrWhiteSpace(versionId))
+            return "current blob";
+
+        return versionId.Length <= 16 ? versionId : versionId[..16];
     }
 }

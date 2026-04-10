@@ -1,0 +1,126 @@
+@* Renders the Jobs FluentDataGrid. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="JobInfo" Virtualize="true" ItemSize="36"
+                RowClass="@(job => SelectedJob is not null && SelectedJob.Name == job.Name && SelectedJob.Namespace == job.Namespace ? "selected-row" : "")"
+                OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+    <TemplateColumn Title="Name" SortBy="@(GridSort<JobInfo>.ByAscending(job => job.Name))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    @if (IsMultiNamespace)
+    {
+        <TemplateColumn Title="Namespace" Width="130px" SortBy="@(GridSort<JobInfo>.ByAscending(job => job.Namespace))">
+            <span class="aks-ns-cell"
+                  @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+        </TemplateColumn>
+    }
+    <TemplateColumn Title="Status" Width="120px" SortBy="@(GridSort<JobInfo>.ByAscending(job => job.Status))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-status @GetStatusClass(context)">@context.Status</span>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Source" Width="220px"
+                    SortBy="@(GridSort<JobInfo>.ByAscending(job => job.SourceName ?? job.Name))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (!string.IsNullOrWhiteSpace(context.SourceName))
+            {
+                <div class="aks-job-source">
+                    <span class="aks-job-source-kind">@(context.SourceKind ?? "Source")</span>
+                    <span class="aks-job-source-name">@context.SourceName</span>
+                </div>
+            }
+            else
+            {
+                <span class="aks-text-muted">Ad hoc</span>
+            }
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Progress" Width="130px"
+                    SortBy="@(GridSort<JobInfo>.ByDescending(job => (job.Succeeded * 1000) + job.Active - job.Failed))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <div class="aks-job-progress @GetProgressClass(context)">@FormatProgress(context)</div>
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Recent" Width="130px"
+                    SortBy="@(GridSort<JobInfo>.ByDescending(job => job.CompletionTime ?? job.StartTime ?? DateTimeOffset.MinValue))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (TryGetRecentTimestamp(context, out var timestamp, out var label))
+            {
+                <div class="aks-job-timestamp">
+                    <span class="aks-job-timestamp-label">@label</span>
+                    <span>@FormatAge(timestamp)</span>
+                    <span class="aks-age-suffix">ago</span>
+                </div>
+            }
+            else
+            {
+                <span class="aks-text-muted">-</span>
+            }
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<JobInfo> FilteredItems { get; set; } = Enumerable.Empty<JobInfo>().AsQueryable();
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public JobInfo? SelectedJob { get; set; }
+    [Parameter] public EventCallback<JobInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, JobInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string GetStatusClass(JobInfo job)
+        => job.Status switch
+        {
+            "Succeeded" or "Complete" => "running",
+            "Failed" => "error",
+            "Active" or "Running" => "pending",
+            _ => "other"
+        };
+
+    private static string FormatProgress(JobInfo job)
+    {
+        var desired = job.DesiredCompletions ?? Math.Max(1, job.Succeeded + job.Failed + job.Active);
+        return $"{job.Succeeded}/{desired} done | {job.Active} active | {job.Failed} failed";
+    }
+
+    private static string GetProgressClass(JobInfo job)
+        => job.Failed > 0 ? "failed"
+            : job.Active > 0 ? "active"
+            : job.Succeeded > 0 ? "succeeded"
+            : "pending";
+
+    private static bool TryGetRecentTimestamp(JobInfo job, out DateTimeOffset timestamp, out string label)
+    {
+        if (job.CompletionTime.HasValue)
+        {
+            timestamp = job.CompletionTime.Value;
+            label = "Completed";
+            return true;
+        }
+
+        if (job.StartTime.HasValue)
+        {
+            timestamp = job.StartTime.Value;
+            label = "Started";
+            return true;
+        }
+
+        timestamp = default;
+        label = string.Empty;
+        return false;
+    }
+
+    private static string FormatAge(DateTimeOffset start)
+    {
+        var span = DateTimeOffset.UtcNow - start;
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+        return $"{Math.Max(0, (int)span.TotalMinutes)}m";
+    }
+}

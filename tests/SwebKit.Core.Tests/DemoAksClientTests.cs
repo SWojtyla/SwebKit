@@ -1,5 +1,6 @@
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
+using SwebKit.Core.Constants;
 
 namespace SwebKit.Core.Tests;
 
@@ -135,7 +136,22 @@ public class DemoAksClientTests
 
         Assert.Contains("default", namespaces);
         Assert.Contains("ecommerce", namespaces);
-        Assert.Contains("kube-system", namespaces);
+        Assert.Contains("payments", namespaces);
+        Assert.Contains("infrastructure", namespaces);
+        Assert.Contains("monitoring", namespaces);
+    }
+
+    [Fact]
+    public async Task GetNamespacesAsync_IncludesDefaultForAllNamespaceJobsAndCronJobs()
+    {
+        var namespaces = await _client.GetNamespacesAsync();
+        var client = (Abstractions.IAksClient)_client;
+
+        var jobs = await client.GetJobsAsync(namespaces);
+        var cronJobs = await client.GetCronJobsAsync(namespaces);
+
+        Assert.Contains(jobs, job => job.Namespace == "default");
+        Assert.Contains(cronJobs, cronJob => cronJob.Namespace == "default");
     }
 
     [Fact]
@@ -186,6 +202,85 @@ public class DemoAksClientTests
 
         Assert.Contains(result, p => p.Namespace == "a");
         Assert.Contains(result, p => p.Namespace == "b");
+    }
+
+    [Fact]
+    public async Task MultiNamespace_GetCronJobsAsync_MergesResults()
+    {
+        var client = (Abstractions.IAksClient)_client;
+        var result = await client.GetCronJobsAsync(new List<string> { "ns1", "ns2" });
+
+        Assert.Contains(result, cronJob => cronJob.Namespace == "ns1");
+        Assert.Contains(result, cronJob => cronJob.Namespace == "ns2");
+    }
+
+    [Fact]
+    public async Task MultiNamespace_GetJobsAsync_MergesResults()
+    {
+        var client = (Abstractions.IAksClient)_client;
+        var result = await client.GetJobsAsync(new List<string> { "jobs-a", "jobs-b" });
+
+        Assert.Contains(result, job => job.Namespace == "jobs-a");
+        Assert.Contains(result, job => job.Namespace == "jobs-b");
+    }
+
+    [Fact]
+    public async Task GetJobsAsync_ReturnsBatchJobsWithStatusAndProvenance()
+    {
+        var jobs = await _client.GetJobsAsync("default");
+
+        Assert.NotEmpty(jobs);
+        Assert.Contains(jobs, job => job.Status == "Active");
+        Assert.Contains(jobs, job => job.SourceKind == "CronJob" && !string.IsNullOrWhiteSpace(job.SourceName));
+        Assert.All(jobs, job => Assert.Equal("default", job.Namespace));
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_Job_ReturnsBatchV1Yaml()
+    {
+        var job = (await _client.GetJobsAsync("default")).First();
+
+        var yaml = await _client.GetResourceYamlAsync("default", "Job", job.Name);
+
+        Assert.Contains("apiVersion: batch/v1", yaml);
+        Assert.Contains("kind: Job", yaml);
+        Assert.Contains($"name: {job.Name}", yaml);
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_CreatesVisibleJobWithCronJobProvenance()
+    {
+        var createdName = await _client.TriggerCronJobAsync("default", "inventory-sync");
+
+        Assert.StartsWith("inventory-sync-manual-", createdName, StringComparison.Ordinal);
+
+        var jobs = await _client.GetJobsAsync("default");
+        var createdJob = Assert.Single(jobs, job => job.Name == createdName);
+        Assert.Equal("CronJob", createdJob.SourceKind);
+        Assert.Equal("inventory-sync", createdJob.SourceName);
+        Assert.Equal("Active", createdJob.Status);
+
+        var yaml = await _client.GetResourceYamlAsync("default", "Job", createdName);
+        Assert.Contains($"{AksBatchAnnotations.SourceKind}: CronJob", yaml);
+        Assert.Contains($"{AksBatchAnnotations.SourceName}: inventory-sync", yaml);
+    }
+
+    [Fact]
+    public async Task RerunJobAsync_CreatesSiblingJobWithJobProvenance()
+    {
+        var sourceJob = (await _client.GetJobsAsync("default"))
+            .First(job => job.SourceKind == "CronJob");
+
+        var createdName = await _client.RerunJobAsync("default", sourceJob.Name);
+
+        Assert.NotEqual(sourceJob.Name, createdName);
+        Assert.StartsWith($"{sourceJob.Name}-rerun-", createdName, StringComparison.Ordinal);
+
+        var jobs = await _client.GetJobsAsync("default");
+        var createdJob = Assert.Single(jobs, job => job.Name == createdName);
+        Assert.Equal("Job", createdJob.SourceKind);
+        Assert.Equal(sourceJob.Name, createdJob.SourceName);
+        Assert.Equal(sourceJob.DesiredCompletions ?? 1, createdJob.DesiredCompletions);
     }
 
     // ── New feature tests ──

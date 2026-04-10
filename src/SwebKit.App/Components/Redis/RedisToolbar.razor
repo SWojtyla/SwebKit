@@ -13,19 +13,27 @@
     </FluentButton>
     <FluentButton @onclick="OnDeleteKey" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
     </FluentButton>
-    <FluentButton @onclick="OnPurgeAll" Disabled="@IsLoading">Purge All</FluentButton>
+    <FluentButton @onclick="HandleSelectAllLoaded" Disabled="@(IsLoading || KeyCount == 0)">Select All Loaded
+    </FluentButton>
     <FluentButton @onclick="ToggleMultiSelectMode"
                   Appearance="@(_multiSelectMode ? Appearance.Accent : Appearance.Neutral)">
         @(_multiSelectMode ? "Cancel Select" : "Select")
     </FluentButton>
-    @if (_multiSelectMode && _selectedKeys.Count > 0)
+    @if (_multiSelectMode)
     {
-        <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent">
-            Delete @_selectedKeys.Count key(s)
-        </FluentButton>
+        <span class="selection-summary">
+            Selected @_selectedKeys.Count of @KeyCount loaded key(s)@((HasMoreKeys && KeyCount > 0) ? " (more keys not loaded)" : string.Empty)
+        </span>
+        <FluentButton @onclick="ClearSelection" Disabled="@(_selectedKeys.Count == 0)">Clear Selection</FluentButton>
+        @if (_selectedKeys.Count > 0)
+        {
+            <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent">
+                Delete @_selectedKeys.Count key(s)
+            </FluentButton>
+        }
         @if (BatchProgressMessage is not null)
         {
-            <span style="font-size:12px; color:var(--color-text-muted);">@BatchProgressMessage</span>
+            <span class="selection-summary">@BatchProgressMessage</span>
         }
     }
     <FluentButton @onclick="OnExportJson" Disabled="@(IsLoading || KeyCount == 0)">Export JSON
@@ -44,7 +52,7 @@
     [Parameter] public EventCallback<string> OnScan { get; set; }
     [Parameter] public EventCallback OnRefreshKey { get; set; }
     [Parameter] public EventCallback OnDeleteKey { get; set; }
-    [Parameter] public EventCallback OnPurgeAll { get; set; }
+    [Parameter] public EventCallback OnSelectAllLoaded { get; set; }
     [Parameter] public EventCallback OnExportJson { get; set; }
     [Parameter] public EventCallback OnBatchDelete { get; set; }
 
@@ -56,20 +64,63 @@
     public bool MultiSelectMode => _multiSelectMode;
     public HashSet<string> SelectedKeys => _selectedKeys;
 
-    public void ClearMultiSelect()
+    public void ReplaceSelection(IEnumerable<string> keys)
+    {
+        _selectedKeys.Clear();
+        foreach (var key in keys)
+            _selectedKeys.Add(key);
+        _multiSelectMode = true;
+        RequestRender();
+    }
+
+    public void AddSelection(IEnumerable<string> keys)
+    {
+        _multiSelectMode = true;
+        foreach (var key in keys)
+            _selectedKeys.Add(key);
+        RequestRender();
+    }
+
+    public void RemoveSelection(IEnumerable<string> keys)
+    {
+        foreach (var key in keys)
+            _selectedKeys.Remove(key);
+        RequestRender();
+    }
+
+    public void ClearSelection()
+    {
+        _selectedKeys.Clear();
+        RequestRender();
+    }
+
+    public void ExitMultiSelect()
     {
         _selectedKeys.Clear();
         _multiSelectMode = false;
-        StateHasChanged();
+        RequestRender();
+    }
+
+    public void PruneSelection(IEnumerable<string> allowedKeys)
+    {
+        var allowed = allowedKeys as HashSet<string>
+            ?? new HashSet<string>(allowedKeys, StringComparer.Ordinal);
+        _selectedKeys.RemoveWhere(key => !allowed.Contains(key));
     }
 
     public void ToggleKeySelection(string key)
     {
+        _multiSelectMode = true;
         if (!_selectedKeys.Remove(key))
             _selectedKeys.Add(key);
+        RequestRender();
     }
 
     private Task HandleScan() => OnScan.InvokeAsync(_pattern);
+
+    private Task HandleSelectAllLoaded() => OnSelectAllLoaded.InvokeAsync();
+
+    private void RequestRender() => _ = InvokeAsync(StateHasChanged);
 
     private void ToggleMultiSelectMode()
     {

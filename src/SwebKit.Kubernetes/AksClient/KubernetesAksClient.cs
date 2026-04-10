@@ -3,6 +3,7 @@ using Azure.Identity;
 using k8s;
 using k8s.Models;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
 using System.Diagnostics;
 using System.Globalization;
@@ -18,6 +19,23 @@ namespace SwebKit.Kubernetes.AksClient;
 public class KubernetesAksClient : IAksClient, IAsyncDisposable
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
+    private const int MaxGeneratedJobNamePrefixLength = 52;
+
+    private static readonly HashSet<string> ControllerOwnedJobLabelKeys =
+    [
+        "controller-uid",
+        "batch.kubernetes.io/controller-uid",
+        "job-name",
+        "batch.kubernetes.io/job-name"
+    ];
+
+    private static readonly HashSet<string> ControllerOwnedJobAnnotationKeys =
+    [
+        AksBatchAnnotations.SourceKind,
+        AksBatchAnnotations.SourceName,
+        "cronjob.kubernetes.io/instantiate",
+        "batch.kubernetes.io/cronjob-scheduled-timestamp"
+    ];
 
     private static readonly DefaultAzureCredentialOptions AzureCredentialOptions = new()
     {
@@ -405,6 +423,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 "configmap" => await _client.CoreV1.ReadNamespacedConfigMapAsync(name, ns, cancellationToken: ct),
                 "secret" => await _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct),
                 "horizontalpodautoscaler" or "hpa" => await _client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(name, ns, cancellationToken: ct),
+                "job" => await _client.BatchV1.ReadNamespacedJobAsync(name, ns, cancellationToken: ct),
                 "cronjob" => await _client.BatchV1.ReadNamespacedCronJobAsync(name, ns, cancellationToken: ct),
                 _ => throw new ArgumentException($"Unsupported resource kind: {kind}")
             };
@@ -1362,7 +1381,76 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         return long.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
     }
 
-    // ── CronJobs ─────────────────────────────────────────────────────────────
+    // ── Jobs and CronJobs ───────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await _client.BatchV1.ListNamespacedJobAsync(ns, cancellationToken: ct);
+            return result.Items
+                .Select(job => MapJobInfo(job, ns))
+                .OrderByDescending(job => job.StartTime ?? DateTimeOffset.MinValue)
+                .ThenBy(job => job.Name, StringComparer.Ordinal)
+                .ToList();
+        });
+    }
+
+    public async Task<string> TriggerCronJobAsync(string ns, string cronJobName, CancellationToken ct = default)
+    {
+        try
+        {
+            return await WithAuthRetryAsync(async () =>
+            {
+                var cronJob = await _client.BatchV1.ReadNamespacedCronJobAsync(cronJobName, ns, cancellationToken: ct);
+                var createdJob = await _client.BatchV1.CreateNamespacedJobAsync(
+                    BuildTriggeredJobFromCronJob(cronJob, ns),
+                    ns,
+                    cancellationToken: ct);
+
+                return createdJob.Metadata?.Name
+                    ?? throw new InvalidOperationException($"Kubernetes created a Job from CronJob '{cronJobName}' without returning a name.");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException(
+                $"Kubernetes denied creating Jobs in namespace '{ns}'. Ensure the current identity has batch/v1 Job create permission.",
+                ex);
+        }
+    }
+
+    public async Task<string> RerunJobAsync(string ns, string jobName, CancellationToken ct = default)
+    {
+        try
+        {
+            return await WithAuthRetryAsync(async () =>
+            {
+                var sourceJob = await _client.BatchV1.ReadNamespacedJobAsync(jobName, ns, cancellationToken: ct);
+                var createdJob = await _client.BatchV1.CreateNamespacedJobAsync(
+                    BuildTriggeredJobFromJob(sourceJob, ns),
+                    ns,
+                    cancellationToken: ct);
+
+                return createdJob.Metadata?.Name
+                    ?? throw new InvalidOperationException($"Kubernetes reran Job '{jobName}' without returning a created Job name.");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException(
+                $"Kubernetes denied creating Jobs in namespace '{ns}'. Ensure the current identity has batch/v1 Job create permission.",
+                ex);
+        }
+    }
 
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
@@ -1385,6 +1473,263 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 Labels = cj.Metadata.Labels is not null ? new Dictionary<string, string>(cj.Metadata.Labels) : []
             }).ToList();
         });
+    }
+
+    internal static JobInfo MapJobInfo(V1Job job, string fallbackNamespace)
+    {
+        var (sourceKind, sourceName) = GetJobSource(job.Metadata);
+        return new JobInfo
+        {
+            Name = job.Metadata?.Name ?? string.Empty,
+            Namespace = job.Metadata?.NamespaceProperty ?? fallbackNamespace,
+            Status = DeriveJobStatus(job),
+            Active = job.Status?.Active ?? 0,
+            Succeeded = job.Status?.Succeeded ?? 0,
+            Failed = job.Status?.Failed ?? 0,
+            DesiredCompletions = job.Spec?.Completions,
+            StartTime = job.Status?.StartTime.HasValue == true
+                ? new DateTimeOffset(job.Status.StartTime.Value)
+                : null,
+            CompletionTime = job.Status?.CompletionTime.HasValue == true
+                ? new DateTimeOffset(job.Status.CompletionTime.Value)
+                : null,
+            SourceKind = sourceKind,
+            SourceName = sourceName,
+            Labels = RemoveControllerOwnedJobLabels(job.Metadata?.Labels)
+        };
+    }
+
+    internal static V1Job BuildTriggeredJobFromCronJob(V1CronJob cronJob, string ns)
+    {
+        var cronJobName = cronJob.Metadata?.Name;
+        if (string.IsNullOrWhiteSpace(cronJobName))
+            throw new InvalidOperationException("CronJob name is missing.");
+
+        var jobSpec = DeepClone(cronJob.Spec?.JobTemplate?.Spec)
+            ?? throw new InvalidOperationException($"CronJob '{cronJobName}' does not define a job template.");
+
+        SanitizeJobSpecForCreate(jobSpec);
+
+        return new V1Job
+        {
+            ApiVersion = "batch/v1",
+            Kind = "Job",
+            Metadata = CreateTriggeredJobMetadata(
+                ns,
+                cronJobName,
+                "CronJob",
+                cronJob.Spec?.JobTemplate?.Metadata?.Labels,
+                cronJob.Spec?.JobTemplate?.Metadata?.Annotations),
+            Spec = jobSpec
+        };
+    }
+
+    internal static V1Job BuildTriggeredJobFromJob(V1Job sourceJob, string ns)
+    {
+        var jobName = sourceJob.Metadata?.Name;
+        if (string.IsNullOrWhiteSpace(jobName))
+            throw new InvalidOperationException("Job name is missing.");
+
+        var jobSpec = DeepClone(sourceJob.Spec)
+            ?? throw new InvalidOperationException($"Job '{jobName}' does not define a spec.");
+
+        SanitizeJobSpecForCreate(jobSpec);
+
+        return new V1Job
+        {
+            ApiVersion = "batch/v1",
+            Kind = "Job",
+            Metadata = CreateTriggeredJobMetadata(
+                ns,
+                jobName,
+                "Job",
+                sourceJob.Metadata?.Labels,
+                sourceJob.Metadata?.Annotations),
+            Spec = jobSpec
+        };
+    }
+
+    internal static string DeriveJobStatus(V1Job job)
+    {
+        if (job.Status?.Conditions?.Any(condition =>
+                string.Equals(condition.Type, "Failed", StringComparison.OrdinalIgnoreCase) &&
+                IsJobConditionTrue(condition)) == true)
+            return "Failed";
+
+        if (job.Status?.Conditions?.Any(condition =>
+                string.Equals(condition.Type, "Complete", StringComparison.OrdinalIgnoreCase) &&
+                IsJobConditionTrue(condition)) == true)
+            return "Succeeded";
+
+        if (job.Spec?.Suspend == true)
+            return "Suspended";
+
+        if ((job.Status?.Active ?? 0) > 0)
+            return "Active";
+
+        if ((job.Status?.Succeeded ?? 0) > 0)
+            return "Succeeded";
+
+        if ((job.Status?.Failed ?? 0) > 0)
+            return "Failed";
+
+        return "Pending";
+    }
+
+    private static (string? SourceKind, string? SourceName) GetJobSource(V1ObjectMeta? metadata)
+    {
+        var ownerReference = metadata?.OwnerReferences?
+            .FirstOrDefault(owner => owner.Controller == true &&
+                                     !string.IsNullOrWhiteSpace(owner.Kind) &&
+                                     !string.IsNullOrWhiteSpace(owner.Name))
+            ?? metadata?.OwnerReferences?
+                .FirstOrDefault(owner => !string.IsNullOrWhiteSpace(owner.Kind) &&
+                                         !string.IsNullOrWhiteSpace(owner.Name));
+
+        if (ownerReference is not null)
+            return (ownerReference.Kind, ownerReference.Name);
+
+        if (metadata?.Annotations is null)
+            return (null, null);
+
+        metadata.Annotations.TryGetValue(AksBatchAnnotations.SourceKind, out var sourceKind);
+        metadata.Annotations.TryGetValue(AksBatchAnnotations.SourceName, out var sourceName);
+        return (sourceKind, sourceName);
+    }
+
+    private static bool IsJobConditionTrue(V1JobCondition condition)
+        => string.Equals(condition.Status, "True", StringComparison.OrdinalIgnoreCase);
+
+    private static V1ObjectMeta CreateTriggeredJobMetadata(
+        string ns,
+        string sourceName,
+        string sourceKind,
+        IDictionary<string, string>? sourceLabels,
+        IDictionary<string, string>? sourceAnnotations)
+    {
+        var labels = RemoveControllerOwnedJobLabels(sourceLabels);
+        var annotations = RemoveControllerOwnedJobAnnotations(sourceAnnotations);
+        annotations[AksBatchAnnotations.SourceKind] = sourceKind;
+        annotations[AksBatchAnnotations.SourceName] = sourceName;
+
+        return new V1ObjectMeta
+        {
+            NamespaceProperty = ns,
+            GenerateName = BuildGeneratedJobNamePrefix(sourceName, sourceKind),
+            Labels = labels.Count > 0 ? labels : null,
+            Annotations = annotations.Count > 0 ? annotations : null
+        };
+    }
+
+    private static void SanitizeJobSpecForCreate(V1JobSpec jobSpec)
+    {
+        jobSpec.ManualSelector = null;
+        jobSpec.Selector = null;
+
+        if (jobSpec.Template is null)
+            throw new InvalidOperationException("Job spec is missing a pod template.");
+
+        jobSpec.Template.Metadata ??= new V1ObjectMeta();
+        jobSpec.Template.Metadata.Name = null;
+        jobSpec.Template.Metadata.GenerateName = null;
+        jobSpec.Template.Metadata.NamespaceProperty = null;
+        jobSpec.Template.Metadata.ResourceVersion = null;
+        jobSpec.Template.Metadata.Uid = null;
+        jobSpec.Template.Metadata.CreationTimestamp = null;
+        jobSpec.Template.Metadata.ManagedFields = null;
+        jobSpec.Template.Metadata.OwnerReferences = null;
+        jobSpec.Template.Metadata.Finalizers = null;
+        jobSpec.Template.Metadata.Labels = RemoveControllerOwnedJobLabels(jobSpec.Template.Metadata.Labels);
+        jobSpec.Template.Metadata.Annotations = RemoveControllerOwnedJobAnnotations(jobSpec.Template.Metadata.Annotations);
+    }
+
+    private static Dictionary<string, string> RemoveControllerOwnedJobLabels(IDictionary<string, string>? labels)
+    {
+        if (labels is null || labels.Count == 0)
+            return [];
+
+        var sanitized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in labels)
+        {
+            if (ControllerOwnedJobLabelKeys.Contains(entry.Key))
+                continue;
+
+            sanitized[entry.Key] = entry.Value;
+        }
+
+        return sanitized;
+    }
+
+    private static Dictionary<string, string> RemoveControllerOwnedJobAnnotations(IDictionary<string, string>? annotations)
+    {
+        if (annotations is null || annotations.Count == 0)
+            return [];
+
+        var sanitized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in annotations)
+        {
+            if (ControllerOwnedJobAnnotationKeys.Contains(entry.Key))
+                continue;
+
+            sanitized[entry.Key] = entry.Value;
+        }
+
+        return sanitized;
+    }
+
+    internal static string BuildGeneratedJobNamePrefix(string sourceName, string sourceKind)
+    {
+        var operation = string.Equals(sourceKind, "CronJob", StringComparison.OrdinalIgnoreCase)
+            ? "manual"
+            : "rerun";
+
+        var sanitizedSourceName = SanitizeDnsLabel(sourceName);
+        var suffix = $"-{operation}-";
+        var maxSourceLength = Math.Max(1, MaxGeneratedJobNamePrefixLength - suffix.Length);
+
+        if (sanitizedSourceName.Length > maxSourceLength)
+            sanitizedSourceName = sanitizedSourceName[..maxSourceLength].TrimEnd('-');
+
+        if (string.IsNullOrWhiteSpace(sanitizedSourceName))
+            sanitizedSourceName = "job";
+
+        return $"{sanitizedSourceName}{suffix}";
+    }
+
+    private static string SanitizeDnsLabel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "job";
+
+        var builder = new StringBuilder(value.Length);
+        var previousWasDash = false;
+        foreach (var ch in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch) && ch <= sbyte.MaxValue)
+            {
+                builder.Append(ch);
+                previousWasDash = false;
+                continue;
+            }
+
+            if (previousWasDash)
+                continue;
+
+            builder.Append('-');
+            previousWasDash = true;
+        }
+
+        var sanitized = builder.ToString().Trim('-');
+        return string.IsNullOrWhiteSpace(sanitized) ? "job" : sanitized;
+    }
+
+    private static T? DeepClone<T>(T? value)
+    {
+        if (value is null)
+            return default;
+
+        var json = System.Text.Json.JsonSerializer.Serialize(value);
+        return System.Text.Json.JsonSerializer.Deserialize<T>(json);
     }
 }
 

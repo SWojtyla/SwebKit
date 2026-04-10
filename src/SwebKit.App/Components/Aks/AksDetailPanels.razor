@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -76,7 +76,7 @@
 
                 @* ── Container details ── *@
                 @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                        _logDeploymentName is null)
+                                                                        _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -144,7 +144,7 @@
                             {
                                 <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                     <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                == "Warning")
+                                                                                                                                                                    == "Warning")
                                 </span>
                             }
                             <span class="aks-toolbar-spacer"></span>
@@ -219,7 +219,7 @@
 
     // ── Pending-open state (BL-6: @ref inside @if cannot be used until after first render) ──
     private enum HelmPendingAction { History, Values, Rollback }
-    private (string Kind, string Name, bool EditMode)? _pendingYamlOpen;
+    private (string Kind, string Name, bool EditMode, string? Namespace)? _pendingYamlOpen;
     private (string ReleaseName, HelmPendingAction Action)? _pendingHelmOpen;
 
     // ── Internal state ──
@@ -259,9 +259,9 @@
     // Always go through the pending path so AksDetailPanels re-renders its @if(HasOpenPanel) block.
     // A direct call on _yamlViewer would bypass this component's StateHasChanged and leave the
     // panel collapsed even though the child's _target is set. (BL-6 variant)
-    public async Task OpenYamlAsync(string kind, string name, bool editMode = false)
+    public async Task OpenYamlAsync(string kind, string name, bool editMode = false, string? targetNamespace = null)
     {
-        _pendingYamlOpen = (kind, name, editMode);
+        _pendingYamlOpen = (kind, name, editMode, targetNamespace);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -357,9 +357,9 @@
     {
         if (_pendingYamlOpen.HasValue && _yamlViewer is not null)
         {
-            var (kind, name, editMode) = _pendingYamlOpen.Value;
+            var (kind, name, editMode, targetNamespace) = _pendingYamlOpen.Value;
             _pendingYamlOpen = null;
-            await _yamlViewer.OpenAsync(kind, name, startInEditMode: editMode);
+            await _yamlViewer.OpenAsync(kind, name, targetNamespace, startInEditMode: editMode);
         }
 
         if (_pendingHelmOpen.HasValue && _helmPanel is not null)

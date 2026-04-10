@@ -46,8 +46,20 @@ public interface IAksClient
 
     // ── Feature 5: HPA ───────────────────────────────────────────────────────
     Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default);
-    // ── CronJobs ─────────────────────────────────────────────────────────────────
+    // ── Jobs and CronJobs ───────────────────────────────────────────────────────
     Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)
+        => Task.FromException<IReadOnlyList<JobInfo>>(
+            new NotSupportedException("This AKS client does not support Kubernetes Jobs."));
+
+    Task<string> TriggerCronJobAsync(string ns, string cronJobName, CancellationToken ct = default)
+        => Task.FromException<string>(
+            new NotSupportedException("This AKS client does not support triggering CronJobs."));
+
+    Task<string> RerunJobAsync(string ns, string jobName, CancellationToken ct = default)
+        => Task.FromException<string>(
+            new NotSupportedException("This AKS client does not support rerunning Jobs."));
+
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
@@ -66,6 +78,20 @@ public interface IAksClient
     async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
         var tasks = namespaces.Select(ns => GetStatefulSetsAsync(ns, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetCronJobsAsync(ns, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<JobInfo>> GetJobsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetJobsAsync(ns, ct));
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(r => r).ToList();
     }

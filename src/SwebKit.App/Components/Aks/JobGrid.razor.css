@@ -1,0 +1,106 @@
+/* ── Shared table cell styles (scoped to JobGrid) ── */
+.aks-row-ctx {
+    margin: -4px -8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: default;
+}
+
+.aks-resource-name {
+    font-weight: 500;
+}
+
+.aks-ns-cell {
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-cell:hover {
+    text-decoration: underline;
+}
+
+.aks-status {
+    font-size: var(--font-size-sm);
+}
+
+.aks-status.running {
+    color: var(--color-success);
+}
+
+.aks-status.pending {
+    color: var(--color-warning);
+}
+
+.aks-status.error {
+    color: var(--color-error);
+}
+
+.aks-status.other {
+    color: var(--color-text-muted);
+}
+
+.aks-text-muted {
+    color: var(--color-text-muted);
+}
+
+.aks-job-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.aks-job-source-kind {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(0, 120, 212, 0.08);
+    color: var(--color-accent);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.aks-job-source-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aks-job-progress {
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.aks-job-progress.succeeded {
+    color: var(--color-success);
+}
+
+.aks-job-progress.active,
+.aks-job-progress.pending {
+    color: var(--color-warning);
+}
+
+.aks-job-progress.failed {
+    color: var(--color-error);
+}
+
+.aks-job-timestamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--font-size-sm);
+}
+
+.aks-job-timestamp-label,
+.aks-age-suffix {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+::deep .selected-row {
+    background: rgba(0, 120, 212, 0.08);
+}
