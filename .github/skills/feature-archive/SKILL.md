@@ -7,7 +7,7 @@ description: 'Archive a completed feature by creating a summary and moving the f
 
 Use when a feature is ready to be closed out.
 
-- **If the feature has a linked Jira ticket:** delete the active folder — Jira is the durable record. No archive needed.
+- **If the feature has a linked Jira ticket:** add a closing Jira comment and delete the active folder by default; keep Jira in validation/review state unless a Done transition is explicitly requested/confirmed.
 - **If there is no Jira ticket:** create a summary and move the folder to `docs/features/archive/`.
 
 ## When to Close Out
@@ -31,14 +31,17 @@ Only proceed after the user explicitly confirms.
 
 ---
 
-## Path A: Jira ticket linked — Delete active folder
+## Path A: Jira ticket linked — Close out ticket context + delete active folder
 
 **Use this path when `index.md` contains a Jira ticket link.**
 
 1. **Read `index.md`** to confirm the Jira ticket key.
 2. **Add a closing Jira comment** using `addCommentToJiraIssue` (see format below).
-3. **Transition to Done** using `transitionJiraIssue`.
-4. **Delete the active folder** and all files in it.
+3. **Default: do NOT transition to Done** — keep the ticket in its current validation/review state (`In validation`, `In testing`, `Review`, etc.).
+4. **Transition to Done only when policy allows and user confirms:**
+   - User explicitly requests a Done transition, or
+   - The change is technical-only and the user confirms Done is desired now.
+5. **Delete the active folder** and all files in it.
 
 ### Closing Jira comment format
 
@@ -134,6 +137,6 @@ Code area
 
 ## Quality Bar
 
-**Path A:** After deletion, a team member should be able to read the linked Jira ticket and understand what was delivered.
+**Path A:** After deletion, a team member should be able to read the linked Jira ticket (typically still in validation/review unless Done was explicitly requested/confirmed) and understand what was delivered.
 
 **Path B:** After archiving, a new team member should be able to read `summary.md` and understand what was built, why, and what was learned — in under 2 minutes. No sensitive or temporary content should remain.

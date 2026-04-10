@@ -83,7 +83,18 @@ Please clarify these points, or tell me to proceed with my best interpretation.
    - Concern-specific validation notes
 6. **Transition the Jira ticket** to `In Progress` using `getTransitionsForJiraIssue` + `transitionJiraIssue`.
 
-### Phase 4 — Implementation
+### Phase 4 — Planning Checkpoint Commit
+
+Before implementation starts, create a docs-focused checkpoint so the plan is reviewable and recoverable:
+
+1. **Stage planning docs only** — include the new/updated files under `docs/features/active/<feature-name>/` (and any directly related planning docs).
+2. **Commit with Conventional Commits** — use a docs-focused message, for example:
+   - `docs(<feature-name>): planning checkpoint`
+   - `docs(<jira-key>): feature plan scaffold`
+3. **Push the branch** — push the feature branch to `origin` so the planning baseline is available remotely.
+4. **If branch is default (`main`/`dev`)** — stop and ask the user to confirm branch strategy before continuing.
+
+### Phase 5 — Implementation
 
 Execute the plan from Phase 3 systematically:
 
@@ -100,7 +111,7 @@ Execute the plan from Phase 3 systematically:
    - Map each changed path to a logical Jira component (e.g., project folder, service, or functional area). Call `getJiraIssue` to inspect naming conventions already used on the ticket or related tickets in the project.
    - Call `editJiraIssue` with `{ "components": [{ "name": "<component>" }, ...] }` — include all affected components. This replaces the existing field value, so always include previously set components if they should be preserved.
 
-### Phase 5 — Self-Assessment
+### Phase 6 — Self-Assessment
 
 After implementation is complete, validate against the Definition of Done:
 
@@ -116,11 +127,11 @@ After implementation is complete, validate against the Definition of Done:
 
 #### If self-assessment fails — fix and re-assess
 
-Loop back to Phase 4 to fix any gaps. Do NOT proceed to Phase 6 until all Definition of Done conditions are met.
+Loop back to Phase 5 to fix any gaps. Do NOT proceed to Phase 7 until all Definition of Done conditions are met.
 
 Update `status.md` to state `Done` only after all checks pass.
 
-### Phase 6 — Pre-Ship Review
+### Phase 7 — Pre-Ship Review
 
 Invoke the `pre-ship-review` skill against the current feature branch.
 
@@ -136,11 +147,11 @@ The skill evaluates six areas and produces a **go / conditional-go / no-go** rep
 
 | Result         | Action                                                                     |
 | -------------- | -------------------------------------------------------------------------- |
-| GO             | Proceed to Phase 7 automatically                                           |
+| GO             | Proceed to Phase 8 automatically                                           |
 | CONDITIONAL GO | Present warnings to user, wait for acknowledgement, then proceed           |
-| NO-GO          | STOP — present blockers, hand back to user for fixes, loop back to Phase 4 |
+| NO-GO          | STOP — present blockers, hand back to user for fixes, loop back to Phase 5 |
 
-### Phase 7 — Ship to Azure DevOps
+### Phase 8 — Ship to Azure DevOps
 
 Invoke the `azure-devops` skill to push the work and open a PR:
 
@@ -149,9 +160,9 @@ Invoke the `azure-devops` skill to push the work and open a PR:
 3. **PR** — create a Pull Request against the default branch. The `azure-devops` skill discovers the target branch and repository from the git remote automatically. The PR title and description are generated from the feature `index.md`.
 4. **CI** — the CI pipeline is **not triggered by default**. Only queued if the user explicitly requests it (e.g., "trigger CI", "with CI"). The `azure-devops` skill handles this as an opt-in step.
 
-Phase 8 begins once the PR URL is confirmed.
+Phase 9 begins once the PR URL is confirmed.
 
-### Phase 8 — Post-ship update
+### Phase 9 — Post-ship update
 
 1. Update `status.md` — set state to `Review`, record the PR URL under a **Shipped** heading:
 
@@ -162,7 +173,12 @@ Phase 8 begins once the PR URL is confirmed.
    - Branch: <feature-branch>
    ```
 
-2. **Transition Jira to Review** — call `getTransitionsForJiraIssue` + `transitionJiraIssue` to move the ticket to `Review` (or `In Review` / `Code Review`, depending on the board).
+2. **Transition Jira to a validation state (not Done by default)** — call `getTransitionsForJiraIssue` + `transitionJiraIssue` and apply this order:
+   - Prefer `In validation`
+   - Fallback `In testing`
+   - Fallback `Review` / `In Review` / `Code Review` (board-specific)
+   - For functional work, do **not** auto-transition to `Done`
+   - Transition to `Done` only if the user explicitly asks, or for a technical-only change where policy allows and the user confirms
 3. **Add PR link to Jira** — call `addCommentToJiraIssue`:
    ```
    PR raised: <PR URL>
@@ -187,15 +203,15 @@ The skill **pauses and asks the user** in exactly these situations:
 | Ticket is unclear or too vague             | STOP after Phase 2 — ask open questions             |
 | Ticket has subtasks and scope is ambiguous | STOP in Phase 2 — ask which scope to deliver        |
 | Self-assessment fails after 2 fix attempts | STOP — report what's failing and ask for guidance   |
-| Pre-ship review returns NO-GO              | STOP in Phase 6 — list blockers, return to Phase 4  |
-| Feature branch is `dev` or `main`          | STOP in Phase 7 — ask for explicit confirmation     |
-| Parent story has open subtasks at ship     | STOP in Phase 8 — ask which ticket(s) to transition |
+| Pre-ship review returns NO-GO              | STOP in Phase 7 — list blockers, return to Phase 5  |
+| Feature branch is `dev` or `main`          | STOP in Phase 8 — ask for explicit confirmation     |
+| Parent story has open subtasks at ship     | STOP in Phase 9 — ask which ticket(s) to transition |
 
 In all other cases, **proceed autonomously** through all phases without stopping.
 
 ## Failure Cleanup
 
-When the skill stops before Phase 7 (i.e., implementation is incomplete or abandoned), clean up state to prevent invisible debt:
+When the skill stops before Phase 8 (i.e., implementation is incomplete or abandoned), clean up state to prevent invisible debt:
 
 1. **Feature folder** — update `status.md` to `Blocked` (or `Planned` if work never started). Record the stop reason under a `## Blocker` heading.
 2. **Jira ticket** — if already transitioned to `In Progress`, add a comment stating why work stopped:
@@ -220,7 +236,8 @@ Cleanup applies when stopping due to:
 - Does NOT skip the pre-ship review — security and DoD are always checked before pushing
 - Does NOT ship on a NO-GO review result — blockers must be resolved first
 - Does NOT skip the PR step — code is always shipped via pull request
-- Does NOT transition the Jira ticket to Done — it transitions to Review (Done happens after merge, via `feature-archive`)
+- Does NOT auto-transition functional Jira work to Done — it transitions to a validation/review state by default
+- Does NOT transition to Done unless explicitly requested by the user, or for a technical-only change with user confirmation
 - Does NOT delete the feature folder — that is deferred to `feature-archive` after merge
 - Does NOT transition parent stories with open subtasks — it asks first
 
@@ -230,17 +247,18 @@ Cleanup applies when stopping due to:
 
 ```
 Input:    Jira ticket key or URL
-Output:   Implemented feature, passing tests, open PR, Jira in Review
+Output:   Implemented feature, passing tests, open PR, Jira in validation/review state
 
 Phase 1:  Load project context + workflow docs
 Phase 2:  Fetch ticket → assess clarity → ask if unclear
 Phase 3:  Plan feature → create docs → transition Jira to In Progress
-Phase 4:  Implement → build → test → update status
-Phase 5:  Self-assess against Definition of Done → fix if needed
-Phase 6:  Pre-ship review — DoD / arch / security / docs / hygiene  [pre-ship-review skill]
-Phase 7:  Ship — commit → push → PR → CI (optional, off by default)  [azure-devops skill]
-Phase 8:  Post-ship — update status.md with PR link, check subtasks
+Phase 4:  Planning checkpoint — docs commit (conventional) → push baseline
+Phase 5:  Implement → build → test → update status
+Phase 6:  Self-assess against Definition of Done → fix if needed
+Phase 7:  Pre-ship review — DoD / arch / security / docs / hygiene  [pre-ship-review skill]
+Phase 8:  Ship — commit → push → PR → CI (optional, off by default)  [azure-devops skill]
+Phase 9:  Post-ship — update status.md, transition Jira to validation/review state, check subtasks
 
 After CI runs (separate): swebifix skill → fix review comments → resolve threads
-After merge (separate): feature-archive skill → close Jira → delete active folder
+After merge (separate): feature-archive skill → close-out comment + delete active folder (Done transition only when explicitly requested/confirmed)
 ```

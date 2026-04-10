@@ -148,7 +148,14 @@ Verify:
 - Each commit message follows Conventional Commits format (`<type>(<scope>): <subject>`).
 - No commit subject exceeds 72 characters.
 - No "WIP", "fixup", "temp", "debug", or "test commit" messages exist (these should be squashed before shipping).
-- There is at least one commit (i.e., something has actually been staged).
+- If there are no commits ahead of `origin/<DEFAULT_BRANCH>`, flag as ⚠ warn (not ✗ fail):
+   - "No commits ahead of default branch yet — continue implementation/shipping flow, then re-run commit hygiene after the first commit."
+
+Commit hygiene findings are warnings by default:
+
+- Non-conventional format, long subjects, and squashable commit messages are ⚠ warn.
+- "No commits yet" is ⚠ warn.
+- Do not produce NO-GO from commit hygiene alone unless explicitly marked security-critical (none in this policy).
 
 If squashable commits are found, recommend the user run:
 
@@ -157,6 +164,8 @@ git rebase -i origin/<DEFAULT_BRANCH>
 ```
 
 before proceeding to ship. Flag as ⚠ warn (not a hard blocker).
+
+If no commits exist yet, continue with the review result as **CONDITIONAL GO** and add an explicit instruction to re-check Step 6 immediately after the first commit.
 
 ---
 
