@@ -23,6 +23,11 @@
     box-shadow: inset 4px 0 0 var(--color-accent, #40aaff);
 }
 
+.ns-row.partial {
+    background: rgba(64, 170, 255, 0.12);
+    border-color: rgba(64, 170, 255, 0.24);
+}
+
 .ns-row.active {
     background: rgba(64, 170, 255, 0.26);
     border-color: rgba(64, 170, 255, 0.44);
@@ -30,8 +35,15 @@
 }
 
 .ns-row.active .ns-name,
-.ns-row.selected .ns-name {
+.ns-row.selected .ns-name,
+.ns-row.partial .ns-name {
     font-weight: 600;
+}
+
+.ns-row.selected .ns-count,
+.ns-row.partial .ns-count {
+    background: rgba(64, 170, 255, 0.2);
+    color: var(--color-text);
 }
 
 .ns-toggle {
@@ -57,6 +69,24 @@
     color: inherit;
     padding: 0;
     cursor: pointer;
+}
+
+.ns-row-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.ns-row-toggle:hover {
+    background: rgba(64, 170, 255, 0.16);
 }
 
 .ns-name {
@@ -102,22 +132,6 @@
 }
 
 .ns-filter:hover {
-    background: rgba(64, 170, 255, 0.2);
-    color: var(--color-text);
-}
-
-.ns-subtree-action {
-    font-size: 10px;
-    background: transparent;
-    border: 0;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 999px;
-    flex-shrink: 0;
-}
-
-.ns-subtree-action:hover {
     background: rgba(64, 170, 255, 0.2);
     color: var(--color-text);
 }

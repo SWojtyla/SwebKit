@@ -30,8 +30,8 @@ Validate that blob downloads expose clear in-flight progress and completion/fail
 7. Scenario: rescan, change filter, or switch cache while key-type badges from the prior tree are still resolving. Expected result: stale badge writes do not populate the newer tree state.
 8. Scenario: scan a large Redis keyspace. Expected result: the first loaded match page renders promptly, and type badges continue to populate in small batches without freezing the page.
 9. Scenario: click `Select all loaded` in Redis multi-select mode. Expected result: all currently loaded matching keys become selected, the count matches the loaded set, and no unscanned keys are implied.
-10. Scenario: trigger `Select subtree` on a namespace node. Expected result: all loaded descendant key leaves under that prefix are selected and the toolbar count reflects the exact descendant count.
-11. Scenario: clear a subtree or clear all selection. Expected result: only the intended keys are deselected and batch-delete affordances update immediately.
+10. Scenario: click a namespace row in Redis multi-select mode when not all loaded descendants are selected. Expected result: all loaded descendant key leaves under that prefix become selected, the toolbar count reflects the exact descendant count, and the row remains expandable via the chevron control.
+11. Scenario: click the same namespace row again after all loaded descendants are selected, or clear all selection from the toolbar. Expected result: only the intended loaded keys are deselected and batch-delete affordances update immediately.
 12. Scenario: delete keys after using full-select helpers. Expected result: confirmation still occurs, only selected keys are removed, and the page clears stale detail state if the selected key was deleted.
 13. Scenario: load a Redis page after the follow-up lands. Expected result: there is no direct page-level `Purge All` action in the main toolbar, and the selected key row is visually obvious in the tree.
 
@@ -56,8 +56,8 @@ Validate that blob downloads expose clear in-flight progress and completion/fail
 - Start a large download from the detail pane, verify visible progress, wait for completion, and confirm the final message remains clear and brief.
 - Check: list download feedback parity - steps
 - Start a download from the blob list and verify the UX matches the detail-pane flow.
-- Check: Redis subtree helper safety - steps
-- Enter multi-select mode, use subtree selection on one prefix, verify the count, then cancel instead of deleting.
+- Check: Redis row-click subtree safety - steps
+- Enter multi-select mode, click one namespace row, verify the count, click the chevron to confirm expand/collapse still works independently, then cancel instead of deleting.
 - Check: Redis destructive path removal - steps
 - Open the Redis page and verify cleanup is driven through selection plus confirmation rather than direct database purge.
 
@@ -65,7 +65,7 @@ Validate that blob downloads expose clear in-flight progress and completion/fail
 
 - Risk: progress updates trigger too many renders in MAUI Blazor.
 - Mitigation: coalesce updates and validate responsiveness with a large blob fixture.
-- Risk: subtree helpers accidentally select prefix labels instead of only leaf keys.
+- Risk: namespace row clicks accidentally select prefix labels instead of only leaf keys.
 - Mitigation: add component assertions against exact loaded leaf counts.
 - Risk: removing purge-all leaves dead code or stale command wiring in the toolbar/page.
 - Mitigation: verify toolbar rendering and action bindings with component tests.
@@ -80,7 +80,7 @@ Validate that blob downloads expose clear in-flight progress and completion/fail
 - Redis cleanup is selection-first: no direct full-database purge action remains in the main page UX.
 - Redis filter messaging is explicit that patterns apply across the full keyspace while the tree stays limited to currently loaded matches.
 - Redis SCAN overflow never renders more than one requested loaded-match page at a time; overflow remains available on the next `Load more matches` step.
-- Subtree selection and full-select helpers act only on loaded keys and always show explicit counts before delete.
+- Namespace row toggles and full-select helpers act only on loaded keys and always show explicit counts before delete.
 - Tests and functionality docs are updated together with the implementation.
 
 ## Validation status

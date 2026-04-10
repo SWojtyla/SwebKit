@@ -19,28 +19,70 @@ public class RedisNamespaceTreeNodeTests : TestContext
     }
 
     [Fact]
-    public void NamespaceNode_SelectSubtree_InvokesCallbackWithLoadedDescendantsOnly()
+    public void LeafNode_ClickInBrowseMode_InvokesKeySelected()
     {
-        List<string>? selectedKeys = null;
+        string? selectedKey = null;
+        string? toggledKey = null;
 
         var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
-            .Add(p => p.Node, CreateNamespaceNode())
-            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.Node, CreateLeafNode())
+            .Add(p => p.MultiSelectMode, false)
             .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal))
             .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal))
-            .Add(p => p.OnSubtreeSelected, (List<string> keys) => selectedKeys = keys)
-            .Add(p => p.OnSubtreeCleared, (_ => { })));
+            .Add(p => p.OnKeySelected, (string key) => selectedKey = key)
+            .Add(p => p.OnKeyToggled, (string key) => toggledKey = key));
 
-        cut.FindAll("button")
-            .First(button => string.Equals(button.TextContent.Trim(), "All", StringComparison.Ordinal))
-            .Click();
+        cut.Find("button.ns-row-main").Click();
 
-        Assert.Equal(["app:alpha", "app:child:beta", "app:child:gamma"], selectedKeys);
+        Assert.Equal("app:alpha", selectedKey);
+        Assert.Null(toggledKey);
     }
 
     [Fact]
-    public void NamespaceNode_ClearSubtree_InvokesCallbackWithLoadedDescendantsOnly()
+    public void LeafNode_ClickInMultiSelectMode_TogglesSelectionInsteadOfOpeningDetails()
     {
+        string? selectedKey = null;
+        string? toggledKey = null;
+
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, CreateLeafNode())
+            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal))
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal))
+            .Add(p => p.OnKeySelected, (string key) => selectedKey = key)
+            .Add(p => p.OnKeyToggled, (string key) => toggledKey = key));
+
+        cut.Find("button.ns-row-main").Click();
+
+        Assert.Equal("app:alpha", toggledKey);
+        Assert.Null(selectedKey);
+    }
+
+    [Fact]
+    public void NamespaceNode_ClickInBrowseMode_TogglesExpansion()
+    {
+        var subtreeSelected = false;
+
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, CreateNamespaceNode())
+            .Add(p => p.MultiSelectMode, false)
+            .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal))
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal))
+            .Add(p => p.OnSubtreeSelected, (_ => subtreeSelected = true))
+            .Add(p => p.OnSubtreeCleared, (_ => { })));
+
+        Assert.Single(cut.FindAll(".ns-name"));
+
+        cut.Find("button.ns-row-main").Click();
+
+        Assert.False(subtreeSelected);
+        Assert.Equal(3, cut.FindAll(".ns-name").Count);
+    }
+
+    [Fact]
+    public void NamespaceNode_ClickInMultiSelectMode_SelectsLoadedDescendantsOnly()
+    {
+        List<string>? selectedKeys = null;
         List<string>? clearedKeys = null;
 
         var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
@@ -48,14 +90,56 @@ public class RedisNamespaceTreeNodeTests : TestContext
             .Add(p => p.MultiSelectMode, true)
             .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal))
             .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal))
-            .Add(p => p.OnSubtreeSelected, (_ => { }))
+            .Add(p => p.OnSubtreeSelected, (List<string> keys) => selectedKeys = keys)
             .Add(p => p.OnSubtreeCleared, (List<string> keys) => clearedKeys = keys));
 
-        cut.FindAll("button")
-            .First(button => string.Equals(button.TextContent.Trim(), "None", StringComparison.Ordinal))
-            .Click();
+        cut.Find("button.ns-row-main").Click();
 
+        Assert.Equal(["app:alpha", "app:child:beta", "app:child:gamma"], selectedKeys);
+        Assert.Null(clearedKeys);
+        Assert.Single(cut.FindAll(".ns-name"));
+        Assert.Empty(cut.FindAll(".ns-subtree-action"));
+    }
+
+    [Fact]
+    public void NamespaceNode_ClickInMultiSelectMode_ClearsLoadedDescendantsWhenAlreadySelected()
+    {
+        List<string>? selectedKeys = null;
+        List<string>? clearedKeys = null;
+
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, CreateNamespaceNode())
+            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal)
+            {
+                "app:alpha",
+                "app:child:beta",
+                "app:child:gamma"
+            })
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal))
+            .Add(p => p.OnSubtreeSelected, (List<string> keys) => selectedKeys = keys)
+            .Add(p => p.OnSubtreeCleared, (List<string> keys) => clearedKeys = keys));
+
+        cut.Find("button.ns-row-main").Click();
+
+        Assert.Null(selectedKeys);
         Assert.Equal(["app:alpha", "app:child:beta", "app:child:gamma"], clearedKeys);
+    }
+
+    [Fact]
+    public void NamespaceNode_ExpandToggle_RemainsAvailableInMultiSelectMode()
+    {
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, CreateNamespaceNode())
+            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal))
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal)));
+
+        Assert.Single(cut.FindAll(".ns-name"));
+
+        cut.Find("button.ns-row-toggle").Click();
+
+        Assert.Equal(3, cut.FindAll(".ns-name").Count);
     }
 
     [Fact]
@@ -83,6 +167,30 @@ public class RedisNamespaceTreeNodeTests : TestContext
         Assert.Contains("selected", row.ClassName, StringComparison.Ordinal);
         Assert.Equal("true", row.GetAttribute("data-selected"));
     }
+
+    [Fact]
+    public void NamespaceNode_PartialSelection_RendersMixedState()
+    {
+        var cut = RenderComponent<RedisNamespaceTreeNode>(ps => ps
+            .Add(p => p.Node, CreateNamespaceNode())
+            .Add(p => p.MultiSelectMode, true)
+            .Add(p => p.SelectedKeys, new HashSet<string>(StringComparer.Ordinal) { "app:child:beta" })
+            .Add(p => p.KeyTypes, new Dictionary<string, string>(StringComparer.Ordinal)));
+
+        var row = cut.Find(".ns-row");
+
+        Assert.Contains("partial", row.ClassName, StringComparison.Ordinal);
+        Assert.Equal("mixed", row.GetAttribute("data-selected"));
+    }
+
+    private static NamespaceNode CreateLeafNode() => new()
+    {
+        Name = "alpha",
+        FullPrefix = "app:alpha",
+        KeyCount = 1,
+        IsKey = true,
+        FullKey = "app:alpha"
+    };
 
     private static NamespaceNode CreateNamespaceNode() => new()
     {

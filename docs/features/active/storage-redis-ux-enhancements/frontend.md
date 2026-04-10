@@ -33,12 +33,12 @@ Capture the delivered UX changes with minimal surface expansion: one shared prog
 - Redis:
 - The page-level `Purge All` affordance is removed from the main toolbar.
 - Delete remains an explicit two-step flow: selection first, confirmation second.
-- The toolbar exposes `Select all loaded`, and tree nodes expose `All` / `None` helpers for loaded descendant keys.
+- The toolbar exposes `Select all loaded`, and Redis tree row clicks drive multi-select directly: leaf rows toggle one key, namespace rows toggle their loaded descendants, and the chevron remains the dedicated expand/collapse control.
 - The pattern helper now states that filtering is applied across the full Redis keyspace while the tree is limited to the currently loaded matches.
 - The initial Redis loaded-match page stays intentionally bounded, oversized SCAN batches are buffered for the next `Load more matches` action, and key-type badges are filled in with lightweight batched lookups so the tree can render before all badge metadata arrives.
 - New scan, filter, or cache contexts supersede older badge batches so stale type writes do not leak into the next tree state.
 - Selection stays reversible and the selected-key count remains visible while multi-select mode is active.
-- Selected key rows use a stronger border, accent rail, and weight treatment so the current selection is obvious at a glance.
+- Selected key rows use a stronger border, accent rail, and weight treatment so the current selection is obvious at a glance, and namespace rows surface partial or full loaded-subtree selection with the same visual language.
 
 ## API / contract changes
 
@@ -66,7 +66,7 @@ Recommended implementing agent: UI-capable .NET agent.
 
 - [x] Removed the toolbar binding for `OnPurgeAll` and the corresponding main-page destructive CTA.
 - [x] Added a toolbar helper for `Select all loaded` and kept `Clear selection` visible while multi-select mode is active.
-- [x] Added node-level callbacks so a namespace prefix can select or clear all loaded descendant keys.
+- [x] Routed Redis multi-select through direct row clicks so a key toggles itself and a namespace toggles its loaded descendants without separate subtree badges.
 - [x] Reused `_toolbar.SelectedKeys` plus `DeleteSelectedKeysAsync` chunked deletion instead of adding a new delete path.
 - [x] Kept selected counts explicit when scan pagination means not all keys are loaded.
 - [x] Bounded the initial Redis loaded-match page and kept `Load more` on the same filtered cursor to prevent large key scans from freezing the tree.
@@ -84,6 +84,6 @@ Recommended implementing agent: UI-capable .NET agent.
 ## Notes
 
 - Storage progress updates should avoid high-frequency `StateHasChanged` churn; coalesce updates if needed.
-- Redis selection helpers must operate on the loaded tree only; hidden unscanned keys must never be silently included.
+- Redis row-driven selection must operate on the loaded tree only; hidden unscanned keys must never be silently included.
 - Redis scan copy must keep the distinction explicit: the filter is keyspace-wide, but the tree and bulk helpers operate on the currently loaded matches.
 - Redis scan-session boundaries must stay authoritative so older badge batches cannot repopulate the next cache or filter state.

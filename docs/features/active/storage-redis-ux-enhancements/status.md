@@ -32,7 +32,7 @@ Current focus: keep the feature in a review-ready state with the Redis follow-up
 
 - Added additive byte-progress reporting to the storage download path and surfaced inline progress in `StorageBlobList` and `BlobDetailPane`, including blob-version downloads.
 - Moved Blob detail action messaging to a shared pane-level slot so version-tab downloads expose completion state inline.
-- Removed the Redis toolbar `Purge All` CTA and replaced it with `Select all loaded` plus namespace-level `All` / `None` subtree helpers for loaded descendants only.
+- Removed the Redis toolbar `Purge All` CTA and replaced it with `Select all loaded` plus row-click subtree selection for loaded descendants only.
 - Reused the existing selected-key delete flow for Redis bulk cleanup instead of adding a new destructive path.
 - Repaired the Redis toolbar imperative selection helpers so they queue renders on the Blazor dispatcher instead of calling `StateHasChanged()` directly.
 - Tightened the focused storage progress tests to run on the renderer dispatcher and assert localized size formatting.
@@ -42,6 +42,7 @@ Current focus: keep the feature in a review-ready state with the Redis follow-up
 - Bound batched key-type writes to the active scan/filter/cache session so stale badge results are canceled or ignored before they mutate the next tree state.
 - Made the toolbar copy explicit that the scan pattern is applied across the full Redis keyspace while the tree shows currently loaded matches only.
 - Strengthened the Redis tree selected-row treatment so the current selection is visibly distinct during single-select and multi-select workflows.
+- Switched Redis multi-select to use direct row clicks: key rows now toggle selection, namespace rows toggle their loaded descendants, and the old `All` / `None` subtree badges are gone.
 - Passed the focused Redis hardening validation slice and a solution build.
 
 ## Remaining
@@ -63,7 +64,7 @@ Current focus: keep the feature in a review-ready state with the Redis follow-up
 
 ## Notes
 
-- Redis selection helpers must stay explicitly reviewable before delete; no hidden wildcard delete behavior should be introduced.
+- Redis selection must stay explicitly reviewable before delete; no hidden wildcard delete behavior should be introduced.
 - Storage progress is a functional acceptance criterion for large downloads, not cosmetic polish.
 - Redis scan filtering remains keyspace-wide at the backend; only the currently loaded match page is rendered and selectable in the tree at any moment.
 - Redis scan-session resets must remain authoritative so cache, filter, and manual rescan flows cannot leak stale badge writes into the next page state.
