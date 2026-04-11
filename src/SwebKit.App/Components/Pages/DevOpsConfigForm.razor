@@ -1,7 +1,7 @@
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
+@inject IDevOpsClientFactory DevOpsClientFactory
 @inject ICredentialStore CredentialStore
-@inject SwebKit.DevOps.DevOpsClient DevOpsClient
 
 <div style="display:grid; gap:12px; padding:12px 0;">
     <div style="display:grid; gap:4px;">
@@ -72,12 +72,13 @@
         var config = new DevOpsConfig
         {
             Organization = Organization.Trim(),
-            PatCredentialKey = CredentialKey
+            PatCredentialKey = CredentialKey,
+            PinnedProjects = AppState.Config.DevOpsConfig?.PinnedProjects?.ToList() ?? []
         };
 
         try
         {
-            DevOpsClient.Configure(config);
+            _ = DevOpsClientFactory.Create(config);
         }
         catch (InvalidOperationException ex)
         {
@@ -88,10 +89,12 @@
 
         AppState.Config.DevOpsConfig = config;
 
-        await AppState.SaveConfigAsync();
+        var persisted = await AppState.SaveConfigAsync();
         await OnSaved.InvokeAsync();
-        StatusOk = true;
-        StatusMessage = "Saved.";
+        StatusOk = persisted;
+        StatusMessage = persisted
+            ? "Saved."
+            : AppState.ProfilePersistenceBlockedMessage;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -113,12 +116,12 @@
             var config = new DevOpsConfig
             {
                 Organization = Organization.Trim(),
-                PatCredentialKey = CredentialKey
+                PatCredentialKey = CredentialKey,
+                PinnedProjects = AppState.Config.DevOpsConfig?.PinnedProjects?.ToList() ?? []
             };
 
-            DevOpsClient.Configure(config);
-
-            var ok = await DevOpsClient.TestConnectionAsync();
+            var client = DevOpsClientFactory.Create(config);
+            var ok = await client.TestConnectionAsync();
             StatusOk = ok;
             StatusMessage = ok ? "Connection successful." : "Connection failed — check your PAT and organization.";
         }

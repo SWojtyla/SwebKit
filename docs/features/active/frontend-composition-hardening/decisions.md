@@ -167,3 +167,30 @@ Treat `SwebKitComponentBase` behavior, `PageDataCache` snapshot behavior, and ca
 
 - Alternative A - Replace current base and cache patterns during the same feature. Rejected because it expands scope and risk.
 - Alternative B - Ignore the preserved strengths and only chase page-size reduction. Rejected because it would likely cause regressions.
+
+---
+
+## Decision 007 - Treat responsiveness as an explicit invariant of the hardening pass
+
+**Status:** Accepted
+
+**Date:** 2026-04-11
+
+### Context
+
+Composition cleanup on heavy pages can accidentally add extra await chains, broader blocking loaders, or more aggressive clearing of visible state. That would technically improve structure while making the UI feel slower or frozen during loading.
+
+### Decision
+
+For the scoped shell, Observability, Service Bus, and AKS paths, long-running startup, refresh, drill-through, and reconnect work must preserve interactivity. Prefer progressive or local loading states, cached snapshot reuse where already supported, and cancellation of superseded work. Do not broaden this feature into general render-performance tuning.
+
+### Consequences
+
+- Reviewers have a clear UX bar for accepting the refactor.
+- The feature stays narrow while protecting perceived performance.
+- Existing strengths such as `PageDataCache` and cancellation-first flows become explicit guardrails rather than informal assumptions.
+
+### Alternatives considered
+
+- Alternative A - Treat responsiveness as implicit and rely on manual judgment. Rejected because internal refactors can regress perceived fluidity without obviously breaking correctness.
+- Alternative B - Defer all responsiveness concerns to a separate performance initiative. Rejected because this feature itself can introduce loading regressions if the constraint is not written down now.

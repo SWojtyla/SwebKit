@@ -13,13 +13,13 @@ updated: "2026-04-11"
 
 ## Goal
 
-Reduce frontend change cost and hidden failure modes by introducing thin composition seams for the heaviest operational pages, replacing timing-based page coordination, and making shell failures visible and testable without redesigning current workflows.
+Reduce frontend change cost and hidden failure modes by introducing thin composition seams for the heaviest operational pages, replacing timing-based page coordination, and making shell failures visible and testable without redesigning current workflows. Preserve a snappy, reactive UI while this hardening lands: shell startup, page refresh, drill-through, and reconnect paths should remain interactive, show progress locally, and avoid freezing the visible surface during loading.
 
 ## Value
 
 SwebKit already has solid component-level patterns, useful page caching, and good lifecycle and cancellation awareness. The biggest maintainability pressure is now at the top of the page stack: `AksPage`, `ServiceBusPage`, and `ObservabilityPage` still mix UI state, infrastructure construction, and async coordination inside the Razor page itself. `MainLayout` also treats important shell failures as console-only best effort, which makes regression diagnosis harder and leaves operators without a clear signal when startup behavior degrades.
 
-This feature keeps the current user experience intact while reducing refactor risk for future work on Observability, AKS, and Service Bus.
+This feature keeps the current user experience intact while reducing refactor risk for future work on Observability, AKS, and Service Bus. It also protects operator trust in the desktop shell: internal composition cleanup must not make the app feel slower or more stalled while async work is in flight.
 
 ## Scope
 
@@ -28,6 +28,7 @@ This feature keeps the current user experience intact while reducing refactor ri
 - Replace page-owned concrete construction of `AzureAppInsightsProvider`, `AzureServiceBusClient`, and `KubernetesAksClient` in the scoped frontend paths.
 - Replace the Observability failure-to-logs drill-through delay with an explicit render-ready handoff.
 - Replace shell console-only async error handling with a shared surfaced error path plus structured logging.
+- Make non-blocking responsiveness an explicit constraint for the scoped shell, Observability, Service Bus, and AKS paths. Long-running bootstrap or refresh work should use local loading states, cached snapshots, or background reconnect behavior instead of blocking the whole page.
 - Add shell and page-composition regression coverage around `MainLayout`, service registration, request cancellation, and drill-through behavior.
 - Preserve existing routed pages, current UX structure, `SwebKitComponentBase` behavior, `PageDataCache` snapshot behavior, and lifecycle or cancellation awareness.
 - Out of scope:
@@ -35,6 +36,7 @@ This feature keeps the current user experience intact while reducing refactor ri
 - Visual redesign, layout refresh, or navigation IA changes.
 - Full decomposition of AKS detail panels or Service Bus workspace components.
 - Broad cleanup of Dashboard, Storage, Redis, Pipelines, or Settings beyond shared shell patterns.
+- Broad rendering-performance work such as virtualization, whole-app repaint tuning, or a generalized loading-state redesign.
 - Replacing every direct client construction in the app in one pass.
 
 ## Implementation waves
@@ -69,6 +71,8 @@ This feature keeps the current user experience intact while reducing refactor ri
 - Mitigation: only route actionable failures to the shared UX surface and keep detailed diagnostics in `ILogger` output.
 - Risk: test seams become MAUI-specific and brittle.
 - Mitigation: favor small injected coordinators and factories plus bUnit-friendly doubles over UI-thread dependent logic.
+- Risk: seam extraction accidentally adds heavier blocking loaders or extra await chains that make the UI feel less fluid.
+- Mitigation: prefer progressive hydration, last-request-wins cancellation, cached snapshot reuse where already present, and targeted local busy states instead of full-page blocking waits.
 
 ## Related documents
 

@@ -34,6 +34,9 @@
 
 The PAT is never written to disk — it lives in Windows Credential Manager. `PipelinesPage` checks
 `IsConfigured` before showing content (`Organization` must be non-empty, or demo mode active).
+Real Azure DevOps callers create fresh client snapshots from this config through
+`IDevOpsClientFactory`, so the credential key is captured per client instance rather than mutated on
+a shared singleton.
 
 ## IDevOpsClient interface
 
@@ -89,9 +92,14 @@ Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Key implementation notes
 
-- `DevOpsClient.Configure()` is idempotent and may be called multiple times to apply updated
-  settings; organization input is normalized across slug, `dev.azure.com`, and
-  `visualstudio.com` forms before use.
+- `IDevOpsClientFactory` is the app-owned seam for real Azure DevOps clients. `DashboardPage`,
+  `PipelinesPage`, and `DevOpsConfigForm` create immutable `DevOpsClient` snapshots from the
+  current `DevOpsConfig` instead of mutating a shared singleton.
+- `DevOpsClient` normalizes organization input and captures `PatCredentialKey` at construction
+  time, so existing client instances keep their original organization and PAT lookup state.
+- `DevOpsAuthHandler` is stateless: each request sets `PatCredentialKeyOption` on
+  `HttpRequestMessage.Options`, and the handler resolves the PAT from `ICredentialStore` for that
+  specific request.
 - `ApprovalCenter` is now global — it calls `GetPendingApprovalsAsync` per project to load all
   approvals, not per release component. The `OnCountChanged` callback updates the tab badge count.
 - `GetEnvironmentStatusAsync` in `DevOpsClient` calls `GetPipelineRunAsync` (which fetches the
@@ -117,11 +125,14 @@ Used by `PipelineDetail.razor` to drive the environments table.
 | `Releases/ReleaseEditor.razor`                    | Modal: create/edit release record                       |
 | `Releases/ComponentScopeEditor.razor`             | Modal: manage pipeline scope per release                |
 | `SwebKit.Core/Abstractions/IDevOpsClient.cs`      | Interface                                               |
+| `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs` | Immutable live-client creation seam                   |
 | `SwebKit.Core/Models/DevOpsModels.cs`             | ADO domain models + `PipelineEnvironmentStatus`         |
 | `SwebKit.Core/Models/ReleaseModels.cs`            | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot` |
 | `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (JSON)                                |
 | `SwebKit.Core/Services/DemoDevOpsClient.cs`       | Demo data                                               |
-| `SwebKit.DevOps/DevOpsClient.cs`                  | Real ADO REST implementation                            |
+| `SwebKit.DevOps/DevOpsClientFactory.cs`           | Creates real DevOps client snapshots                    |
+| `SwebKit.DevOps/DevOpsAuthHandler.cs`             | Resolves PAT per request from request options           |
+| `SwebKit.DevOps/DevOpsClient.cs`                  | Real ADO REST implementation using immutable config snapshots |
 
 ## Removed in pipelines-revamp
 

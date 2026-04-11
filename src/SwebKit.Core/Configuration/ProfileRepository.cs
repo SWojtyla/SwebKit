@@ -12,12 +12,15 @@ public class ProfileRepository
     };
 
     private ProfileData _data = new();
+    private ProfileLoadResult _lastLoadResult = ProfileLoadResult.NotStarted;
 
     public AppConfig Config => ResolveActiveEnvironment();
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _data.MessageTemplates;
     public IReadOnlyList<AppConfig> Environments => _data.Environments;
     public string? ActiveEnvironmentName => _data.ActiveEnvironmentName;
+    public ProfileLoadResult LastLoadResult => _lastLoadResult;
+    public bool IsPersistenceBlocked => _lastLoadResult.IsFailure;
 
     private AppConfig ResolveActiveEnvironment()
     {
@@ -28,39 +31,72 @@ public class ProfileRepository
             ?? _data.Environments[0];
     }
 
-    public async Task LoadAsync()
+    public async Task<ProfileLoadResult> LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
         var filePath = File.Exists(AppDataPaths.ProfilesJson)
             ? AppDataPaths.ProfilesJson
             : (File.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
 
-        if (filePath is null) return;
+        if (filePath is null)
+        {
+            _lastLoadResult = ProfileLoadResult.NotFound;
+            return _lastLoadResult;
+        }
 
         try
         {
             var json = await File.ReadAllTextAsync(filePath);
-            _data = JsonSerializer.Deserialize<ProfileData>(json, Options) ?? new();
+            var loaded = JsonSerializer.Deserialize<ProfileData>(json, Options) ?? new ProfileData();
 
             // Migrate: if Environments is empty, seed from Config
-            if (_data.Environments.Count == 0)
+            if (loaded.Environments.Count == 0)
             {
-                _data.Config.Name ??= "Default";
-                _data.Environments.Add(_data.Config);
-                _data.ActiveEnvironmentName = _data.Config.Name;
+                loaded.Config.Name ??= "Default";
+                loaded.Environments.Add(loaded.Config);
+                loaded.ActiveEnvironmentName = loaded.Config.Name;
             }
+
+            _data = loaded;
+            _lastLoadResult = ProfileLoadResult.Loaded(filePath);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _data = new ProfileData();
+            _lastLoadResult = ProfileLoadResult.Failed(filePath, ex.Message);
         }
+
+        return _lastLoadResult;
+    }
+
+    public async Task<bool> TrySaveAsync()
+    {
+        if (IsPersistenceBlocked)
+        {
+            return false;
+        }
+
+        AppDataPaths.EnsureDirectoryExists();
+        var json = JsonSerializer.Serialize(_data, Options);
+        await File.WriteAllTextAsync(AppDataPaths.ProfilesJson, json);
+        return true;
     }
 
     public async Task SaveAsync()
     {
-        AppDataPaths.EnsureDirectoryExists();
-        var json = JsonSerializer.Serialize(_data, Options);
-        await File.WriteAllTextAsync(AppDataPaths.ProfilesJson, json);
+        if (!await TrySaveAsync())
+        {
+            throw CreatePersistenceBlockedException();
+        }
+    }
+
+    public InvalidOperationException CreatePersistenceBlockedException()
+    {
+        var fileLabel = string.IsNullOrWhiteSpace(_lastLoadResult.FilePath)
+            ? "profiles.json"
+            : _lastLoadResult.FilePath;
+
+        return new InvalidOperationException(
+            $"Profile data could not be loaded from '{fileLabel}'. Saving is blocked to avoid overwriting the existing file. {_lastLoadResult.ErrorMessage}".Trim());
     }
 
     public void AddServiceBusNamespace(ServiceBusNamespace ns) => _data.ServiceBusNamespaces.Add(ns);
@@ -123,6 +159,27 @@ public class ProfileRepository
             _data.ActiveEnvironmentName = _data.Config.Name;
         }
     }
+}
+
+public enum ProfileLoadStatus
+{
+    NotStarted,
+    NotFound,
+    Loaded,
+    Failed
+}
+
+public sealed record ProfileLoadResult(ProfileLoadStatus Status, string? FilePath, string? ErrorMessage)
+{
+    public static ProfileLoadResult NotStarted { get; } = new(ProfileLoadStatus.NotStarted, null, null);
+    public static ProfileLoadResult NotFound { get; } = new(ProfileLoadStatus.NotFound, null, null);
+
+    public bool IsFailure => Status == ProfileLoadStatus.Failed;
+
+    public static ProfileLoadResult Loaded(string filePath) => new(ProfileLoadStatus.Loaded, filePath, null);
+
+    public static ProfileLoadResult Failed(string filePath, string errorMessage) =>
+        new(ProfileLoadStatus.Failed, filePath, errorMessage);
 }
 
 public class ProfileData

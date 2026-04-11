@@ -4,7 +4,7 @@
 
 title: "Feature Overview - backend-reliability-hardening"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 jira: "not linked"
 created: "2026-04-11"
 updated: "2026-04-11"
@@ -13,32 +13,32 @@ updated: "2026-04-11"
 
 ## Goal
 
-Eliminate a focused set of verified backend correctness and error-handling faults across DevOps, Service Bus, Redis, Observability, and core state services so existing workflows operate on complete data and fail predictably.
+Harden a narrow set of backend correctness and failure-handling paths so existing workflows operate on complete data and surface recoverable problems explicitly.
 
 ## Value
 
-Recent review findings show a small number of backend defects that are high leverage even though they are spread across multiple projects:
+The landed implementation removes silent or partial backend failures without broad architectural churn:
 
-- Azure DevOps requests can pick up shared mutable singleton state from another configuration.
-- Service Bus dead-letter completion and resubmit can silently stop after one receive batch.
-- Redis set paging returns a fabricated continuation cursor that can skip or duplicate data.
-- Observability query truncation applies after an overly broad projection boundary.
-- Profile loading can swallow a real failure and reset state silently.
-- App event publishing can log false handler failures when sync publish encounters async subscriptions.
+- profile bootstrap now returns explicit `ProfileLoadResult` outcomes, keeps startup non-fatal, and blocks destructive persistence after a failed load
+- real Azure DevOps callers now use immutable client snapshots created by `IDevOpsClientFactory` / `DevOpsClientFactory`
+- Service Bus dead-letter complete and resubmit now process the full requested sequence set across broker batches or fail explicitly
+- Redis set-member paging now uses Redis-issued `SSCAN` cursors instead of fabricated continuation state
+- Application Insights row projection is now bounded at the provider boundary before truncation is finalized
+- `AppEventBus` sync publish no longer logs false async-handler failures
 
-Fixing these now improves operator trust, protects persisted state, and gives later feature work a safer backend foundation without broad architectural churn.
+Fixing these improves operator trust, protects persisted state, and gives later feature work a safer backend foundation without widening the architecture.
 
 ## Scope
 
 - In scope:
-- immutable or per-configuration DevOps client state for real Azure DevOps calls
-- exhaustive DLQ completion and resubmit behavior across multiple broker receive batches
-- source-backed Redis set-member paging continuation semantics
-- bounded App Insights row projection before truncation is finalized
-- explicit profile load failure surfacing instead of silent reset
-- correct sync versus async `AppEventBus` dispatch behavior and logging
-- minimal app-layer adoption work needed to consume the corrected backend shapes
-- targeted regression tests and functionality-doc updates
+- explicit profile load outcomes plus in-memory-only persistence blocking after failed profile load
+- the non-fatal startup warning banner in `MainLayout`
+- immutable Azure DevOps client creation and per-request PAT resolution
+- exhaustive Service Bus DLQ complete/resubmit behavior across receive batches
+- source-backed Redis set-member continuation parsing
+- bounded App Insights row projection and truncation detection
+- sync versus async `AppEventBus` dispatch cleanup
+- targeted regression tests and backend/architecture doc updates
 - Out of scope:
 - new pages, new workflows, or UX redesigns
 - broad retry-policy changes outside the existing DevOps resilience handler
@@ -47,35 +47,25 @@ Fixing these now improves operator trust, protects persisted state, and gives la
 - new observability features or KQL authoring features
 - any schema or infrastructure migration
 
-## Implementation waves
+## Landed workstreams
 
-- Wave 1 - Core correctness contracts and failure surfacing.
-- Define the load-failure contract for profile initialization.
-- Fix `AppEventBus` sync-publish semantics.
-- Preserve non-fatal startup while making failures visible.
-- Wave 2 - Integration client hardening.
-- Remove shared mutable DevOps configuration.
-- Fix DLQ multi-batch mutation behavior.
-- Fix Redis set-member cursor behavior.
-- Bound Observability row projection at the provider boundary.
-- Wave 3 - Adoption, regression safety, and docs.
-- Update minimal app callers and DI registrations.
-- Extend regression coverage in the affected test projects.
-- Update functionality docs for changed behavior.
+- Workstream 1 - Core state safety and startup diagnostics: complete
+- Workstream 2 - Integration client hardening: complete
+- Workstream 3 - Regression coverage and documentation alignment: complete
 
 ## Dependencies
 
-- Internal projects and likely touchpoints:
+- Internal projects and shipped touchpoints:
 - `src/SwebKit.Core`
 - `src/SwebKit.DevOps`
 - `src/SwebKit.Azure`
 - `src/SwebKit.Redis`
 - `src/SwebKit.Observability`
-- `src/SwebKit.App` for DI and caller adoption only
-- Pitfalls that apply:
+- `src/SwebKit.App` for minimal adoption and shell messaging
+- Pitfalls that still apply to future follow-up work:
 - `docs/pitfalls/azure-sdk.md`
 - `docs/pitfalls/dotnet-csharp.md`
-- Functionality docs expected to change during implementation:
+- Functionality docs updated alongside this feature:
 - `docs/architecture/functionalities/service-bus.md`
 - `docs/architecture/functionalities/redis.md`
 - `docs/architecture/functionalities/observability.md`
@@ -84,16 +74,12 @@ Fixing these now improves operator trust, protects persisted state, and gives la
 
 ## Risks & mitigations
 
-- Risk: DevOps lifetime changes regress existing Pipelines, Dashboard, or Tag Manager flows.
-- Mitigation: keep the `IDevOpsClient` method surface stable, move configuration isolation behind a factory or session boundary, and add app regression checks for the affected consumers.
-- Risk: DLQ fixes still leave partial mutation behavior under concurrency.
-- Mitigation: require the operation to either process the full requested sequence set or fail explicitly with missing sequence information.
-- Risk: Redis cursor correctness removes the illusion of stable offset ordering.
-- Mitigation: treat the cursor as opaque and validate no duplicate or skipped members instead of relying on a fabricated offset.
-- Risk: surfacing profile load failures changes startup expectations.
-- Mitigation: keep initialization non-fatal, expose diagnostics through `AppStateService`, and avoid destructive auto-save after failed load.
-- Risk: Observability cap changes alter logs-tab messaging or assumptions.
-- Mitigation: keep the existing provider contract, add direct regression coverage for truncation, and verify the manual logs flow.
+- Risk: a later caller reintroduces shared mutable DevOps state.
+- Mitigation: keep live-client creation behind `IDevOpsClientFactory` and avoid adding mutable `Configure()` state back onto app callers.
+- Risk: operators assume profile saves still persist after a corrupted `profiles.json` load.
+- Mitigation: keep the banner and blocked-save message explicit until the file is repaired.
+- Risk: future Redis or Service Bus callers assume continuation tokens or receive windows are synthetic.
+- Mitigation: treat cursors as source-owned tokens and keep DLQ mutation semantics exhaustive-or-fail.
 
 ## Related documents
 

@@ -27,6 +27,11 @@ public class AppStateService
     public bool UseDemoData { get; private set; }
 
     public bool IsInitialized { get; private set; }
+    public ProfileLoadResult ProfileLoadResult { get; private set; } = ProfileLoadResult.NotStarted;
+    public bool HasProfileLoadFailure => ProfileLoadResult.IsFailure;
+    public bool IsProfilePersistenceBlocked => _profiles.IsPersistenceBlocked;
+    public string? ProfilePersistenceBlockedMessage =>
+        IsProfilePersistenceBlocked ? _profiles.CreatePersistenceBlockedException().Message : null;
 
     /// <summary>Raised when full initialization completes so UI components can re-render.</summary>
     public event Action? Initialized;
@@ -45,7 +50,7 @@ public class AppStateService
         if (IsInitialized)
             return;
 
-        await _profiles.LoadAsync();
+        ProfileLoadResult = await _profiles.LoadAsync();
         await _uiState.LoadAsync();
         UseDemoData = _uiState.State.UseDemoData;
 
@@ -62,30 +67,30 @@ public class AppStateService
         DemoModeChanged?.Invoke();
     }
 
-    public Task SaveConfigAsync() => _profiles.SaveAsync();
+    public Task<bool> SaveConfigAsync() => TryPersistProfilesAsync();
 
     public async Task AddServiceBusNamespaceAsync(ServiceBusNamespace ns)
     {
         _profiles.AddServiceBusNamespace(ns);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
     }
 
     public async Task RemoveServiceBusNamespaceAsync(Guid id)
     {
         _profiles.RemoveServiceBusNamespace(id);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
     }
 
     public async Task SaveMessageTemplateAsync(SbMessageTemplate template)
     {
         _profiles.SaveMessageTemplate(template);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
     }
 
     public async Task DeleteMessageTemplateAsync(Guid id)
     {
         _profiles.DeleteMessageTemplate(id);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
     }
 
     public IReadOnlyList<AppConfig> Environments => _profiles.Environments;
@@ -94,24 +99,26 @@ public class AppStateService
     public async Task CloneEnvironmentAsync(string newName)
     {
         _profiles.CloneEnvironment(newName);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
     }
 
     public async Task SwitchEnvironmentAsync(string name)
     {
         _profiles.SwitchEnvironment(name);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
         Initialized?.Invoke(); // notify UI to re-render with new config
     }
 
     public async Task RemoveEnvironmentAsync(string name)
     {
         _profiles.RemoveEnvironment(name);
-        await _profiles.SaveAsync();
+        await TryPersistProfilesAsync();
         Initialized?.Invoke();
     }
 
     public ProfileData GetProfileData() => _profiles.GetProfileData();
 
     public void ReplaceProfileData(ProfileData data) => _profiles.ReplaceProfileData(data);
+
+    private Task<bool> TryPersistProfilesAsync() => _profiles.TrySaveAsync();
 }

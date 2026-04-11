@@ -8,6 +8,7 @@
 - Pattern-based key scan with server-side full-keyspace `MATCH` semantics and progressive loaded-match pagination (`Load more matches` support).
 - Unified key tree view: keys organized hierarchically by configurable separator (default `-`, persisted across sessions).
 - Key detail inspection by type (string, hash, list, set, zset).
+- Incremental set-member paging in key detail, using source-backed `SSCAN` continuation cursors.
 - TTL read/set/remove operations.
 - **TTL visualisation**: human-readable label (e.g. "2h 22m remaining"), colour-coded expiry progress bar (green → amber → red), live client-side countdown (1 s tick), and 30-second server-side drift correction.
 - String/hash value updates.
@@ -44,6 +45,7 @@
 - `src/SwebKit.Core/Services/RedisKeyspaceHealthAnalyzer.cs`
 - `src/SwebKit.Core/Services/RedisScanPageAccumulator.cs`
 - `src/SwebKit.Redis/RedisClient.cs`
+- `src/SwebKit.Redis/RedisScanResponseParser.cs`
 - `src/SwebKit.Core/Services/DemoRedisClient.cs`
 - `src/SwebKit.Core/Services/RedisKeyGrouper.cs`
 - `src/SwebKit.Core/Models/RedisModels.cs` (namespace tree + health report contracts)
@@ -57,6 +59,8 @@
 - Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveConfigAsync()`.
 - Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze; Redis intentionally keeps the currently loaded match page bounded so large keyspaces do not saturate the render path.
 - If Redis returns more keys than requested for one `SCAN COUNT`, the page shows only one loaded-match page immediately and carries the overflow forward to the next `Load more matches` action.
+- Set-member paging is source-backed: `RedisClient.GetSetMembersPageAsync()` issues raw `SSCAN`, `RedisScanResponseParser` preserves the returned cursor, and `SetScanResult.Cursor` must be treated as opaque source state instead of a fabricated offset.
+- `SetScanResult.IsComplete` becomes `true` only when Redis returns cursor `0`.
 - Health findings are invalidated on scans and key mutations to prevent stale risk output.
 - `Select all loaded` and namespace row toggles operate on the keys currently loaded into the page tree only; no wildcard or hidden prefix delete pass is introduced behind the UI.
 - The toolbar copy must keep the distinction explicit: filter patterns are keyspace-wide, while the tree, badges, and bulk helpers only cover the currently loaded matches.
@@ -68,6 +72,7 @@
 - `tests/SwebKit.Core.Tests/DemoRedisClientTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyGrouperTests.cs`
 - `tests/SwebKit.Core.Tests/RedisConfigMigrationTests.cs`
+- `tests/SwebKit.Core.Tests/RedisScanResponseParserTests.cs`
 - `tests/SwebKit.Core.Tests/RedisValueHelpersTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyspaceHealthAnalyzerTests.cs`
 - `tests/SwebKit.App.Tests/RedisKeyspaceHealthExplorerTests.cs`

@@ -11,6 +11,7 @@
 @inject PageDataCache Cache
 @inject ILogger<AksPage> Logger
 @inject IPodHealthMonitorService Monitor
+@inject IAksClientBootstrapper AksBootstrapper
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     @* ── Toolbar ── *@
@@ -509,6 +510,8 @@
     private bool ShowEvents = false;
     private bool ShowPortForwardSessions = false;
     private bool _preventGridKey;
+    private CancellationTokenSource _bootstrapCts = new();
+    private AksBootstrapSignature? _lastBootstrapSignature;
 
     // Port-forward dialog state
     private bool ShowPortForwardDialog;
@@ -572,6 +575,13 @@
     private bool IsProduction => AppState.Config.IsProduction;
 
     [Parameter] public IAksClient? ClientOverride { get; set; }
+
+    private sealed record AksBootstrapSignature(
+        IAksClient? ClientOverride,
+        bool UseDemoData,
+        string? KubeconfigPath,
+        string? KubeconfigContext,
+        string DefaultNamespace);
 
     protected override void OnInitialized()
     {
@@ -679,97 +689,86 @@ OnCtxRestartDeployment();
 
     protected override void OnParametersSet()
     {
+        var config = AppState.Config.AksConfig;
+        var signature = new AksBootstrapSignature(
+            ClientOverride,
+            AppState.UseDemoData,
+            config?.KubeconfigPath,
+            config?.KubeconfigContext,
+            NormalizeDefaultNamespace(config));
+
+        if (_lastBootstrapSignature == signature)
+        {
+            return;
+        }
+
+        _lastBootstrapSignature = signature;
         SyncFromEnvironment();
         // Fire-and-forget so the UI renders immediately with loading state
-        _ = ConnectAndLoadAsync();
+        _ = BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
     }
 
     private void SyncFromEnvironment()
     {
         var config = AppState.Config.AksConfig;
-        CurrentNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
+        CurrentNamespace = NormalizeDefaultNamespace(config);
         ActiveContext = config?.KubeconfigContext ?? string.Empty;
     }
 
-    private async Task ConnectAndLoadAsync()
+    private static string NormalizeDefaultNamespace(AksConfig? config) =>
+        string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config.DefaultNamespace;
+
+    private async Task BootstrapAndLoadAsync(string requestedContext, string requestedNamespace)
     {
+        var newBootstrapCts = new CancellationTokenSource();
+        var previousBootstrapCts = Interlocked.Exchange(ref _bootstrapCts, newBootstrapCts);
+        previousBootstrapCts.Cancel();
+        previousBootstrapCts.Dispose();
+        var ct = newBootstrapCts.Token;
+
         IsLoading = true;
+        ErrorMessage = null;
         await InvokeAsync(StateHasChanged);
-
-        if (ClientOverride is not null)
-        {
-            Client = ClientOverride;
-            await LoadContextsAsync();
-            await LoadNamespacesAsync();
-            await LoadAsync();
-            ConnectionState.SetConnected("aks");
-            return;
-        }
-
-        if (AppState.UseDemoData)
-        {
-            Client = new SwebKit.Core.Services.DemoAksClient();
-            await LoadContextsAsync();
-            await LoadNamespacesAsync();
-            await LoadAsync();
-            ConnectionState.SetConnected("aks");
-            return;
-        }
-
-        var config = AppState.Config.AksConfig;
-        if (config is null)
-        {
-            ConnectionState.SetNotConfigured("aks");
-            return;
-        }
-
         try
         {
-            Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
-            string.IsNullOrWhiteSpace(config.KubeconfigContext) ? null : config.KubeconfigContext,
-            string.IsNullOrWhiteSpace(config.KubeconfigPath) ? null : config.KubeconfigPath);
-            await LoadContextsAsync();
-            await LoadNamespacesAsync();
-            await LoadAsync();
-            ConnectionState.SetConnected("aks");
-        }
-        catch (Exception ex) { ErrorMessage = ex.Message; ConnectionState.SetError("aks", ex.Message); }
-    }
+            var result = await AksBootstrapper.BootstrapAsync(
+                new AksClientBootstrapRequest(
+                    ClientOverride,
+                    AppState.UseDemoData,
+                    AppState.Config.AksConfig,
+                    requestedContext,
+                    requestedNamespace),
+                ct);
 
-    private async Task LoadContextsAsync()
-    {
-        if (Client is null) return;
-        try
-        {
-            Contexts = (await Client.GetContextsAsync()).ToList();
-            if (string.IsNullOrWhiteSpace(ActiveContext))
+            ct.ThrowIfCancellationRequested();
+
+            Client = result.Client;
+            Contexts = result.Contexts.ToList();
+            Namespaces = result.Namespaces.Count > 0 ? result.Namespaces.ToList() : ["default"];
+            ActiveContext = result.ActiveContext;
+            CurrentNamespace = result.CurrentNamespace;
+
+            switch (result.Status)
             {
-                var current = Contexts.FirstOrDefault(c => c.IsCurrent);
-                if (current is not null) ActiveContext = current.Name;
+                case AksClientBootstrapStatus.NotConfigured:
+                    ConnectionState.SetNotConfigured("aks");
+                    IsLoading = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                case AksClientBootstrapStatus.Error:
+                    ErrorMessage = result.ErrorMessage;
+                    ConnectionState.SetError("aks", result.ErrorMessage ?? "AKS bootstrap failed.");
+                    IsLoading = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
             }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"LoadContextsAsync failed: {ex.Message}");
-        }
-    }
 
-    private async Task LoadNamespacesAsync()
-    {
-        if (Client is null) return;
-        try
-        {
-            var ns = await Client.GetNamespacesAsync();
-            if (ns.Count > 0)
-            {
-                Namespaces = ns.ToList();
-                if (CurrentNamespace != "*" && !Namespaces.Contains(CurrentNamespace))
-                    CurrentNamespace = Namespaces.Contains("default") ? "default" : Namespaces[0];
-            }
+            await LoadAsync();
+            ConnectionState.SetConnected("aks");
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            System.Diagnostics.Debug.WriteLine($"LoadNamespacesAsync failed: {ex.Message}");
+            return;
         }
     }
 
@@ -1000,21 +999,7 @@ OnCtxRestartDeployment();
         if (newContext == ActiveContext) return;
         Cache.InvalidateByPrefix("aks:"); // PERF-18: context switch — invalidate stale cache
         ActiveContext = newContext;
-
-        if (!AppState.UseDemoData)
-        {
-            var config = AppState.Config.AksConfig;
-            try
-            {
-                Client = new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
-                string.IsNullOrWhiteSpace(newContext) ? null : newContext,
-                string.IsNullOrWhiteSpace(config?.KubeconfigPath) ? null : config?.KubeconfigPath);
-            }
-            catch (Exception ex) { ErrorMessage = ex.Message; return; }
-        }
-
-        await LoadNamespacesAsync();
-        await LoadAsync();
+        await BootstrapAndLoadAsync(newContext, CurrentNamespace);
     }
 
     private async Task HandleNamespaceChangedAsync(string ns)
@@ -1711,6 +1696,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
     public void Dispose()
     {
+        var bootstrapCts = Interlocked.Exchange(ref _bootstrapCts, null!);
+        bootstrapCts?.Cancel();
+        bootstrapCts?.Dispose();
         var cts = Interlocked.Exchange(ref _cts, null!);
         cts?.Cancel();
         cts?.Dispose();

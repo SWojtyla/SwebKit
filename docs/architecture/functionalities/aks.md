@@ -3,6 +3,7 @@
 ## What Is Supported
 
 - Connect to Kubernetes using default or configured kubeconfig/context.
+- Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
 - Context switching and namespace filtering (single and all namespaces).
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, ingresses, Helm releases, Jobs, and CronJobs.
@@ -36,8 +37,8 @@
 
 ## Core Runtime Flow
 
-1. AKS page initializes client from selected environment AKS config.
-2. UI loads context list, namespaces, and the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
+1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
+2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
 3. Resource YAML for Jobs and CronJobs flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
 4. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
 5. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
@@ -48,6 +49,7 @@
 ## Key Design Notes
 
 - **Batch workload contract.** `IAksClient` now exposes additive Jobs and trigger methods: `GetJobsAsync`, `TriggerCronJobAsync`, and `RerunJobAsync`. Default multi-namespace overloads for `GetJobsAsync` and `GetCronJobsAsync` let the AKS page keep both resource types visible in all-namespaces mode without special client wrappers.
+- **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
 - **Batch YAML parity.** `GetResourceYamlAsync` explicitly supports `job` and `cronjob`. `DemoAksClient` emits batch/v1 YAML for both resource kinds, matching the live-client viewer flow.
 - **Trigger provenance and sanitization.** `KubernetesAksClient` clones CronJob job templates or Job specs, strips controller-owned metadata and selectors, and annotates created Jobs with `swebkit.io/source-kind` and `swebkit.io/source-name`. Source mapping prefers owner references first, then these annotations.
@@ -65,6 +67,7 @@
 ## Main Code Locations
 
 - `src/SwebKit.App/Components/Pages/AksPage.razor`
+- `src/SwebKit.App/Services/AksClientBootstrapper.cs`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
 - `src/SwebKit.App/Components/Aks/AksConnectionBar.razor`
 - `src/SwebKit.App/Components/Aks/NamespaceMonitorSelector.razor`
@@ -78,6 +81,7 @@
 - `src/SwebKit.App/Components/Aks/PortForwardSessionsPanel.razor`
 - `src/SwebKit.App/Components/Aks/PortForwardStartDialog.razor`
 - `src/SwebKit.Core/Abstractions/IAksClient.cs`
+- `src/SwebKit.Core/Abstractions/IAksClientBootstrapper.cs`
 - `src/SwebKit.Core/Constants/AksBatchAnnotations.cs`
 - `src/SwebKit.Core/Abstractions/IPortForwardSessionService.cs`
 - `src/SwebKit.Core/Models/AksModels.cs`

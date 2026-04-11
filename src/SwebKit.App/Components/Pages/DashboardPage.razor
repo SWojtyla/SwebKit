@@ -1,10 +1,10 @@
 @page "/"
 @page "/dashboard"
 @inject AppStateService AppState
+@inject IDevOpsClientFactory DevOpsClientFactory
 @inject IAppEventBus Events
 @inject ICredentialStore CredentialStore
 @inject IPodHealthMonitorService Monitor
-@inject SwebKit.DevOps.DevOpsClient RealDevOpsClient
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoDevOpsClient
 @implements IDisposable
 
@@ -393,7 +393,9 @@
         if (!_releasesConfigured) return;
         try
         {
-            IDevOpsClient client = AppState.UseDemoData ? DemoDevOpsClient : RealDevOpsClient;
+            IDevOpsClient client = AppState.UseDemoData
+                ? DemoDevOpsClient
+                : CreateLiveDevOpsClient();
             var projects = await client.GetProjectsAsync(ct);
             var approvalTasks = projects.Select(p => client.GetPendingApprovalsAsync(p.Name, ct));
             var results = await Task.WhenAll(approvalTasks);
@@ -405,6 +407,14 @@
         {
             _releasesError = ex.Message;
         }
+    }
+
+    private IDevOpsClient CreateLiveDevOpsClient()
+    {
+        var config = AppState.Config.DevOpsConfig
+            ?? throw new InvalidOperationException("Azure DevOps is not configured.");
+
+        return DevOpsClientFactory.Create(config);
     }
 
     // ── Navigation ───────────────────────────────────────────────────────────────────

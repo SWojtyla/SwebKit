@@ -12,20 +12,26 @@ namespace SwebKit.App.Tests;
 
 public sealed class ServiceBusPageTests : TestContext
 {
+    private readonly AppStateService _appState;
+    private readonly FakeCredentialStore _credentialStore;
+
     public ServiceBusPageTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         Services.AddSingleton<IAppEventBus>(events);
-        Services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
-        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
+        _credentialStore = new FakeCredentialStore();
+        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), events);
+        Services.AddSingleton<ICredentialStore>(_credentialStore);
+        Services.AddSingleton(_appState);
         Services.AddSingleton(new ScheduledMessageRepository());
         Services.AddSingleton(new UiStateRepository());
         Services.AddSingleton(new PageDataCache());
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
+        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore));
     }
 
     [Fact]

@@ -46,8 +46,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
+        builder.Services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
+        builder.Services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
         builder.Services.AddSingleton<TrayLifecycleState>();
 
         // Pod Health Monitor
@@ -63,8 +66,9 @@ public static class MauiProgram
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoStorageClient>();
 
-        // Observability — real resource discovery (singleton for caching); providers are created per-resource by the page
+        // Observability — real resource discovery (singleton for caching); providers are created per-resource by the factory seam
         builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
+        builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
         builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
 
         // DevOps / Releases
@@ -76,7 +80,7 @@ public static class MauiProgram
                 options.Retry.MaxRetryAttempts = 3;
                 options.Retry.Delay = TimeSpan.FromSeconds(1);
             });
-        builder.Services.AddSingleton<DevOpsClient>();
+        builder.Services.AddSingleton<IDevOpsClientFactory, DevOpsClientFactory>();
         builder.Services.AddSingleton<DemoDevOpsClient>();
         builder.Services.AddSingleton<ReleaseRepository>();
         builder.Services.AddSingleton<PageDataCache>();

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Services;
 
@@ -10,6 +11,9 @@ public class AppEventBusTests
 
     private static AppEventBus CreateBus() =>
         new(NullLogger<AppEventBus>.Instance);
+
+    private static AppEventBus CreateBus(ILogger<AppEventBus> logger) =>
+        new(logger);
 
     [Fact]
     public void Publish_InvokesSubscriber()
@@ -209,5 +213,58 @@ public class AppEventBusTests
         bus.Publish(new TestEventA("sync-only"));
 
         Assert.False(asyncCalled);
+    }
+
+    [Fact]
+    public void Publish_IgnoresAsyncHandlers_WithoutLoggingFalseErrors()
+    {
+        var logger = new TestLogger<AppEventBus>();
+        var bus = CreateBus(logger);
+
+        bus.Subscribe<TestEventA>(async _ =>
+        {
+            await Task.Yield();
+        });
+
+        bus.Publish(new TestEventA("sync-only"));
+
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public void Publish_WhenSyncHandlerCancels_RethrowsOperationCanceledException()
+    {
+        var bus = CreateBus();
+        Action<TestEventA> handler = _ => throw new OperationCanceledException();
+        bus.Subscribe(handler);
+
+        Assert.Throws<OperationCanceledException>(() => bus.Publish(new TestEventA("cancel")));
+    }
+
+    private sealed class TestLogger<T> : ILogger<T>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

@@ -1,6 +1,7 @@
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
@@ -374,33 +375,65 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
 
     public async Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default)
     {
+        if (sequenceNumbers.Count == 0)
+        {
+            return;
+        }
+
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
         var target = targetEntityPath ?? entityPath;
-        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions { ReceiveMode = ServiceBusReceiveMode.PeekLock });
+        var requestedSequenceNumbers = ParseRequestedSequenceNumbers(sequenceNumbers);
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = Math.Min(MaxReceiveBatchSize, requestedSequenceNumbers.Count)
+        });
         await using var sender = _client.CreateSender(target);
 
-        var seqSet = new HashSet<string>(sequenceNumbers);
-        var received = await receiver.ReceiveMessagesAsync(seqSet.Count, TimeSpan.FromSeconds(10), ct);
-
-        foreach (var msg in received)
-        {
-            if (!seqSet.Contains(msg.SequenceNumber.ToString())) continue;
-            var forwarded = new ServiceBusMessage(msg) { MessageId = Guid.NewGuid().ToString() };
-            forwarded.ApplicationProperties.Remove("DeadLetterReason");
-            forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
-            await sender.SendMessageAsync(forwarded, ct);
-            await receiver.CompleteMessageAsync(msg, ct);
-        }
+        await DeadLetterSequenceProcessor.ProcessAsync(
+            requestedSequenceNumbers,
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            async (message, token) =>
+            {
+                var forwarded = new ServiceBusMessage(message) { MessageId = Guid.NewGuid().ToString() };
+                forwarded.ApplicationProperties.Remove("DeadLetterReason");
+                forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+                await sender.SendMessageAsync(forwarded, token);
+                await receiver.CompleteMessageAsync(message, token);
+            },
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            ct);
     }
 
     public async Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
     {
+        if (sequenceNumbers.Count == 0)
+        {
+            return;
+        }
+
         var dlqPath = $"{entityPath}/$DeadLetterQueue";
-        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions { ReceiveMode = ServiceBusReceiveMode.PeekLock });
-        var seqSet = new HashSet<string>(sequenceNumbers);
-        var received = await receiver.ReceiveMessagesAsync(seqSet.Count, TimeSpan.FromSeconds(10), ct);
-        foreach (var msg in received.Where(m => seqSet.Contains(m.SequenceNumber.ToString())))
-            await receiver.CompleteMessageAsync(msg, ct);
+        var requestedSequenceNumbers = ParseRequestedSequenceNumbers(sequenceNumbers);
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = Math.Min(MaxReceiveBatchSize, requestedSequenceNumbers.Count)
+        });
+
+        await DeadLetterSequenceProcessor.ProcessAsync(
+            requestedSequenceNumbers,
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            (message, token) => receiver.CompleteMessageAsync(message, token),
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            ct);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
@@ -452,6 +485,23 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         topicName = topic;
         subscriptionName = subscription;
         return true;
+    }
+
+    private static HashSet<long> ParseRequestedSequenceNumbers(IReadOnlyList<string> sequenceNumbers)
+    {
+        var parsed = new HashSet<long>();
+
+        foreach (var sequenceNumber in sequenceNumbers)
+        {
+            if (!long.TryParse(sequenceNumber, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedValue))
+            {
+                throw new InvalidOperationException($"Sequence number '{sequenceNumber}' is not valid.");
+            }
+
+            parsed.Add(parsedValue);
+        }
+
+        return parsed;
     }
 
     private async Task<SbEntityStats?> TryGetQueueStatsAsync(string queueName, CancellationToken ct)

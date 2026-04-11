@@ -4,7 +4,7 @@
 
 title: "Status - backend-reliability-hardening"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-04-11"
@@ -14,55 +14,56 @@ last_updated: "2026-04-11"
 
 ## Quick summary
 
-Planning is complete for a correctness-first backend hardening feature that addresses six verified issues without broad architectural churn.
+Implementation is landed and validated. This docs pass brings the backend feature and architecture notes up to date, and the feature is ready for review.
 
 Jira: not linked
 
-Current focus: start with Wave 1 design and implementation for DevOps configuration isolation, profile load diagnostics, and `AppEventBus` dispatch semantics because those define the failure model that the remaining fixes should follow.
+Current focus: reviewer confirmation only. No additional implementation is planned unless review uncovers a regression.
 
 ## Progress checklist
 
-### Planning
+### Implementation
 
-- [x] Confirmed the verified issue set and kept the scope limited to those hotspots
-- [x] Mapped affected code, doc, and test areas across Core, DevOps, Azure, Redis, Observability, and App
-- [x] Chosen a wave order that preserves project boundaries and additive contract patterns
-- [x] Defined acceptance criteria around complete operations, explicit failures, and regression safety
+- [x] `ProfileRepository` returns `ProfileLoadResult` and blocks persistence after failed load
+- [x] `AppStateService` surfaces profile-load diagnostics and blocked-save messaging
+- [x] `MainLayout` shows a non-fatal profile-load warning banner
+- [x] Real Azure DevOps callers create immutable snapshots through `IDevOpsClientFactory` / `DevOpsClientFactory`
+- [x] `DevOpsAuthHandler` resolves the PAT credential key from per-request options instead of shared mutable state
+- [x] `AzureServiceBusClient` routes DLQ complete/resubmit through `DeadLetterSequenceProcessor` across batches and fails explicitly for missing sequence numbers
+- [x] `RedisClient.GetSetMembersPageAsync` uses `RedisScanResponseParser` and Redis-issued `SSCAN` cursors
+- [x] `AzureAppInsightsProvider.RunQueryAsync` bounds row projection through `LogQueryResultProjector`
+- [x] `AppEventBus.Publish` ignores async subscribers without logging false errors
 
-### Implementation focus
+### Validation and docs
 
-- [ ] Replace shared mutable DevOps configuration with per-configuration real client creation
-- [ ] Make DLQ complete and resubmit behavior exhaustive across receive batches
-- [ ] Replace fabricated Redis set-member continuation logic with source-backed cursor behavior
-- [ ] Surface profile load failures instead of silently resetting state
-- [ ] Stop `AppEventBus` sync publish from logging false async-handler cast failures
-- [ ] Bound App Insights row projection before truncation and add direct regression coverage
-- [ ] Align functionality docs and validation notes with the shipped behavior
+- [x] Focused regression suites passed in `tests/SwebKit.Core.Tests`, `tests/SwebKit.DevOps.Tests`, and `tests/SwebKit.Azure.Tests`
+- [x] Windows app build passed for the adopted app-layer changes
+- [x] Backend feature docs and functionality docs now match the shipped behavior
 
 ## Completed
 
-- Captured the affected backend hotspots and preserved strengths from the current architecture.
-- Scoped the feature to correctness and error handling rather than a general backend refactor.
-- Identified the minimal app adoption work required to keep DI ownership in `SwebKit.App`.
+- Shipped the planned backend hardening seams across Core, DevOps, Azure, Redis, Observability, and minimal app adoption points.
+- Preserved the current project boundaries and the existing Azure DevOps resilience registration.
+- Converted the active feature docs from planning state to review-ready implementation notes.
 
 ## Remaining
 
-- Implement the three planned waves.
-- Decide the narrowest direct test seam for `AzureAppInsightsProvider` truncation coverage.
-- Update the affected functionality docs in the same change set as implementation.
+- Reviewer feedback only.
+- Archive or close out once review is complete.
 
 ## Blockers
 
-- No implementation blocker identified.
+- None.
 - Jira is not linked. Informational only.
 
 ## Validation
 
 - Test plan: `test-plan.md`
-- Validation status: Planning updated; code validation not started
+- Focused tests: 58 passed, 0 failed across the touched regression files in `tests/SwebKit.Core.Tests`, `tests/SwebKit.DevOps.Tests`, and `tests/SwebKit.Azure.Tests`
+- App build: `dotnet build .\src\SwebKit.App\SwebKit.App.csproj -f net10.0-windows10.0.19041.0 --no-restore`
+- Compiler state: no compiler errors reported on the touched backend and app adoption files
 
 ## Notes
 
-- Preserve the existing DevOps `AddStandardResilienceHandler` registration.
-- Prefer additive contracts or factories over breaking interface changes.
-- Do not widen this feature into a generic repository-hardening sweep unless a very small shared helper emerges naturally during implementation.
+- `AddStandardResilienceHandler` on the named Azure DevOps `HttpClient` remains unchanged; snapshot isolation happens at client creation and request-option flow.
+- Profile persistence stays intentionally blocked after a failed profile load until the file is repaired.

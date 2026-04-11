@@ -6,30 +6,27 @@ namespace SwebKit.DevOps;
 
 /// <summary>
 /// DelegatingHandler that injects Azure DevOps PAT as a Basic auth header.
-/// Reads the PAT from ICredentialStore using the key set via <see cref="SetCredentialKey"/>.
+/// Reads the PAT from ICredentialStore using the key provided on the current request.
 /// The PAT value is never logged or exposed in error messages.
 /// </summary>
 public class DevOpsAuthHandler : DelegatingHandler
 {
+    public static readonly HttpRequestOptionsKey<string> PatCredentialKeyOption = new("SwebKit.DevOps.PatCredentialKey");
+
     private readonly ICredentialStore _credentialStore;
-    private volatile string? _patCredentialKey;
 
     public DevOpsAuthHandler(ICredentialStore credentialStore)
     {
         _credentialStore = credentialStore;
     }
 
-    public void SetCredentialKey(string patCredentialKey)
-    {
-        _patCredentialKey = patCredentialKey;
-    }
-
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrEmpty(_patCredentialKey))
+        if (request.Options.TryGetValue(PatCredentialKeyOption, out var patCredentialKey)
+            && !string.IsNullOrWhiteSpace(patCredentialKey))
         {
-            var pat = _credentialStore.Get(_patCredentialKey);
+            var pat = _credentialStore.Get(patCredentialKey);
             if (!string.IsNullOrEmpty(pat))
             {
                 var encoded = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));

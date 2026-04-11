@@ -6,7 +6,7 @@
 - Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
 - Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
-- Drill-to-Logs: clicking "View in Logs" from any tab pre-populates the KQL editor and switches tab
+- Drill-to-Logs: clicking "View in Logs" from any tab now uses an explicit pending-query handoff from `ObservabilityPage` into `ObservabilityLogs`, so the focused KQL executes exactly once without a render-timing delay
 - Logs supports explicit mode switching:
   - Guided mode compiles `GuidedKqlQueryDefinition` via `IGuidedKqlCompiler` and blocks execution on compile validation errors
   - Guided mode surfaces inline field-level validation (`aria-invalid`) and keeps warning-only issues non-blocking
@@ -47,34 +47,39 @@ The resolved identity is shown as a badge in the Observability toolbar (provider
 
 ```
 User opens Observability page
-  → DemoObservabilityProvider (demo mode) OR AzureAppInsightsProvider (real)
+  → IObservabilityProviderFactory.Create(resourceId, useDemoData)
   → ResourceSelectorDialog streams ObservabilityResourceInfo via IObservabilityResourceDiscovery
   → User selects resource → ObservabilityPage.ActivateResourceAsync()
-  → AzureAppInsightsProvider created with the selected resource's ARM resource ID
+  → DemoObservabilityProvider (demo mode) OR AzureAppInsightsProvider (real)
   → Each tab calls provider.GetXxx(TimeRange, ct)
+      → Drill-to-Logs writes an explicit pending query request into ObservabilityLogs and clears it only after the child acknowledges consumption
       → Logs tab (Guided mode): Guided definition → IGuidedKqlCompiler.Compile() → KQL
       → LogsQueryClient.QueryResourceAsync(resourceId, kql, QueryTimeRange)
+      → `AzureAppInsightsProvider.RunQueryAsync()` hands the returned table to `LogQueryResultProjector`
+      → projector materializes at most `maxRows + 1` rows, uses the extra row only to mark truncation, and leaves the original KQL unchanged
       → Returns LogsQueryResult / OverviewMetrics / ExceptionGroup[] / etc.
   → Razor components render data; detail pane opens on row click
 ```
 
 ## Key Code Locations
 
-| What                      | Where                                                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                   |
-| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                   |
-| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                                                            |
-| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                                                            |
-| Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs` |
-| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                    |
-| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                     |
-| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                  |
-| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                   |
-| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                  |
-| Sub-components            | `src/SwebKit.App/Components/Observability/`                                                                 |
-| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page")                                           |
-| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                                                            |
+| What                      | Where                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                    |
+| Provider factory seam     | `src/SwebKit.Core/Abstractions/IObservabilityProviderFactory.cs`, `src/SwebKit.App/Services/ObservabilityProviderFactory.cs` |
+| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                    |
+| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                                                                             |
+| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                                                                             |
+| Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs`                  |
+| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                     |
+| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                      |
+| Log projection helper     | `src/SwebKit.Observability/LogQueryResultProjector.cs`                                                                        |
+| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                                   |
+| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                                    |
+| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                                   |
+| Sub-components            | `src/SwebKit.App/Components/Observability/`                                                                                  |
+| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page")                                                            |
+| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                                                                             |
 
 ## NuGet Packages (SwebKit.Observability)
 
@@ -87,13 +92,19 @@ User opens Observability page
 
 ## Important Constraints
 
-- **Query cost:** Azure Monitor bills per GB scanned. The `MaxRowsPerQuery` setting (default 500, configurable in `ObservabilityConfig`) caps result sets. A truncation warning is shown in the Logs tab when the cap is hit.
+- **Query cost:** Azure Monitor bills per GB scanned. The `MaxRowsPerQuery` setting (default 500, configurable in `ObservabilityConfig`) caps returned rows. `AzureAppInsightsProvider` enforces the cap at projection time via `LogQueryResultProjector`, which stops after `maxRows + 1` rows to detect truncation without materializing every source row. A truncation warning is shown in the Logs tab when the cap is hit.
 - **Data latency:** Azure Monitor Logs has 1–5 minute ingestion latency. Live streaming is not supported.
 - **ARM beta package:** `Azure.ResourceManager.ApplicationInsights` is still in beta (1.1.0-beta.1). The specific method used is `SubscriptionResource.GetApplicationInsightsComponentsAsync()`.
+- **Free-form KQL:** SwebKit does not rewrite user-entered KQL with `take` just to impose the row cap; truncation is finalized after bounded projection of the returned table.
+
+## Validation Pointers
+
+- `tests/SwebKit.Core.Tests/LogQueryResultProjectorTests.cs`
+- `tests/SwebKit.Core.Tests/DemoObservabilityProviderTests.cs`
 
 ## Future Extension Points
 
-- **OTLP / Prometheus backend:** Implement `IObservabilityProvider` for a self-hosted OTLP endpoint. The UI requires zero changes — swap the provider in `ObservabilityPage.CreateProvider()`.
+- **OTLP / Prometheus backend:** Implement `IObservabilityProvider` for a self-hosted OTLP endpoint and return it from `IObservabilityProviderFactory`. The UI requires zero page-flow changes.
 - **Live near-real-time tab:** Poll Azure Monitor every 2–5 minutes and append rows to the Logs view.
 - **Application map:** Requires `dependencies` table queries and a graph layout library (deferred).
 - **Multi-resource comparison:** Run the same KQL across multiple resources and merge results (deferred).

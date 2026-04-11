@@ -1,7 +1,7 @@
 @page "/pipelines"
 @page "/releases"
 @inject AppStateService AppState
-@inject SwebKit.DevOps.DevOpsClient RealDevOpsClient
+@inject IDevOpsClientFactory DevOpsClientFactory
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoClient
 @inject IAppEventBus Events
 @inject ReleaseRepository ReleaseRepo
@@ -179,6 +179,7 @@
     private bool _hasValidDevOpsConfig = true;
     private List<string> _demoPinnedProjects = [];
     private CancellationTokenSource _cts = new();
+    private IDevOpsClient? _realClient;
 
     // Pipelines tab state
     private AdoProject? _selectedProject;
@@ -194,7 +195,7 @@
     private bool ShowComponentEditor;
     private bool ShowDeleteConfirm;
 
-    private IDevOpsClient ActiveClient => AppState.UseDemoData ? DemoClient : RealDevOpsClient;
+    private IDevOpsClient ActiveClient => AppState.UseDemoData ? DemoClient : _realClient ?? DemoClient;
 
     private bool IsConfigured =>
         AppState.UseDemoData ||
@@ -241,11 +242,12 @@
             {
                 try
                 {
-                    RealDevOpsClient.Configure(config);
+                    _realClient = DevOpsClientFactory.Create(config);
                 }
                 catch (InvalidOperationException)
                 {
                     _hasValidDevOpsConfig = false;
+                    _realClient = null;
                 }
             }
         }

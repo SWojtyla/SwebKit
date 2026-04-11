@@ -4,7 +4,7 @@
 
 title: "Decisions - backend-reliability-hardening"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 
 ---
 

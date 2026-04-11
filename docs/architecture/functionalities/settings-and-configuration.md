@@ -4,22 +4,30 @@
 
 - Environment-scoped configuration editing for:
   - Service Bus pinned entities
+  - Azure DevOps organization and PAT credential-key settings
   - Observability provider settings
   - AKS kubeconfig/context defaults
   - Redis cache entries
   - Storage (Azure Blob) account config
-- Save settings back to the current project profile.
-- Inline feedback after save.
+- Save settings back to the current project profile when profile persistence is healthy.
+- Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
+- Non-fatal startup warning banner when `profiles.json` fails to load.
+- DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
 
 ## Core Runtime Flow
 
-1. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
-2. Accordion forms mutate the config objects directly on `AppConfig`.
-3. Save operation calls `AppState.SaveConfigAsync` to persist changes to `profiles.json`.
+1. `AppStateService.InitializeAsync()` calls `ProfileRepository.LoadAsync()` and keeps `ProfileLoadResult`, `HasProfileLoadFailure`, and blocked-persistence state available to the shell.
+2. `MainLayout` renders immediately, then shows a non-fatal warning banner if profile loading failed.
+3. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
+4. Accordion forms mutate the config objects directly on `AppConfig`.
+5. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. If the last profile load failed, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`.
+6. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
 
 ## Main Code Locations
 
+- `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
+- `src/SwebKit.App/Components/Pages/DevOpsConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ObservabilityConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
@@ -27,17 +35,20 @@
 - `src/SwebKit.App/Components/Pages/StorageConfigForm.razor`
 - `src/SwebKit.Core/Configuration/ProfileRepository.cs`
 - `src/SwebKit.Core/Configuration/UiStateRepository.cs`
+- `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`
+- `src/SwebKit.DevOps/DevOpsClientFactory.cs`
 
 ## Important Notes
 
 - Settings are project-level data with environment-level nested configs.
 - Secrets are expected in credential store and not in profile JSON.
-- DevOps settings accept organization slug input or supported Azure DevOps URL forms; saving applies updated DevOps client configuration immediately, while the PAT remains stored in the credential store.
+- `ProfileRepository` blocks persistence after a failed load so a corrupted `profiles.json` file is not silently overwritten.
+- DevOps settings accept organization slug input or supported Azure DevOps URL forms. Saving or testing settings creates new live-client snapshots; it does not mutate an existing shared live client.
 - Service Bus settings here focus on pinned entities, while namespace registration happens on the Service Bus page.
 - AKS monitoring persistence (`MonitoringEnabled`, `MonitoredNamespaces`) remains in existing AKS config and is not altered by window hide/restore transitions.
 - On Windows, Minimize and Close now route to system tray by default; explicit Exit from tray menu is required for full app termination. This behavior is currently fixed (not user-toggleable in Settings).
 
 ## Validation Pointers
 
-- Configuration behavior is primarily covered by Core tests around models and repositories.
-- UI form workflows are partially covered by App tests and require manual smoke checks for each section.
+- `tests/SwebKit.Core.Tests/AppStateServiceProfileLoadTests.cs`
+- `tests/SwebKit.DevOps.Tests/DevOpsClientTests.cs`

@@ -9,6 +9,7 @@
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
+@inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
 
 <div class="service-bus-page-shell">
     <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
@@ -257,45 +258,49 @@
 
         // Restore cached structural snapshot for instant back-navigation rendering
         var cached = Cache.Get<SbPageSnapshot>("servicebus");
-        if (cached is not null)
-        {
-            var lookup = cached.Namespaces.ToDictionary(n => n.Config.Id);
-            _namespaceStates = incoming.Select(ns =>
-            {
-                if (lookup.TryGetValue(ns.Id, out var snap))
-                    return new NsState
-                    {
-                        Namespace = ns,
-                        IsExpanded = true,
-                        IsConnecting = snap.WasConnected, // will reconnect in background
-                        ConnectionError = snap.WasConnected ? null : snap.Error
-                    };
-                return new NsState { Namespace = ns, IsExpanded = true, IsConnecting = true };
-            }).ToList();
-        }
-        else
-        {
-            _namespaceStates = incoming.Select(ns => new NsState
-            {
-                Namespace = ns,
-                IsExpanded = true,
-                IsConnecting = true
-            }).ToList();
-        }
+        var cachedSnapshots = cached?.Namespaces.ToDictionary(
+            snapshot => snapshot.Config.Id,
+            snapshot => new ServiceBusNamespaceBootstrapSnapshot(snapshot.WasConnected, snapshot.Error))
+            ?? new Dictionary<Guid, ServiceBusNamespaceBootstrapSnapshot>();
 
-        if (AppState.UseDemoData)
-            AddDemoNamespace();
+        var demoIndex = 0;
+        _namespaceStates = NamespaceBootstrapper
+            .BuildInitialStates(incoming, cachedSnapshots, AppState.UseDemoData)
+            .Select(state => new NsState
+            {
+                Namespace = state.Namespace,
+                Client = state.Client,
+                IsExpanded = state.IsDemo ? demoIndex++ == 0 : true,
+                IsConnecting = state.ShouldConnect,
+                ConnectionError = state.ConnectionError
+            })
+            .ToList();
 
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
 
         // Connect each namespace independently — render as each completes
         var tasks = _namespaceStates
-            .Where(s => s.Client is null && s.ConnectionError is null)
+            .Where(s => s.IsConnecting)
             .Select(async state =>
             {
-                state.Client = await TryConnectAsync(state.Namespace, state, ct);
-                if (!ct.IsCancellationRequested)
+                try
+                {
+                    var result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    state.Client = result.Client;
+                    state.ConnectionError = result.ConnectionError;
+                    state.IsConnecting = false;
+                    ReportConnectionState();
                     await InvokeAsync(StateHasChanged); // BL-2
+                }
+                catch (OperationCanceledException)
+                {
+                    state.IsConnecting = false;
+                }
             });
 
         await Task.WhenAll(tasks);
@@ -327,44 +332,6 @@
         {
             var firstError = _namespaceStates.FirstOrDefault(s => s.ConnectionError is not null)?.ConnectionError;
             ConnectionState.SetError("service-bus", firstError ?? "All namespaces failed to connect.");
-        }
-    }
-
-    private async Task<IServiceBusClient?> TryConnectAsync(ServiceBusNamespace ns, NsState state, CancellationToken ct =
-default)
-    {
-        try
-        {
-            var connStr = CredentialStore.Get(ns.CredentialKey);
-            if (string.IsNullOrWhiteSpace(connStr))
-            {
-                state.ConnectionError = "Connection string not found in credential store.";
-                state.IsConnecting = false;
-                return null;
-            }
-
-            var client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(connStr);
-            var ok = await client.TestConnectionAsync(ct);
-            state.IsConnecting = false;
-            if (!ok)
-            {
-                state.ConnectionError = "Connection test failed. Check the connection string.";
-                await client.DisposeAsync();
-                return null;
-            }
-
-            return client;
-        }
-        catch (OperationCanceledException)
-        {
-            state.IsConnecting = false;
-            return null;
-        }
-        catch (Exception ex)
-        {
-            state.IsConnecting = false;
-            state.ConnectionError = ex.Message;
-            return null;
         }
     }
 
@@ -400,9 +367,19 @@ default)
 
     private async Task ConnectNamespaceInBackgroundAsync(NsState state)
     {
-        state.Client = await TryConnectAsync(state.Namespace, state, _cts.Token);
-        ReportConnectionState();
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, _cts.Token);
+            state.Client = result.Client;
+            state.ConnectionError = result.ConnectionError;
+            state.IsConnecting = false;
+            ReportConnectionState();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            state.IsConnecting = false;
+        }
     }
 
     private async Task RemoveNamespaceAsync(Guid namespaceId)
@@ -532,44 +509,6 @@ default)
         Selection.SetSelection("service-bus", null);
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
-    }
-
-    private static readonly Guid DemoNamespaceId1 = new("00000000-0000-0000-0000-000000000001");
-    private static readonly Guid DemoNamespaceId2 = new("00000000-0000-0000-0000-000000000002");
-
-    private void AddDemoNamespace()
-    {
-        if (_namespaceStates.Any(s => s.Namespace.Id == DemoNamespaceId1)) return;
-
-        _namespaceStates.Add(new NsState
-        {
-            Namespace = new ServiceBusNamespace
-            {
-                Id = DemoNamespaceId1,
-                Alias = "orders-dev",
-                FullyQualifiedNamespace = "orders-dev.servicebus.windows.net",
-                CredentialKey = string.Empty
-            },
-            IsExpanded = true,
-            IsConnecting = false,
-            Client = SwebKit.Core.Services.DemoServiceBusClient.OrdersDev()
-        });
-
-        _namespaceStates.Add(new NsState
-        {
-            Namespace = new ServiceBusNamespace
-            {
-                Id = DemoNamespaceId2,
-                Alias = "payments-dev",
-                FullyQualifiedNamespace = "payments-dev.servicebus.windows.net",
-                CredentialKey = string.Empty
-            },
-            IsExpanded = false,
-            IsConnecting = false,
-            Client = SwebKit.Core.Services.DemoServiceBusClient.PaymentsDev()
-        });
-
-        StateHasChanged();
     }
 
     private class SbTab

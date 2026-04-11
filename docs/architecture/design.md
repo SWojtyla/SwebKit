@@ -42,15 +42,18 @@ sequenceDiagram
     Layout->>AppState: InitializeEssentialsAsync()
     Layout->>AppState: InitializeAsync() in background
     AppState->>Profiles: LoadAsync()
+    Profiles-->>AppState: ProfileLoadResult
     AppState->>UiState: LoadAsync()
-    AppState-->>Layout: Initialized event
+    AppState-->>Layout: Initialized event + load state
     Layout->>Tabs: RestoreTabs(UiState.OpenTabs)
-    Layout-->>User: Fully interactive shell
+    Layout-->>User: Fully interactive shell with warning banner if profile load failed
 ```
 
 ### Design Notes
 
 - `MainLayout` uses two-phase startup: immediate shell render, then full state hydration.
+- `ProfileRepository.LoadAsync()` returns `ProfileLoadResult`; `AppStateService` keeps startup non-fatal but blocks profile persistence after a failed load so `profiles.json` is not overwritten.
+- `MainLayout` renders the shell even on profile-load failure and surfaces a non-fatal warning banner from `AppState.HasProfileLoadFailure`.
 - `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
 - Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
 
@@ -67,6 +70,7 @@ sequenceDiagram
     participant User
     participant Page as ServiceBusPage
     participant State as AppStateService
+    participant Bootstrap as IServiceBusNamespaceBootstrapper
     participant Secrets as ICredentialStore
     participant Client as AzureServiceBusClient
     participant List as MessageListView
@@ -74,12 +78,16 @@ sequenceDiagram
 
     User->>Page: Open Service Bus page
     Page->>State: Read ServiceBusNamespaces
+    Page->>Bootstrap: BuildInitialStates(namespaces, snapshot, useDemoData)
     loop Per namespace
-        Page->>Secrets: Get(credentialKey)
-        Page->>Client: new AzureServiceBusClient(connStr)
-        Page->>Client: TestConnectionAsync()
+        Page->>Bootstrap: ConnectAsync(namespace)
+        Bootstrap->>Secrets: Get(credentialKey)
+        Bootstrap->>Client: new AzureServiceBusClient(connStr)
+        Bootstrap->>Client: TestConnectionAsync()
         Client->>SB: Namespace probe
         SB-->>Client: OK / error
+        Client-->>Bootstrap: Client / error
+        Bootstrap-->>Page: Connection result
     end
     User->>Page: Open queue/topic tab
     Page->>List: Activate MessageListView
@@ -92,6 +100,7 @@ sequenceDiagram
 ### Design Notes
 
 - Namespace connectivity is fan-out and non-atomic; one namespace can fail while others stay usable.
+- Initial namespace state is restored from `PageDataCache` snapshot data before reconnect fan-out begins, so the namespace list renders immediately on return navigation.
 - Tab state is local (`SbTab`), so each open entity maintains its own selected message and mode.
 - Message-list preferences and filter presets are persisted through `UiStateRepository` scope keys.
 - Mutative operations (delete, purge, DLQ replay/complete) route through shared `IServiceBusClient` contracts and UI confirmations.
@@ -108,14 +117,17 @@ Provide responsive cluster diagnostics (resource lists, logs, YAML, shell, port-
 sequenceDiagram
     participant User
     participant Page as AksPage
+    participant Bootstrap as IAksClientBootstrapper
     participant Client as KubernetesAksClient
     participant Api as Kubernetes API
     participant Panels as AksDetailPanels
     participant Sessions as PortForwardSessionService
 
     User->>Page: Open AKS page
-    Page->>Client: Build client from AKS config/context
-    Page->>Client: GetContextsAsync(), GetNamespacesAsync()
+    Page->>Bootstrap: BootstrapAsync(config/context/namespace)
+    Bootstrap->>Client: Build or resolve IAksClient
+    Bootstrap->>Api: GetContextsAsync(), GetNamespacesAsync()
+    Bootstrap-->>Page: Client + contexts + namespaces
     Page->>Client: Load active resource list
     Client->>Api: Query cluster resources
     Api-->>Client: Deployments/Pods/Ingresses/Helm/etc.
@@ -129,6 +141,7 @@ sequenceDiagram
 ### Design Notes
 
 - `KubernetesAksClient` retries on auth failures by rebuilding client config and reapplying Azure token fallback.
+- `AksPage` starts bootstrap in fire-and-forget mode from `OnParametersSet`, but guards the signature first so parent re-renders do not retrigger identical reconnect work.
 - Auto-refresh is intentionally paused when detail panels are open to avoid disrupting active diagnostic context.
 - Port-forward process tracking is centralized in `IPortForwardSessionService`, and cleanup runs during process exit.
 
@@ -145,6 +158,7 @@ sequenceDiagram
     participant User
     participant Page as ObservabilityPage
     participant Discovery as AppInsightsDiscoveryService
+    participant Factory as IObservabilityProviderFactory
     participant ARM as Azure Resource Manager
     participant Provider as AzureAppInsightsProvider
     participant Logs as Azure Monitor Logs
@@ -155,7 +169,8 @@ sequenceDiagram
     Discovery->>ARM: Enumerate subscriptions and AI components
     ARM-->>Discovery: Resource stream
     User->>Page: Select resource
-    Page->>Provider: new AzureAppInsightsProvider(resourceId)
+    Page->>Factory: Create(resourceId, useDemoData)
+    Factory-->>Page: Observability provider
     User->>Page: Refresh active tab
     Page->>Provider: GetOverview / RunQuery / GetFailures / etc.
     Provider->>Logs: QueryResourceAsync(resourceId, kql)
@@ -166,6 +181,7 @@ sequenceDiagram
 ### Design Notes
 
 - Resource discovery is cached in-memory by `AppInsightsDiscoveryService` for session reuse.
+- Failure-to-logs drill-through uses an explicit pending-query request and child acknowledgment between `ObservabilityPage` and `ObservabilityLogs`; it no longer relies on a render-timing delay.
 - The selected resource ID/name persists in `AppState.Config.ObservabilityConfig`.
 - Demo mode swaps both discovery and provider implementations without changing page-level flow.
 
@@ -190,30 +206,40 @@ sequenceDiagram
     Settings->>AppState: Mutate AppState.Config
     User->>Settings: Click Save
     Settings->>AppState: SaveConfigAsync()
-    AppState->>Profiles: SaveAsync()
-    Profiles->>Json: Write serialized profile data
+    AppState->>Profiles: TrySaveAsync()
+    alt Last profile load succeeded
+        Profiles->>Json: Write serialized profile data
+    else Persistence blocked after failed load
+        Profiles-->>AppState: false + blocked-save message
+    end
     Pages->>AppState: Read updated config on refresh/reload
 ```
 
 ### Design Notes
 
 - Settings edits are in-memory until explicit save.
+- `SaveConfigAsync()` returns `false` when profile persistence is blocked after a failed load; settings forms surface the blocked-save message and keep the current session state in memory.
 - Credentials are referenced by logical keys; secret material remains in credential store.
+- DevOps settings validation and live pages create fresh clients through `IDevOpsClientFactory`; saving settings affects only future client snapshots.
 - Environment selection is profile-based (`Environments` and `ActiveEnvironmentName` in `ProfileData`).
 
 ## Key Reference Points
 
-| File                                                       | Responsibility                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/SwebKit.App/MauiProgram.cs`                           | DI composition root and infrastructure registration.                                  |
-| `src/SwebKit.App/Components/Layout/MainLayout.razor`       | App shell lifecycle, startup sequencing, and global command registration.             |
-| `src/SwebKit.Core/Services/AppStateService.cs`             | Shared app state, initialization, demo mode toggling, and persistence calls.          |
-| `src/SwebKit.Core/Configuration/ProfileRepository.cs`      | Profile/environment load-save lifecycle for `profiles.json`.                          |
-| `src/SwebKit.Core/Configuration/UiStateRepository.cs`      | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences. |
-| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`    | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.          |
-| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`    | Service Bus SDK implementation and message/entity operations.                         |
-| `src/SwebKit.App/Components/Pages/AksPage.razor`           | AKS page orchestration and resource panel lifecycle.                                  |
-| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`  | Kubernetes operations, auth fallback, and log/port-forward behavior.                  |
-| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor` | Resource selection, tab routing, and provider-driven refresh logic.                   |
-| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`    | KQL execution and typed observability result mapping.                                 |
-| `src/SwebKit.DevOps/DevOpsClient.cs`                       | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                    |
+| File                                                          | Responsibility                                                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/SwebKit.App/MauiProgram.cs`                              | DI composition root and infrastructure registration.                                  |
+| `src/SwebKit.App/Components/Layout/MainLayout.razor`          | App shell lifecycle, startup sequencing, and global command registration.             |
+| `src/SwebKit.Core/Services/AppStateService.cs`                | Shared app state, initialization, demo mode toggling, and persistence calls.          |
+| `src/SwebKit.Core/Configuration/ProfileRepository.cs`         | Profile/environment load-save lifecycle for `profiles.json`.                          |
+| `src/SwebKit.Core/Configuration/UiStateRepository.cs`         | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences. |
+| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`       | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.          |
+| `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs` | Service Bus namespace bootstrap and connection seam used by the page.                 |
+| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`       | Service Bus SDK implementation and message/entity operations.                         |
+| `src/SwebKit.App/Components/Pages/AksPage.razor`              | AKS page orchestration and resource panel lifecycle.                                  |
+| `src/SwebKit.App/Services/AksClientBootstrapper.cs`           | AKS client/context/namespace bootstrap seam used by the page.                         |
+| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`     | Kubernetes operations, auth fallback, and log/port-forward behavior.                  |
+| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`    | Resource selection, tab routing, and provider-driven refresh logic.                   |
+| `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`    | Observability provider activation seam for demo/live resource binding.                |
+| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`       | KQL execution and typed observability result mapping.                                 |
+| `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`, `src/SwebKit.DevOps/DevOpsClientFactory.cs` | Immutable live DevOps client creation from the current saved settings. |
+| `src/SwebKit.DevOps/DevOpsClient.cs`                          | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                    |

@@ -142,19 +142,12 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
             var table = response.Value.Table;
             var columns = table.Columns.Select(c => c.Name).ToList();
-            var rows = table.Rows.Select(r =>
-            {
-                var dict = new Dictionary<string, object?>();
-                for (var i = 0; i < columns.Count; i++)
-                    dict[columns[i]] = r[i];
-                return new LogRow(dict);
-            }).Take(maxRows).ToList();
-
-            return new LogQueryResult(
-                ColumnNames: columns,
-                Rows: rows,
-                ExecutionTime: sw.Elapsed,
-                Truncated: table.Rows.Count > maxRows);
+            return LogQueryResultProjector.Project(
+                columns,
+                table.Rows,
+                static (row, index) => row[index],
+                sw.Elapsed,
+                maxRows);
         }
         catch (RequestFailedException ex)
         {

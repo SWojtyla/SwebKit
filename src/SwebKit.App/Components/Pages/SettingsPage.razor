@@ -209,9 +209,11 @@
 
     private async Task SaveAsync()
     {
-        await AppState.SaveConfigAsync();
+        var persisted = await AppState.SaveConfigAsync();
         _configSnapshot = CurrentConfigJson();
-        _savedMessage = "Settings saved.";
+        _savedMessage = persisted
+            ? "Settings saved."
+            : AppState.ProfilePersistenceBlockedMessage;
         await InvokeAsync(StateHasChanged);
         await Task.Delay(3000);
         _savedMessage = null;

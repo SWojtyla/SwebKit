@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject CommandRegistry Commands
+@inject IShellErrorPresenter ShellErrors
 @implements IDisposable
 
 <FluentDesignTheme StorageName="swebkit-theme"
@@ -17,6 +18,12 @@
 
         <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
             <TopBar OnNavToggle="ToggleNav" />
+            @if (AppState.HasProfileLoadFailure)
+            {
+                <div class="demo-banner">
+                    <span>@GetProfileLoadWarningText()</span>
+                </div>
+            }
             @if (AppState.UseDemoData)
             {
                 <div class="demo-banner">
@@ -86,7 +93,7 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SwebKit] Background initialization failed: {ex.Message}");
+            ShellErrors.PresentBackgroundInitializationFailure(ex);
         }
     }
 
@@ -105,9 +112,13 @@
         {
             await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SwebKit] Keyboard shortcuts registration failed: {ex.Message}");
+            ShellErrors.PresentKeyboardShortcutRegistrationFailure(ex);
         }
 
         // Load persisted theme preference, fallback to OS preference (BL-6: must run in OnAfterRenderAsync)
@@ -156,6 +167,15 @@
     private void OnAppStateInitialized() => InvokeAsync(StateHasChanged);
 
     private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
+
+    private string GetProfileLoadWarningText()
+    {
+        var fileLabel = string.IsNullOrWhiteSpace(AppState.ProfileLoadResult.FilePath)
+            ? "profiles.json"
+            : AppState.ProfileLoadResult.FilePath;
+
+        return $"Configuration failed to load from {fileLabel}. Changes will stay in memory only until the file is repaired. {AppState.ProfileLoadResult.ErrorMessage}".Trim();
+    }
 
     private void ToggleNav() { IsNavExpanded = !IsNavExpanded; StateHasChanged(); }
 

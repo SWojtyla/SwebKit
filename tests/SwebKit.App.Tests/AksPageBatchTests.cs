@@ -52,6 +52,7 @@ public sealed class AksPageBatchTests : TestContext
         Services.AddSingleton(new PageDataCache());
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<IPodHealthMonitorService>(new FakePodHealthMonitorService());
+        Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
     }
 
     [Fact]

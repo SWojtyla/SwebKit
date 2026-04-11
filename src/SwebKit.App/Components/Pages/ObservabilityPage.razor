@@ -8,6 +8,7 @@
 @inject AppStateService AppState
 @inject IConnectionStateService ConnectionState
 @inject IObservabilityResourceDiscovery RealDiscovery
+@inject IObservabilityProviderFactory ProviderFactory
 @inject INotificationService Notifications
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
@@ -126,6 +127,8 @@
                         <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
                                            MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
                                            SavedQueriesChanged="OnSavedQueriesChangedAsync"
+                                           PendingQuery="@_pendingLogsQuery" PendingQueryVersion="@_pendingLogsQueryVersion"
+                                           PendingQueryHandled="OnPendingLogsQueryHandledAsync"
                                            Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
                                            GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
                         break;
@@ -170,6 +173,8 @@
     private ObservabilityPerformance? _perfRef;
     private ObservabilityLogs? _logsRef;
     private ObservabilityAvailability? _availRef;
+    private string? _pendingLogsQuery;
+    private int _pendingLogsQueryVersion;
 
     private ObservabilityConfig? CurrentConfig => AppState.Config.ObservabilityConfig;
 
@@ -192,6 +197,7 @@
             _tzOffsetMinutes = await JS.InvokeAsync<int>("SwebKit.getBrowserTimezoneOffset");
             await InvokeAsync(StateHasChanged);
         }
+
     }
 
     private void RegisterObsCommands()
@@ -290,9 +296,7 @@
     }
 
     private IObservabilityProvider CreateProvider(string resourceId) =>
-        AppState.UseDemoData
-            ? new DemoObservabilityProvider()
-            : new SwebKit.Observability.AzureAppInsightsProvider(resourceId);
+        ProviderFactory.Create(resourceId, AppState.UseDemoData);
 
     private void ToggleResourceSelector()
     {
@@ -333,12 +337,21 @@
 
     private async Task DrillToLogsAsync(string kql)
     {
+        _pendingLogsQuery = kql;
+        _pendingLogsQueryVersion++;
         _tab = Tab.Logs;
         await InvokeAsync(StateHasChanged);
-        // Allow the Logs component to render before loading the query
-        await Task.Delay(50);
-        if (_logsRef is not null)
-            await _logsRef.LoadQueryAsync(kql);
+    }
+
+    private async Task OnPendingLogsQueryHandledAsync(int handledVersion)
+    {
+        if (handledVersion != _pendingLogsQueryVersion)
+        {
+            return;
+        }
+
+        _pendingLogsQuery = null;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnSavedQueriesChangedAsync(List<SwebKit.Core.Domain.SavedQuery> queries)

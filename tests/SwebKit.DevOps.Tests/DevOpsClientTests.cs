@@ -9,9 +9,8 @@ namespace SwebKit.DevOps.Tests;
 public sealed class DevOpsClientTests
 {
   // ── Factory helper ──────────────────────────────────────────────────────
-  // DevOpsClient(IHttpClientFactory, DevOpsAuthHandler, ILogger).
-  // DevOpsAuthHandler is a DelegatingHandler; we set its InnerHandler to the
-  // FakeHttpMessageHandler so the fake receives every outgoing request.
+  // DevOpsClient(IHttpClientFactory, DevOpsConfig, ILogger).
+  // DevOpsAuthHandler is stateless and reads the PAT key from the current request.
 
   private static (DevOpsClient client, FakeHttpMessageHandler handler) CreateClient(
       string organization = "testorg",
@@ -32,89 +31,73 @@ public sealed class DevOpsClientTests
     };
 
     var factory = new FakeHttpClientFactory(httpClient);
-    var client = new DevOpsClient(factory, authHandler, NullLogger<DevOpsClient>.Instance);
-
-    client.Configure(new DevOpsConfig
+    var client = new DevOpsClient(factory, new DevOpsConfig
     {
       Organization = organization,
       PatCredentialKey = patCredentialKey
-    });
+    }, NullLogger<DevOpsClient>.Instance);
 
     return (client, fakeHandler);
   }
 
-  // ── Configure() ─────────────────────────────────────────────────────────
+  // ── Immutable snapshot behaviour ───────────────────────────────────────
 
   [Fact]
-  public async Task Configure_CalledTwice_UsesUpdatedOrganizationWithoutThrowing()
-  {
-    var (client, handler) = CreateClient(organization: "firstorg");
-
-    handler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
-    handler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
-
-    var firstResult = await client.TestConnectionAsync(CancellationToken.None);
-    Assert.True(firstResult);
-
-    var ex = Record.Exception(() => client.Configure(new DevOpsConfig
-    {
-      Organization = "secondorg",
-      PatCredentialKey = "devops:pat"
-    }));
-    Assert.Null(ex);
-
-    var secondResult = await client.TestConnectionAsync(CancellationToken.None);
-    Assert.True(secondResult);
-
-    Assert.Equal(2, handler.RequestUris.Count);
-    Assert.Equal("https://dev.azure.com/firstorg/_apis/projects", handler.RequestUris[0]!.GetLeftPart(UriPartial.Path));
-    Assert.Equal("https://dev.azure.com/secondorg/_apis/projects", handler.RequestUris[1]!.GetLeftPart(UriPartial.Path));
-  }
-
-  [Fact]
-  public async Task Configure_CalledTwice_UsesUpdatedPatCredentialKey()
+  public async Task ClientSnapshots_UseTheirOwnOrganizationAndPatWithoutCrossBleed()
   {
     var fakeHandler = new FakeHttpMessageHandler();
     var credentialStore = new FakeCredentialStore();
     credentialStore.Seed("pat:key:1", "pat-value-1");
     credentialStore.Seed("pat:key:2", "pat-value-2");
 
-    var authHandler = new DevOpsAuthHandler(credentialStore) { InnerHandler = fakeHandler };
-    var factory = new FakeHttpClientFactory(new HttpClient(authHandler));
-    var client = new DevOpsClient(factory, authHandler, NullLogger<DevOpsClient>.Instance);
-
-    client.Configure(new DevOpsConfig
+    var authHandler = new DevOpsAuthHandler(credentialStore)
     {
-      Organization = "myorg",
+      InnerHandler = fakeHandler
+    };
+
+    var httpClient = new HttpClient(authHandler)
+    {
+      BaseAddress = null
+    };
+
+    var factory = new FakeHttpClientFactory(httpClient);
+    var firstClient = new DevOpsClient(factory, new DevOpsConfig
+    {
+      Organization = "firstorg",
       PatCredentialKey = "pat:key:1"
-    });
-
-    fakeHandler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
-    var firstResult = await client.TestConnectionAsync(CancellationToken.None);
-    Assert.True(firstResult);
-
-    client.Configure(new DevOpsConfig
+    }, NullLogger<DevOpsClient>.Instance);
+    var secondClient = new DevOpsClient(factory, new DevOpsConfig
     {
-      Organization = "myorg",
+      Organization = "secondorg",
       PatCredentialKey = "pat:key:2"
-    });
+    }, NullLogger<DevOpsClient>.Instance);
 
     fakeHandler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
-    var secondResult = await client.TestConnectionAsync(CancellationToken.None);
-    Assert.True(secondResult);
+    fakeHandler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
+    fakeHandler.EnqueueJson("{\"count\":1,\"value\":[]}", HttpStatusCode.OK);
+
+    Assert.True(await firstClient.TestConnectionAsync(CancellationToken.None));
+    Assert.True(await secondClient.TestConnectionAsync(CancellationToken.None));
+    Assert.True(await firstClient.TestConnectionAsync(CancellationToken.None));
+
+    Assert.Equal(3, fakeHandler.RequestUris.Count);
+    Assert.Equal("https://dev.azure.com/firstorg/_apis/projects", fakeHandler.RequestUris[0]!.GetLeftPart(UriPartial.Path));
+    Assert.Equal("https://dev.azure.com/secondorg/_apis/projects", fakeHandler.RequestUris[1]!.GetLeftPart(UriPartial.Path));
+    Assert.Equal("https://dev.azure.com/firstorg/_apis/projects", fakeHandler.RequestUris[2]!.GetLeftPart(UriPartial.Path));
 
     var expectedFirstAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(":pat-value-1"));
     var expectedSecondAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(":pat-value-2"));
 
     Assert.Equal(expectedFirstAuth, fakeHandler.AuthorizationParameters[0]);
     Assert.Equal(expectedSecondAuth, fakeHandler.AuthorizationParameters[1]);
+    Assert.Equal(expectedFirstAuth, fakeHandler.AuthorizationParameters[2]);
   }
 
   [Theory]
   [InlineData("myorg", "https://dev.azure.com/myorg/_apis/projects")]
   [InlineData("https://dev.azure.com/myorg", "https://dev.azure.com/myorg/_apis/projects")]
   [InlineData("https://myorg.visualstudio.com", "https://myorg.visualstudio.com/_apis/projects")]
-  public async Task Configure_NormalizesOrganizationInput(string organizationInput, string expectedProjectsPath)
+  public async Task Constructor_NormalizesOrganizationInput(string organizationInput, string expectedProjectsPath)
   {
     var (client, handler) = CreateClient(organization: organizationInput);
 
@@ -132,16 +115,15 @@ public sealed class DevOpsClientTests
   }
 
   [Fact]
-  public void Configure_FirstCall_DoesNotThrow()
+  public void Constructor_WithValidConfig_DoesNotThrow()
   {
     var fakeHandler = new FakeHttpMessageHandler();
     var credentialStore = new FakeCredentialStore();
     var authHandler = new DevOpsAuthHandler(credentialStore) { InnerHandler = fakeHandler };
     var factory = new FakeHttpClientFactory(new HttpClient(authHandler));
-    var client = new DevOpsClient(factory, authHandler, NullLogger<DevOpsClient>.Instance);
+    var config = new DevOpsConfig { Organization = "myorg", PatCredentialKey = "key" };
 
-    var ex = Record.Exception(() => client.Configure(
-        new DevOpsConfig { Organization = "myorg", PatCredentialKey = "key" }));
+    var ex = Record.Exception(() => new DevOpsClient(factory, config, NullLogger<DevOpsClient>.Instance));
 
     Assert.Null(ex);
   }

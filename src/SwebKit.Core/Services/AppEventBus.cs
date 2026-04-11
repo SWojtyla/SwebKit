@@ -72,9 +72,18 @@ public class AppEventBus : IAppEventBus
         if (handlers is null) return;
         foreach (var h in handlers)
         {
+            if (h is not Action<T> syncHandler)
+            {
+                continue;
+            }
+
             try
             {
-                ((Action<T>)h)(@event);
+                syncHandler(@event);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

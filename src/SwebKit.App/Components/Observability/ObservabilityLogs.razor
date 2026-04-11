@@ -402,6 +402,9 @@
     [Parameter] public int MaxRows { get; set; } = 500;
     [Parameter] public List<SwebKit.Core.Domain.SavedQuery> SavedQueries { get; set; } = [];
     [Parameter] public EventCallback<List<SwebKit.Core.Domain.SavedQuery>> SavedQueriesChanged { get; set; }
+    [Parameter] public string? PendingQuery { get; set; }
+    [Parameter] public int PendingQueryVersion { get; set; }
+    [Parameter] public EventCallback<int> PendingQueryHandled { get; set; }
     [Parameter] public GuidedLogsQueryMode Mode { get; set; } = GuidedLogsQueryMode.Advanced;
     [Parameter] public EventCallback<GuidedLogsQueryMode> ModeChanged { get; set; }
     [Parameter] public GuidedKqlQueryDefinition? GuidedDraft { get; set; }
@@ -452,6 +455,7 @@ Enum.GetValues<GuidedKqlFilterOperator>();
     private GuidedLogsQueryMode _lastModeParameter;
     private bool _guidedDraftInitialized;
     private GuidedKqlQueryDefinition? _lastGuidedDraftParameter;
+    private int _handledPendingQueryVersion;
 
     // Save dialog
     private bool _saveDialogOpen;
@@ -515,7 +519,7 @@ Enum.GetValues<GuidedKqlFilterOperator>();
             async (_, _) => await RunQueryAsync());
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _presets = Provider?.GetPresets() ?? [];
         _savedQueries = SavedQueries;
@@ -534,6 +538,17 @@ Enum.GetValues<GuidedKqlFilterOperator>();
             RecomputeGuidedPreview();
             _lastGuidedDraftParameter = GuidedDraft;
             _guidedDraftInitialized = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(PendingQuery) && PendingQueryVersion != 0 && PendingQueryVersion != _handledPendingQueryVersion)
+        {
+            _handledPendingQueryVersion = PendingQueryVersion;
+            await LoadQueryAsync(PendingQuery);
+
+            if (PendingQueryHandled.HasDelegate)
+            {
+                await PendingQueryHandled.InvokeAsync(PendingQueryVersion);
+            }
         }
     }
 

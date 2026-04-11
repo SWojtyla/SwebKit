@@ -50,39 +50,13 @@ public sealed class RedisClient : IRedisClient
 
         pageSize = Math.Max(1, pageSize);
         var result = await _db.ExecuteAsync("SCAN", cursor, "MATCH", pattern, "COUNT", pageSize);
-        if (result.IsNull)
-        {
-            return new KeyScanResult
-            {
-                Cursor = 0,
-                Keys = [],
-                IsComplete = true
-            };
-        }
-
-        var parts = (RedisResult[])result!;
-        if (parts.Length < 2)
-        {
-            return new KeyScanResult
-            {
-                Cursor = 0,
-                Keys = [],
-                IsComplete = true
-            };
-        }
-
-        var nextCursor = ParseLong(parts[0].ToString());
-        var keys = ((RedisResult[])parts[1]!)
-            .Select(k => k.ToString())
-            .Where(k => !string.IsNullOrWhiteSpace(k))
-            .Select(k => k!)
-            .ToList();
+        var scanPage = RedisScanResponseParser.Parse(result);
 
         return new KeyScanResult
         {
-            Cursor = nextCursor,
-            Keys = keys,
-            IsComplete = nextCursor == 0
+            Cursor = scanPage.Cursor,
+            Keys = scanPage.Values,
+            IsComplete = scanPage.IsComplete
         };
     }
 
@@ -265,21 +239,11 @@ public sealed class RedisClient : IRedisClient
     public async Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var members = new List<string>();
-        long nextCursor = cursor;
 
-        await foreach (var entry in _db.SetScanAsync(key, cursor: cursor, pageSize: pageSize))
-        {
-            ct.ThrowIfCancellationRequested();
-            members.Add(entry.ToString());
-            if (members.Count >= pageSize) break;
-        }
-
-        // SetScanAsync abstracts cursor; if we got fewer than pageSize we're done
-        var isComplete = members.Count < pageSize;
-        nextCursor = isComplete ? 0 : cursor + members.Count;
-
-        return new SetScanResult(members, nextCursor, isComplete);
+        pageSize = Math.Max(1, pageSize);
+        var result = await _db.ExecuteAsync("SSCAN", key, cursor, "COUNT", pageSize);
+        var scanPage = RedisScanResponseParser.Parse(result);
+        return new SetScanResult(scanPage.Values, scanPage.Cursor, scanPage.IsComplete);
     }
 
     public void Dispose()
