@@ -10,7 +10,7 @@ status: "Planned"
 
 ## Goal
 
-Add a cancellation-aware, performance-bounded backend aggregation layer that transforms App Insights, AKS, Service Bus, and DevOps signals into one normalized incident timeline contract for the new workbench UI.
+Add a cancellation-aware, performance-bounded backend aggregation layer that produces one workload-scoped incident evidence timeline for the new cockpit UI. The backend should gather evidence from AKS, App Insights, Service Bus, and deployment or release activity for one workload and one incident window, without introducing causal claims.
 
 ## Impacted areas
 
@@ -29,82 +29,122 @@ Add a cancellation-aware, performance-bounded backend aggregation layer that tra
 - src/SwebKit.Core/Services/IncidentTimelineService.cs
 - src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs
 - src/SwebKit.Kubernetes/IncidentTimeline/AksTimelineSignalSource.cs
-- src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusDlqTimelineSignalSource.cs
+- src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusEvidenceSignalSource.cs
 - src/SwebKit.DevOps/IncidentTimeline/DevOpsReleaseTimelineSignalSource.cs
 
 ## Design
 
-The backend uses a source-adapter pattern to avoid coupling the new workbench to specific SDK clients:
+The backend uses a source-adapter pattern so the new cockpit can stay additive and avoid coupling directly to individual SDK clients:
 
-1. Each source adapter projects source-specific payloads into a normalized timeline row model at the project boundary.
-2. IncidentTimelineService fans out source queries in parallel using a linked CancellationToken.
-3. Aggregation merges rows by UTC timestamp, applies deterministic tie-break ordering, deduplicates stable keys, and returns capped results.
-4. Service returns source-level health metadata (duration, failed, canceled, timeout) so UI can render partial-result status.
+1. The UI submits one workload-scoped query containing profile, cluster, namespace, workload selector, incident window, selected sources, and a hard max item cap.
+2. The AKS adapter resolves the anchor workload and produces direct evidence items from pod lifecycle and event data.
+3. Other adapters query only the assets that are already mapped to that workload, its known topology, or an existing correlation ID inside the same time window.
+4. IncidentTimelineService fans out eligible source queries in parallel using a linked CancellationToken, merges all evidence by UTC timestamp, and returns per-source coverage metadata.
+5. Every returned item includes one or more link reasons explaining why it is present. The service does not compute or expose root-cause scores.
 
-This design keeps existing feature clients reusable and prevents broad breaking changes in existing page components.
+This design keeps existing feature clients reusable, respects the SwebKit.Core contract boundary, and avoids broad breaking changes in existing pages.
 
 ## API / Contracts
 
 - Core query contracts (new):
-- IncidentTimelineQuery with StartUtc, EndUtc, SelectedSources, MaxItems, Cursor.
-- IncidentTimelineSource enum with Observability, Aks, ServiceBusDlq, Releases.
+- IncidentTimelineQuery with Scope, StartUtc, EndUtc, SelectedSources, and MaxItems.
+- IncidentWorkloadScope with profile context, cluster context, namespace, workload reference, and optional pod hint.
+- IncidentTimelineSource enum with Observability, Aks, ServiceBus, and Releases.
 - Core result contracts (new):
-- IncidentTimelineItem with ItemId, TimestampUtc, Source, Severity, Title, Summary, CorrelationKey, Metadata.
-- IncidentTimelinePage with Items, NextCursor, SourceStatuses, IsPartial.
-- IncidentTimelineSourceStatus with Source, Outcome, DurationMs, ErrorMessage.
+- IncidentTimelineItem with ItemId, TimestampUtc, Source, Severity, Title, Summary, ResourceRef, LinkReasons, and Metadata.
+- IncidentLinkReason with Type, Relevance, and Explanation.
+- IncidentTimelinePage with Items, SourceStatuses, IsPartial, and WasTruncated.
+- IncidentTimelineSourceStatus with Source, Outcome, DurationMs, CoverageState, and ErrorMessage.
 - Service contracts (new):
 - IIncidentTimelineSignalSource: FetchAsync(query, ct) for one source.
-- IIncidentTimelineService: GetTimelineAsync(query, ct) for merged cross-source output.
+- IIncidentTimelineService: GetTimelineAsync(query, ct) for merged cross-source evidence.
 - Backward compatibility notes:
-- Existing interfaces (IObservabilityProvider, IAksClient, IServiceBusClient, IDevOpsClient) remain additive.
+- Existing interfaces remain additive.
 - No contract removals or behavior changes for existing pages.
+
+## Inclusion rules by source
+
+- AKS:
+- Required: namespace and workload resolution.
+- Include pod events, restart counts, warnings, scheduling failures, and owner-chain activity for the selected workload.
+- Mark these items as Direct when the owner chain resolves cleanly.
+- App Insights:
+- Required: explicit app or component mapping to the workload, or an existing correlation ID discovered from already-scoped evidence.
+- Include failures, exceptions, and targeted request or dependency evidence inside the incident window.
+- Do not sweep all telemetry from the namespace or subscription.
+- Service Bus:
+- Required: explicit queue, topic, or subscription mapping to the scoped workload or existing correlation ID.
+- Include symptoms such as DLQ growth, repeated receive failures, or send failures within the window.
+- Do not infer ownership from name similarity alone.
+- Deployments or releases:
+- Required: explicit environment, app, pipeline, or namespace mapping.
+- Include deployment, rollout, or release activity that overlaps the selected incident window.
+- Treat these as Contextual unless a stronger mapping exists.
+
+## Confidence and explanation model
+
+Backend contracts should carry a safe relevance model that the UI can render directly:
+
+- Direct: explicit workload ownership or topology match.
+- Corroborating: existing correlation ID, or explicit mapping plus time overlap.
+- Contextual: already-scoped platform or release activity that happened in the same window.
+
+Each IncidentLinkReason explanation should be human-readable, for example:
+
+- "Linked because ReplicaSet owner resolves to deployment phonotif-api in namespace prd-phonotif."
+- "Linked because queue phonotif-outbound is mapped to the selected workload and showed DLQ growth in the incident window."
+- "Linked because release 2026.04.11 targeted namespace prd-phonotif during the selected window."
+
+The backend must not emit fields or enums that suggest cause, blame, or root-cause probability.
 
 ## Tasks
 
-### Wave 1 - Core contracts and orchestration [dotnet-expert] (sequential root)
+### Wave 1 - Core scope and evidence contracts [dotnet-expert] (sequential root)
 
-- [ ] Create IncidentTimeline models in src/SwebKit.Core/Models.
-- [ ] Create timeline abstractions in src/SwebKit.Core/Abstractions.
+- [ ] Define IncidentWorkloadScope and workload-scoped query contracts in src/SwebKit.Core/Models.
+- [ ] Define normalized evidence item, link reason, and source coverage contracts in src/SwebKit.Core/Models.
+- [ ] Create IIncidentTimelineService and IIncidentTimelineSignalSource abstractions in src/SwebKit.Core/Abstractions.
 - [ ] Implement IncidentTimelineService in src/SwebKit.Core/Services.
-- [ ] Add merge-order deterministic comparator and duplicate-key policy.
-- [ ] Add source-level timeout budget support and per-source health telemetry.
+- [ ] Add deterministic merge ordering, duplicate-key policy, and transparent truncation support.
 
 ### Wave 2 - Source adapters [dotnet-expert] (parallel after Wave 1)
 
-- [ ] Implement App Insights adapter in src/SwebKit.Observability using existing query capabilities from AzureAppInsightsProvider.
-- [ ] Implement AKS adapter in src/SwebKit.Kubernetes using event and restart data from IAksClient methods.
-- [ ] Implement Service Bus adapter in src/SwebKit.Azure using DLQ stats and message peek metadata from IServiceBusClient.
-- [ ] Implement DevOps adapter in src/SwebKit.DevOps using recent run/release trigger metadata from IDevOpsClient.
-- [ ] Ensure all adapters normalize timestamps to UTC at source boundary.
+- [ ] Implement AKS adapter as the anchor evidence source for workload and namespace activity.
+- [ ] Implement App Insights adapter using existing query capabilities and explicit workload mapping rules.
+- [ ] Implement Service Bus adapter using topology mapping or existing correlation IDs.
+- [ ] Implement DevOps adapter for recent deployment or release activity tied to the same workload or namespace.
+- [ ] Normalize all timestamps to UTC at the source boundary.
 
-### Wave 3 - Performance and cancellation hardening [dotnet-expert] (depends on Waves 1-2)
+### Wave 3 - Orchestration hardening [dotnet-expert] (depends on Waves 1-2)
 
-- [ ] Implement cancellation-first strategy: every new load cancels prior aggregate request.
+- [ ] Implement cancellation-first request handling so every new load cancels the prior aggregate request.
 - [ ] Guarantee OperationCanceledException passthrough and avoid generic catch swallowing.
-- [ ] Add bounded result limits and source-specific top-N caps to prevent memory spikes.
-- [ ] Add lightweight in-memory short-lived cache for identical query parameters (optional, feature flagged).
+- [ ] Add per-source timeout budgets and coverage-state reporting.
+- [ ] Apply bounded result limits and source-specific top-N caps for the 15 minute, 1 hour, and 6 hour windows.
 
 ### Wave 4 - Test implementation [dotnet-expert] (depends on Waves 1-3)
 
-- [ ] Add unit tests in tests/SwebKit.Core.Tests for merge, dedup, pagination/cursor, and cancellation.
+- [ ] Add unit tests in tests/SwebKit.Core.Tests for inclusion rules, merge ordering, truncation, and cancellation.
 - [ ] Add adapter mapping tests in tests/SwebKit.Azure.Tests, tests/SwebKit.Kubernetes.Tests, and tests/SwebKit.DevOps.Tests.
-- [ ] Add failure-injection tests for timeout, auth failure, and partial-result behavior.
+- [ ] Add failure-injection tests for timeout, auth failure, unmapped source coverage, and partial-result behavior.
 - [ ] Record notable tradeoffs and deviations in decisions.md.
 
 ## Migration and runtime changes
 
 - No schema or persistent data migration required.
 - No infrastructure change required.
-- Runtime configuration additions, if any, should be optional with safe defaults (for example max items and per-source timeout budget).
+- Runtime configuration additions, if any, should be optional with safe defaults.
+- Any non-AKS workload mappings used by adapters should be additive configuration or existing metadata, not new mandatory infrastructure.
 
 ## Validation
 
 - Unit tests: Not started
 - Integration tests: Not started
 - Manual checks:
-- Verify query cancellation under rapid refresh loops.
-- Verify partial source failure still returns usable timeline.
-- Verify 24-hour query stays within target latency envelope.
+- Verify the `prd-phonotif` pod-down scenario returns only workload-scoped evidence.
+- Verify unmapped sources are surfaced as unavailable or unmapped instead of guessed.
+- Verify partial source failure still returns usable evidence.
+- Verify the 6 hour query stays within the target latency envelope.
 
 ## Notes
 

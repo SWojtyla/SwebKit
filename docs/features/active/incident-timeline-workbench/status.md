@@ -8,81 +8,57 @@ state: "Planned"
 jira: "not linked"
 branch: ""
 started: "2026-03-28"
-last_updated: "2026-03-28"
+last_updated: "2026-04-11"
 
 ---
 
 ## Quick summary
 
-Feature plan is complete and implementation is ready to start with Wave 1 core contracts and aggregator orchestration.
+Plan refinement is complete. V1 is now defined as a workload-scoped incident cockpit for one workload, one namespace, and one bounded incident window, with explicit link explanations and no root-cause claims.
 
 Jira: not linked
 
-Current focus: finalize core timeline model and source contract boundaries before implementation begins.
+Current focus: begin implementation with the SwebKit.Core scope and evidence contracts that support the `prd-phonotif` pod-down investigation workflow.
 
 ## Progress checklist
 
-### Wave 0 - Planning
+### Planning
 
-- [x] Feature scope, non-goals, and risks defined
-- [x] Backend and frontend implementation planning modules created
-- [x] Decision log initialized with upfront architectural choices
-- [x] Test strategy defined across component, unit, integration, and e2e levels
+- [x] Narrowed the feature from a generic cross-source dashboard to a workload-scoped incident cockpit
+- [x] Defined workload scope, inclusion rules, and non-goals
+- [x] Defined the v1 relevance and explanation model
+- [x] Aligned backend, frontend, decisions, and test plan docs to the narrower MVP
 
-### Wave 1 - Core timeline contracts and orchestration
+### Implementation focus
 
-- [ ] Define normalized timeline models in src/SwebKit.Core/Models
-- [ ] Define timeline service abstractions in src/SwebKit.Core/Abstractions
-- [ ] Implement cancellation-aware fan-out orchestration in src/SwebKit.Core/Services
-- [ ] Add unit tests for merge ordering, dedup, and partial failure behavior
-
-### Wave 2 - Source adapters
-
-- [ ] Implement App Insights timeline signal adapter
-- [ ] Implement AKS timeline signal adapter
-- [ ] Implement Service Bus DLQ timeline signal adapter
-- [ ] Implement DevOps release trigger timeline signal adapter
-- [ ] Add adapter-level tests in corresponding test projects
-
-### Wave 3 - Workbench UI
-
-- [ ] Add incident timeline route and navigation entry in src/SwebKit.App
-- [ ] Build workbench page and timeline components
-- [ ] Add loading, empty, error, and partial-data states
-- [ ] Add refresh and auto-refresh behavior with overlap cancellation
-- [ ] Add component tests for primary user journeys
-
-### Wave 4 - Hardening and verification
-
-- [ ] Validate performance targets for 1h, 6h, and 24h ranges
-- [ ] Validate cancellation semantics under rapid filter/range changes
-- [ ] Complete integration and e2e coverage
-- [ ] Align functionality architecture docs with delivered behavior
-- [ ] Ready for review
+- [ ] Define workload scope and evidence contracts in src/SwebKit.Core
+- [ ] Implement additive source adapters with explicit inclusion rules
+- [ ] Build the cockpit page in src/SwebKit.App with scope summary, evidence timeline, and coverage states
+- [ ] Add unit, component, integration, and e2e coverage for scope filtering, explanation labels, and partial results
 
 ## Completed
 
-- Created active feature plan folder and six required durable artifacts.
-- Captured wave-based scope, risk profile, and validation strategy.
-- Recorded upfront design decisions to prevent early architecture drift.
+- Refined the feature around the `prd-phonotif` pod-down investigation scenario.
+- Replaced correlation language with explicit linking semantics.
+- Clarified that v1 is read-only, bounded, and manual-refresh only.
 
 ## Remaining
 
-- Execute Wave 1 through Wave 4 implementation tasks.
-- Confirm timeline item schema with implementation owners before coding.
-- Define final acceptance thresholds for large-window performance in CI.
+- Implement the core scope, evidence item, and source coverage model.
+- Confirm workload mapping inputs needed for App Insights, Service Bus, and deployment or release adapters.
+- Build and validate the cockpit page.
 
 ## Blockers
 
-- Jira ticket is not linked (informational; not blocking implementation).
-- No implementation branch has been created yet.
+- Jira ticket is not linked (informational).
+- Final non-AKS workload mappings still need confirmation during implementation.
 
 ## Validation
 
 - Test Plan: test-plan.md
-- Validation status: Not started (planning only)
+- Validation status: Planning updated; code validation not started
 
 ## Notes
 
-- Performance and cancellation behavior are first-class constraints and must be treated as acceptance criteria, not polish.
-- Source-level degradation must be visible in UI to avoid false confidence during incidents.
+- Every included item must be able to explain why it is present.
+- Source-level degradation and unmapped coverage must remain visible to avoid false confidence during incidents.
