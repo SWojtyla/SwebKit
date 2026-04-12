@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
@@ -185,6 +186,43 @@ public sealed class EntityTreeTests : TestContext
 
         Assert.Contains(client.SubscriptionToggleCalls,
             call => call.TopicName == "bundle-1" && call.SubscriptionName == "processor-a" && call.Enabled);
+    }
+
+    [Fact]
+    public void LinkedEntitiesParameterChange_ReRendersPinButtonState()
+    {
+        var client = new FakeServiceBusClient();
+        var namespaceId = Guid.NewGuid();
+
+        var cut = RenderComponent<EntityTree>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, namespaceId));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pinButton = cut.Find("button[aria-label='Pin queue orders to dashboard']");
+            Assert.DoesNotContain("pinned", pinButton.ClassName, StringComparison.Ordinal);
+            Assert.Contains("☆", pinButton.TextContent, StringComparison.Ordinal);
+        });
+
+        cut.SetParametersAndRender(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, namespaceId)
+            .Add(p => p.LinkedEntities,
+            [
+                new SbEntityLink
+                {
+                    NamespaceId = namespaceId,
+                    EntityPath = "orders"
+                }
+            ]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pinButton = cut.Find("button[aria-label='Unpin queue orders from dashboard']");
+            Assert.Contains("pinned", pinButton.ClassName, StringComparison.Ordinal);
+            Assert.Contains("★", pinButton.TextContent, StringComparison.Ordinal);
+        });
     }
 
     private sealed class FakeServiceBusClient : IServiceBusClient

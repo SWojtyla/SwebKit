@@ -27,7 +27,7 @@
 - Resubmit dead-letter messages to original or target entity, processing the full requested sequence set across receive batches.
 - Complete dead-letter messages with the same exhaustive sequence matching.
 - Use production-safe confirmation dialogs for destructive actions.
-- Pin entity links per environment from settings.
+- Pin entity links per environment from the Service Bus page or settings, with the dashboard reflecting the same pinned Service Bus list.
 
 ## Core Runtime Flow
 
@@ -81,9 +81,11 @@
 - Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
 - Entity names in the entity list wrap to full visibility (no single-line truncation/horizontal-scroll pattern).
 - Topic rows retain expand/collapse behavior; queue/subscription operational actions are centralized in the selected-entity action bar.
+- Pin and unpin changes update immediately in the entity list, and the dashboard pinned panel reflects the same Service Bus entity list.
 - Message list row density and column profiles are persisted in `UiStateRepository` per `{namespaceId}:{entityPath}:{mode}` scope and can be reset to defaults from the column chooser.
 - Namespace pane collapsed/expanded state remains persisted in local storage.
 - Demo namespaces and cached reconnect semantics are composed through `IServiceBusNamespaceBootstrapper`; `ServiceBusPage` preserves the visible namespace list and per-row progress while the background reconnect fan-out runs.
+- Service Bus settings remain reachable from shell navigation and unconfigured-state CTAs; the main route header no longer reserves space for a one-off Settings button.
 
 ## Validation Pointers
 

@@ -66,6 +66,18 @@ public sealed class ServiceBusPageTests : TestContext
         });
     }
 
+    [Fact]
+    public void RouteHeader_DoesNotRenderServiceBusSettingsActionButton()
+    {
+        var cut = RenderComponent<ServiceBusPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll(".page-shell-header .page-header-action-btn"));
+            Assert.NotEmpty(cut.FindAll("a[href='/settings?section=servicebus']"));
+        });
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         private readonly Dictionary<string, string> _secrets = new(StringComparer.Ordinal);

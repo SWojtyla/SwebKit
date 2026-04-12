@@ -91,7 +91,7 @@
                     case TreeRowKind.Queue:
                         {
                             var q = row.Entity!;
-                            var isLinked = IsEntityLinked(q.EntityPath);
+                            var isPinned = IsEntityLinked(q.EntityPath);
                             <div @key="q.EntityPath" class="@GetEntityRowClass(q)" @onclick="() => OnEntityRowClickedAsync(q)">
                                 <span class="entity-tree-glyph entity-tree-glyph-queue">Q</span>
                                 <span class="entity-tree-name" title="@q.Name">@q.Name</span>
@@ -103,12 +103,12 @@
                                         <span class="entity-active-count">@FormatCount(q.Stats?.ActiveMessageCount)</span>
                                     </span>
                                     <button type="button"
-                                            class="entity-pin-btn entity-icon-btn @(isLinked ? "pinned" : string.Empty)"
-                                            title="@(isLinked ? "Unpin from project" : "Pin to project")"
-                                            aria-label="@(isLinked ? $"Unpin queue {q.Name} from project" : $"Pin queue {q.Name} to project")"
+                                            class="entity-pin-btn entity-icon-btn @(isPinned ? "pinned" : string.Empty)"
+                                            title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                            aria-label="@(isPinned ? $"Unpin queue {q.Name} from dashboard" : $"Pin queue {q.Name} to dashboard")"
                                             @onclick:stopPropagation="true"
                                             @onclick="() => ToggleLink(q.EntityPath)">
-                                        <span aria-hidden="true">@(isLinked ? "*" : "o")</span>
+                                        <span class="entity-pin-glyph" aria-hidden="true">@(isPinned ? "★" : "☆")</span>
                                     </button>
                                 </div>
                             </div>
@@ -134,7 +134,7 @@
                     case TreeRowKind.Subscription:
                         {
                             var s = row.Entity!;
-                            var isLinked = IsEntityLinked(s.EntityPath);
+                            var isPinned = IsEntityLinked(s.EntityPath);
                             <div @key="s.EntityPath" class="@GetEntityRowClass(s, "entity-tree-item entity-tree-subscription")" @onclick="() => OnEntityRowClickedAsync(s)">
                                 <span class="entity-tree-glyph entity-tree-glyph-subscription">&gt;</span>
                                 <span class="entity-tree-name" title="@s.Name">@s.Name</span>
@@ -146,12 +146,12 @@
                                         <span class="entity-active-count">@FormatCount(s.Stats?.ActiveMessageCount)</span>
                                     </span>
                                     <button type="button"
-                                            class="entity-pin-btn entity-icon-btn @(isLinked ? "pinned" : string.Empty)"
-                                            title="@(isLinked ? "Unpin from project" : "Pin to project")"
-                                            aria-label="@(isLinked ? $"Unpin subscription {s.Name} from project" : $"Pin subscription {s.Name} to project")"
+                                            class="entity-pin-btn entity-icon-btn @(isPinned ? "pinned" : string.Empty)"
+                                            title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                            aria-label="@(isPinned ? $"Unpin subscription {s.Name} from dashboard" : $"Pin subscription {s.Name} to dashboard")"
                                             @onclick:stopPropagation="true"
                                             @onclick="() => ToggleLink(s.EntityPath)">
-                                        <span aria-hidden="true">@(isLinked ? "*" : "o")</span>
+                                        <span class="entity-pin-glyph" aria-hidden="true">@(isPinned ? "★" : "☆")</span>
                                     </button>
                                 </div>
                             </div>
@@ -179,18 +179,10 @@
     private HashSet<string> ExpandedTopics = [];
     private IServiceBusClient? _loadedClient;
     private List<TreeRow> _flatRows = [];
-    private bool _needsRender = true;
     private bool IsMutating;
     private string? OperationMessage;
     private string? _selectedEntityPath;
     private SbEntityInfo? SelectedEntity;
-
-    protected override bool ShouldRender()
-    {
-        if (!_needsRender) return false;
-        _needsRender = false;
-        return true;
-    }
 
     enum TreeRowKind { QueueHeader, Queue, TopicHeader, Topic, Subscription }
 
@@ -208,7 +200,6 @@
             _loadedClient = null;
             _selectedEntityPath = null;
             SelectedEntity = null;
-            _needsRender = true;
             return;
         }
 
@@ -254,14 +245,12 @@
         Queues = [];
         Topics = [];
         _flatRows = [];
-        _needsRender = true;
         await InvokeAsync(StateHasChanged);
         try
         {
             // Load queues first - show them immediately
             Queues = (await Client.ListQueuesAsync()).ToList();
             RebuildFlatRows();
-            _needsRender = true;
             await InvokeAsync(StateHasChanged); // BL-2: progressive update - queues visible before topics load
 
             // Then load topics
@@ -280,7 +269,6 @@ ex.Message.Contains("Forbidden")
         finally
         {
             IsLoading = false;
-            _needsRender = true;
             await InvokeAsync(StateHasChanged); // BL-2
         }
     }
@@ -289,7 +277,7 @@ ex.Message.Contains("Forbidden")
     {
         if (ExpandedTopics.Contains(name))
         {
-            ExpandedTopics.Remove(name); RebuildFlatRows(); _needsRender = true;
+            ExpandedTopics.Remove(name); RebuildFlatRows();
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -297,7 +285,6 @@ ex.Message.Contains("Forbidden")
         if (!Subscriptions.ContainsKey(name) && Client is not null)
             Subscriptions[name] = (await Client.ListSubscriptionsAsync(name)).ToList();
         RebuildFlatRows();
-        _needsRender = true;
         await InvokeAsync(StateHasChanged); // BL-2: use InvokeAsync after await
     }
 
@@ -308,7 +295,6 @@ ex.Message.Contains("Forbidden")
         var shouldEnable = entity.IsDisabled;
         IsMutating = true;
         OperationMessage = null;
-        _needsRender = true;
         await InvokeAsync(StateHasChanged);
 
         try
@@ -344,13 +330,11 @@ ex.Message.Contains("Forbidden")
         catch (Exception ex)
         {
             OperationMessage = $"Failed to update {entity.Name}: {ex.Message}";
-            _needsRender = true;
             await InvokeAsync(StateHasChanged);
         }
         finally
         {
             IsMutating = false;
-            _needsRender = true;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -371,7 +355,6 @@ ex.Message.Contains("Forbidden")
     {
         _selectedEntityPath = entity.EntityPath;
         SelectedEntity = entity;
-        _needsRender = true;
     }
 
     private void RefreshSelectedEntity()

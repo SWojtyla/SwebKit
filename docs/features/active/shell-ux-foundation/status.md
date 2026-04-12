@@ -54,6 +54,7 @@ Current focus: review the final validation evidence, avoid reopening stable shel
 - Added focused shell closeout E2E coverage for direct alias entry on `/releases`, theme persistence via `swebkit-ui-theme` across reload and CDP reconnect, and `FocusOnNavigate` heading focus on route changes.
 - Corrected the `LeftNav` active-area binding so direct alias entry on `/releases` activates the Pipelines nav item and `aria-current` state correctly.
 - Addressed one narrow review-stage shell chrome polish item by refining the top-bar nav-toggle styling and improving brand/context spacing without reopening broader shell scope.
+- Applied one additional narrow repair by removing the one-off Service Bus route-header Settings button so the page keeps more workspace width and relies on the shared shell/settings entry points instead.
 
 ## Remaining
 
@@ -75,3 +76,4 @@ Current focus: review the final validation evidence, avoid reopening stable shel
 - Any request that adds new shell-level surface area during implementation should still be evaluated against this feature before landing as a one-off page change.
 - The final validation slice stayed intentionally narrow: shared E2E fixture updates, feature-doc alignment, and one small `LeftNav` correction for alias-route active-state behavior.
 - Review feedback remained similarly narrow after that closeout slice: top-bar nav-toggle styling and brand/context spacing polish only, with the feature staying in `Review` rather than reopening scope.
+- A later review-stage repair stayed within that same narrow shell boundary by trimming the Service Bus route-header chrome instead of adding another page-specific shell affordance.

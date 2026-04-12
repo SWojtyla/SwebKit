@@ -8,6 +8,10 @@
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoDevOpsClient
 @implements IDisposable
 
+@{
+    var pinnedItems = GetPinnedItems();
+}
+
 <div class="dashboard-page">
     <RoutePageHeader Area="dashboard" Subtitle="Here's what needs attention.">
         <Meta>
@@ -15,7 +19,7 @@
             {
                 <span class="shell-pill shell-pill--warning">Demo mode</span>
             }
-            <span class="shell-pill shell-pill--muted">@_pins.Count pinned</span>
+            <span class="shell-pill shell-pill--muted">@pinnedItems.Count pinned</span>
             @if (Monitor.IsMonitoring)
             {
                 <span class="shell-pill shell-pill--accent">@Monitor.MonitoredNamespaces.Count
@@ -52,7 +56,7 @@
                     <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
                 </span>
                 <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                                                            "—")</span>
+                                                                                                                "—")</span>
                     <span class="hero-stat-label">Redis</span>
                 </div>
                 <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -60,7 +64,7 @@
                         <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                     </span>
                     <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                                                             "—")</span>
+                                                                                                                                     "—")</span>
                         <span class="hero-stat-label">Pipelines</span>
                     </div>
                 </div>
@@ -179,7 +183,7 @@
 
                     <aside class="dashboard-pinned-panel">
                         <h2 class="dashboard-section-title">Pinned</h2>
-                        @if (_pins.Count == 0)
+                        @if (pinnedItems.Count == 0)
                         {
                             <EmptyState Icon="⌘" Title="No pinned items"
                                         Subtitle="Pin queues, topics, subscriptions, or workloads from their workspace to keep them close.">
@@ -192,10 +196,10 @@
                         else
                         {
                             <div class="pinned-chips">
-                                @foreach (var pin in _pins)
+                                @foreach (var pin in pinnedItems)
                                 {
                                     <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
-                                        <span class="pinned-chip-icon">@PinIcon(pin.EntityType)</span>
+                                        <span class="pinned-chip-icon">@pin.Icon</span>
                                         <span class="pinned-chip-name">@pin.DisplayPath</span>
                                     </button>
                                 }
@@ -220,7 +224,7 @@
     private readonly List<ActivityRecord> _activities = [];
 
     // ── Pinned entities ─────────────────────────────────────────────────────────────
-    private IReadOnlyList<FavoriteEntity> _pins = [];
+    private sealed record DashboardPinnedItem(string DisplayPath, string Area, string Icon);
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────────
     private readonly CancellationTokenSource _cts = new();
@@ -228,7 +232,6 @@
 
     protected override void OnInitialized()
     {
-        _pins = AppState.Config.FavoriteEntities;
         Events.Subscribe<ActivityEvent>(OnActivityReceived);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnPodHealthDetected;
@@ -455,25 +458,83 @@
 
     private void NavigateToSettings() => Events.Publish(new NavigateToAreaEvent("settings"));
 
-    private void NavigateToPin(FavoriteEntity pin)
+    private void NavigateToPin(DashboardPinnedItem pin)
     {
-        var area = pin.EntityType switch
+        Events.Publish(new NavigateToAreaEvent(pin.Area));
+    }
+
+    private IReadOnlyList<DashboardPinnedItem> GetPinnedItems()
+    {
+        var items = new List<DashboardPinnedItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var link in AppState.Config.ServiceBusEntityLinks)
+        {
+            AddPinnedItem(
+                items,
+                seen,
+                new DashboardPinnedItem(ResolveServiceBusDisplayPath(link), "service-bus", "⇄"));
+        }
+
+        foreach (var favorite in AppState.Config.FavoriteEntities)
+        {
+            AddPinnedItem(items, seen, BuildFavoritePinnedItem(favorite));
+        }
+
+        return items;
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────────────
+
+    private DashboardPinnedItem BuildFavoritePinnedItem(FavoriteEntity favorite)
+    {
+        var area = favorite.EntityType switch
         {
             EntityType.Queue or EntityType.Topic or EntityType.Subscription => "service-bus",
             EntityType.Deployment => "aks",
             _ => "settings"
         };
-        Events.Publish(new NavigateToAreaEvent(area));
+
+        var icon = favorite.EntityType switch
+        {
+            EntityType.Queue or EntityType.Topic or EntityType.Subscription => "⇄",
+            EntityType.Deployment => "☁",
+            _ => "⬡"
+        };
+
+        return new DashboardPinnedItem(favorite.DisplayPath, area, icon);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────────────
-
-    private static string PinIcon(EntityType type) => type switch
+    private string ResolveServiceBusDisplayPath(SbEntityLink link)
     {
-        EntityType.Queue or EntityType.Topic or EntityType.Subscription => "⇄",
-        EntityType.Deployment => "☁",
-        _ => "⬡"
-    };
+        var namespaceAlias = ResolveNamespaceAlias(link);
+        var entityPath = link.EntityPath.Replace("/subscriptions/", "/", StringComparison.OrdinalIgnoreCase);
+        return string.IsNullOrWhiteSpace(namespaceAlias)
+            ? entityPath
+            : $"{namespaceAlias}/{entityPath}";
+    }
+
+    private string? ResolveNamespaceAlias(SbEntityLink link)
+    {
+        if (!string.IsNullOrWhiteSpace(link.Alias))
+        {
+            return link.Alias;
+        }
+
+        return AppState.ServiceBusNamespaces.FirstOrDefault(namespaceConfig => namespaceConfig.Id == link.NamespaceId)?.Alias;
+    }
+
+    private static void AddPinnedItem(
+        List<DashboardPinnedItem> items,
+        HashSet<string> seen,
+        DashboardPinnedItem item)
+    {
+        var key = $"{item.Area}|{item.DisplayPath}";
+        if (seen.Add(key))
+        {
+            items.Add(item);
+        }
+    }
 
     private static string RelativeTime(DateTimeOffset at)
     {

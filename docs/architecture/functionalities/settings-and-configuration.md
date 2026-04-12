@@ -3,7 +3,7 @@
 ## What Is Supported
 
 - Single-configuration editing for:
-  - Service Bus pinned entities
+  - Service Bus pinned entities, including the same Service Bus pins surfaced on the dashboard
   - Azure DevOps organization and PAT credential-key settings
   - Observability provider settings
   - AKS kubeconfig/context defaults
@@ -49,7 +49,7 @@
 - Secrets are expected in credential store and not in profile JSON.
 - `ProfileRepository` blocks persistence after a failed load so a corrupted `profiles.json` file is not silently overwritten.
 - DevOps settings accept organization slug input or supported Azure DevOps URL forms. Saving or testing settings creates new live-client snapshots; it does not mutate an existing shared live client.
-- Service Bus settings here focus on pinned entities, while namespace registration happens on the Service Bus page.
+- Service Bus settings here focus on pinned entities, while namespace registration happens on the Service Bus page. The same pinned Service Bus list also feeds the dashboard pinned panel.
 - AKS monitoring persistence (`MonitoringEnabled`, `MonitoredNamespaces`) remains in existing AKS config and is not altered by window hide/restore transitions.
 - On Windows, Minimize and Close now route to system tray by default; explicit Exit from tray menu is required for full app termination. This behavior is currently fixed (not user-toggleable in Settings).
 
