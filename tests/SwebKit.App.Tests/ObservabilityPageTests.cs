@@ -24,6 +24,7 @@ public sealed class ObservabilityPageTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         JSInterop.Setup<int>("SwebKit.getBrowserTimezoneOffset").SetResult(0);
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -35,7 +36,7 @@ public sealed class ObservabilityPageTests : TestContext
         Services.AddFluentUIComponents();
 
         var eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), eventBus);
+        var appState = new AppStateService(new ProfileRepository(), uiState, eventBus);
         appState.Config.ObservabilityConfig = new ObservabilityConfig
         {
             SelectedResourceId = "/subscriptions/test/resourceGroups/ops/providers/microsoft.insights/components/checkout-api",
@@ -46,13 +47,15 @@ public sealed class ObservabilityPageTests : TestContext
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(appState);
+        Services.AddSingleton(uiState);
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<IObservabilityResourceDiscovery>(new EmptyObservabilityDiscovery());
         Services.AddSingleton<IObservabilityProviderFactory>(_providerFactory);
-        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton<INotificationService>(new NotificationService(uiState));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IGuidedKqlCompiler>(new GuidedKqlCompiler());
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]

@@ -11,6 +11,7 @@ Update this file when control flow, runtime responsibilities, or integration bou
 This document expands [architecture.md](architecture.md) for the most important implementation flows:
 
 - App bootstrap and shell hydration
+- Operator workspace search, favorites, recents, and route-first restore
 - Service Bus namespace connection and message browsing
 - AKS diagnostics and side-panel operations
 - Observability resource selection and query execution
@@ -57,6 +58,45 @@ sequenceDiagram
 - `MainLayout` renders the shell even on profile-load failure and surfaces a non-fatal warning banner from `AppState.HasProfileLoadFailure`.
 - `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
 - Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
+
+## Operator Workspace Flow
+
+### Intent
+
+Keep resource search, recent resources, favorites, and saved workspaces on one semantic model while letting routed pages own their restore details.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Shell as CommandPalette / TopBar / Dashboard
+    participant Workspace as OperatorWorkspaceService
+    participant Profiles as ProfileRepository
+    participant UiState as UiStateRepository
+    participant Page as Routed Page
+
+    User->>Page: Open or change page context
+    Page->>Workspace: PublishSnapshotAsync(snapshot, recordRecent?)
+    Workspace->>UiState: Save recent resources when needed
+    Workspace-->>Shell: Raise Changed event
+    User->>Shell: Favorite or save current workspace
+    Shell->>Workspace: ToggleFavoriteAsync / SaveCurrentWorkspaceAsync
+    Workspace->>Profiles: Persist environment-scoped data via AppState
+    User->>Shell: Reopen recent/favorite/workspace/resource result
+    Shell->>Workspace: OpenSnapshotAsync(...)
+    Workspace->>Page: Invoke restore handler if already on target route
+    Workspace->>Shell: Otherwise navigate to target area route
+    Page->>Workspace: ApplyPendingRestoreAsync(area)
+    Workspace->>Page: Restore semantic route/resource/filter state
+```
+
+### Design Notes
+
+- Durable favorites and saved workspaces live in `profiles.json`; recent resources stay in local `ui-state.json`.
+- `OperatorWorkspaceService` owns current snapshots, provider-backed search, favorites, recents, saved workspaces, and pending route-first restores.
+- Participating pages register one area restore handler and publish semantic snapshots only; they never serialize live component objects or service graphs.
+- Search providers are additive. New capability areas can contribute resource candidates without reopening one central palette branch.
 
 ## Service Bus Namespace and Message Browse Flow
 

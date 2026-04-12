@@ -11,6 +11,7 @@
 - Empty, partial, truncation, and all-sources-failed states that stay evidence-first and never imply root cause.
 - Cancellation-first request handling with last-request-wins versioning so rapid refreshes or scope edits do not flash stale evidence.
 - Mapping-backed workload suggestions with a free-text workload name field so AKS-only investigations remain possible even when non-AKS mappings are absent.
+- Shared workspace integration for context, namespace, workload kind/name, time window, and source toggles, allowing recent/favorite reopen and named workspace restore from shell surfaces.
 
 ## Core Runtime Flow
 
@@ -21,6 +22,7 @@
 5. The backend returns one aggregated `IncidentTimelinePage`; the UI projects the items and source statuses without re-implementing inclusion logic.
 6. If the returned source coverage includes `Unmapped` or `Not configured`, the page renders a focused guidance note with a direct navigation path to `/settings?section=incident-timeline` for the selected workload scope.
 7. Only the latest request version is allowed to update the page state. Stale responses are ignored even if they complete after a newer refresh.
+8. Scope edits and successful refreshes publish a semantic workspace snapshot; route-first restore rehydrates the scope and selected sources before refresh.
 
 ## Key Design Notes
 
@@ -30,6 +32,7 @@
 - Mapping discoverability is intentional: the page does not silently leave `Unmapped` or `Not configured` coverage unexplained.
 - The first evidence item becomes the default detail-panel selection for a new result set. Operators can switch detail focus by selecting another timeline row.
 - The page sets the `incident-timeline` area connection state so the shared status bar can reflect whether the workbench last connected successfully or failed globally.
+- `IncidentTimelinePage` registers an area restore handler with `OperatorWorkspaceService` and keeps restore state semantic: context, namespace, workload kind/name, window, and selected sources.
 
 ## Main Code Locations
 

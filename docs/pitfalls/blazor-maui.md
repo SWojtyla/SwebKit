@@ -266,4 +266,22 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 
 ---
 
+## BL-13 — Linked bUnit test hosts must register new injected shell services
+
+**Symptom:** A page or shell component renders fine in the app, but bUnit tests fail with `Cannot provide a value for property ... There is no registered service of type ...` as soon as a new `@inject` dependency is added.
+
+**Cause:** `tests/SwebKit.App.Tests` compiles linked app source files into the test project. When a component starts injecting a new shell service, the test DI container does not pick that up automatically. Existing test constructors keep building a stale service graph until they explicitly register the new dependency and any repositories it needs.
+
+**Fix:** Update the affected test setup in the same change that adds the new `@inject`. If the service depends on shared persistence state, register the same repository instance for all cooperating services in that test host.
+
+```csharp
+var uiState = new UiStateRepository();
+Services.AddSingleton(uiState);
+Services.AddSingleton(new OperatorWorkspaceService(appState, uiState, navigation, providers));
+```
+
+**Rule:** whenever a routed page or shared shell component gains a new injected service, patch the relevant bUnit/test host registrations in the same change set instead of waiting for the first broken test run.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

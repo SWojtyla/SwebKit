@@ -21,6 +21,7 @@ public class ComponentTests : TestContext
     public ComponentTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -33,8 +34,10 @@ public class ComponentTests : TestContext
 
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         Services.AddSingleton<IAppEventBus>(events);
-        Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
+        Services.AddSingleton(new AppStateService(new ProfileRepository(), uiState, events));
+        Services.AddSingleton(uiState);
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]

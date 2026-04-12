@@ -23,6 +23,7 @@ public sealed class AksPageBootstrapTests : TestContext
     public AksPageBootstrapTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -35,7 +36,7 @@ public sealed class AksPageBootstrapTests : TestContext
         Services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
 
         var eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), eventBus);
+        _appState = new AppStateService(new ProfileRepository(), uiState, eventBus);
         _appState.Config.AksConfig = new AksConfig
         {
             DefaultNamespace = "default",
@@ -46,14 +47,16 @@ public sealed class AksPageBootstrapTests : TestContext
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(_appState);
-        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
+        Services.AddSingleton(uiState);
+        Services.AddSingleton<INotificationService>(new NotificationService(uiState));
         Services.AddSingleton<IPortForwardSessionService>(new FakePortForwardSessionService());
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton(new PageDataCache());
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IPodHealthMonitorService>(new FakePodHealthMonitorService());
         Services.AddSingleton<IAksClientBootstrapper>(_bootstrapper);
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]

@@ -30,7 +30,11 @@ This file is the master sequencing plan for the next phase of SwebKit. It does n
 
 ### Wave 1 - Shell UX foundation
 
-Primary feature: `docs/features/active/shell-ux-foundation/`
+Primary feature: `docs/features/archive/shell-ux-foundation/summary.md`
+
+Status:
+
+- Complete and archived on 2026-04-12.
 
 Outcome:
 
@@ -65,7 +69,11 @@ Likely code and test areas:
 
 ### Wave 2 - Operator navigation and workspaces
 
-Primary feature: `docs/features/active/operator-navigation-and-workspaces/`
+Primary feature: `docs/features/archive/operator-navigation-and-workspaces/summary.md`
+
+Status:
+
+- Complete and archived on 2026-04-12.
 
 Depends on:
 
@@ -161,7 +169,7 @@ Primary feature:
 Depends on:
 
 - `docs/features/active/incident-timeline-workbench/`
-- `docs/features/active/operator-navigation-and-workspaces/`
+- `docs/features/archive/operator-navigation-and-workspaces/summary.md`
 - `docs/features/active/environment-and-configuration-health/`
 
 Outcome:

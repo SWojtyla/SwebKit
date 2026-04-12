@@ -4,7 +4,7 @@
 
 title: "Decisions - operator-navigation-and-workspaces"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Archived"
 
 ---
 

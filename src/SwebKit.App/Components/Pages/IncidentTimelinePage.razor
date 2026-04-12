@@ -7,6 +7,7 @@
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
 @inject NavigationManager Nav
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 <div class="incident-timeline-page">
@@ -218,6 +219,7 @@ IncidentTimelineSourceCoverageState.NotConfigured)
     protected override void OnInitialized()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.RegisterRestoreHandler("incident-timeline", RestoreWorkspaceAsync);
         RegisterCommands();
         _ = BootstrapAndLoadAsync(setDefaults: true, autoLoad: true);
     }
@@ -306,6 +308,8 @@ IncidentTimelineSourceCoverageState.NotConfigured)
         {
             await RefreshAsync();
         }
+
+        await Workspaces.ApplyPendingRestoreAsync("incident-timeline");
     }
 
     private void ApplyDefaultScope()
@@ -365,12 +369,14 @@ string.IsNullOrWhiteSpace(_currentNamespace))
 
         _activeContext = context;
         await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task HandleNamespaceChangedAsync(string namespaceName)
     {
         _currentNamespace = namespaceName;
         SyncWorkloadSelectionToScope();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -378,18 +384,21 @@ string.IsNullOrWhiteSpace(_currentNamespace))
     {
         _workloadKind = workloadKind;
         SyncWorkloadSelectionToScope();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task HandleWorkloadNameChangedAsync(string workloadName)
     {
         _workloadName = workloadName.Trim();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task HandleWindowChangedAsync(TimeRange window)
     {
         _window = window;
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -417,6 +426,7 @@ string.IsNullOrWhiteSpace(_currentNamespace))
                 .ToList();
         }
 
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -483,6 +493,8 @@ string.IsNullOrWhiteSpace(_currentNamespace))
             {
                 ConnectionState.SetConnected("incident-timeline");
             }
+
+            await PublishWorkspaceSnapshotAsync(recordRecent: true);
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
@@ -545,6 +557,106 @@ string.IsNullOrWhiteSpace(_currentNamespace))
             normalizedWindow.Start.ToString("O"),
             normalizedWindow.End.ToString("O"),
             string.Join(",", query.GetRequestedSources().Select(static source => source.ToString())));
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("incident-timeline");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        if (string.IsNullOrWhiteSpace(_currentNamespace) || string.IsNullOrWhiteSpace(_workloadName))
+        {
+            return null;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"incident-timeline:{_currentNamespace}:{_workloadKind}:{_workloadName}",
+                Area = "incident-timeline",
+                Kind = _workloadKind.ToString().ToLowerInvariant(),
+                DisplayName = GetCurrentWorkloadDisplayName(),
+                DisplayPath = $"{_currentNamespace}/{_workloadName}",
+                Summary = IncidentTimelineDisplay.FormatWindowLabel(_window),
+                Icon = "🕒",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["context"] = _activeContext,
+                    ["namespace"] = _currentNamespace,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["context"] = _activeContext,
+                ["namespace"] = _currentNamespace,
+                ["workloadKind"] = _workloadKind.ToString(),
+                ["workloadName"] = _workloadName,
+                ["windowStart"] = _window.Start.ToString("O"),
+                ["windowEnd"] = _window.End.ToString("O"),
+                ["sources"] = string.Join(',', _selectedSources.Select(static source => source.ToString())),
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("context", out var restoredContext))
+        {
+            _activeContext = restoredContext;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("namespace", out var restoredNamespace))
+        {
+            _currentNamespace = restoredNamespace;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("workloadKind", out var workloadKindText)
+            && Enum.TryParse<IncidentWorkloadKind>(workloadKindText, out var restoredKind))
+        {
+            _workloadKind = restoredKind;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("workloadName", out var restoredWorkloadName))
+        {
+            _workloadName = restoredWorkloadName;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("windowStart", out var windowStartText)
+            && snapshot.RestoreState.TryGetValue("windowEnd", out var windowEndText)
+            && DateTimeOffset.TryParse(windowStartText, out var restoredWindowStart)
+            && DateTimeOffset.TryParse(windowEndText, out var restoredWindowEnd))
+        {
+            _window = new TimeRange(restoredWindowStart, restoredWindowEnd);
+        }
+
+        if (snapshot.RestoreState.TryGetValue("sources", out var sourceText))
+        {
+            _selectedSources = sourceText
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(source => Enum.TryParse<IncidentTimelineSource>(source, out var restoredSource)
+                    ? restoredSource
+                    : (IncidentTimelineSource?)null)
+                .Where(static source => source is not null)
+                .Select(static source => source!.Value)
+                .Distinct()
+                .OrderBy(GetSourceOrder)
+                .ToList();
+        }
+
+        await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
+        await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
     }
 
     private static bool HasGlobalFailure(IncidentTimelineResultPage page) => page.Items.Count == 0
@@ -683,6 +795,7 @@ IncidentTimelineSourceCoverageState.TimedOut);
     public void Dispose()
     {
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("incident-timeline");
         Commands.Unregister("incident-timeline-refresh");
         _activeLoadCts?.Cancel();
         _activeLoadCts?.Dispose();

@@ -26,6 +26,7 @@ public sealed class IncidentTimelinePageTests : TestContext
     public IncidentTimelinePageTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -37,7 +38,7 @@ public sealed class IncidentTimelinePageTests : TestContext
         Services.AddFluentUIComponents();
 
         _eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), _eventBus);
+        _appState = new AppStateService(new ProfileRepository(), uiState, _eventBus);
         _appState.InitializeAsync().GetAwaiter().GetResult();
         _appState.Config.Name = "Prod";
         _appState.Config.AksConfig = new AksConfig
@@ -65,10 +66,12 @@ public sealed class IncidentTimelinePageTests : TestContext
 
         Services.AddSingleton<IAppEventBus>(_eventBus);
         Services.AddSingleton(_appState);
+        Services.AddSingleton(uiState);
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IAksClientBootstrapper>(_aksBootstrapper);
         Services.AddSingleton<IIncidentTimelineService>(_timelineService);
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]

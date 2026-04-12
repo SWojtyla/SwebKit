@@ -34,6 +34,7 @@
 - YAML viewer includes inline search (highlight + scroll to match).
 - Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
 - CronJob rows show schedule, active count, last schedule time, last success time, and suspended state badge.
+- Publish current AKS context, namespace, resource type, filter state, and selected resource into the shared shell workspace model so favorites, recents, and saved workspaces can reopen AKS context.
 - Windows tray continuity for monitoring — Minimize and Close hide the app to tray, monitoring continues in the existing `PodHealthMonitorService`, and hidden pod alerts increment tray unread state.
 
 ## Core Runtime Flow
@@ -56,6 +57,7 @@
 - **Batch YAML parity.** `GetResourceYamlAsync` explicitly supports `job` and `cronjob`. `DemoAksClient` emits batch/v1 YAML for both resource kinds, matching the live-client viewer flow.
 - **Trigger provenance and sanitization.** `KubernetesAksClient` clones CronJob job templates or Job specs, strips controller-owned metadata and selectors, and annotates created Jobs with `swebkit.io/source-kind` and `swebkit.io/source-name`. Source mapping prefers owner references first, then these annotations.
 - **Row-scoped batch actions.** In all-namespaces mode, `AksPage.razor` resolves Job and CronJob actions from the selected row object, not `CurrentNamespace`, which prevents accidental cross-namespace execution.
+- **Workspace integration.** `AksPage` registers a restore handler with `OperatorWorkspaceService`, publishes semantic snapshots for context, namespace, active resource tab, filters, panel flags, and current selection, and suppresses duplicate recent-resource writes while replaying a restore.
 - **Unified side-panel column.** All side panels (YAML, Helm history/values, scale, logs, container details, ConfigMap/Secret detail, HPA) are rendered inside a single `aks-panels-col` flex container. Events sit at the bottom of this column as a collapsible inset (`aks-events-inset`), so multiple open panels never overflow the grid. When nothing is open the column is hidden and a thin vertical `aks-events-collapsed-tab` appears instead.
 - **YAML search** is implemented entirely in `yamlHighlight.js` (`searchInPre`, `clearSearch`). Blazor calls JSInterop on each input change; match count is displayed in the search bar.
 - **Multi-pod log fan-out** uses `System.Threading.Channels.Channel<AggregatedLogLine>` (unbounded). Each per-pod task writes into the channel; a linked `CancellationTokenSource` ensures the outer consumer cancellation propagates to all per-pod readers. No ordering guarantees — lines arrive as produced.

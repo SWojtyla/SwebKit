@@ -4,7 +4,7 @@
 
 title: "Status - professional-devops-tool-roadmap"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
@@ -14,11 +14,11 @@ last_updated: "2026-04-12"
 
 ## Quick summary
 
-The master sequencing plan is documented. The next step is maintainer review of wave boundaries and then implementation should begin with `shell-ux-foundation`, not with additional domain-specific feature work.
+The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` is now the next planned delivery slice.
 
 Jira: not linked
 
-Current focus: keep the roadmap aligned while waves 1 to 3 move from planning into implementation and ensure any later-wave work gets its own feature folder instead of landing directly from this roadmap.
+Current focus: keep downstream references current after the Wave 2 archive, preserve the Wave 3 dependency boundary, and prevent later-wave work from bypassing the roadmap order.
 
 ## Progress checklist
 
@@ -29,9 +29,12 @@ Current focus: keep the roadmap aligned while waves 1 to 3 move from planning in
 - [x] Create active feature folders for waves 1 to 3
 - [x] Create the dedicated wave-4 incident follow-on feature folder
 - [x] Create the dedicated wave-5 domain-depth feature folders
+- [x] Close out Wave 1 and point downstream docs at the archive artifact
+- [x] Advance Wave 2 from planning into implementation and targeted validation
+- [x] Close out Wave 2 and point downstream docs at the archive artifact
 - [ ] Review wave boundaries with maintainers
 - [ ] Confirm the default wave-5A/5B/5C ordering with maintainers
-- [ ] Keep downstream status references current as implementation begins
+- [x] Keep downstream status references current as implementation begins
 
 ## Completed
 
@@ -39,12 +42,15 @@ Current focus: keep the roadmap aligned while waves 1 to 3 move from planning in
 - Anchored the roadmap to the current architecture docs and the existing `incident-timeline-workbench` feature.
 - Scoped the roadmap as a durable sequencing artifact rather than an umbrella implementation feature.
 - Created detailed active feature folders for the incident follow-on and the wave-5 domain-depth features so implementation can start without turning the roadmap into a mega-spec.
+- Advanced the roadmap into execution by closing Wave 1 and activating Wave 2 as the next implementation slice.
+- Recorded that Wave 2 now has landed code plus focused validation, while still keeping Wave 3 and later work sequenced behind it.
+- Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
 
 ## Remaining
 
 - Validate that wave entry and exit criteria are realistic for the current team bandwidth.
+- Keep this roadmap current as Wave 3 and later waves move through implementation and review.
 - Use this roadmap to govern the order in which the already-created wave-4 and wave-5 feature folders move into implementation.
-- Keep this document current as downstream features move from `Planned` to implementation and review.
 
 ## Blockers
 
@@ -59,3 +65,5 @@ Current focus: keep the roadmap aligned while waves 1 to 3 move from planning in
 
 - `incident-timeline-workbench` remains an independent active feature and should not be modified just to satisfy the roadmap.
 - The roadmap now references real feature folders for wave 4 and wave 5; sequencing, not scoping, is the primary remaining responsibility here.
+- Wave 1 durability now lives in the archive summary rather than in an active feature folder.
+- Wave 2 durability now lives in `docs/features/archive/operator-navigation-and-workspaces/` rather than in an active feature folder.

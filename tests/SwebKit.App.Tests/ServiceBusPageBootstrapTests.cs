@@ -21,20 +21,22 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
+        var uiState = new UiStateRepository();
         var eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), eventBus);
+        _appState = new AppStateService(new ProfileRepository(), uiState, eventBus);
         _bootstrapper = new FakeServiceBusNamespaceBootstrapper();
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(_appState);
+        Services.AddSingleton(uiState);
         Services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
         Services.AddSingleton(new ScheduledMessageRepository());
-        Services.AddSingleton(new UiStateRepository());
         Services.AddSingleton(new PageDataCache());
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(_bootstrapper);
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]

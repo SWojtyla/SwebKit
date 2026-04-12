@@ -8,25 +8,26 @@ Update this file when project/folder structure changes, entry points move, or na
 
 ## Entry Points by Task Type
 
-| Task                                                  | Starting file                                                                                                                                                                  |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| App startup and dependency registration               | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
-| Incident timeline frontend route and workbench        | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor` and `src/SwebKit.App/Components/IncidentTimeline/`                                                               |
-| Incident timeline backend contracts and aggregation   | `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` and `src/SwebKit.Core/Services/IncidentTimelineService.cs`                                                         |
-| MAUI lifecycle and shutdown hooks                     | `src/SwebKit.App/App.xaml.cs`                                                                                                                                                  |
-| Blazor shell and global layout behavior               | `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                                                                                           |
-| Route wiring and page entry URLs                      | `src/SwebKit.App/Components/Routes.razor`                                                                                                                                      |
-| Sidebar navigation area mapping                       | `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                                                              |
-| Profile/config persistence                            | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                                          |
-| UI state persistence (tabs, filters, preferences)     | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                                          |
-| Secret storage and retrieval                          | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                  |
-| Service Bus behavior or queue/DLQ operations          | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
-| AKS operations (logs, YAML, port-forward, shell)      | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
-| Redis operations and key-level actions                | `src/SwebKit.Core/Abstractions/IRedisClient.cs` and `src/SwebKit.Redis/RedisClient.cs`                                                                                         |
-| Blob Storage operations                               | `src/SwebKit.Core/Abstractions/IStorageClient.cs` and `src/SwebKit.Azure/Storage/AzureStorageClient.cs`                                                                        |
-| Azure DevOps pipelines/releases/approvals integration | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |
-| Observability queries and App Insights discovery      | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
-| Global commands and keyboard shortcuts                | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                            |
+| Task                                                                  | Starting file                                                                                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| App startup and dependency registration                               | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
+| Incident timeline frontend route and workbench                        | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor` and `src/SwebKit.App/Components/IncidentTimeline/`                                                               |
+| Incident timeline backend contracts and aggregation                   | `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` and `src/SwebKit.Core/Services/IncidentTimelineService.cs`                                                         |
+| MAUI lifecycle and shutdown hooks                                     | `src/SwebKit.App/App.xaml.cs`                                                                                                                                                  |
+| Blazor shell and global layout behavior                               | `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                                                                                           |
+| Route wiring and page entry URLs                                      | `src/SwebKit.App/Components/Routes.razor`                                                                                                                                      |
+| Shell-level resource search, favorites, recents, or workspace restore | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Components/Shared/CommandPalette.razor`, and `src/SwebKit.Core/Domain/WorkspaceModels.cs`             |
+| Sidebar navigation area mapping                                       | `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                                                              |
+| Profile/config persistence                                            | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                                          |
+| UI state persistence (tabs, filters, preferences)                     | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                                          |
+| Secret storage and retrieval                                          | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                  |
+| Service Bus behavior or queue/DLQ operations                          | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
+| AKS operations (logs, YAML, port-forward, shell)                      | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
+| Redis operations and key-level actions                                | `src/SwebKit.Core/Abstractions/IRedisClient.cs` and `src/SwebKit.Redis/RedisClient.cs`                                                                                         |
+| Blob Storage operations                                               | `src/SwebKit.Core/Abstractions/IStorageClient.cs` and `src/SwebKit.Azure/Storage/AzureStorageClient.cs`                                                                        |
+| Azure DevOps pipelines/releases/approvals integration                 | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |
+| Observability queries and App Insights discovery                      | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
+| Global commands and keyboard shortcuts                                | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                            |
 
 ## Key Folders and Responsibilities
 
@@ -46,7 +47,7 @@ src/
 │   │   ├── Observability/        # Overview/failures/performance/logs/availability tabs
 │   │   ├── Notifications/        # Notification toast and history components
 │   │   └── Shared/               # Shared primitives and base components
-│   ├── Services/                 # App-layer orchestration services (commands, tabs, notifications)
+│   ├── Services/                 # App-layer orchestration services (commands, tabs, notifications, workspaces)
 │   ├── Platforms/Windows/        # Windows-specific implementations (credential store, notifications)
 │   └── wwwroot/js/               # JS interop for keyboard, YAML highlighting, splitters, and UI helpers
 │
@@ -99,27 +100,28 @@ tests/
 
 ## Cross-Cutting Concerns
 
-| Concern                                | Where it lives                                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Dependency injection root              | `src/SwebKit.App/MauiProgram.cs`                                                                    |
-| Shared app state                       | `src/SwebKit.Core/Services/AppStateService.cs`                                                      |
-| Event bus                              | `src/SwebKit.Core/Services/AppEventBus.cs`                                                          |
-| Profile persistence (`profiles.json`)  | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                               |
-| UI state persistence (`ui-state.json`) | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                               |
-| Release persistence (`releases.json`)  | `src/SwebKit.Core/Configuration/ReleaseRepository.cs`                                               |
-| Credential storage                     | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                       |
-| Background queueing                    | `src/SwebKit.Core/Services/TaskQueueService.cs`                                                     |
-| Port-forward session lifecycle         | `src/SwebKit.Core/Services/PortForwardSessionService.cs` and `src/SwebKit.App/App.xaml.cs`          |
-| Command palette and shortcuts          | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js` |
-| Notifications                          | `src/SwebKit.App/Services/NotificationService.cs` and `src/SwebKit.App/Components/Notifications/`   |
-| HTTP resilience for Azure DevOps       | `src/SwebKit.App/MauiProgram.cs` (`AddStandardResilienceHandler`)                                   |
-| Demo mode behavior                     | `src/SwebKit.Core/Services/Demo*` and page-level `AppState.UseDemoData` checks                      |
+| Concern                                | Where it lives                                                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependency injection root              | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                    |
+| Shared app state                       | `src/SwebKit.Core/Services/AppStateService.cs`                                                                                                                      |
+| Event bus                              | `src/SwebKit.Core/Services/AppEventBus.cs`                                                                                                                          |
+| Profile persistence (`profiles.json`)  | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                               |
+| UI state persistence (`ui-state.json`) | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                               |
+| Workspace/favorites/recent restore     | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Services/OperatorResourceSearchProviders.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs` |
+| Release persistence (`releases.json`)  | `src/SwebKit.Core/Configuration/ReleaseRepository.cs`                                                                                                               |
+| Credential storage                     | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                       |
+| Background queueing                    | `src/SwebKit.Core/Services/TaskQueueService.cs`                                                                                                                     |
+| Port-forward session lifecycle         | `src/SwebKit.Core/Services/PortForwardSessionService.cs` and `src/SwebKit.App/App.xaml.cs`                                                                          |
+| Command palette and shortcuts          | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                 |
+| Notifications                          | `src/SwebKit.App/Services/NotificationService.cs` and `src/SwebKit.App/Components/Notifications/`                                                                   |
+| HTTP resilience for Azure DevOps       | `src/SwebKit.App/MauiProgram.cs` (`AddStandardResilienceHandler`)                                                                                                   |
+| Demo mode behavior                     | `src/SwebKit.Core/Services/Demo*` and page-level `AppState.UseDemoData` checks                                                                                      |
 
 ## Feature-to-File Quick Lookup
 
 | Feature area               | Key files                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Dashboard and shell        | `src/SwebKit.App/Components/Pages/DashboardPage.razor`, `src/SwebKit.App/Components/Layout/MainLayout.razor`, `src/SwebKit.App/Components/Layout/TopBar.razor`                                                                                                                                                                                                                                                                 |
+| Dashboard and shell        | `src/SwebKit.App/Components/Pages/DashboardPage.razor`, `src/SwebKit.App/Components/Layout/MainLayout.razor`, `src/SwebKit.App/Components/Layout/TopBar.razor`, `src/SwebKit.App/Components/Shared/CommandPalette.razor`, `src/SwebKit.App/Services/OperatorWorkspaceService.cs`                                                                                                                                               |
 | Service Bus                | `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`, `src/SwebKit.App/Components/ServiceBus/MessageListView.razor`, `src/SwebKit.App/Components/ServiceBus/DlqView.razor`, `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                                                                                                                                                         |
 | AKS                        | `src/SwebKit.App/Components/Pages/AksPage.razor`, `src/SwebKit.App/Components/Aks/AksDetailPanels.razor`, `src/SwebKit.App/Components/Aks/PodLogView.razor`, `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                                                                                                                                                         |
 | Redis                      | `src/SwebKit.App/Components/Pages/RedisPage.razor`, `src/SwebKit.App/Components/Redis/RedisNamespaceTree.razor`, `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor`, `src/SwebKit.Redis/RedisClient.cs`                                                                                                                                                                                                                   |

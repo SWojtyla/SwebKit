@@ -10,6 +10,7 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
+@inject OperatorWorkspaceService Workspaces
 
 <div class="service-bus-page">
     <div class="page-shell-header">
@@ -17,7 +18,7 @@
                          Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
             <Meta>
                 <span class="shell-pill shell-pill--muted">@_namespaceStates.Count namespace@(_namespaceStates.Count == 1 ?
-                                          "" : "s")</span>
+                                                              "" : "s")</span>
                     <span class="shell-pill shell-pill--accent">@_openTabs.Count workspace@(_openTabs.Count == 1 ? "" : "s")
                         open</span>
                         @if (_namespaceStates.Any(state => state.Client is not null))
@@ -232,6 +233,8 @@
         RegisterSbCommands();
         await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
+        Workspaces.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
+        await Workspaces.ApplyPendingRestoreAsync("service-bus");
     }
 
     private void RegisterSbCommands()
@@ -352,6 +355,11 @@
         Cache.Set("servicebus", new SbPageSnapshot(
             _namespaceStates.Select(s => new SbNamespaceSnapshot(
                 s.Namespace, s.Client is not null, s.ConnectionError)).ToList()));
+
+        if (_activeTab is not null)
+        {
+            await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
     }
 
     private void ReportConnectionState()
@@ -377,6 +385,7 @@
     {
         _isNamespacePaneCollapsed = isCollapsed;
         await JS.InvokeVoidAsync("SwebKitUi.setLocalStorage", NamespacePaneStateKey, isCollapsed.ToString().ToLowerInvariant());
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task HandleAddNamespaceAsync(string raw)
@@ -439,6 +448,15 @@
 
         _namespaceStates.Remove(state);
         await AppState.RemoveServiceBusNamespaceAsync(namespaceId);
+        if (_activeTab is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+        }
+        else
+        {
+            await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -448,20 +466,22 @@
         var modeSuffix = isDlq ? "dlq" : "active";
         var id = $"{ns.Namespace.Id}:{entity.EntityPath}:{modeSuffix}";
         var existing = _openTabs.FirstOrDefault(t => t.Id == id);
-        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
-
-        var tab = new SbTab
+        if (existing is not null)
         {
-            Id = id,
-            NamespaceId = ns.Namespace.Id,
-            NamespaceAlias = ns.Namespace.Alias,
-            Title = isDlq ? $"{entity.Name} (DLQ)" : entity.Name,
-            EntityPath = entity.EntityPath,
-            Client = ns.Client,
-            IsDlq = isDlq
-        };
+            _activeTab = existing; _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
+            StateHasChanged(); return;
+        }
+
+        var tab = CreateTab(
+            ns.Namespace,
+            ns.Client,
+            entity.EntityPath,
+            isDlq ? $"{entity.Name} (DLQ)" : entity.Name,
+            isDlq ? "dlq" : "active",
+            "entity");
         _openTabs.Add(tab);
         _activeTab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
     }
 
@@ -470,49 +490,254 @@
         if (ns.Client is null) return;
         var id = $"{ns.Namespace.Id}:scheduled";
         var existing = _openTabs.FirstOrDefault(t => t.Id == id);
-        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
-
-        var tab = new SbTab
+        if (existing is not null)
         {
-            Id = id,
-            NamespaceId = ns.Namespace.Id,
-            NamespaceAlias = ns.Namespace.Alias,
-            Title = "Scheduled",
-            EntityPath = string.Empty,
-            Client = ns.Client,
-            IsScheduled = true
-        };
+            _activeTab = existing; _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
+            StateHasChanged(); return;
+        }
+
+        var tab = CreateTab(
+            ns.Namespace,
+            ns.Client,
+            string.Empty,
+            "Scheduled",
+            "scheduled",
+            "scheduled");
         _openTabs.Add(tab);
         _activeTab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
     }
 
     private async Task ToggleEntityLinkAsync(SbEntityLink link)
     {
-        var existing = AppState.Config.ServiceBusEntityLinks
-        .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
+        var snapshot = BuildEntitySnapshot(link.NamespaceId, link.EntityPath, link.Alias, mode: "active");
+        if (snapshot is null)
+        {
+            return;
+        }
 
-        if (existing is not null)
-            AppState.Config.ServiceBusEntityLinks.Remove(existing);
-        else
-            AppState.Config.ServiceBusEntityLinks.Add(link);
-
-        await AppState.SaveConfigAsync();
+        await Workspaces.ToggleFavoriteAsync(snapshot);
         await InvokeAsync(StateHasChanged);
     }
 
-    private Task SetActive(SbTab tab)
+    private async Task SetActive(SbTab tab)
     {
         _activeTab = tab;
+        await PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
-        return Task.CompletedTask;
     }
 
     private void CloseTab(SbTab tab)
     {
         _openTabs.Remove(tab);
         if (_activeTab == tab) _activeTab = _openTabs.LastOrDefault();
+        if (_activeTab is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+        }
+        else
+        {
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
+
         StateHasChanged();
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot() => _activeTab is null
+        ? null
+        : new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"service-bus:{_activeTab.Id}",
+                Area = "service-bus",
+                Kind = _activeTab.IsScheduled ? "scheduled" : "entity",
+                DisplayName = _activeTab.Title,
+                DisplayPath = string.IsNullOrWhiteSpace(_activeTab.EntityPath)
+                    ? _activeTab.NamespaceAlias
+                    : $"{_activeTab.NamespaceAlias}/{_activeTab.EntityPath}",
+                Summary = _activeTab.NamespaceAlias,
+                Icon = "📨",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = _activeTab.NamespaceId.ToString("D"),
+                    ["entityPath"] = _activeTab.EntityPath,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["namespacePaneCollapsed"] = _isNamespacePaneCollapsed.ToString(),
+                ["activeTabId"] = _activeTab.Id,
+                ["namespaceId"] = _activeTab.NamespaceId.ToString("D"),
+                ["entityPath"] = _activeTab.EntityPath,
+                ["mode"] = _activeTab.IsScheduled ? "scheduled" : _activeTab.IsDlq ? "dlq" : "active",
+                ["tabType"] = _activeTab.IsScheduled ? "scheduled" : "entity",
+                ["tabs"] = System.Text.Json.JsonSerializer.Serialize(_openTabs.Select(CreateTabState).ToList()),
+            },
+        };
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("namespacePaneCollapsed", out var collapsedText)
+            && bool.TryParse(collapsedText, out var collapsed))
+        {
+            _isNamespacePaneCollapsed = collapsed;
+        }
+
+        _openTabs = [];
+        _activeTab = null;
+
+        if (snapshot.RestoreState.TryGetValue("tabs", out var tabsJson))
+        {
+            var tabStates = System.Text.Json.JsonSerializer.Deserialize<List<ServiceBusWorkspaceTabState>>(tabsJson) ?? [];
+            foreach (var tabState in tabStates)
+            {
+                var nsState = _namespaceStates.FirstOrDefault(state => state.Namespace.Id == tabState.NamespaceId);
+                if (nsState?.Client is null)
+                {
+                    continue;
+                }
+
+                _openTabs.Add(CreateTab(
+                    nsState.Namespace,
+                    nsState.Client,
+                    tabState.EntityPath,
+                    tabState.Title,
+                    tabState.Mode,
+                    tabState.TabType));
+            }
+
+            if (snapshot.RestoreState.TryGetValue("activeTabId", out var activeTabId))
+            {
+                _activeTab = _openTabs.FirstOrDefault(tab => string.Equals(tab.Id, activeTabId, StringComparison.Ordinal));
+            }
+        }
+
+        _activeTab ??= _openTabs.FirstOrDefault();
+
+        if (_activeTab is null
+            && snapshot.RestoreState.TryGetValue("namespaceId", out var namespaceText)
+            && Guid.TryParse(namespaceText, out var namespaceId))
+        {
+            var entityPath = snapshot.RestoreState.TryGetValue("entityPath", out var restoredEntityPath)
+                ? restoredEntityPath
+                : string.Empty;
+            var mode = snapshot.RestoreState.TryGetValue("mode", out var restoredMode)
+                ? restoredMode
+                : "active";
+            var nsState = _namespaceStates.FirstOrDefault(state => state.Namespace.Id == namespaceId);
+
+            if (nsState?.Client is not null)
+            {
+                var tab = CreateTab(
+                    nsState.Namespace,
+                    nsState.Client,
+                    entityPath,
+                    snapshot.Resource.DisplayName,
+                    mode,
+                    snapshot.RestoreState.TryGetValue("tabType", out var restoredTabType) ? restoredTabType : "entity");
+                _openTabs.Add(tab);
+                _activeTab = tab;
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private SbTab CreateTab(
+        ServiceBusNamespace @namespace,
+        IServiceBusClient client,
+        string entityPath,
+        string title,
+        string mode,
+        string tabType)
+    {
+        var isScheduled = string.Equals(tabType, "scheduled", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "scheduled", StringComparison.OrdinalIgnoreCase);
+        var isDlq = string.Equals(mode, "dlq", StringComparison.OrdinalIgnoreCase);
+        var id = isScheduled
+            ? $"{@namespace.Id}:scheduled"
+            : $"{@namespace.Id}:{entityPath}:{(isDlq ? "dlq" : "active")}";
+
+        return new SbTab
+        {
+            Id = id,
+            NamespaceId = @namespace.Id,
+            NamespaceAlias = @namespace.Alias,
+            Title = title,
+            EntityPath = entityPath,
+            Client = client,
+            IsDlq = isDlq,
+            IsScheduled = isScheduled,
+        };
+    }
+
+    private WorkspaceSnapshot? BuildEntitySnapshot(
+        Guid namespaceId,
+        string entityPath,
+        string? namespaceAlias,
+        string mode,
+        string? title = null)
+    {
+        var alias = namespaceAlias
+            ?? _namespaceStates.FirstOrDefault(state => state.Namespace.Id == namespaceId)?.Namespace.Alias
+            ?? AppState.ServiceBusNamespaces.FirstOrDefault(ns => ns.Id == namespaceId)?.Alias;
+        if (string.IsNullOrWhiteSpace(alias))
+        {
+            return null;
+        }
+
+        var isScheduled = string.Equals(mode, "scheduled", StringComparison.OrdinalIgnoreCase);
+        var displayTitle = title;
+        if (string.IsNullOrWhiteSpace(displayTitle))
+        {
+            displayTitle = isScheduled
+                ? "Scheduled"
+                : entityPath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ??
+entityPath;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = isScheduled
+                    ? $"service-bus:{namespaceId:N}:scheduled"
+                    : $"service-bus:{namespaceId:N}:{entityPath}:{mode}",
+                Area = "service-bus",
+                Kind = isScheduled ? "scheduled" : "entity",
+                DisplayName = displayTitle,
+                DisplayPath = string.IsNullOrWhiteSpace(entityPath) ? alias : $"{alias}/{entityPath}",
+                Summary = alias,
+                Icon = "📨",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = namespaceId.ToString("D"),
+                    ["entityPath"] = entityPath,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["namespaceId"] = namespaceId.ToString("D"),
+                ["entityPath"] = entityPath,
+                ["mode"] = mode,
+                ["tabType"] = isScheduled ? "scheduled" : "entity",
+            },
+        };
     }
 
     private void OnServiceBusShortcut(ServiceBusShortcutEvent e) => InvokeAsync(() =>
@@ -553,6 +778,7 @@
         _cts.Dispose();
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("service-bus");
         foreach (var id in new[] { "sb-peek", "sb-resubmit", "sb-edit-resubmit" })
             Commands.Unregister(id);
         Selection.SetSelection("service-bus", null);
@@ -572,6 +798,22 @@
         public bool IsScheduled { get; set; }
         public SbMessage? SelectedMessage { get; set; }
     }
+
+    private sealed record ServiceBusWorkspaceTabState(
+        Guid NamespaceId,
+        string NamespaceAlias,
+        string Title,
+        string EntityPath,
+        string Mode,
+        string TabType);
+
+    private static ServiceBusWorkspaceTabState CreateTabState(SbTab tab) => new(
+        tab.NamespaceId,
+        tab.NamespaceAlias,
+        tab.Title,
+        tab.EntityPath,
+        tab.IsScheduled ? "scheduled" : tab.IsDlq ? "dlq" : "active",
+        tab.IsScheduled ? "scheduled" : "entity");
 
     private sealed record SbPageSnapshot(
         List<SbNamespaceSnapshot> Namespaces);

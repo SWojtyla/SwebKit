@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
@@ -29,6 +30,7 @@ public class UiStateRepository
             _state.SavedFilters ??= [];
             _state.MessageListPreferences ??= [];
             _state.RecentCommandIds ??= [];
+            _state.RecentResources ??= [];
             _state.NotificationHistory ??= [];
             _state.DemoMonitoredNamespaces ??= [];
         }
@@ -155,6 +157,8 @@ public class UiState
     public Dictionary<string, MessageListPreferences> MessageListPreferences { get; set; } = [];
     /// <summary>Most-recently-used command IDs (newest first, max 5).</summary>
     public List<string> RecentCommandIds { get; set; } = [];
+    /// <summary>Most-recently-used semantic resources (newest first, max 8).</summary>
+    public List<RecentResourceEntry> RecentResources { get; set; } = [];
     /// <summary>Persisted notification history (newest-first, max 50).</summary>
     public List<PersistedNotification> NotificationHistory { get; set; } = [];
     /// <summary>Demo-mode pod health monitoring preferences (no AksConfig to fall back on).</summary>

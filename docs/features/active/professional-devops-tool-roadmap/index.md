@@ -4,7 +4,7 @@
 
 title: "Feature Overview - professional-devops-tool-roadmap"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 jira: "not linked"
 created: "2026-04-12"
 updated: "2026-04-12"
@@ -41,8 +41,8 @@ Without a master sequence, later features will naturally re-solve the same shell
 
 ### Delivery waves
 
-- Wave 1 - `shell-ux-foundation`
-- Wave 2 - `operator-navigation-and-workspaces`
+- Wave 1 - `shell-ux-foundation` (archived)
+- Wave 2 - `operator-navigation-and-workspaces` (archived)
 - Wave 3 - `environment-and-configuration-health`
 - Wave 4 - `incident-investigation-workflows` on top of `incident-timeline-workbench`
 - Wave 5A - `pipelines-deployment-assurance` and `service-bus-operator-workbench`
@@ -51,9 +51,9 @@ Without a master sequence, later features will naturally re-solve the same shell
 
 ## Dependencies
 
-- Related active features:
-- `docs/features/active/shell-ux-foundation/`
-- `docs/features/active/operator-navigation-and-workspaces/`
+- Related features:
+- `docs/features/archive/shell-ux-foundation/summary.md`
+- `docs/features/archive/operator-navigation-and-workspaces/summary.md`
 - `docs/features/active/environment-and-configuration-health/`
 - `docs/features/active/incident-timeline-workbench/`
 - `docs/features/active/incident-investigation-workflows/`

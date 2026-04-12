@@ -9,6 +9,7 @@
 @inject ISelectionContext Selection
 @inject INotificationService Notifications
 @inject IJSRuntime JS
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 <div class="storage-page-shell">
@@ -119,8 +120,10 @@
     protected override void OnInitialized()
     {
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.RegisterRestoreHandler("storage", RestoreWorkspaceAsync);
         RebuildClient();
         RegisterStorageCommands();
+        _ = Workspaces.ApplyPendingRestoreAsync("storage");
     }
 
     private void RegisterStorageCommands()
@@ -163,6 +166,7 @@
         _cts.Cancel();
         _cts.Dispose();
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("storage");
         foreach (var id in new[] { "storage-refresh", "storage-download-blob", "storage-copy-sas" })
         {
             Commands.Unregister(id);
@@ -192,6 +196,7 @@
             _selectedAccountId = DemoStorage.Config.Id;
             _storageClient = DemoStorage;
             ConnectionState.SetConnected("storage");
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
             return;
         }
 
@@ -199,6 +204,7 @@
         if (_storageAccounts.Count == 0)
         {
             ConnectionState.SetNotConfigured("storage");
+            Workspaces.ClearCurrentSnapshot("storage");
             return;
         }
 
@@ -215,6 +221,8 @@
         {
             ConnectionState.SetError("storage", ex.Message);
         }
+
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task OnAccountChangedAsync(ChangeEventArgs e)
@@ -223,6 +231,7 @@
         _selectedContainer = null;
         _selectedBlob = null;
         RebuildClient();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -230,6 +239,7 @@
     {
         _selectedContainer = container;
         _selectedBlob = null;
+        await PublishWorkspaceSnapshotAsync(recordRecent: !string.IsNullOrWhiteSpace(container));
         await InvokeAsync(StateHasChanged);
     }
 
@@ -237,6 +247,80 @@
     {
         _selectedBlob = blob;
         Selection.SetSelection("storage", blob);
+        await PublishWorkspaceSnapshotAsync(recordRecent: blob is not null);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("storage");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        var account = _storageAccounts.FirstOrDefault(candidate => candidate.Id == _selectedAccountId);
+        if (account is null)
+        {
+            return null;
+        }
+
+        var kind = _selectedBlob is not null
+            ? "blob"
+            : !string.IsNullOrWhiteSpace(_selectedContainer)
+                ? "container"
+                : "account";
+        var displayName = _selectedBlob?.Name ?? _selectedContainer ?? account.DisplayName;
+        var displayPath = _selectedBlob is not null
+            ? $"{account.DisplayName}/{_selectedContainer}/{_selectedBlob.Name}"
+            : !string.IsNullOrWhiteSpace(_selectedContainer)
+                ? $"{account.DisplayName}/{_selectedContainer}"
+                : account.DisplayName;
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"storage:{account.Id}:{_selectedContainer}:{_selectedBlob?.Name}",
+                Area = "storage",
+                Kind = kind,
+                DisplayName = displayName,
+                DisplayPath = displayPath,
+                Summary = account.AccountName,
+                Icon = "📁",
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["accountId"] = account.Id,
+                ["container"] = _selectedContainer ?? string.Empty,
+                ["blobName"] = _selectedBlob?.Name ?? string.Empty,
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        _selectedAccountId = snapshot.RestoreState.TryGetValue("accountId", out var accountId)
+            ? accountId
+            : _selectedAccountId;
+        RebuildClient();
+
+        _selectedContainer = snapshot.RestoreState.TryGetValue("container", out var container)
+            && !string.IsNullOrWhiteSpace(container)
+            ? container
+            : null;
+        _selectedBlob = snapshot.RestoreState.TryGetValue("blobName", out var blobName)
+            && !string.IsNullOrWhiteSpace(blobName)
+            ? new StorageBlobItem(blobName, false, null, null, null, null)
+            : null;
+
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 

@@ -49,12 +49,19 @@ public static class MauiProgram
         builder.Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
+        builder.Services.AddScoped<OperatorWorkspaceService>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
         builder.Services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
         builder.Services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, AksResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, StorageResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, RedisResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ObservabilityResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
         builder.Services.AddSingleton<TrayLifecycleState>();
 
         // Pod Health Monitor

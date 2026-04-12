@@ -6,6 +6,7 @@
 - Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
 - Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
+- Current resource, active tab, and time range participate in the shared operator workspace model, so recent/favorite reopen flows and named workspaces can restore Observability context route-first from shell surfaces.
 - Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
 - Drill-to-Logs: clicking "View in Logs" from any tab now uses an explicit pending-query handoff from `ObservabilityPage` into `ObservabilityLogs`, so the focused KQL executes exactly once without a render-timing delay
 - Logs supports explicit mode switching:
@@ -64,6 +65,8 @@ User opens Observability page
 
 For the incident cockpit backend, `AppInsightsTimelineSignalSource` resolves the selected workload's explicit `IncidentTimelineObservabilityMapping`, creates the current `IObservabilityProvider`, executes a bounded union query across exceptions/failed requests/failed dependencies, and emits corroborating evidence items with explicit "linked because" explanations. If no mapping exists, the backend returns `Unmapped` coverage instead of guessing.
 
+`ObservabilityPage` also publishes a semantic workspace snapshot after resource activation, tab changes, drill-to-logs handoff, and time-range changes. Restore reactivates the resource first, then reapplies the selected tab and time range before refresh.
+
 ## Key Code Locations
 
 | What                      | Where                                                                                                                        |
@@ -105,6 +108,7 @@ For the incident cockpit backend, `AppInsightsTimelineSignalSource` resolves the
 
 - `tests/SwebKit.Core.Tests/LogQueryResultProjectorTests.cs`
 - `tests/SwebKit.Core.Tests/DemoObservabilityProviderTests.cs`
+- `tests/SwebKit.App.Tests/ObservabilityPageTests.cs`
 
 ## Future Extension Points
 

@@ -14,6 +14,7 @@
 @inject ISelectionContext Selection
 @inject IJSRuntime JS
 @inject IAppEventBus Events
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 <div class="obs-page">
@@ -105,8 +106,8 @@
         <div class="obs-empty-state-wrap">
             <EmptyState Icon="📊" Title="No resource selected"
                         Subtitle="@(AppState.UseDemoData
-                                                                    ? "Pick a demo Application Insights resource to explore the observability workspace."
-                                                                    : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
+                                                                                                            ? "Pick a demo Application Insights resource to explore the observability workspace."
+                                                                                                            : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
                 <Actions>
                     <button type="button" @onclick="ToggleResourceSelector">Select resource</button>
                     @if (!AppState.UseDemoData)
@@ -211,7 +212,9 @@
         AppState.DemoModeChanged += OnDemoModeChanged;
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterObsCommands();
+        Workspaces.RegisterRestoreHandler("observability", RestoreWorkspaceAsync);
         await TryRestoreLastResourceAsync();
+        await Workspaces.ApplyPendingRestoreAsync("observability");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -317,6 +320,7 @@
         }
 
         await InvokeAsync(StateHasChanged);
+        await PublishWorkspaceSnapshotAsync(recordRecent: persist);
     }
 
     private IObservabilityProvider CreateProvider(string resourceId) =>
@@ -332,11 +336,13 @@
     {
         _range = range;
         await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private void SetTab(Tab tab)
     {
         _tab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }
 
@@ -364,6 +370,87 @@
         _pendingLogsQuery = kql;
         _pendingLogsQueryVersion++;
         _tab = Tab.Logs;
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("observability");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        if (_selectedResource is null)
+        {
+            return null;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"observability:{_selectedResource.ResourceId}",
+                Area = "observability",
+                Kind = "resource",
+                DisplayName = _selectedResource.Name,
+                DisplayPath = _selectedResource.Name,
+                Summary = _selectedResource.ResourceGroup,
+                Icon = "📈",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["resourceId"] = _selectedResource.ResourceId,
+                    ["resourceGroup"] = _selectedResource.ResourceGroup,
+                    ["location"] = _selectedResource.Location,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["resourceId"] = _selectedResource.ResourceId,
+                ["resourceName"] = _selectedResource.Name,
+                ["tab"] = _tab.ToString(),
+                ["rangeStart"] = _range.Start.ToString("O"),
+                ["rangeEnd"] = _range.End.ToString("O"),
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("resourceId", out var resourceId)
+            && snapshot.RestoreState.TryGetValue("resourceName", out var resourceName)
+            && !string.IsNullOrWhiteSpace(resourceId)
+            && !string.IsNullOrWhiteSpace(resourceName))
+        {
+            await ActivateResourceAsync(
+                new ObservabilityResourceInfo(resourceId, resourceName, string.Empty, string.Empty, snapshot.Resource.Summary ??
+string.Empty, string.Empty),
+                persist: false);
+        }
+
+        if (snapshot.RestoreState.TryGetValue("tab", out var tabText)
+            && Enum.TryParse<Tab>(tabText, out var restoredTab))
+        {
+            _tab = restoredTab;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("rangeStart", out var startText)
+            && snapshot.RestoreState.TryGetValue("rangeEnd", out var endText)
+            && DateTimeOffset.TryParse(startText, out var rangeStart)
+            && DateTimeOffset.TryParse(endText, out var rangeEnd))
+        {
+            _range = new TimeRange(rangeStart, rangeEnd);
+        }
+
+        await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -487,6 +574,7 @@
         Selection.SetSelection("observability", null);
         AppState.DemoModeChanged -= OnDemoModeChanged;
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("observability");
         _cts.Cancel();
         _cts.Dispose();
     }

@@ -12,5 +12,7 @@ public class AppConfig
     public DevOpsConfig? DevOpsConfig { get; set; }
     public ObservabilityConfig? ObservabilityConfig { get; set; }
     public List<FavoriteEntity> FavoriteEntities { get; set; } = [];
+    public List<FavoriteResource> FavoriteResources { get; set; } = [];
+    public List<SavedWorkspace> SavedWorkspaces { get; set; } = [];
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];
 }

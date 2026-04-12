@@ -6,6 +6,7 @@
 @inject ICredentialStore CredentialStore
 @inject IPodHealthMonitorService Monitor
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoDevOpsClient
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 @{
@@ -56,7 +57,7 @@
                     <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
                 </span>
                 <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                                                                                "—")</span>
+                                                                                                                                    "—")</span>
                     <span class="hero-stat-label">Redis</span>
                 </div>
                 <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -64,7 +65,7 @@
                         <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                     </span>
                     <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                                                                                     "—")</span>
+                                                                                                                                                             "—")</span>
                         <span class="hero-stat-label">Pipelines</span>
                     </div>
                 </div>
@@ -224,7 +225,7 @@
     private readonly List<ActivityRecord> _activities = [];
 
     // ── Pinned entities ─────────────────────────────────────────────────────────────
-    private sealed record DashboardPinnedItem(string DisplayPath, string Area, string Icon);
+    private sealed record DashboardPinnedItem(string DisplayPath, string Icon, WorkspaceSnapshot Snapshot);
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────────
     private readonly CancellationTokenSource _cts = new();
@@ -235,6 +236,7 @@
         Events.Subscribe<ActivityEvent>(OnActivityReceived);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnPodHealthDetected;
+        Workspaces.Changed += OnWorkspaceChanged;
         // Seed from ring buffer so alerts already recorded before dashboard load are visible.
         _monitorAlerts.AddRange(Monitor.RecentEvents);
     }
@@ -289,6 +291,8 @@
 
         _ = InvokeAsync(RefreshAll);
     }
+
+    private void OnWorkspaceChanged() => InvokeAsync(StateHasChanged);
 
     private Task RefreshAll() => LoadHealthDataAsync(_cts.Token);
 
@@ -458,25 +462,14 @@
 
     private void NavigateToSettings() => Events.Publish(new NavigateToAreaEvent("settings"));
 
-    private void NavigateToPin(DashboardPinnedItem pin)
-    {
-        Events.Publish(new NavigateToAreaEvent(pin.Area));
-    }
+    private Task NavigateToPin(DashboardPinnedItem pin) => Workspaces.OpenSnapshotAsync(pin.Snapshot, recordRecent: true);
 
     private IReadOnlyList<DashboardPinnedItem> GetPinnedItems()
     {
         var items = new List<DashboardPinnedItem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var link in AppState.Config.ServiceBusEntityLinks)
-        {
-            AddPinnedItem(
-                items,
-                seen,
-                new DashboardPinnedItem(ResolveServiceBusDisplayPath(link), "service-bus", "⇄"));
-        }
-
-        foreach (var favorite in AppState.Config.FavoriteEntities)
+        foreach (var favorite in Workspaces.GetFavoriteResources())
         {
             AddPinnedItem(items, seen, BuildFavoritePinnedItem(favorite));
         }
@@ -486,42 +479,22 @@
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────
 
-    private DashboardPinnedItem BuildFavoritePinnedItem(FavoriteEntity favorite)
+    private DashboardPinnedItem BuildFavoritePinnedItem(FavoriteResource favorite)
     {
-        var area = favorite.EntityType switch
+        var icon = favorite.Snapshot.Resource.Area switch
         {
-            EntityType.Queue or EntityType.Topic or EntityType.Subscription => "service-bus",
-            EntityType.Deployment => "aks",
-            _ => "settings"
+            "service-bus" => "⇄",
+            "aks" => "☁",
+            "observability" => "📈",
+            "storage" => "📁",
+            "redis" => "⚡",
+            _ => favorite.Snapshot.Resource.Icon ?? "⌘"
         };
 
-        var icon = favorite.EntityType switch
-        {
-            EntityType.Queue or EntityType.Topic or EntityType.Subscription => "⇄",
-            EntityType.Deployment => "☁",
-            _ => "⬡"
-        };
-
-        return new DashboardPinnedItem(favorite.DisplayPath, area, icon);
-    }
-
-    private string ResolveServiceBusDisplayPath(SbEntityLink link)
-    {
-        var namespaceAlias = ResolveNamespaceAlias(link);
-        var entityPath = link.EntityPath.Replace("/subscriptions/", "/", StringComparison.OrdinalIgnoreCase);
-        return string.IsNullOrWhiteSpace(namespaceAlias)
-            ? entityPath
-            : $"{namespaceAlias}/{entityPath}";
-    }
-
-    private string? ResolveNamespaceAlias(SbEntityLink link)
-    {
-        if (!string.IsNullOrWhiteSpace(link.Alias))
-        {
-            return link.Alias;
-        }
-
-        return AppState.ServiceBusNamespaces.FirstOrDefault(namespaceConfig => namespaceConfig.Id == link.NamespaceId)?.Alias;
+        return new DashboardPinnedItem(
+            favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName,
+            icon,
+            favorite.Snapshot.Clone());
     }
 
     private static void AddPinnedItem(
@@ -529,7 +502,7 @@
         HashSet<string> seen,
         DashboardPinnedItem item)
     {
-        var key = $"{item.Area}|{item.DisplayPath}";
+        var key = item.Snapshot.Resource.Key;
         if (seen.Add(key))
         {
             items.Add(item);
@@ -551,6 +524,7 @@
         Events.Unsubscribe<ActivityEvent>(OnActivityReceived);
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected -= OnPodHealthDetected;
+        Workspaces.Changed -= OnWorkspaceChanged;
         _cts.Cancel();
         _cts.Dispose();
         _refreshTimer?.Dispose();

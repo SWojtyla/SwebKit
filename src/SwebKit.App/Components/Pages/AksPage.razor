@@ -12,6 +12,7 @@
 @inject ILogger<AksPage> Logger
 @inject IPodHealthMonitorService Monitor
 @inject IAksClientBootstrapper AksBootstrapper
+@inject OperatorWorkspaceService Workspaces
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     <div class="page-shell-header">
@@ -118,17 +119,15 @@
                                 <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
                                                 SelectedDeployment="@SelectedDeployment"
                                                 OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                                OnSelectRow="@((d) => { SelectedDeployment = d; Selection.SetSelection("aks", d); StateHasChanged(); })"
-                                                OnOpenHpa="@OpenHpaDetail"
-                                                OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                                OnSelectRow="@SelectDeployment" OnOpenHpa="@OpenHpaDetail"
+                                                OnNamespaceClick="@HandleNamespaceJumpAsync" />
                                 break;
 
                             case "StatefulSets":
                                 <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
-                                                 SelectedStatefulSet="@SelectedStatefulSet"
-                                                 OnSelectRow="@((s) => { SelectedStatefulSet = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
+                                                 SelectedStatefulSet="@SelectedStatefulSet" OnSelectRow="@SelectStatefulSet"
                                                  OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
-                                                 OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                                 OnNamespaceClick="@HandleNamespaceJumpAsync" />
                                 break;
 
                             case "ConfigMaps":
@@ -143,16 +142,14 @@
                                 else
                                 {
                                     <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
-                                                   SelectedConfigMap="@SelectedConfigMap"
-                                                   OnSelectRow="@((cm) => { SelectedConfigMap = cm; Selection.SetSelection("aks", cm); StateHasChanged(); })"
+                                                   SelectedConfigMap="@SelectedConfigMap" OnSelectRow="@SelectConfigMap"
                                                    OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
                                 }
                                 break;
 
                             case "Secrets":
                                 <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
-                                            SelectedSecret="@SelectedSecret"
-                                            OnSelectRow="@((s) => { SelectedSecret = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
+                                            SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
                                             OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
                                 break;
 
@@ -160,38 +157,34 @@
                                 <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
                                          IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
                                          CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
-                                         MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)"
-                                         OnSelectRow="@((p) => { SelectedPod = p; Selection.SetSelection("aks", p); StateHasChanged(); })"
+                                         MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)" OnSelectRow="@SelectPod"
                                          OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
-                                         OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
                                 break;
 
                             case "Ingresses":
                                 <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
-                                             OnSelectRow="@((i) => { SelectedIngress = i; Selection.SetSelection("aks", i); StateHasChanged(); })"
-                                             OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
+                                             OnSelectRow="@SelectIngress" OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
                                              OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
                                 break;
 
                             case "Helm":
                                 <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
-                                          OnSelectRow="@((h) => { SelectedHelmRelease = h; Selection.SetSelection("aks", h); StateHasChanged(); })"
+                                          OnSelectRow="@SelectHelmRelease"
                                           OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
                                 break;
 
                             case "Jobs":
                                 <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace" SelectedJob="@SelectedJob"
-                                         OnSelectRow="@((job) => { SelectedJob = job; Selection.SetSelection("aks", job); StateHasChanged(); })"
-                                         OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
-                                         OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                         OnSelectRow="@SelectJob" OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@HandleNamespaceJumpAsync" />
                                 break;
 
                             case "CronJobs":
                                 <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
-                                             SelectedCronJob="@SelectedCronJob"
-                                             OnSelectRow="@((cj) => { SelectedCronJob = cj; Selection.SetSelection("aks", cj); StateHasChanged(); })"
+                                             SelectedCronJob="@SelectedCronJob" OnSelectRow="@SelectCronJob"
                                              OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
-                                             OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                             OnNamespaceClick="@HandleNamespaceJumpAsync" />
                                 break;
                         }
                     </div>
@@ -204,7 +197,7 @@
                             <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                         }
                         @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                        or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
                         {
                             <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                         }
@@ -524,6 +517,7 @@
     private string CurrentNamespace = "default";
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
+    private bool _suppressWorkspaceRecent;
     private bool ShowEvents = false;
     private bool ShowPortForwardSessions = false;
     private bool _preventGridKey;
@@ -605,6 +599,7 @@
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnMonitorPodHealthDetected;
+        Workspaces.RegisterRestoreHandler("aks", RestoreWorkspaceAsync);
         RegisterAksCommands();
     }
 
@@ -793,6 +788,7 @@ OnCtxRestartDeployment();
 
             await LoadAsync();
             ConnectionState.SetConnected("aks");
+            await Workspaces.ApplyPendingRestoreAsync("aks");
         }
         catch (OperationCanceledException)
         {
@@ -1016,6 +1012,7 @@ OnCtxRestartDeployment();
                     StoreSnapshot(cacheKey);
                 }
 
+                await PublishWorkspaceSnapshotAsync(recordRecent: false);
                 IsLoading = false;
                 await InvokeAsync(StateHasChanged); // BL-2
             }
@@ -1028,6 +1025,7 @@ OnCtxRestartDeployment();
         Cache.InvalidateByPrefix("aks:"); // PERF-18: context switch — invalidate stale cache
         ActiveContext = newContext;
         await BootstrapAndLoadAsync(newContext, CurrentNamespace);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task HandleNamespaceChangedAsync(string ns)
@@ -1035,6 +1033,243 @@ OnCtxRestartDeployment();
         CurrentNamespace = ns;
         // PERF-18: namespace switch does NOT invalidate — each ns has its own cache key
         await LoadAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private Task HandleNamespaceJumpAsync(string ns)
+    {
+        CurrentNamespace = ns;
+        return LoadAsync();
+    }
+
+    private void SelectDeployment(DeploymentInfo deployment)
+    {
+        SelectedDeployment = deployment;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectStatefulSet(StatefulSetInfo statefulSet)
+    {
+        SelectedStatefulSet = statefulSet;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectConfigMap(ConfigMapInfo configMap)
+    {
+        SelectedConfigMap = configMap;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectSecret(SecretInfo secret)
+    {
+        SelectedSecret = secret;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectPod(PodInfo pod)
+    {
+        SelectedPod = pod;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectIngress(IngressInfo ingress)
+    {
+        SelectedIngress = ingress;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectHelmRelease(HelmReleaseInfo helmRelease)
+    {
+        SelectedHelmRelease = helmRelease;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectJob(JobInfo job)
+    {
+        SelectedJob = job;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private void SelectCronJob(CronJobInfo cronJob)
+    {
+        SelectedCronJob = cronJob;
+        PushAksSelection();
+        StateHasChanged();
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("aks");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        var resourceName = GetSelectedResourceName();
+        var resourceKind = GetSelectedResourceKind();
+        var displayName = resourceName ?? (string.IsNullOrWhiteSpace(ActiveContext) ? "AKS" : ActiveContext);
+        var displayPath = resourceName is null ? displayName : $"{CurrentNamespace}/{resourceName}";
+        var key = resourceName is null
+            ? $"aks:cluster:{ActiveContext}:{CurrentNamespace}"
+            : $"aks:{resourceKind}:{CurrentNamespace}:{resourceName}";
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = key,
+                Area = "aks",
+                Kind = resourceKind,
+                DisplayName = displayName,
+                DisplayPath = displayPath,
+                Summary = string.IsNullOrWhiteSpace(ActiveContext)
+                    ? ActiveResourceType
+                    : $"{ActiveContext} | {ActiveResourceType}",
+                Icon = "☸",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["context"] = ActiveContext,
+                    ["namespace"] = CurrentNamespace,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["context"] = ActiveContext,
+                ["namespace"] = CurrentNamespace,
+                ["resourceType"] = ActiveResourceType,
+                ["filter"] = ActiveFilter,
+                ["showEvents"] = ShowEvents.ToString(),
+                ["showPortForwardSessions"] = ShowPortForwardSessions.ToString(),
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("context", out var restoredContext))
+        {
+            ActiveContext = restoredContext;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("namespace", out var restoredNamespace))
+        {
+            CurrentNamespace = restoredNamespace;
+        }
+
+        await BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
+
+        if (snapshot.RestoreState.TryGetValue("resourceType", out var restoredResourceType)
+            && !string.IsNullOrWhiteSpace(restoredResourceType))
+        {
+            ActiveResourceType = restoredResourceType;
+        }
+
+        ActiveFilter = snapshot.RestoreState.TryGetValue("filter", out var restoredFilter)
+            ? restoredFilter
+            : string.Empty;
+
+        if (snapshot.RestoreState.TryGetValue("showEvents", out var showEventsText)
+            && bool.TryParse(showEventsText, out var restoredShowEvents))
+        {
+            ShowEvents = restoredShowEvents;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("showPortForwardSessions", out var showPortForwardText)
+            && bool.TryParse(showPortForwardText, out var restoredShowPortForwardSessions))
+        {
+            ShowPortForwardSessions = restoredShowPortForwardSessions;
+        }
+
+        if (snapshot.Resource.Kind != "cluster")
+        {
+            _suppressWorkspaceRecent = true;
+            ApplySelectedResource(snapshot.Resource.Kind, snapshot.Resource.DisplayName);
+            _suppressWorkspaceRecent = false;
+        }
+
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string? GetSelectedResourceName() => ActiveResourceType switch
+    {
+        "Deployments" => SelectedDeployment?.Name,
+        "Pods" => SelectedPod?.Name,
+        "StatefulSets" => SelectedStatefulSet?.Name,
+        "ConfigMaps" => SelectedConfigMap?.Name,
+        "Secrets" => SelectedSecret?.Name,
+        "Ingresses" => SelectedIngress?.Name,
+        "Helm" => SelectedHelmRelease?.Name,
+        "Jobs" => SelectedJob?.Name,
+        "CronJobs" => SelectedCronJob?.Name,
+        _ => null,
+    };
+
+    private string GetSelectedResourceKind() => ActiveResourceType switch
+    {
+        "Deployments" => "deployment",
+        "Pods" => "pod",
+        "StatefulSets" => "statefulset",
+        "ConfigMaps" => "configmap",
+        "Secrets" => "secret",
+        "Ingresses" => "ingress",
+        "Helm" => "helm",
+        "Jobs" => "job",
+        "CronJobs" => "cronjob",
+        _ => "cluster",
+    };
+
+    private void ApplySelectedResource(string resourceKind, string resourceName)
+    {
+        switch (resourceKind)
+        {
+            case "deployment":
+                SelectedDeployment = Deployments.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "pod":
+                SelectedPod = Pods.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "statefulset":
+                SelectedStatefulSet = StatefulSets.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "configmap":
+                SelectedConfigMap = ConfigMaps.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "secret":
+                SelectedSecret = Secrets.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "ingress":
+                SelectedIngress = Ingresses.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "helm":
+                SelectedHelmRelease = HelmReleases.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "job":
+                SelectedJob = Jobs.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            case "cronjob":
+                SelectedCronJob = CronJobs.FirstOrDefault(item => item.Name == resourceName);
+                break;
+            default:
+                ClearSelection();
+                return;
+        }
+
+        PushAksSelection();
     }
 
     private void HandleToggleEvents(bool value)
@@ -1053,11 +1288,13 @@ OnCtxRestartDeployment();
     {
         ActiveResourceType = type;
         ClearSelection();
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private void OnFilterChanged(string value)
     {
         ActiveFilter = value;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }
 
@@ -1132,6 +1369,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
             _ => null
         };
         Selection.SetSelection("aks", selected);
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: !_suppressWorkspaceRecent && selected is not null);
     }
 
     private void ClearSelection()
@@ -1146,6 +1384,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         SelectedJob = null;
         SelectedCronJob = null;
         Selection.SetSelection("aks", null);
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }
 
@@ -1733,6 +1972,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected -= OnMonitorPodHealthDetected;
+        Workspaces.UnregisterRestoreHandler("aks");
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })
             Commands.Unregister(id);

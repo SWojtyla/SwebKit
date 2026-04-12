@@ -42,9 +42,9 @@ Right now an operator often discovers missing configuration or credential issues
 ## Dependencies
 
 - Hard dependency:
-- `docs/features/active/shell-ux-foundation/`
+- `docs/features/archive/shell-ux-foundation/summary.md`
 - Sequencing dependency:
-- `docs/features/active/operator-navigation-and-workspaces/`
+- `docs/features/archive/operator-navigation-and-workspaces/summary.md`
 - Sequencing parent:
 - `docs/features/active/professional-devops-tool-roadmap/`
 - Architecture and functionality references:

@@ -1,7 +1,6 @@
 @inject CommandRegistry Registry
 @inject IJSRuntime JS
-@inject AppStateService AppState
-@inject IAppEventBus Events
+@inject OperatorWorkspaceService Workspaces
 @implements IAsyncDisposable
 
 <div class="command-palette-overlay" @onclick="Close">
@@ -16,35 +15,37 @@
         <div class="cp-results" @ref="_resultsRef">
             @{
                 var sections = GetSections();
-                var allCmds = sections.SelectMany(s => s.Commands).ToList();
+                var allItems = sections.SelectMany(s => s.Items).ToList();
                 int renderIdx = 0;
             }
-            @if (allCmds.Count == 0 && !string.IsNullOrWhiteSpace(_query))
+            @if (allItems.Count == 0 && !string.IsNullOrWhiteSpace(_query))
             {
                 <div class="cp-empty">No commands match "<em>@_query</em>"</div>
             }
             @foreach (var grp in sections)
             {
                 <div class="cp-section-header">@grp.Label</div>
-                @foreach (var cmd in grp.Commands)
+                @foreach (var item in grp.Items)
                 {
                     var idx = renderIdx++;
-                    var cmdCapture = cmd;
-                    <div class="command-item @(idx == _focusedIndex ? "focused" : "")" @onclick="() => ExecuteAsync(cmdCapture)"
-                         @onmousemove="() => { _focusedIndex = idx; }">
-                        @if (!string.IsNullOrEmpty(cmd.Icon))
+                    var itemCapture = item;
+                    <div class="command-item @(idx == _focusedIndex ? "focused" : "")"
+                         @onclick="() => ExecuteAsync(itemCapture)" @onmousemove="() => { _focusedIndex = idx; }">
+                        @if (!string.IsNullOrEmpty(item.Icon))
                         {
-                            <span class="cp-cmd-icon">@cmd.Icon</span>
+                            <span class="cp-cmd-icon">@item.Icon</span>
                         }
-                        @if (!string.IsNullOrEmpty(cmd.Category) && string.IsNullOrWhiteSpace(_query))
-                        {
-                            @* Category label hidden when grouped by section header *@
-                        }
-                        <span class="cp-cmd-label">@cmd.Label</span>
-                        @if (!string.IsNullOrEmpty(cmd.Shortcut))
+                        <div class="cp-cmd-body">
+                            <span class="cp-cmd-label">@item.Label</span>
+                            @if (!string.IsNullOrWhiteSpace(item.Summary))
+                            {
+                                <span class="cp-cmd-summary">@item.Summary</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(item.Shortcut))
                         {
                             <span class="cp-cmd-shortcut">
-                                @foreach (var part in cmd.Shortcut.Split('+'))
+                                @foreach (var part in item.Shortcut.Split('+'))
                                 {
                                     <kbd>@part.Trim()</kbd>
                                 }
@@ -68,7 +69,16 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public string? CurrentArea { get; set; }
 
-    private record CommandSection(string Label, IReadOnlyList<AppCommand> Commands);
+    private sealed record PaletteItem(
+        string Id,
+        string Label,
+        Func<Task> Execute,
+        string? Icon = null,
+        string? Shortcut = null,
+        string? CommandId = null,
+        string? Summary = null);
+
+    private sealed record PaletteSection(string Label, IReadOnlyList<PaletteItem> Items);
 
     private string _query = "";
     private int _focusedIndex;
@@ -85,11 +95,15 @@
 
     private Task Close() => OnClose.InvokeAsync();
 
-    private async Task ExecuteAsync(AppCommand cmd)
+    private async Task ExecuteAsync(PaletteItem item)
     {
         await OnClose.InvokeAsync();
-        await Registry.RecordUsedAsync(cmd.Id);
-        await cmd.Execute();
+        if (!string.IsNullOrWhiteSpace(item.CommandId))
+        {
+            await Registry.RecordUsedAsync(item.CommandId);
+        }
+
+        await item.Execute();
     }
 
     private void OnQueryInput(ChangeEventArgs e)
@@ -100,23 +114,23 @@
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        var allCmds = GetSections().SelectMany(s => s.Commands).ToList();
+        var allItems = GetSections().SelectMany(s => s.Items).ToList();
 
         switch (e.Key)
         {
             case "ArrowDown":
-                _focusedIndex = allCmds.Count == 0 ? 0 : (_focusedIndex + 1) % allCmds.Count;
+                _focusedIndex = allItems.Count == 0 ? 0 : (_focusedIndex + 1) % allItems.Count;
                 await ScrollFocused();
                 break;
 
             case "ArrowUp":
-                _focusedIndex = allCmds.Count == 0 ? 0 : (_focusedIndex - 1 + allCmds.Count) % allCmds.Count;
+                _focusedIndex = allItems.Count == 0 ? 0 : (_focusedIndex - 1 + allItems.Count) % allItems.Count;
                 await ScrollFocused();
                 break;
 
             case "Enter":
-                if (_focusedIndex < allCmds.Count)
-                    await ExecuteAsync(allCmds[_focusedIndex]);
+                if (_focusedIndex < allItems.Count)
+                    await ExecuteAsync(allItems[_focusedIndex]);
                 break;
 
             case "Escape":
@@ -131,177 +145,131 @@
         catch { }
     }
 
-    private List<CommandSection> GetSections()
+    private List<PaletteSection> GetSections()
     {
-        // UI-4: "go " prefix — show transient "Go to resource" commands
-        if (_query.StartsWith("go ", StringComparison.OrdinalIgnoreCase))
-        {
-            var subQuery = _query[3..].Trim();
-            return BuildGoToSections(subQuery);
-        }
-
+        var resourceOnlyMode = _query.StartsWith("go ", StringComparison.OrdinalIgnoreCase);
+        var resourceQuery = resourceOnlyMode ? _query[3..].Trim() : _query.Trim();
         var available = Registry.GetAvailable(CurrentArea);
-        var result = new List<CommandSection>();
+        var result = new List<PaletteSection>();
 
-        if (string.IsNullOrWhiteSpace(_query))
+        if (string.IsNullOrWhiteSpace(resourceQuery))
         {
-            // Show recent commands first, then group the rest by category
             var recentIds = Registry.RecentCommandIds;
-            var recentCmds = recentIds
+            var recentCommands = recentIds
                 .Select(id => available.FirstOrDefault(c => c.Id == id))
                 .OfType<AppCommand>()
+                .Select(CreateCommandItem)
                 .ToList();
 
-            if (recentCmds.Count > 0)
-                result.Add(new CommandSection("Recent", recentCmds));
+            if (recentCommands.Count > 0)
+            {
+                result.Add(new PaletteSection("Recent Commands", recentCommands));
+            }
+
+            var recentResources = Workspaces.GetRecentResources()
+                .Select(entry => CreateSnapshotItem(entry.Snapshot, entry.AccessedAt.ToLocalTime().ToString("g")))
+                .ToList();
+            if (recentResources.Count > 0)
+            {
+                result.Add(new PaletteSection("Recent Resources", recentResources));
+            }
+
+            var favorites = Workspaces.GetFavoriteResources()
+                .Select(favorite => CreateSnapshotItem(favorite.Snapshot, BuildResourceSummary(favorite.Snapshot)))
+                .ToList();
+            if (favorites.Count > 0)
+            {
+                result.Add(new PaletteSection("Favorites", favorites));
+            }
+
+            var workspaces = Workspaces.GetSavedWorkspaces()
+                .Select(CreateWorkspaceItem)
+                .ToList();
+            if (workspaces.Count > 0)
+            {
+                result.Add(new PaletteSection("Workspaces", workspaces));
+            }
 
             foreach (var group in available
                 .Where(c => !recentIds.Contains(c.Id))
                 .GroupBy(c => c.Category ?? "General")
                 .OrderBy(g => CategoryOrder(g.Key)))
             {
-                result.Add(new CommandSection(group.Key, group.ToList()));
+                result.Add(new PaletteSection(group.Key, group.Select(CreateCommandItem).ToList()));
             }
         }
         else
         {
-            // Fuzzy-match all available commands, group by category, rank by score
-            var scored = available
-                .Select(c => (cmd: c, score: FuzzyScore(_query, c.Label)))
-                .Where(x => x.score > 0)
-                .OrderByDescending(x => x.score)
-                .Select(x => x.cmd)
+            var matchingResources = Workspaces.SearchResources(resourceQuery)
+                .Select(snapshot => CreateSnapshotItem(snapshot, BuildResourceSummary(snapshot)))
                 .ToList();
-
-            foreach (var group in scored
-                .GroupBy(c => c.Category ?? "General")
-                .OrderBy(g => CategoryOrder(g.Key)))
+            if (matchingResources.Count > 0)
             {
-                result.Add(new CommandSection(group.Key, group.ToList()));
+                result.Add(new PaletteSection("Resources", matchingResources));
+            }
+
+            var matchingWorkspaces = Workspaces.SearchSavedWorkspaces(resourceQuery)
+                .Select(CreateWorkspaceItem)
+                .ToList();
+            if (matchingWorkspaces.Count > 0)
+            {
+                result.Add(new PaletteSection("Workspaces", matchingWorkspaces));
+            }
+
+            if (!resourceOnlyMode)
+            {
+                var scoredCommands = available
+                    .Select(command => (Command: command, Score: SearchScoring.FuzzyScore(resourceQuery, command.Label)))
+                    .Where(candidate => candidate.Score > 0)
+                    .OrderByDescending(candidate => candidate.Score)
+                    .Select(candidate => candidate.Command)
+                    .ToList();
+
+                foreach (var group in scoredCommands
+                    .GroupBy(command => command.Category ?? "General")
+                    .OrderBy(group => CategoryOrder(group.Key)))
+                {
+                    result.Add(new PaletteSection(group.Key, group.Select(CreateCommandItem).ToList()));
+                }
             }
         }
 
         return result;
     }
 
-    private List<CommandSection> BuildGoToSections(string subQuery)
+    private static PaletteItem CreateCommandItem(AppCommand command) => new(
+        command.Id,
+        command.Label,
+        command.Execute,
+        command.Icon,
+        command.Shortcut,
+        command.Id,
+        command.Category);
+
+    private PaletteItem CreateSnapshotItem(WorkspaceSnapshot snapshot, string? summary) => new(
+        snapshot.Resource.Key,
+        snapshot.Resource.DisplayPath ?? snapshot.Resource.DisplayName,
+        () => Workspaces.OpenSnapshotAsync(snapshot, recordRecent: true),
+        snapshot.Resource.Icon,
+        null,
+        null,
+        summary);
+
+    private PaletteItem CreateWorkspaceItem(SavedWorkspace workspace) => new(
+        workspace.Id.ToString("N"),
+        workspace.Name,
+        () => Workspaces.OpenWorkspaceAsync(workspace.Id),
+        workspace.Snapshot.Resource.Icon,
+        null,
+        null,
+        workspace.Snapshot.Resource.DisplayPath ?? workspace.Snapshot.Resource.DisplayName);
+
+    private static string BuildResourceSummary(WorkspaceSnapshot snapshot)
     {
-        var goCommands = new List<AppCommand>();
-
-        // Service Bus namespaces
-        foreach (var ns in AppState.ServiceBusNamespaces)
-        {
-            goCommands.Add(new AppCommand
-            {
-                Id = $"goto-sb-{ns.Id}",
-                Label = $"Service Bus: {ns.Alias}",
-                Category = "Go to",
-                Icon = "📨",
-                Execute = () =>
-                {
-                    Events.Publish(new NavigateToAreaEvent("service-bus"));
-                    return Task.CompletedTask;
-                }
-            });
-        }
-
-        // Storage accounts
-        foreach (var acc in AppState.Config.StorageAccounts)
-        {
-            goCommands.Add(new AppCommand
-            {
-                Id = $"goto-storage-{acc.Id}",
-                Label = $"Storage: {acc.DisplayName} ({acc.AccountName})",
-                Category = "Go to",
-                Icon = "📁",
-                Execute = () =>
-                {
-                    Events.Publish(new NavigateToAreaEvent("storage"));
-                    return Task.CompletedTask;
-                }
-            });
-        }
-
-        // AKS
-        if (AppState.Config.AksConfig is { } aksConfig)
-        {
-            var label = !string.IsNullOrWhiteSpace(aksConfig.KubeconfigContext)
-                ? $"AKS: {aksConfig.KubeconfigContext}"
-                : "AKS Cluster";
-            goCommands.Add(new AppCommand
-            {
-                Id = "goto-aks-cluster",
-                Label = label,
-                Category = "Go to",
-                Icon = "☸",
-                Execute = () =>
-                {
-                    Events.Publish(new NavigateToAreaEvent("aks"));
-                    return Task.CompletedTask;
-                }
-            });
-        }
-
-        // Redis caches
-        if (AppState.Config.RedisConfig is { } redisConfig)
-        {
-            foreach (var cache in redisConfig.Caches)
-            {
-                goCommands.Add(new AppCommand
-                {
-                    Id = $"goto-redis-{cache.Id}",
-                    Label = $"Redis: {cache.DisplayName}",
-                    Category = "Go to",
-                    Icon = "⚡",
-                    Execute = () =>
-                    {
-                        Events.Publish(new NavigateToAreaEvent("redis"));
-                        return Task.CompletedTask;
-                    }
-                });
-            }
-        }
-
-        // Filter by sub-query
-        var filtered = string.IsNullOrWhiteSpace(subQuery)
-            ? goCommands
-            : goCommands
-                .Select(c => (cmd: c, score: FuzzyScore(subQuery, c.Label)))
-                .Where(x => x.score > 0)
-                .OrderByDescending(x => x.score)
-                .Select(x => x.cmd)
-                .ToList();
-
-        return filtered.Count > 0
-            ? [new CommandSection("Go to Resource", filtered)]
-            : [new CommandSection("Go to Resource", [new AppCommand
-                {
-                    Id = "goto-empty",
-                    Label = "No matching resources",
-                    Category = "Go to",
-                    Execute = () => Task.CompletedTask
-                }])];
-    }
-
-    private static int FuzzyScore(string query, string label)
-    {
-        var q = query.ToLowerInvariant();
-        var l = label.ToLowerInvariant();
-        int qi = 0, score = 0, lastMatch = -1;
-        bool firstMatchSeen = false;
-
-        for (int i = 0; i < l.Length && qi < q.Length; i++)
-        {
-            if (l[i] != q[qi]) continue;
-            int bonus = (i == lastMatch + 1) ? 2 : 1; // consecutive char bonus
-            if (!firstMatchSeen && i == 0) bonus += 3; // prefix bonus
-            firstMatchSeen = true;
-            score += bonus;
-            lastMatch = i;
-            qi++;
-        }
-
-        return qi == q.Length ? score : 0;
+        var areaLabel = SwebKit.App.Components.Layout.ShellNavigation.ForArea(snapshot.Resource.Area).Label;
+        return string.IsNullOrWhiteSpace(snapshot.Resource.Summary)
+            ? areaLabel
+            : $"{areaLabel} | {snapshot.Resource.Summary}";
     }
 
     private static int CategoryOrder(string cat) => cat switch
