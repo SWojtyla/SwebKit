@@ -77,7 +77,7 @@
   - active mode uses `CompleteMessagesAsync(entityPath, sequenceNumbers)`
   - DLQ mode uses `CompleteDeadLetterAsync(entityPath, sequenceNumbers)`
 - Filtered export for parity Wave 2 is JSON-only; CSV export is intentionally deferred.
-- Production protections rely on current environment and are enforced by `ConfirmDialog` at UI interaction level.
+- Production protections rely on the current production-marked configuration and are enforced by `ConfirmDialog` at UI interaction level.
 - Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
 - Entity names in the entity list wrap to full visibility (no single-line truncation/horizontal-scroll pattern).
 - Topic rows retain expand/collapse behavior; queue/subscription operational actions are centralized in the selected-entity action bar.

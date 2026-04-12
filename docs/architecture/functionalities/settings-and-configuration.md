@@ -2,7 +2,7 @@
 
 ## What Is Supported
 
-- Environment-scoped configuration editing for:
+- Single-configuration editing for:
   - Service Bus pinned entities
   - Azure DevOps organization and PAT credential-key settings
   - Observability provider settings
@@ -10,7 +10,7 @@
   - Incident Timeline workload mappings for App Insights, Service Bus, and Azure DevOps evidence
   - Redis cache entries
   - Storage (Azure Blob) account config
-- Save settings back to the current project profile when profile persistence is healthy.
+- Save settings back to the persisted app profile when profile persistence is healthy.
 - Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
 - Non-fatal startup warning banner when `profiles.json` fails to load.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
@@ -44,7 +44,7 @@
 
 ## Important Notes
 
-- Settings are project-level data with environment-level nested configs.
+- Settings are project-level data stored in one persisted app configuration.
 - Incident Timeline mappings are additive workload metadata; they do not replace the base Service Bus, Observability, or DevOps settings those sources still depend on.
 - Secrets are expected in credential store and not in profile JSON.
 - `ProfileRepository` blocks persistence after a failed load so a corrupted `profiles.json` file is not silently overwritten.

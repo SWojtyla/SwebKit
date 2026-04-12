@@ -58,7 +58,6 @@ public enum IncidentTimelineSourceCoverageState
 }
 
 public sealed record IncidentWorkloadScope(
-    string? EnvironmentName,
     string? ClusterContext,
     string Namespace,
     IncidentWorkloadKind WorkloadKind,
@@ -69,7 +68,7 @@ public sealed record IncidentWorkloadScope(
     public string WorkloadKey => WorkloadName.Trim();
 
     public string ToScopeKey() =>
-        $"{EnvironmentName ?? string.Empty}|{ClusterContext ?? string.Empty}|{NamespaceKey}|{WorkloadKind}|{WorkloadKey}";
+        $"{ClusterContext ?? string.Empty}|{NamespaceKey}|{WorkloadKind}|{WorkloadKey}";
 }
 
 public sealed record IncidentTimelineQuery

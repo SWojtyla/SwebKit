@@ -42,7 +42,7 @@ public sealed class ServiceBusEvidenceSignalSourceTests
 
         var result = await source.FetchAsync(new IncidentTimelineQuery
         {
-            Scope = new IncidentWorkloadScope("Prod", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "order-api"),
+            Scope = new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "order-api"),
             Window = new TimeRange(DateTimeOffset.UtcNow.AddHours(-6), DateTimeOffset.UtcNow),
             SelectedSources = [IncidentTimelineSource.ServiceBus],
             MaxItems = 10,
@@ -64,8 +64,6 @@ public sealed class ServiceBusEvidenceSignalSourceTests
         repository.ReplaceProfileData(new ProfileData
         {
             Config = config,
-            Environments = [config],
-            ActiveEnvironmentName = config.Name,
             ServiceBusNamespaces = [namespaceConfig],
         });
 

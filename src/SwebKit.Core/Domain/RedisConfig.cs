@@ -10,7 +10,7 @@ namespace SwebKit.Core.Domain;
 /// </summary>
 public class RedisConfig
 {
-    /// <summary>Named cache entries for this environment.</summary>
+    /// <summary>Named cache entries for this configuration.</summary>
     public List<RedisCacheEntry> Caches { get; set; } = [];
 
     /// <summary>Id of the currently active cache.</summary>

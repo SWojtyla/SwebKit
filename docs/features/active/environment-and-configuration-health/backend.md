@@ -10,7 +10,7 @@ status: "Planned"
 
 ## Goal
 
-Create the read-only health, readiness, and environment-diff contracts needed to explain whether an operator environment is configured and ready for SwebKit's Azure-focused workflows.
+Create the read-only health and readiness contracts needed to explain whether the current SwebKit configuration is set up and ready for Azure-focused workflows.
 
 ## Impacted areas
 
@@ -27,7 +27,7 @@ Create the read-only health, readiness, and environment-diff contracts needed to
 - `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`
 - `src/SwebKit.DevOps/DevOpsClientFactory.cs`
 - Likely new contracts and services:
-- `src/SwebKit.Core/Domain/` or `src/SwebKit.Core/Models/` for health-report and diff models
+- `src/SwebKit.Core/Domain/` or `src/SwebKit.Core/Models/` for health-report and configuration-gap models
 - `src/SwebKit.Core/Abstractions/` for health-report or readiness service contracts
 - `src/SwebKit.Core/Services/` for report aggregation and environment-diff logic
 - Tests:
@@ -44,15 +44,14 @@ The backend should separate three concerns:
 2. Credential/reference health: does the referenced credential or Azure identity path appear available without exposing secret contents?
 3. Readiness/probe outcome: can the app perform a cheap, read-only verification that the workflow is likely usable?
 
-One aggregated service should combine those concerns into a single environment report. Environment comparison should be a sibling concern: normalize two `AppConfig` instances, compare meaningful fields, and ignore secrets or unstable runtime values.
+One aggregated service should combine those concerns into a single readiness report for the current persisted configuration. Any future configuration-gap summary should normalize one `AppConfig` snapshot and explain missing or risky fields without diffing multiple local profile environments.
 
 ## API / Contracts
 
 - Likely report contracts:
-- `EnvironmentHealthReport` with area-level results and an overall readiness summary.
-- `EnvironmentCheckResult` with status values such as `NotConfigured`, `Configured`, `Ready`, `Warning`, `Error`, and `Skipped`.
+- `ConfigurationHealthReport` with area-level results and an overall readiness summary.
+- `ConfigurationCheckResult` with status values such as `NotConfigured`, `Configured`, `Ready`, `Warning`, `Error`, and `Skipped`.
 - `CredentialReferenceStatus` that reports presence/absence and source type without exposing secret contents.
-- `EnvironmentDiffResult` and `EnvironmentDiffEntry` for normalized config comparison.
 - `OperatorReadinessState` for shell-friendly summary chips or checklist items.
 - Backward compatibility notes:
 - Existing page-local connection status should remain additive and may later consume the same report model.
@@ -60,10 +59,10 @@ One aggregated service should combine those concerns into a single environment r
 
 ## Tasks
 
-### Wave 1 - Canonical report and diff models [dotnet-expert] (sequential root)
+### Wave 1 - Canonical report models [dotnet-expert] (sequential root)
 
-- [ ] Define the health-report, readiness, and diff models in `SwebKit.Core`.
-- [ ] Define normalization rules for environment comparison.
+- [ ] Define the health-report and readiness models in `SwebKit.Core`.
+- [ ] Define normalization rules for configuration-gap summaries.
 - [ ] Decide which report fields are safe for logs, UI rendering, and persistence.
 - [ ] Keep secrets and raw credential values out of all report contracts.
 
@@ -74,12 +73,11 @@ One aggregated service should combine those concerns into a single environment r
 - [ ] Budget provider execution time and expose partial results cleanly.
 - [ ] Ensure providers can report `Configured but not ready` without pretending success.
 
-### Wave 3 - Environment comparison and readiness aggregation [dotnet-expert] (depends on Waves 1-2)
+### Wave 3 - Readiness aggregation and settings handoff [dotnet-expert] (depends on Waves 1-2)
 
-- [ ] Build environment diff logic across `ProfileRepository.Environments`.
 - [ ] Aggregate per-area health into one operator-readiness summary.
 - [ ] Expose direct Settings handoff metadata where useful.
-- [ ] Keep compare/readiness logic framework-agnostic so it is testable outside the UI.
+- [ ] Keep readiness logic framework-agnostic so it is testable outside the UI.
 
 ### Wave 4 - Tests and hardening [dotnet-expert] (depends on Waves 1-3)
 
@@ -91,7 +89,7 @@ One aggregated service should combine those concerns into a single environment r
 ## Migration and runtime changes
 
 - No infrastructure changes are required.
-- Existing profile data should remain valid; comparison can be derived from current `Environments` structure.
+- Existing profile data should remain valid; the feature should consume the single-config model introduced by `remove-environment-model`.
 - Checklist completion should be derived from config/readiness state rather than from storing a separate wizard-complete flag unless implementation proves that is necessary.
 
 ## Validation
@@ -101,7 +99,7 @@ One aggregated service should combine those concerns into a single environment r
 - Manual checks:
 - Verify probes remain read-only.
 - Verify missing credentials and missing config can be distinguished.
-- Verify environment comparison omits secrets and unstable fields.
+- Verify configuration-gap summaries omit secrets and unstable fields.
 
 ## Notes
 

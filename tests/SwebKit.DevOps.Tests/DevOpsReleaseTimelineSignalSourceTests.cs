@@ -45,7 +45,7 @@ public sealed class DevOpsReleaseTimelineSignalSourceTests
 
         var result = await source.FetchAsync(new IncidentTimelineQuery
         {
-            Scope = new IncidentWorkloadScope("Prod", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "order-api"),
+            Scope = new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "order-api"),
             Window = new TimeRange(DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow),
             SelectedSources = [IncidentTimelineSource.Releases],
             MaxItems = 20,
@@ -67,8 +67,6 @@ public sealed class DevOpsReleaseTimelineSignalSourceTests
         repository.ReplaceProfileData(new ProfileData
         {
             Config = config,
-            Environments = [config],
-            ActiveEnvironmentName = config.Name,
         });
 
         return new AppStateService(repository, new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance));

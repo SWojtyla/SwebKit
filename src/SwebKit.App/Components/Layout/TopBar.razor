@@ -19,8 +19,7 @@
 
     <div class="top-bar__spacer"></div>
 
-    <div class="top-bar__badges" aria-label="Environment and page status">
-        <span class="shell-pill shell-pill--muted">@CurrentContext.EnvironmentLabel</span>
+    <div class="top-bar__badges" aria-label="Page status">
         @if (!string.IsNullOrWhiteSpace(ConnectionBadgeText))
         {
             <span class="shell-pill @ConnectionBadgeClass">@ConnectionBadgeText</span>
@@ -82,7 +81,7 @@
     [Parameter] public EventCallback OnNavToggle { get; set; }
     [Parameter]
     public ShellRouteContext CurrentContext { get; set; } =
-ShellNavigation.CreateContext(ShellNavigation.Dashboard, "Default", false, false);
+ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
 
     private bool _isHistoryOpen;
     private bool _showDemoConfirm;

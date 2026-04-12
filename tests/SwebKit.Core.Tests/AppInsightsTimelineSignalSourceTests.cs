@@ -26,7 +26,7 @@ public sealed class AppInsightsTimelineSignalSourceTests
             ],
         };
 
-        var mapping = config.FindWorkloadMapping(new IncidentWorkloadScope("Prod", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"));
+        var mapping = config.FindWorkloadMapping(new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"));
 
         Assert.NotNull(mapping);
     }
@@ -92,7 +92,7 @@ public sealed class AppInsightsTimelineSignalSourceTests
 
     private static IncidentTimelineQuery CreateQuery() => new()
     {
-        Scope = new IncidentWorkloadScope("Prod", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
+        Scope = new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
         Window = new TimeRange(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow),
         SelectedSources = [IncidentTimelineSource.Observability],
         MaxItems = 20,
@@ -108,8 +108,6 @@ public sealed class AppInsightsTimelineSignalSourceTests
         repository.ReplaceProfileData(new ProfileData
         {
             Config = config,
-            Environments = [config],
-            ActiveEnvironmentName = config.Name,
         });
 
         return new AppStateService(repository, new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance));

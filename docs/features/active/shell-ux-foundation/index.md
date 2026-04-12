@@ -26,7 +26,7 @@ This feature is the foundation for every later operator experience improvement. 
 - In scope:
 - Route-aware navigation state instead of purely imperative area tracking.
 - Navigation grouping and clearer shell hierarchy.
-- Better top-bar context for current page and active environment.
+- Better top-bar context for current page and shell safety state.
 - Consistent page headers and `h1` usage across routed pages.
 - Stronger empty states with actionable CTAs.
 - Trustworthy refresh and status signals in the shell.

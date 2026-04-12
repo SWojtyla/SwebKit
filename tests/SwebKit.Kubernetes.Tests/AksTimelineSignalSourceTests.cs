@@ -21,7 +21,7 @@ public sealed class AksTimelineSignalSourceTests
 
         var result = await source.FetchAsync(new IncidentTimelineQuery
         {
-            Scope = new IncidentWorkloadScope("Prod", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
+            Scope = new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
             Window = new TimeRange(now.AddHours(-1), now),
             SelectedSources = [IncidentTimelineSource.Aks],
             MaxItems = 20,
@@ -45,8 +45,6 @@ public sealed class AksTimelineSignalSourceTests
         repository.ReplaceProfileData(new ProfileData
         {
             Config = config,
-            Environments = [config],
-            ActiveEnvironmentName = config.Name,
         });
 
         return new AppStateService(repository, new UiStateRepository(), new AppEventBus(NullLogger<AppEventBus>.Instance));

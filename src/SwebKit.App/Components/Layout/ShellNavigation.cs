@@ -17,7 +17,6 @@ public sealed record ShellNavGroup(string Label, IReadOnlyList<ShellNavEntry> It
 
 public sealed record ShellRouteContext(
     ShellNavEntry Entry,
-    string EnvironmentLabel,
     bool IsProduction,
     bool IsDemoMode)
 {
@@ -33,7 +32,7 @@ public static class ShellNavigation
         "dashboard",
         "/dashboard",
         "Dashboard",
-        "Cross-service signals and shortcuts for the active environment.",
+        "Cross-service signals and shortcuts for the current workspace.",
         "Overview",
         new Icons.Regular.Size24.Home(),
         false,
@@ -101,7 +100,7 @@ public static class ShellNavigation
         "settings",
         "/settings",
         "Settings",
-        "Manage environment config, theme, and safety defaults.",
+        "Manage configuration, theme, and safety defaults.",
         "Configuration",
         new Icons.Regular.Size24.Settings(),
         true);
@@ -166,12 +165,10 @@ public static class ShellNavigation
 
     public static ShellRouteContext CreateContext(
         ShellNavEntry entry,
-        string? environmentLabel,
         bool isProduction,
         bool isDemoMode) =>
         new(
             entry,
-            string.IsNullOrWhiteSpace(environmentLabel) ? "Default" : environmentLabel.Trim(),
             isProduction,
             isDemoMode);
 

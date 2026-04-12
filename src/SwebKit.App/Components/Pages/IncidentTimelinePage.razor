@@ -13,7 +13,6 @@
     <RoutePageHeader Area="incident-timeline"
                      Subtitle="Inspect workload-scoped evidence across AKS, App Insights, Service Bus, and recent release activity.">
         <Meta>
-            <span class="shell-pill shell-pill--muted">@EnvironmentLabel</span>
             @if (!string.IsNullOrWhiteSpace(_workloadName))
             {
                 <span class="shell-pill shell-pill--accent">@ScopeWorkloadLabel</span>
@@ -38,7 +37,6 @@
 
     <section class="incident-scope-summary" data-testid="incident-scope-summary" aria-live="polite">
         <div class="incident-scope-summary__facts">
-            <span class="incident-scope-summary__fact">Environment: @EnvironmentLabel</span>
             <span class="incident-scope-summary__fact">Context: @ScopeValueOrFallback(_activeContext)</span>
             <span class="incident-scope-summary__fact">Namespace: @ScopeValueOrFallback(_currentNamespace)</span>
             <span class="incident-scope-summary__fact">Workload: @ScopeWorkloadLabel</span>
@@ -193,8 +191,6 @@
                 && mapping.WorkloadKind == _workloadKind)
             .OrderBy(mapping => mapping.DisplayName ?? mapping.WorkloadName, StringComparer.OrdinalIgnoreCase)
             .ToList();
-
-    private string EnvironmentLabel => AppState.ActiveEnvironmentName ?? AppState.Config.Name;
 
     private string ScopeWorkloadLabel => string.IsNullOrWhiteSpace(_workloadName)
         ? "Not selected"
@@ -526,7 +522,6 @@ string.IsNullOrWhiteSpace(_currentNamespace))
         return new IncidentTimelineQuery
         {
             Scope = new IncidentWorkloadScope(
-                EnvironmentLabel,
                 string.IsNullOrWhiteSpace(_activeContext) ? null : _activeContext,
                 _currentNamespace,
                 _workloadKind,
@@ -605,7 +600,7 @@ IncidentTimelineSourceCoverageState.TimedOut);
 
         if (notConfiguredSources.Count > 0)
         {
-            messages.Add($"{FormatSourceList(notConfiguredSources)} {(notConfiguredSources.Count == 1 ? "is" : "are")} not configured for this environment.");
+            messages.Add($"{FormatSourceList(notConfiguredSources)} {(notConfiguredSources.Count == 1 ? "is" : "are")} not configured for this scope.");
         }
 
         messages.Add("Open Settings > Incident Timeline to author workload mappings for this scope.");

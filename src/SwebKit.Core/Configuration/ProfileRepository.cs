@@ -14,22 +14,11 @@ public class ProfileRepository
     private ProfileData _data = new();
     private ProfileLoadResult _lastLoadResult = ProfileLoadResult.NotStarted;
 
-    public AppConfig Config => ResolveActiveEnvironment();
+    public AppConfig Config => _data.Config;
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _data.MessageTemplates;
-    public IReadOnlyList<AppConfig> Environments => _data.Environments;
-    public string? ActiveEnvironmentName => _data.ActiveEnvironmentName;
     public ProfileLoadResult LastLoadResult => _lastLoadResult;
     public bool IsPersistenceBlocked => _lastLoadResult.IsFailure;
-
-    private AppConfig ResolveActiveEnvironment()
-    {
-        if (_data.Environments.Count == 0)
-            return _data.Config;
-
-        return _data.Environments.FirstOrDefault(e => e.Name == _data.ActiveEnvironmentName)
-            ?? _data.Environments[0];
-    }
 
     public async Task<ProfileLoadResult> LoadAsync()
     {
@@ -47,17 +36,7 @@ public class ProfileRepository
         try
         {
             var json = await File.ReadAllTextAsync(filePath);
-            var loaded = JsonSerializer.Deserialize<ProfileData>(json, Options) ?? new ProfileData();
-
-            // Migrate: if Environments is empty, seed from Config
-            if (loaded.Environments.Count == 0)
-            {
-                loaded.Config.Name ??= "Default";
-                loaded.Environments.Add(loaded.Config);
-                loaded.ActiveEnvironmentName = loaded.Config.Name;
-            }
-
-            _data = loaded;
+            _data = DeserializeProfileData(json);
             _lastLoadResult = ProfileLoadResult.Loaded(filePath);
         }
         catch (Exception ex)
@@ -119,45 +98,73 @@ public class ProfileRepository
     public void DeleteMessageTemplate(Guid id) =>
         _data.MessageTemplates.RemoveAll(t => t.Id == id);
 
-    /// <summary>Deep-clones the active environment config via JSON roundtrip.</summary>
-    public AppConfig CloneEnvironment(string newName)
-    {
-        var source = Config;
-        var json = JsonSerializer.Serialize(source, Options);
-        var clone = JsonSerializer.Deserialize<AppConfig>(json, Options)!;
-        clone.Name = newName;
-        _data.Environments.Add(clone);
-        return clone;
-    }
-
-    public void SwitchEnvironment(string name)
-    {
-        var target = _data.Environments.FirstOrDefault(e => e.Name == name);
-        if (target is not null)
-            _data.ActiveEnvironmentName = name;
-    }
-
-    public void RemoveEnvironment(string name)
-    {
-        _data.Environments.RemoveAll(e => e.Name == name);
-        if (_data.ActiveEnvironmentName == name)
-            _data.ActiveEnvironmentName = _data.Environments.FirstOrDefault()?.Name;
-    }
-
     /// <summary>Returns the full profile data for export purposes.</summary>
     public ProfileData GetProfileData() => _data;
 
     /// <summary>Replaces the full profile data (used by config import).</summary>
     public void ReplaceProfileData(ProfileData data)
     {
-        _data = data;
-        // Ensure migration
-        if (_data.Environments.Count == 0)
+        _data = NormalizeProfileData(data);
+    }
+
+    private static ProfileData DeserializeProfileData(string json)
+    {
+        var loaded = JsonSerializer.Deserialize<LegacyProfileData>(json, Options) ?? new LegacyProfileData();
+        return NormalizeLegacyProfileData(loaded);
+    }
+
+    private static ProfileData NormalizeLegacyProfileData(LegacyProfileData data)
+    {
+        var config = ResolveConfig(data);
+        config.Name ??= "Default";
+
+        return new ProfileData
         {
-            _data.Config.Name ??= "Default";
-            _data.Environments.Add(_data.Config);
-            _data.ActiveEnvironmentName = _data.Config.Name;
+            Config = config,
+            ServiceBusNamespaces = data.ServiceBusNamespaces ?? [],
+            MessageTemplates = data.MessageTemplates ?? [],
+            SchemaVersion = 2,
+        };
+    }
+
+    private static ProfileData NormalizeProfileData(ProfileData data)
+    {
+        data.Config ??= new AppConfig();
+        data.Config.Name ??= "Default";
+        data.ServiceBusNamespaces ??= [];
+        data.MessageTemplates ??= [];
+        data.SchemaVersion = Math.Max(data.SchemaVersion, 2);
+        return data;
+    }
+
+    private static AppConfig ResolveConfig(LegacyProfileData data)
+    {
+        if (data.Environments.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(data.ActiveEnvironmentName))
+            {
+                var active = data.Environments.FirstOrDefault(environment =>
+                    string.Equals(environment.Name, data.ActiveEnvironmentName, StringComparison.OrdinalIgnoreCase));
+                if (active is not null)
+                {
+                    return active;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(data.Config.Name))
+            {
+                var matchingConfig = data.Environments.FirstOrDefault(environment =>
+                    string.Equals(environment.Name, data.Config.Name, StringComparison.OrdinalIgnoreCase));
+                if (matchingConfig is not null)
+                {
+                    return matchingConfig;
+                }
+            }
+
+            return data.Environments[0];
         }
+
+        return data.Config ?? new AppConfig();
     }
 }
 
@@ -183,6 +190,14 @@ public sealed record ProfileLoadResult(ProfileLoadStatus Status, string? FilePat
 }
 
 public class ProfileData
+{
+    public AppConfig Config { get; set; } = new();
+    public List<ServiceBusNamespace> ServiceBusNamespaces { get; set; } = [];
+    public List<SbMessageTemplate> MessageTemplates { get; set; } = [];
+    public int SchemaVersion { get; set; } = 2;
+}
+
+internal sealed class LegacyProfileData
 {
     public AppConfig Config { get; set; } = new();
     public List<AppConfig> Environments { get; set; } = [];

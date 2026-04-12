@@ -27,7 +27,7 @@ Current focus: review the final validation evidence, avoid reopening stable shel
 - [x] Define scope and implementation waves
 - [x] Route-derived shell context model
 - [x] Navigation grouping and active-state behavior
-- [x] Top-bar context for current area and active environment
+- [x] Top-bar context for current area and shell safety state
 
 ### Wave 2 - Shared state patterns and status signals
 

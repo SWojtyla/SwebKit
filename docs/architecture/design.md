@@ -297,7 +297,7 @@ sequenceDiagram
 - `SaveConfigAsync()` returns `false` when profile persistence is blocked after a failed load; settings forms surface the blocked-save message and keep the current session state in memory.
 - Credentials are referenced by logical keys; secret material remains in credential store.
 - DevOps settings validation and live pages create fresh clients through `IDevOpsClientFactory`; saving settings affects only future client snapshots.
-- Environment selection is profile-based (`Environments` and `ActiveEnvironmentName` in `ProfileData`).
+- `ProfileRepository` now persists one active `AppConfig` and only keeps legacy multi-environment compatibility at load time for migration.
 
 ## Key Reference Points
 
@@ -306,7 +306,7 @@ sequenceDiagram
 | `src/SwebKit.App/MauiProgram.cs`                                                                     | DI composition root and infrastructure registration.                                   |
 | `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                 | App shell lifecycle, startup sequencing, and global command registration.              |
 | `src/SwebKit.Core/Services/AppStateService.cs`                                                       | Shared app state, initialization, demo mode toggling, and persistence calls.           |
-| `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                | Profile/environment load-save lifecycle for `profiles.json`.                           |
+| `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                | Single-config load-save lifecycle plus legacy-profile migration for `profiles.json`.   |
 | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences.  |
 | `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`                                              | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.           |
 | `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs`                                        | Service Bus namespace bootstrap and connection seam used by the page.                  |

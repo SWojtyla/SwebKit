@@ -58,7 +58,7 @@ Readiness reporting may describe credential references, source type, and presenc
 
 ---
 
-## Decision 003 - Environment comparison should diff normalized config, not live runtime state
+## Decision 003 - Readiness summaries should normalize config, not live runtime state
 
 **Status:** Accepted
 
@@ -66,20 +66,20 @@ Readiness reporting may describe credential references, source type, and presenc
 
 ### Context
 
-Operators need to compare environments such as Dev and Prod. Mixing runtime probe state with config diff would make the output noisy and unstable.
+Operators need a stable explanation of what is configured and what is missing. Mixing runtime probe state with raw config output would make the result noisy and unstable.
 
 ### Decision
 
-Environment comparison should operate on normalized profile config plus safe credential-reference metadata, not on volatile runtime status.
+Readiness summaries and configuration-gap output should operate on normalized config plus safe credential-reference metadata, not on volatile runtime status.
 
 ### Consequences
 
-- Comparison stays stable and explainable.
+- Summaries stay stable and explainable.
 - Runtime readiness remains a separate health-report concern.
 
 ### Alternatives considered
 
-- Alternative A - mix live readiness into environment diff: rejected because it makes comparison too noisy and time-variant.
+- Alternative A - mix live readiness into configuration summaries: rejected because it makes the output too noisy and time-variant.
 
 ---
 

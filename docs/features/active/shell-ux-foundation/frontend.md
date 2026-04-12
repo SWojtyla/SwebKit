@@ -87,7 +87,7 @@ This final slice stayed intentionally narrow: mostly tests and docs, with room f
 
 - [x] Replace purely imperative `CurrentArea` tracking with route-derived shell context.
 - [x] Group left-nav items by operator intent rather than a flat list.
-- [x] Extend top-bar context to show the current area, active environment, and any shell-level safety state.
+- [x] Extend top-bar context to show the current area and any shell-level safety state.
 - [x] Preserve existing refresh and shortcut behavior while moving shell state derivation closer to routing.
 
 ### Wave 2 - Shared page-header and state patterns [blazor-expert] (depends on Wave 1)
@@ -107,7 +107,7 @@ This final slice stayed intentionally narrow: mostly tests and docs, with room f
 ### Wave 4 - Theme and production-safety polish [blazor-expert] (depends on Waves 1-3)
 
 - [x] Audit shell colors, tokens, and theme persistence behavior.
-- [x] Surface environment production context consistently at shell level.
+- [x] Surface production context consistently at shell level.
 - [x] Standardize shared destructive-action emphasis so pages do not each invent their own production treatment.
 - [x] Record the final shell-context and safety model in `decisions.md`.
 
@@ -123,7 +123,7 @@ This final slice stayed intentionally narrow: mostly tests and docs, with room f
 - E2E tests: Passed via `tests/SwebKit.E2E.Tests/AppUiTests.cs` after adding per-test shell reset coverage, `/releases` alias routing checks, theme persistence checks, `FocusOnNavigate` heading focus checks, and a final `LeftNav` active-state repair exposed by the alias-route assertion.
 - Manual UX checks:
 - Open each top-level route directly and verify correct nav state, page header, and focus target.
-- Toggle between normal and production-marked environments and verify shell safety treatment.
+- Toggle production mode on and off and verify shell safety treatment.
 - Trigger notification flows and confirm toast/history consistency.
 - Change theme, restart the app, and verify consistent shell rendering.
 

@@ -79,7 +79,7 @@
 
                 <div class="settings-field-group">
                     <p class="settings-hint">
-                        Mark this environment as production. Destructive operations (e.g. DLQ resubmit/delete) will show
+                        Mark this configuration as production. Destructive operations (e.g. DLQ resubmit/delete) will show
                         an extra confirmation step requiring you to type CONFIRM.
                     </p>
                     <FluentCheckbox Value="@AppState.Config.IsProduction"
@@ -234,7 +234,7 @@
 
     private string CurrentSectionSubtitle => _active switch
     {
-        AppearanceSection => "Tune shell themes, demo behavior, and safety defaults for this environment.",
+        AppearanceSection => "Tune shell themes, demo behavior, and safety defaults for this configuration.",
         ServiceBusSection => "Manage namespace connections and how messaging workspaces open by default.",
         AksSection => "Choose the cluster context and namespace defaults that drive the AKS workspace.",
         RedisSection => "Select the active cache and the connection profile used by Redis views.",
@@ -242,7 +242,7 @@
         IncidentTimelineSection => "Point timeline analysis at the namespace and workload metadata it should inspect.",
         StorageSection => "Configure Azure Blob access for storage inspection and related workflows.",
         ObservabilitySection => "Review query limits and the Azure CLI identity model used for Application Insights access.",
-        _ => "Manage workspace-specific configuration for the current environment."
+        _ => "Manage workspace-specific configuration for the app."
     };
 
     protected override void OnInitialized()

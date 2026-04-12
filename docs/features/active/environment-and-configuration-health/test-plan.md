@@ -12,11 +12,11 @@ updated: "2026-04-12"
 
 ## Goal
 
-Validate that SwebKit can explain environment readiness clearly and safely: what is configured, what credentials exist, which workflows are ready, how environments differ, and what the operator should do next when something is missing.
+Validate that SwebKit can explain readiness clearly and safely for the current configuration: what is configured, what credentials exist, which workflows are ready, and what the operator should do next when something is missing.
 
 ## Scope
 
-- In scope: first-run checklist, credential/config health, connection-health overview, environment comparison, and Azure-focused readiness summaries.
+- In scope: first-run checklist, credential/config health, connection-health overview, configuration-gap summaries, and Azure-focused readiness summaries.
 - Out of scope: new domain operations, shell navigation improvements, and mutating repair actions against Azure resources.
 
 ## Main scenarios (priority)
@@ -26,7 +26,7 @@ Validate that SwebKit can explain environment readiness clearly and safely: what
 3. Scenario: missing credential reference - Expected result: the app explains which referenced credential is absent without exposing secret values.
 4. Scenario: Azure identity readiness gap - Expected result: Observability, Storage, or AKS readiness can explain likely `DefaultAzureCredential` prerequisites without pretending the workflow is healthy.
 5. Scenario: connection-health overview - Expected result: Service Bus, AKS, Redis, Storage, Pipelines, and Incident Timeline prerequisites show configured/not configured/ready/error states accurately.
-6. Scenario: environment comparison - Expected result: operators can compare environment config drift without diffing secrets or unstable runtime fields.
+6. Scenario: configuration-gap summary - Expected result: operators can see meaningful missing or risky config without diffing secrets or unstable runtime fields.
 7. Scenario: profile-load failure - Expected result: readiness UI respects blocked profile persistence and does not imply that a broken config file was repaired.
 8. Scenario: probe timeout or partial failure - Expected result: health reporting remains useful and explicit even when one probe fails or times out.
 9. Scenario: production environment - Expected result: readiness and checklist surfaces keep production context visible and avoid encouraging unsafe trial actions.
@@ -34,9 +34,9 @@ Validate that SwebKit can explain environment readiness clearly and safely: what
 ## Automated coverage
 
 - Component tests: `tests/SwebKit.App.Tests`
-- Cover checklist rendering, CTA deep links into Settings, health-state badges/cards, environment comparison UI, and blocked-persistence messaging.
+- Cover checklist rendering, CTA deep links into Settings, health-state badges/cards, configuration-gap UI, and blocked-persistence messaging.
 - Unit tests: `tests/SwebKit.Core.Tests`
-- Cover report normalization, environment diff logic, readiness-state calculation, and health-result aggregation.
+- Cover report normalization, configuration-gap logic, readiness-state calculation, and health-result aggregation.
 - Integration tests: `tests/SwebKit.Azure.Tests`, `tests/SwebKit.Kubernetes.Tests`, `tests/SwebKit.DevOps.Tests`
 - Cover any read-only probe or adapter logic added for Service Bus, AKS, Storage, Observability, or DevOps readiness.
 - End-to-end tests: `tests/SwebKit.E2E.Tests`
@@ -44,8 +44,8 @@ Validate that SwebKit can explain environment readiness clearly and safely: what
 
 ## Test data and setup
 
-- Fresh or sparse profile data with no usable environment config.
-- Mixed environments where one is fully configured and another intentionally lacks credentials or resource configuration.
+- Fresh or sparse profile data with no usable app config.
+- Partially configured profiles that intentionally lack credentials or resource configuration in one or more capability areas.
 - Credential-store fixtures where keys exist, are missing, or point to incomplete configuration.
 - Probe fixtures for success, timeout, not-configured, and auth-failure outcomes.
 
@@ -53,20 +53,20 @@ Validate that SwebKit can explain environment readiness clearly and safely: what
 
 - Check: first-run onboarding - verify the checklist tells the operator what to configure first and where to do it.
 - Check: credential hygiene - inspect health UI and confirm no secret values or sensitive details are rendered.
-- Check: environment comparison - compare two environments and confirm differences are meaningful and stable.
+- Check: configuration-gap summary - confirm the app highlights meaningful missing prerequisites and stable next steps.
 - Check: readiness trust - force a partial failure and confirm the app remains explicit about what is and is not ready.
 
 ## Regression risks & mitigations
 
 - Risk: readiness probes trigger expensive or mutating external operations. Mitigation: keep checks read-only, budgeted, and covered by tests.
 - Risk: health cards overstate readiness based on weak signals. Mitigation: distinguish configured, ready, degraded, and unknown explicitly.
-- Risk: comparison output becomes noisy because of non-deterministic fields. Mitigation: normalize and whitelist fields before diffing.
+- Risk: configuration-gap output becomes noisy because of non-deterministic or low-signal fields. Mitigation: normalize and whitelist fields before summarizing.
 
 ## Acceptance criteria
 
 - Operators can tell what to configure next from a first-run or partially configured state.
 - Credential and readiness reporting does not leak secrets.
-- Environment comparison surfaces meaningful drift between profile environments.
+- Configuration-gap summaries surface meaningful missing or risky setup for the current profile.
 - Major Azure-focused workflows have an explicit readiness summary.
 - Partial failures remain visible instead of being silently ignored.
 

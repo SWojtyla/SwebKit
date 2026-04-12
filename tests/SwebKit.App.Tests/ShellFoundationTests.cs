@@ -135,16 +135,15 @@ public sealed class ShellFoundationTests : TestContext
     }
 
     [Fact]
-    public void TopBar_ShowsEnvironmentAndConnectionStatusForCurrentRoute()
+    public void TopBar_ShowsConnectionStatusForCurrentRoute()
     {
         _connectionState.SetNotConfigured("observability");
 
         var cut = RenderComponent<TopBar>(parameters => parameters
-            .Add(p => p.CurrentContext, ShellNavigation.CreateContext(ShellNavigation.Observability, "Ops Lab", false, false)));
+            .Add(p => p.CurrentContext, ShellNavigation.CreateContext(ShellNavigation.Observability, false, false)));
 
         Assert.Contains("Signals", cut.Markup);
         Assert.Contains("Observability", cut.Markup);
-        Assert.Contains("Ops Lab", cut.Markup);
         Assert.Contains("Needs setup", cut.Markup);
     }
 
@@ -157,7 +156,7 @@ public sealed class ShellFoundationTests : TestContext
         {
             Severity = "Info",
             Message = "Background sync completed",
-            Detail = "Synced 3 environments.",
+            Detail = "Synced 3 workspaces.",
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(-5)
         });
 

@@ -87,7 +87,7 @@ public sealed class IncidentTimelineServiceTests
 
     private static IncidentTimelineQuery CreateQuery(int maxItems = 10, int maxItemsPerSource = 10) => new()
     {
-        Scope = new IncidentWorkloadScope("Test", "ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
+        Scope = new IncidentWorkloadScope("ctx", "prd-phonotif", IncidentWorkloadKind.Deployment, "phonotif-api"),
         Window = new TimeRange(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow),
         SelectedSources =
         [

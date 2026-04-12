@@ -87,9 +87,8 @@
 
     private string CurrentArea => _currentRoute.Area;
     private ShellNavEntry CurrentRoute => _currentRoute;
-    private ShellRouteContext CurrentShellContext => ShellNavigation.CreateContext(_currentRoute, EnvironmentLabel,
+    private ShellRouteContext CurrentShellContext => ShellNavigation.CreateContext(_currentRoute,
 AppState.Config.IsProduction, AppState.UseDemoData);
-    private string EnvironmentLabel => AppState.ActiveEnvironmentName ?? AppState.Config.Name;
     private DesignThemeModes CurrentDesignMode => string.Equals(_currentTheme, DefaultDarkTheme,
 StringComparison.OrdinalIgnoreCase)
         ? DesignThemeModes.Dark
