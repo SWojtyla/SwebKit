@@ -7,12 +7,14 @@
   - Azure DevOps organization and PAT credential-key settings
   - Observability provider settings
   - AKS kubeconfig/context defaults
+  - Incident Timeline workload mappings for App Insights, Service Bus, and Azure DevOps evidence
   - Redis cache entries
   - Storage (Azure Blob) account config
 - Save settings back to the current project profile when profile persistence is healthy.
 - Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
 - Non-fatal startup warning banner when `profiles.json` fails to load.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
+- Query-driven preselection of the Incident Timeline settings section when the incident page links into `/settings?section=incident-timeline`.
 
 ## Core Runtime Flow
 
@@ -20,14 +22,16 @@
 2. `MainLayout` renders immediately, then shows a non-fatal warning banner if profile loading failed.
 3. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
 4. Accordion forms mutate the config objects directly on `AppConfig`.
-5. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. If the last profile load failed, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`.
-6. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
+5. The Incident Timeline settings form edits `AppConfig.IncidentTimeline.WorkloadMappings`, including the per-workload App Insights, Service Bus, and Azure DevOps bindings used by the incident workbench.
+6. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. If the last profile load failed, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`.
+7. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
 
 ## Main Code Locations
 
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
 - `src/SwebKit.App/Components/Pages/DevOpsConfigForm.razor`
+- `src/SwebKit.App/Components/Pages/IncidentTimelineConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ObservabilityConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
@@ -41,6 +45,7 @@
 ## Important Notes
 
 - Settings are project-level data with environment-level nested configs.
+- Incident Timeline mappings are additive workload metadata; they do not replace the base Service Bus, Observability, or DevOps settings those sources still depend on.
 - Secrets are expected in credential store and not in profile JSON.
 - `ProfileRepository` blocks persistence after a failed load so a corrupted `profiles.json` file is not silently overwritten.
 - DevOps settings accept organization slug input or supported Azure DevOps URL forms. Saving or testing settings creates new live-client snapshots; it does not mutate an existing shared live client.

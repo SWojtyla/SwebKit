@@ -4,10 +4,10 @@
 
 title: "Feature Overview - incident-timeline-workbench"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 jira: "not linked"
 created: "2026-03-28"
-updated: "2026-04-11"
+updated: "2026-04-12"
 
 ---
 
@@ -125,6 +125,7 @@ These labels describe inclusion confidence and operator usefulness. They must ne
 - Architecture map: docs/architecture/architecture.md
 - Component design: docs/architecture/design.md
 - Code navigation: docs/architecture/codebase-guide.md
+- Incident timeline functionality: docs/architecture/functionalities/incident-timeline.md
 - Pitfalls index: docs/pitfalls/index.md
 
 ## Quick links

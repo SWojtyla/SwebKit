@@ -4,9 +4,9 @@
 
 title: "Test Plan - incident-timeline-workbench"
 owner: "GitHub Copilot"
-status: "Not started"
+status: "In Progress"
 created: "2026-03-28"
-updated: "2026-04-11"
+updated: "2026-04-12"
 
 ---
 
@@ -33,18 +33,23 @@ Validate that the Incident Timeline Workbench produces a correct, time-ordered, 
 10. Scenario: Result cap reached in a 6 hour window - Expected result: truncation messaging is shown and the UI remains responsive.
 11. Scenario: Navigation away during load and return - Expected result: no background exception leaks and no updates to disposed components.
 12. Scenario: UI wording review - Expected result: the page does not show root cause, culprit, or likely cause language.
+13. Scenario: Source toggle readability - Expected result: each source toggle shows explicit `On` / `Off` state text and remains understandable without relying on color alone.
+14. Scenario: Unmapped or not-configured sources - Expected result: the page shows actionable guidance plus a direct path to Settings > Incident Timeline for the current workload scope.
+15. Scenario: Incident Timeline settings authoring - Expected result: operators can add and persist workload mappings for App Insights, Service Bus, and Azure DevOps from Settings.
 
 ## Automated coverage
 
 - Component tests: tests/SwebKit.App.Tests
-- Validate scope toolbar behavior, loading or empty or error states, coverage strip rendering, truncation messaging, and detail-panel explanation text.
-- Validate row rendering, source badges, severity badges, and relevance labels.
+- Validate scope toolbar behavior, explicit source toggle state, loading or empty or error states, coverage strip rendering, truncation messaging, detail-panel explanation text, and last-request-wins behavior.
+- Validate row rendering, source badges, severity badges, relevance labels, and detail-panel row switching.
+- Validate the incident timeline settings form can seed and normalize workload mappings.
 - Unit tests: tests/SwebKit.Core.Tests
 - Validate workload scope normalization, merge ordering, inclusion-rule evaluation, link-reason generation, source coverage aggregation, truncation, and cancellation token propagation.
 - Integration tests: tests/SwebKit.Azure.Tests, tests/SwebKit.Kubernetes.Tests, tests/SwebKit.DevOps.Tests
 - Validate adapter mappings for AKS workload evidence, App Insights workload mapping, Service Bus topology mapping, and deployment or release mapping.
 - End-to-end tests: tests/SwebKit.E2E.Tests
-- Validate the `prd-phonotif` investigation flow from page load to scoped evidence review and manual refresh behavior.
+- Validate the new incident timeline navigation entry and page route, plus the existing shell nav inventory.
+- Leave the full `prd-phonotif` evidence walkthrough for a later live-data E2E slice because the current fixture targets shell-level navigation checks only.
 - CI gates: all newly added tests pass and no regressions appear in existing suites.
 
 ## Test data and setup
@@ -61,12 +66,15 @@ Validate that the Incident Timeline Workbench produces a correct, time-ordered, 
 - Open Incident Timeline, select the target profile, namespace `prd-phonotif`, workload, and Last 1 hour, then verify row order, scope summary, source chips, and explanation labels.
 - Check: Unmapped source visibility - steps
 - Use a scope with no App Insights or Service Bus mapping, refresh, and verify the coverage strip explains unmapped sources rather than silently omitting them.
+- Verify the mapping guidance note offers a direct path into Settings > Incident Timeline.
 - Check: Partial source outage visibility - steps
 - Simulate one provider failure, refresh, and verify degraded-source messaging while remaining evidence continues to render.
 - Check: Cancellation and responsiveness - steps
 - Trigger rapid scope or range changes and refresh clicks, then verify no stale rows flash and the page remains responsive.
 - Check: Terminology audit - steps
 - Review timeline rows, detail panel, empty state, and coverage strip text to confirm the UI stays evidence-first and avoids causal wording.
+- Check: Mapping authoring handoff - steps
+- From Incident Timeline, open the mapping guidance link and verify Settings lands on Incident Timeline with the current scope ready to author or update.
 
 ## Regression risks & mitigations
 
@@ -74,6 +82,8 @@ Validate that the Incident Timeline Workbench produces a correct, time-ordered, 
 - Mitigation: additive contracts only; run affected project test suites before merge.
 - Risk: UI wording drifts back toward correlation or root-cause claims.
 - Mitigation: add copy assertions in component tests and include wording review in manual validation.
+- Risk: `Unmapped` coverage remains visible but still feels like a dead end.
+- Mitigation: cover the settings deep link and mapping authoring path in targeted component tests plus manual UX checks.
 - Risk: Cancellation is swallowed by broad exception handling.
 - Mitigation: explicit OperationCanceledException passthrough tests and code review checklist.
 - Risk: Source mappings are applied too broadly and include unrelated workload evidence.
@@ -91,7 +101,10 @@ Validate that the Incident Timeline Workbench produces a correct, time-ordered, 
 
 ## Validation status
 
-- Automated: Not started
+- Automated: backend unit and integration suites passed on 2026-04-12 (`SwebKit.Core.Tests`, `SwebKit.Azure.Tests`, `SwebKit.Kubernetes.Tests`, `SwebKit.DevOps.Tests`)
+- Automated: app build passed on 2026-04-12 (`dotnet build src/SwebKit.App/SwebKit.App.csproj -c Debug -f net10.0-windows10.0.19041.0 -p:WindowsPackageType=None`)
+- Automated: incident timeline bUnit coverage passed on 2026-04-12 (`dotnet test tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj -c Debug --filter "FullyQualifiedName~IncidentTimelinePageTests|FullyQualifiedName~IncidentTimelineConfigFormTests"`)
+- Automated: minimal nav/page E2E coverage passed on 2026-04-12 (`dotnet test tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj -c Debug --filter "Navigation_ToIncidentTimeline|AppShell_HasAllNavItems"`)
 - Manual: Not started
 
 ## Sign-off

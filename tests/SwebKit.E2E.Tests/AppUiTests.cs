@@ -58,7 +58,7 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
         var areas = new[]
         {
             "dashboard", "service-bus", "aks", "redis",
-            "storage", "pipelines", "observability", "settings"
+            "storage", "pipelines", "observability", "incident-timeline", "settings"
         };
 
         foreach (var area in areas)
@@ -114,6 +114,15 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
         await NavigateToAsync("service-bus");
 
         await Assertions.Expect(_fixture.Page.Locator(".service-bus-page-shell"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task Navigation_ToIncidentTimeline()
+    {
+        await NavigateToAsync("incident-timeline");
+
+        await Assertions.Expect(_fixture.Page.Locator(".incident-timeline-page"))
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 

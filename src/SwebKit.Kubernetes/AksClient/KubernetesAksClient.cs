@@ -169,7 +169,10 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 Replicas = d.Spec?.Replicas ?? 0,
                 ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
                 Status = d.Status?.Conditions?.FirstOrDefault(c => c.Type == "Available")?.Status ?? "Unknown",
-                Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : []
+                Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : [],
+                SelectorLabels = d.Spec?.Selector?.MatchLabels is not null
+                    ? new Dictionary<string, string>(d.Spec.Selector.MatchLabels)
+                    : []
             }).ToList();
         });
     }
@@ -1060,7 +1063,10 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 ReadyReplicas = s.Status?.ReadyReplicas ?? 0,
                 CurrentRevision = s.Status?.CurrentRevision,
                 UpdateRevision = s.Status?.UpdateRevision,
-                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : []
+                Labels = s.Metadata.Labels is not null ? new Dictionary<string, string>(s.Metadata.Labels) : [],
+                SelectorLabels = s.Spec?.Selector?.MatchLabels is not null
+                    ? new Dictionary<string, string>(s.Spec.Selector.MatchLabels)
+                    : []
             }).ToList();
         });
     }

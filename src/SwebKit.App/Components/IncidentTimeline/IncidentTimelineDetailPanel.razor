@@ -1,0 +1,120 @@
+@using SwebKit.Core.Models
+
+<aside class="incident-detail-panel" data-testid="incident-detail-panel" aria-live="polite">
+    <div class="incident-detail-panel__header">
+        <div>
+            <h2>Evidence details</h2>
+            <p>Inspect why an item is included before drawing conclusions.</p>
+        </div>
+
+        @if (Item is not null)
+        {
+            <FluentButton Appearance="Appearance.Stealth" Title="Close detail panel" @onclick="OnClose">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+            </FluentButton>
+        }
+    </div>
+
+    @if (Item is null)
+    {
+        <div class="incident-detail-panel__placeholder">
+            Select evidence from the timeline to inspect its link explanations and metadata.
+        </div>
+    }
+    else
+    {
+        <div class="incident-detail-panel__content">
+            <div class="incident-detail-panel__badges">
+                <span class="incident-badge @IncidentTimelineDisplay.GetSourceClass(Item.Source)">@IncidentTimelineDisplay.GetSourceLabel(Item.Source)</span>
+                <span class="incident-badge @IncidentTimelineDisplay.GetSeverityClass(Item.Severity)">@IncidentTimelineDisplay.GetSeverityLabel(Item.Severity)</span>
+                <span class="incident-badge @IncidentTimelineDisplay.GetRelevanceClass(Item.PrimaryRelevance)">@IncidentTimelineDisplay.GetRelevanceLabel(Item.PrimaryRelevance)</span>
+            </div>
+
+            <div class="incident-detail-panel__summary-block">
+                <div class="incident-detail-panel__title">@Item.Title</div>
+                <div class="incident-detail-panel__timestamp">@Item.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz")</div>
+                @if (!string.IsNullOrWhiteSpace(Item.Summary))
+                {
+                    <div class="incident-detail-panel__summary">@Item.Summary</div>
+                }
+            </div>
+
+            <section class="incident-detail-panel__section">
+                <h3>Linked because</h3>
+                <ul class="incident-detail-panel__reasons">
+                    @foreach (var reason in GetReasons())
+                    {
+                        <li>
+                            <strong>@IncidentTimelineDisplay.GetLinkTypeLabel(reason.Type):</strong>
+                            <span>@reason.Explanation</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            @if (Item.ResourceRef is not null)
+            {
+                <section class="incident-detail-panel__section">
+                    <h3>Scoped resource</h3>
+                    <div class="incident-detail-panel__resource">@GetResourceLabel(Item.ResourceRef)</div>
+                </section>
+            }
+
+            <section class="incident-detail-panel__section">
+                <h3>Metadata</h3>
+                @if (GetMetadata().Count == 0)
+                {
+                    <div class="incident-detail-panel__empty">No metadata was returned for this evidence item.</div>
+                }
+                else
+                {
+                    <dl class="incident-detail-panel__metadata">
+                        @foreach (var entry in GetMetadata())
+                        {
+                            <dt>@entry.Key</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(entry.Value) ? "-" : entry.Value)</dd>
+                        }
+                    </dl>
+                }
+            </section>
+        </div>
+    }
+</aside>
+
+@code {
+    [Parameter] public IncidentTimelineItem? Item { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private IReadOnlyList<IncidentLinkReason> GetReasons()
+    {
+        if (Item is null || Item.LinkReasons.Count == 0)
+        {
+            return
+            [
+                new IncidentLinkReason(
+                    IncidentLinkReasonType.TimeWindow,
+                    IncidentLinkRelevance.Contextual,
+                    "The evidence falls inside the selected investigation window.")
+            ];
+        }
+
+        return Item.LinkReasons;
+    }
+
+    private IReadOnlyList<KeyValuePair<string, string?>> GetMetadata() =>
+        Item?.Metadata
+            .OrderBy(static entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList()
+        ?? [];
+
+    private static string GetResourceLabel(IncidentResourceRef resourceRef)
+    {
+        var identity = string.IsNullOrWhiteSpace(resourceRef.Namespace)
+            ? resourceRef.ResourceName
+            : $"{resourceRef.Namespace}/{resourceRef.ResourceName}";
+
+        return string.IsNullOrWhiteSpace(resourceRef.ParentResourceName)
+            ? $"{resourceRef.ResourceType}: {identity}"
+            : $"{resourceRef.ResourceType}: {identity} (parent: {resourceRef.ParentResourceName})";
+    }
+}

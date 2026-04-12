@@ -36,6 +36,7 @@ public class DeploymentInfo
     public int ReadyReplicas { get; set; }
     public string Status { get; set; } = "Unknown";
     public Dictionary<string, string> Labels { get; set; } = [];
+    public Dictionary<string, string> SelectorLabels { get; set; } = [];
 }
 
 public class PodInfo
@@ -165,6 +166,7 @@ public class StatefulSetInfo
     public string? CurrentRevision { get; set; }
     public string? UpdateRevision { get; set; }
     public Dictionary<string, string> Labels { get; set; } = [];
+    public Dictionary<string, string> SelectorLabels { get; set; } = [];
 }
 
 // ── Feature 3: ConfigMaps and Secrets ────────────────────────────────────────

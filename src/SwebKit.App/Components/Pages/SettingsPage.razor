@@ -9,35 +9,40 @@
 
     @* ── Left navigation sidebar ── *@
     <nav class="settings-nav">
-        <button class="settings-nav-item @(_active == "appearance" ? "active" : "")"
-                @onclick="@(() => _active = "appearance")">
+        <button class="@GetNavItemClass(AppearanceSection)"
+                @onclick="@(() => SelectSection(AppearanceSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.PaintBrush())" Width="18px" />
             Appearance
         </button>
-        <button class="settings-nav-item @(_active == "servicebus" ? "active" : "")"
-                @onclick="@(() => _active = "servicebus")">
+        <button class="@GetNavItemClass(ServiceBusSection)"
+                @onclick="@(() => SelectSection(ServiceBusSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
             Service Bus
         </button>
-        <button class="settings-nav-item @(_active == "aks" ? "active" : "")" @onclick="@(() => _active = "aks")">
+        <button class="@GetNavItemClass(AksSection)" @onclick="@(() => SelectSection(AksSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="18px" />
             AKS
         </button>
-        <button class="settings-nav-item @(_active == "redis" ? "active" : "")" @onclick="@(() => _active = "redis")">
+        <button class="@GetNavItemClass(RedisSection)" @onclick="@(() => SelectSection(RedisSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="18px" />
             Redis
         </button>
-        <button class="settings-nav-item @(_active == "devops" ? "active" : "")" @onclick="@(() => _active = "devops")">
+        <button class="@GetNavItemClass(DevOpsSection)" @onclick="@(() => SelectSection(DevOpsSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="18px" />
             DevOps
         </button>
-        <button class="settings-nav-item @(_active == "storage" ? "active" : "")"
-                @onclick="@(() => _active = "storage")">
+        <button class="@GetNavItemClass(IncidentTimelineSection)"
+                @onclick="@(() => SelectSection(IncidentTimelineSection))">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Width="18px" />
+            Incident Timeline
+        </button>
+        <button class="@GetNavItemClass(StorageSection)"
+                @onclick="@(() => SelectSection(StorageSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
             Storage
         </button>
-        <button class="settings-nav-item @(_active == "observability" ? "active" : "")"
-                @onclick="@(() => _active = "observability")">
+        <button class="@GetNavItemClass(ObservabilitySection)"
+                @onclick="@(() => SelectSection(ObservabilitySection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="18px" />
             Observability
         </button>
@@ -55,7 +60,7 @@
 
         @switch (_active)
         {
-            case "appearance":
+            case AppearanceSection:
                 <h3 class="page-title">Appearance</h3>
                 <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
 
@@ -71,32 +76,42 @@
                 </div>
                 break;
 
-            case "servicebus":
+            case ServiceBusSection:
                 <h3 class="page-title">Service Bus</h3>
                 <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "aks":
+            case AksSection:
                 <h3 class="page-title">AKS / Kubernetes</h3>
                 <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "redis":
+            case RedisSection:
                 <h3 class="page-title">Redis</h3>
                 <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "devops":
+            case DevOpsSection:
                 <h3 class="page-title">Azure DevOps (Releases)</h3>
                 <DevOpsConfigForm OnSaved="SaveAsync" />
                 break;
 
-            case "storage":
+            case IncidentTimelineSection:
+                <h3 class="page-title">Incident Timeline</h3>
+                <IncidentTimelineConfigForm Environment="AppState.Config"
+                                            OnSaved="SaveAsync"
+                                            OnChanged="HandleDraftChangedAsync"
+                                            SuggestedNamespace="IncidentNamespace"
+                                            SuggestedWorkloadKind="IncidentWorkloadKind"
+                                            SuggestedWorkloadName="IncidentWorkloadName" />
+                break;
+
+            case StorageSection:
                 <h3 class="page-title">Storage (Azure Blob)</h3>
                 <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
                 break;
 
-            case "observability":
+            case ObservabilitySection:
                 <h3 class="page-title">Observability</h3>
                 <div class="settings-info-card">
                     <div class="settings-info-icon">🔑</div>
@@ -177,12 +192,26 @@
 </div>
 
 @code {
-    [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
+    private const string AppearanceSection = "appearance";
+    private const string ServiceBusSection = "servicebus";
+    private const string AksSection = "aks";
+    private const string RedisSection = "redis";
+    private const string DevOpsSection = "devops";
+    private const string IncidentTimelineSection = "incident-timeline";
+    private const string StorageSection = "storage";
+    private const string ObservabilitySection = "observability";
 
-    private string _active = "appearance";
+    [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
+    [SupplyParameterFromQuery(Name = "section")] private string? RequestedSection { get; set; }
+    [SupplyParameterFromQuery(Name = "namespace")] private string? IncidentNamespace { get; set; }
+    [SupplyParameterFromQuery(Name = "workloadKind")] private string? IncidentWorkloadKind { get; set; }
+    [SupplyParameterFromQuery(Name = "workloadName")] private string? IncidentWorkloadName { get; set; }
+
+    private string _active = AppearanceSection;
     private string? _savedMessage;
     private string _configSnapshot = string.Empty;
     private IDisposable? _navGuard;
+    private string? _lastRequestedSection;
 
     private bool IsDirty => _configSnapshot.Length > 0
         && _configSnapshot != CurrentConfigJson();
@@ -191,6 +220,21 @@
     {
         _configSnapshot = CurrentConfigJson();
         _navGuard = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(_lastRequestedSection, RequestedSection, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastRequestedSection = RequestedSection;
+
+        if (NormalizeSection(RequestedSection) is { } normalizedSection)
+        {
+            _active = normalizedSection;
+        }
     }
 
     private async ValueTask OnLocationChanging(LocationChangingContext context)
@@ -225,6 +269,27 @@
         if (_layout is not null)
             await _layout.SetThemeAsync(theme);
     }
+
+    private async Task HandleDraftChangedAsync() => await InvokeAsync(StateHasChanged);
+
+    private void SelectSection(string section) => _active = section;
+
+    private string GetNavItemClass(string section) => string.Equals(_active, section, StringComparison.Ordinal)
+        ? "settings-nav-item active"
+        : "settings-nav-item";
+
+    private static string? NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
+    {
+        AppearanceSection => AppearanceSection,
+        ServiceBusSection => ServiceBusSection,
+        AksSection => AksSection,
+        RedisSection => RedisSection,
+        DevOpsSection => DevOpsSection,
+        IncidentTimelineSection => IncidentTimelineSection,
+        StorageSection => StorageSection,
+        ObservabilitySection => ObservabilitySection,
+        _ => null,
+    };
 
     public void Dispose()
     {

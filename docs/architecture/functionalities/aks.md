@@ -2,6 +2,7 @@
 
 ## What Is Supported
 
+- Incident Timeline backend uses `IAksClientBootstrapper` plus selector-label workload resolution to gather workload-scoped pod lifecycle and event evidence for `Deployment`, `StatefulSet`, and `Pod` scopes.
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
 - Context switching and namespace filtering (single and all namespaces).
@@ -48,6 +49,7 @@
 
 ## Key Design Notes
 
+- **Incident timeline anchor.** `AksTimelineSignalSource` is the anchor evidence adapter for the incident cockpit. It bootstraps the current `IAksClient`, resolves workload-owned pods from deployment/statefulset selector labels, and returns only workload-scoped pod lifecycle changes and events inside the requested UTC window. `DaemonSet` scopes are not yet supported by this adapter.
 - **Batch workload contract.** `IAksClient` now exposes additive Jobs and trigger methods: `GetJobsAsync`, `TriggerCronJobAsync`, and `RerunJobAsync`. Default multi-namespace overloads for `GetJobsAsync` and `GetCronJobsAsync` let the AKS page keep both resource types visible in all-namespaces mode without special client wrappers.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
@@ -86,6 +88,7 @@
 - `src/SwebKit.Core/Abstractions/IPortForwardSessionService.cs`
 - `src/SwebKit.Core/Models/AksModels.cs`
 - `src/SwebKit.Core/Services/PortForwardSessionService.cs`
+- `src/SwebKit.Kubernetes/IncidentTimeline/AksTimelineSignalSource.cs`
 - `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`
 - `src/SwebKit.Core/Services/DemoAksClient.cs`
 - `src/SwebKit.App/Platforms/Windows/WindowsTrayLifecycleService.cs`

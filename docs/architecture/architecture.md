@@ -61,6 +61,7 @@ Key files:
 - `src/SwebKit.App/Components/Routes.razor`
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`
+- `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`
 
 ### SwebKit.Core (`src/SwebKit.Core`)
 
@@ -131,6 +132,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 - `docs/architecture/functionalities/storage.md`
 - `docs/architecture/functionalities/releases.md`
 - `docs/architecture/functionalities/observability.md`
+- `docs/architecture/functionalities/incident-timeline.md`
 - `docs/architecture/functionalities/settings-and-configuration.md`
 
 ## Cross-Cutting Concerns
@@ -147,12 +149,13 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 
 ## Where To Start For Common Tasks
 
-| Task                                                  | Start here                                                                                                            |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Add or change app-level service registration          | `src/SwebKit.App/MauiProgram.cs`                                                                                      |
-| Add a new routed page and navigation entry            | `src/SwebKit.App/Components/Pages/` and `src/SwebKit.App/Components/Layout/LeftNav.razor`                             |
-| Extend persisted environment configuration            | `src/SwebKit.Core/Domain/AppConfig.cs` and `src/SwebKit.Core/Configuration/ProfileRepository.cs`                      |
-| Implement a new Service Bus operation                 | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`      |
-| Add AKS diagnostics behavior                          | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`           |
-| Extend Observability querying or discovery            | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs` |
-| Add Azure DevOps Pipelines/Releases workflow behavior | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                             |
+| Task                                                  | Start here                                                                                                                                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add or change app-level service registration          | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
+| Add a new routed page and navigation entry            | `src/SwebKit.App/Components/Pages/` and `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                      |
+| Extend persisted environment configuration            | `src/SwebKit.Core/Domain/AppConfig.cs` and `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                               |
+| Implement a new Service Bus operation                 | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
+| Add AKS diagnostics behavior                          | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
+| Extend Observability querying or discovery            | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                          |
+| Extend the incident timeline workbench UI             | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`, `src/SwebKit.App/Components/IncidentTimeline/`, and `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` |
+| Add Azure DevOps Pipelines/Releases workflow behavior | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |

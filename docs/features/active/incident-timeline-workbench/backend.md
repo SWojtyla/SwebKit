@@ -4,7 +4,7 @@
 
 title: "Backend Plan - incident-timeline-workbench"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -17,6 +17,7 @@ Add a cancellation-aware, performance-bounded backend aggregation layer that pro
 - Existing projects and likely touchpoints:
 - src/SwebKit.Core/Models
 - src/SwebKit.Core/Abstractions
+- src/SwebKit.Core/Domain
 - src/SwebKit.Core/Services
 - src/SwebKit.Observability/AzureAppInsightsProvider.cs
 - src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs
@@ -26,6 +27,7 @@ Add a cancellation-aware, performance-bounded backend aggregation layer that pro
 - src/SwebKit.Core/Models/IncidentTimelineModels.cs
 - src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs
 - src/SwebKit.Core/Abstractions/IIncidentTimelineSignalSource.cs
+- src/SwebKit.Core/Domain/IncidentTimelineConfig.cs
 - src/SwebKit.Core/Services/IncidentTimelineService.cs
 - src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs
 - src/SwebKit.Kubernetes/IncidentTimeline/AksTimelineSignalSource.cs
@@ -101,53 +103,55 @@ The backend must not emit fields or enums that suggest cause, blame, or root-cau
 
 ### Wave 1 - Core scope and evidence contracts [dotnet-expert] (sequential root)
 
-- [ ] Define IncidentWorkloadScope and workload-scoped query contracts in src/SwebKit.Core/Models.
-- [ ] Define normalized evidence item, link reason, and source coverage contracts in src/SwebKit.Core/Models.
-- [ ] Create IIncidentTimelineService and IIncidentTimelineSignalSource abstractions in src/SwebKit.Core/Abstractions.
-- [ ] Implement IncidentTimelineService in src/SwebKit.Core/Services.
-- [ ] Add deterministic merge ordering, duplicate-key policy, and transparent truncation support.
+- [x] Define IncidentWorkloadScope and workload-scoped query contracts in src/SwebKit.Core/Models.
+- [x] Define normalized evidence item, link reason, and source coverage contracts in src/SwebKit.Core/Models.
+- [x] Create IIncidentTimelineService and IIncidentTimelineSignalSource abstractions in src/SwebKit.Core/Abstractions.
+- [x] Implement IncidentTimelineService in src/SwebKit.Core/Services.
+- [x] Add deterministic UTC merge ordering and transparent truncation support.
 
 ### Wave 2 - Source adapters [dotnet-expert] (parallel after Wave 1)
 
-- [ ] Implement AKS adapter as the anchor evidence source for workload and namespace activity.
-- [ ] Implement App Insights adapter using existing query capabilities and explicit workload mapping rules.
-- [ ] Implement Service Bus adapter using topology mapping or existing correlation IDs.
-- [ ] Implement DevOps adapter for recent deployment or release activity tied to the same workload or namespace.
-- [ ] Normalize all timestamps to UTC at the source boundary.
+- [x] Implement AKS adapter as the anchor evidence source for workload and namespace activity.
+- [x] Implement App Insights adapter using existing query capabilities and explicit workload mapping rules.
+- [x] Implement Service Bus adapter using explicit entity mapping plus best-effort peek/runtime-property evidence.
+- [x] Implement DevOps adapter for recent deployment or release activity tied to mapped pipelines.
+- [x] Normalize all timestamps to UTC at the source boundary.
 
 ### Wave 3 - Orchestration hardening [dotnet-expert] (depends on Waves 1-2)
 
-- [ ] Implement cancellation-first request handling so every new load cancels the prior aggregate request.
-- [ ] Guarantee OperationCanceledException passthrough and avoid generic catch swallowing.
-- [ ] Add per-source timeout budgets and coverage-state reporting.
-- [ ] Apply bounded result limits and source-specific top-N caps for the 15 minute, 1 hour, and 6 hour windows.
+- [x] Implement cancellation-first request handling so every new load cancels the prior aggregate request.
+- [x] Guarantee OperationCanceledException passthrough and avoid generic catch swallowing.
+- [x] Add per-source timeout budgets and coverage-state reporting.
+- [x] Apply bounded result limits and source-specific top-N caps.
 
 ### Wave 4 - Test implementation [dotnet-expert] (depends on Waves 1-3)
 
-- [ ] Add unit tests in tests/SwebKit.Core.Tests for inclusion rules, merge ordering, truncation, and cancellation.
-- [ ] Add adapter mapping tests in tests/SwebKit.Azure.Tests, tests/SwebKit.Kubernetes.Tests, and tests/SwebKit.DevOps.Tests.
-- [ ] Add failure-injection tests for timeout, auth failure, unmapped source coverage, and partial-result behavior.
-- [ ] Record notable tradeoffs and deviations in decisions.md.
+- [x] Add unit tests in tests/SwebKit.Core.Tests for merge ordering, truncation, mapping resolution, and cancellation.
+- [x] Add adapter mapping tests in tests/SwebKit.Azure.Tests, tests/SwebKit.Kubernetes.Tests, and tests/SwebKit.DevOps.Tests.
+- [x] Add partial-result and unmapped-coverage coverage for the aggregation layer and source adapters.
+- [x] Record notable tradeoffs and deviations in decisions.md.
 
 ## Migration and runtime changes
 
 - No schema or persistent data migration required.
 - No infrastructure change required.
-- Runtime configuration additions, if any, should be optional with safe defaults.
-- Any non-AKS workload mappings used by adapters should be additive configuration or existing metadata, not new mandatory infrastructure.
+- Runtime configuration adds optional `AppConfig.IncidentTimeline.WorkloadMappings` with safe defaults.
+- Non-AKS evidence is mapping-first: App Insights, Service Bus, and DevOps items appear only when explicit workload mappings exist.
 
 ## Validation
 
-- Unit tests: Not started
-- Integration tests: Not started
+- Unit tests: `dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --no-restore -c Release` passed
+- Integration tests:
+- `dotnet test tests/SwebKit.Azure.Tests/SwebKit.Azure.Tests.csproj --no-restore -c Release` passed
+- `dotnet test tests/SwebKit.Kubernetes.Tests/SwebKit.Kubernetes.Tests.csproj --no-restore -c Release` passed
+- `dotnet test tests/SwebKit.DevOps.Tests/SwebKit.DevOps.Tests.csproj --no-restore -c Release` passed
 - Manual checks:
-- Verify the `prd-phonotif` pod-down scenario returns only workload-scoped evidence.
-- Verify unmapped sources are surfaced as unavailable or unmapped instead of guessed.
-- Verify partial source failure still returns usable evidence.
-- Verify the 6 hour query stays within the target latency envelope.
+- Frontend integration remains pending.
 
 ## Notes
 
 - Cancellation and timeout handling are correctness requirements, not optional optimizations.
 - Apply dotnet-csharp CS-2 guidance: never swallow OperationCanceledException.
 - Apply azure-sdk guidance when enumerating SDK pageable sequences and handling scoped Service Bus connection strings.
+- Current AKS anchor support is `Deployment`, `StatefulSet`, and `Pod`. `DaemonSet` is not yet implemented by the incident timeline backend.
+- Service Bus evidence is best-effort from explicitly mapped queue/subscription entities using peeks plus runtime properties; unsupported or inaccessible mappings degrade only that source.

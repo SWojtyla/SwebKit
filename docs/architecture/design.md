@@ -14,6 +14,7 @@ This document expands [architecture.md](architecture.md) for the most important 
 - Service Bus namespace connection and message browsing
 - AKS diagnostics and side-panel operations
 - Observability resource selection and query execution
+- Incident timeline workbench bootstrap, request-state, and evidence inspection
 - Settings persistence and config propagation
 
 Folder maps and broad navigation conventions are intentionally kept in `codebase-guide.md`.
@@ -185,6 +186,81 @@ sequenceDiagram
 - The selected resource ID/name persists in `AppState.Config.ObservabilityConfig`.
 - Demo mode swaps both discovery and provider implementations without changing page-level flow.
 
+## Incident Timeline Frontend Workbench Flow
+
+### Intent
+
+Bootstrap workload scope from the current AKS context, keep manual refresh explicit, and present one evidence-first workbench with visible source coverage and a detail panel.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Page as IncidentTimelinePage
+    participant AppState as AppStateService
+    participant Bootstrap as IAksClientBootstrapper
+    participant Timeline as IIncidentTimelineService
+
+    User->>Page: Open Incident Timeline
+    Page->>AppState: Wait for initialized config
+    Page->>Bootstrap: BootstrapAsync(current context, namespace)
+    Bootstrap-->>Page: Context list, namespace list, active scope defaults
+    Page->>Page: Seed workload from explicit mapping or watched deployment
+    Page->>Timeline: GetTimelineAsync(query)
+    Timeline-->>Page: IncidentTimelinePage
+    Page-->>User: Scope summary, coverage strip, timeline rows, detail panel
+    User->>Page: Edit scope or source toggles
+    Page-->>User: Mark pending refresh, keep current evidence visible
+    User->>Page: Refresh
+    Page->>Page: Cancel in-flight request, increment request version
+    Page->>Timeline: GetTimelineAsync(updated query)
+    Timeline-->>Page: Latest result only
+```
+
+### Design Notes
+
+- `IncidentTimelinePage` uses `IAksClientBootstrapper` to normalize context and namespace selection so the workbench follows the same AKS bootstrap seam as the AKS page.
+- The page keeps draft scope edits separate from the currently loaded result. It shows a pending-refresh summary instead of auto-loading on every edit.
+- Each refresh cancels any in-flight request and applies results only when the request version matches the latest requested scope.
+- The UI never re-implements inclusion logic. It only projects `IncidentTimelinePage`, `IncidentTimelineItem`, and `IncidentTimelineSourceStatus` from `SwebKit.Core`.
+
+## Incident Timeline Backend Aggregation Flow
+
+### Intent
+
+Assemble workload-scoped incident evidence from AKS, App Insights, Service Bus, and Azure DevOps without moving merge logic into the UI and without inventing ownership heuristics.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant UI as Incident Timeline Page
+    participant Timeline as IncidentTimelineService
+    participant Aks as AksTimelineSignalSource
+    participant Obs as AppInsightsTimelineSignalSource
+    participant Sb as ServiceBusEvidenceSignalSource
+    participant Ado as DevOpsReleaseTimelineSignalSource
+
+    UI->>Timeline: GetTimelineAsync(query)
+    Timeline->>Aks: FetchAsync(query)
+    Timeline->>Obs: FetchAsync(query)
+    Timeline->>Sb: FetchAsync(query)
+    Timeline->>Ado: FetchAsync(query)
+    Aks-->>Timeline: Direct AKS evidence + coverage
+    Obs-->>Timeline: Corroborating App Insights evidence or Unmapped
+    Sb-->>Timeline: Direct Service Bus evidence or Partial/Failed
+    Ado-->>Timeline: Contextual release/deployment evidence + coverage
+    Timeline-->>UI: UTC-ordered items, per-source status, partial/truncation flags
+```
+
+### Design Notes
+
+- `IncidentTimelineService` owns fan-out, per-source timeout budgets, deterministic UTC ordering, and best-effort partial results.
+- AKS is the anchor source; non-AKS sources participate only when `AppConfig.IncidentTimeline.WorkloadMappings` explicitly maps them to the selected workload.
+- Source adapters return coverage states (`Loaded`, `Partial`, `Unmapped`, `TimedOut`, `Failed`, etc.) so the UI can surface incomplete evidence without guessing.
+- The backend currently supports AKS `Deployment`, `StatefulSet`, and `Pod` scopes. `DaemonSet` is intentionally left unsupported until a dedicated AKS contract exists.
+
 ## Settings Save and Config Propagation Flow
 
 ### Intent
@@ -225,21 +301,24 @@ sequenceDiagram
 
 ## Key Reference Points
 
-| File                                                          | Responsibility                                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/SwebKit.App/MauiProgram.cs`                              | DI composition root and infrastructure registration.                                  |
-| `src/SwebKit.App/Components/Layout/MainLayout.razor`          | App shell lifecycle, startup sequencing, and global command registration.             |
-| `src/SwebKit.Core/Services/AppStateService.cs`                | Shared app state, initialization, demo mode toggling, and persistence calls.          |
-| `src/SwebKit.Core/Configuration/ProfileRepository.cs`         | Profile/environment load-save lifecycle for `profiles.json`.                          |
-| `src/SwebKit.Core/Configuration/UiStateRepository.cs`         | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences. |
-| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`       | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.          |
-| `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs` | Service Bus namespace bootstrap and connection seam used by the page.                 |
-| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`       | Service Bus SDK implementation and message/entity operations.                         |
-| `src/SwebKit.App/Components/Pages/AksPage.razor`              | AKS page orchestration and resource panel lifecycle.                                  |
-| `src/SwebKit.App/Services/AksClientBootstrapper.cs`           | AKS client/context/namespace bootstrap seam used by the page.                         |
-| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`     | Kubernetes operations, auth fallback, and log/port-forward behavior.                  |
-| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`    | Resource selection, tab routing, and provider-driven refresh logic.                   |
-| `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`    | Observability provider activation seam for demo/live resource binding.                |
-| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`       | KQL execution and typed observability result mapping.                                 |
-| `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`, `src/SwebKit.DevOps/DevOpsClientFactory.cs` | Immutable live DevOps client creation from the current saved settings. |
-| `src/SwebKit.DevOps/DevOpsClient.cs`                          | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                    |
+| File                                                                                                 | Responsibility                                                                         |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `src/SwebKit.App/MauiProgram.cs`                                                                     | DI composition root and infrastructure registration.                                   |
+| `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                 | App shell lifecycle, startup sequencing, and global command registration.              |
+| `src/SwebKit.Core/Services/AppStateService.cs`                                                       | Shared app state, initialization, demo mode toggling, and persistence calls.           |
+| `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                | Profile/environment load-save lifecycle for `profiles.json`.                           |
+| `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences.  |
+| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`                                              | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.           |
+| `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs`                                        | Service Bus namespace bootstrap and connection seam used by the page.                  |
+| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                              | Service Bus SDK implementation and message/entity operations.                          |
+| `src/SwebKit.App/Components/Pages/AksPage.razor`                                                     | AKS page orchestration and resource panel lifecycle.                                   |
+| `src/SwebKit.App/Services/AksClientBootstrapper.cs`                                                  | AKS client/context/namespace bootstrap seam used by the page.                          |
+| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                            | Kubernetes operations, auth fallback, and log/port-forward behavior.                   |
+| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                           | Resource selection, tab routing, and provider-driven refresh logic.                    |
+| `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`                                           | Observability provider activation seam for demo/live resource binding.                 |
+| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                              | KQL execution and typed observability result mapping.                                  |
+| `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`                                        | Incident timeline workbench orchestration, request cancellation, and detail selection. |
+| `src/SwebKit.App/Components/IncidentTimeline/`                                                       | Incident timeline toolbar, coverage, list, row, detail panel, and empty-state UI.      |
+| `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs`                                          | Aggregated incident evidence service consumed by the page.                             |
+| `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`, `src/SwebKit.DevOps/DevOpsClientFactory.cs` | Immutable live DevOps client creation from the current saved settings.                 |
+| `src/SwebKit.DevOps/DevOpsClient.cs`                                                                 | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                     |

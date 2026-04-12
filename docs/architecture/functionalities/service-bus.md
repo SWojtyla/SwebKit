@@ -2,6 +2,7 @@
 
 ## What Is Supported
 
+- Incident Timeline backend can surface best-effort queue/subscription symptoms for explicitly mapped Service Bus entities, combining peeks plus runtime properties and degrading coverage per entity instead of failing the whole source.
 - Add/remove global Service Bus namespaces in the UI.
 - Connect namespaces from stored credentials.
 - Restore cached namespace connection snapshots immediately, then reconnect each connectable namespace independently in the background.
@@ -52,11 +53,14 @@
 - `src/SwebKit.Core/Abstractions/IServiceBusClient.cs`
 - `src/SwebKit.Core/Abstractions/IServiceBusNamespaceBootstrapper.cs`
 - `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`
+- `src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusEvidenceSignalSource.cs`
 - `src/SwebKit.Azure/ServiceBus/DeadLetterSequenceProcessor.cs`
 - `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
 
 ## Important Notes
 
+- Incident timeline Service Bus evidence is mapping-first: only entities explicitly linked under `AppConfig.IncidentTimeline.WorkloadMappings` are queried for incident evidence.
+- The current adapter is best-effort and optimized for queue/subscription mappings. Unsupported or inaccessible mapped entities surface degraded source coverage instead of causing a full incident-timeline failure.
 - `AzureServiceBusClient` supports both connection-string and AAD-style setup paths.
 - Scoped entity path connection strings are handled to surface only reachable entities.
 - Entity status toggles are exposed through `SetQueueEnabledAsync`, `SetTopicEnabledAsync`, and `SetSubscriptionEnabledAsync`.

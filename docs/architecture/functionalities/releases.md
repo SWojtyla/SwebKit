@@ -5,6 +5,7 @@
 
 ## What it supports today
 
+- Incident Timeline backend combines explicit Azure DevOps pipeline bindings, local release records, deployment snapshots, and recent pipeline runs into contextual evidence for one workload and one incident window.
 - **Pipeline browser (Pipelines tab)** — two-panel layout: left tree shows all ADO projects and
   pipelines with last-run status indicators; right panel shows pipeline detail (environment
   deployment status, recent runs, inline trigger panel).
@@ -92,6 +93,7 @@ Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Key implementation notes
 
+- `DevOpsReleaseTimelineSignalSource` is the incident cockpit backend adapter for Azure DevOps. It reads explicit pipeline bindings from `AppConfig.IncidentTimeline.WorkloadMappings`, reuses local `ReleaseRepository` data, and optionally augments it with live pipeline runs from `IDevOpsClientFactory`. Missing live DevOps config degrades only that source when local release evidence is still available.
 - `IDevOpsClientFactory` is the app-owned seam for real Azure DevOps clients. `DashboardPage`,
   `PipelinesPage`, and `DevOpsConfigForm` create immutable `DevOpsClient` snapshots from the
   current `DevOpsConfig` instead of mutating a shared singleton.
@@ -110,29 +112,30 @@ Used by `PipelineDetail.razor` to drive the environments table.
 
 ## Main code locations
 
-| File                                              | Role                                                    |
-| ------------------------------------------------- | ------------------------------------------------------- |
-| `Pages/PipelinesPage.razor`                       | Page shell: tabs, split panels, client setup, modals    |
-| `Pages/PipelinesPage.razor.css`                   | All layout CSS for Pipelines hub                        |
-| `Pipelines/PipelineTree.razor`                    | Left panel: project/pipeline tree with run status       |
-| `Pipelines/PipelinesOverview.razor`               | Right panel: project summary cards (no selection)       |
-| `Pipelines/PipelineDetail.razor`                  | Right panel: env status, recent runs, trigger           |
-| `Pipelines/PipelineActivity.razor`                | Activity tab: chronological run feed                    |
-| `Releases/ReleaseList.razor`                      | Left panel: release record list                         |
-| `Releases/ReleaseDetail.razor`                    | Right panel: component × env matrix + action bar        |
-| `Releases/ApprovalCenter.razor`                   | Approvals tab: global across all projects               |
-| `Releases/TagManager.razor`                       | Tag creation (accessible from ReleaseDetail)            |
-| `Releases/ReleaseEditor.razor`                    | Modal: create/edit release record                       |
-| `Releases/ComponentScopeEditor.razor`             | Modal: manage pipeline scope per release                |
-| `SwebKit.Core/Abstractions/IDevOpsClient.cs`      | Interface                                               |
-| `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs` | Immutable live-client creation seam                   |
-| `SwebKit.Core/Models/DevOpsModels.cs`             | ADO domain models + `PipelineEnvironmentStatus`         |
-| `SwebKit.Core/Models/ReleaseModels.cs`            | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot` |
-| `SwebKit.Core/Configuration/ReleaseRepository.cs` | Local persistence (JSON)                                |
-| `SwebKit.Core/Services/DemoDevOpsClient.cs`       | Demo data                                               |
-| `SwebKit.DevOps/DevOpsClientFactory.cs`           | Creates real DevOps client snapshots                    |
-| `SwebKit.DevOps/DevOpsAuthHandler.cs`             | Resolves PAT per request from request options           |
-| `SwebKit.DevOps/DevOpsClient.cs`                  | Real ADO REST implementation using immutable config snapshots |
+| File                                                                   | Role                                                          |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `Pages/PipelinesPage.razor`                                            | Page shell: tabs, split panels, client setup, modals          |
+| `Pages/PipelinesPage.razor.css`                                        | All layout CSS for Pipelines hub                              |
+| `Pipelines/PipelineTree.razor`                                         | Left panel: project/pipeline tree with run status             |
+| `Pipelines/PipelinesOverview.razor`                                    | Right panel: project summary cards (no selection)             |
+| `Pipelines/PipelineDetail.razor`                                       | Right panel: env status, recent runs, trigger                 |
+| `Pipelines/PipelineActivity.razor`                                     | Activity tab: chronological run feed                          |
+| `Releases/ReleaseList.razor`                                           | Left panel: release record list                               |
+| `Releases/ReleaseDetail.razor`                                         | Right panel: component × env matrix + action bar              |
+| `Releases/ApprovalCenter.razor`                                        | Approvals tab: global across all projects                     |
+| `Releases/TagManager.razor`                                            | Tag creation (accessible from ReleaseDetail)                  |
+| `Releases/ReleaseEditor.razor`                                         | Modal: create/edit release record                             |
+| `Releases/ComponentScopeEditor.razor`                                  | Modal: manage pipeline scope per release                      |
+| `SwebKit.Core/Abstractions/IDevOpsClient.cs`                           | Interface                                                     |
+| `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`                    | Immutable live-client creation seam                           |
+| `SwebKit.Core/Models/DevOpsModels.cs`                                  | ADO domain models + `PipelineEnvironmentStatus`               |
+| `SwebKit.Core/Models/ReleaseModels.cs`                                 | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot`       |
+| `SwebKit.Core/Configuration/ReleaseRepository.cs`                      | Local persistence (JSON)                                      |
+| `SwebKit.Core/Services/DemoDevOpsClient.cs`                            | Demo data                                                     |
+| `SwebKit.DevOps/IncidentTimeline/DevOpsReleaseTimelineSignalSource.cs` | Incident timeline adapter                                     |
+| `SwebKit.DevOps/DevOpsClientFactory.cs`                                | Creates real DevOps client snapshots                          |
+| `SwebKit.DevOps/DevOpsAuthHandler.cs`                                  | Resolves PAT per request from request options                 |
+| `SwebKit.DevOps/DevOpsClient.cs`                                       | Real ADO REST implementation using immutable config snapshots |
 
 ## Removed in pipelines-revamp
 

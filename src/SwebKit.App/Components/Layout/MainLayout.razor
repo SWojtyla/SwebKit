@@ -271,6 +271,16 @@
 
         Commands.Register(new AppCommand
         {
+            Id = "navigate-incident-timeline",
+            Label = "Go to Incident Timeline",
+            Category = "Navigation",
+            Icon = "🕒",
+            Shortcut = "Ctrl+8",
+            Execute = () => { NavigateTo("incident-timeline"); return Task.CompletedTask; }
+        });
+
+        Commands.Register(new AppCommand
+        {
             Id = "navigate-settings",
             Label = "Go to Settings",
             Category = "Navigation",

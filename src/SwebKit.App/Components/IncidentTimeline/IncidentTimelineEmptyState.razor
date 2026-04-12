@@ -1,0 +1,13 @@
+<div class="incident-empty-state" data-testid="incident-empty-state">
+    <EmptyState Icon="Evidence" Title="@Title" Subtitle="@Message" />
+    @if (!string.IsNullOrWhiteSpace(Hint))
+    {
+        <div class="incident-empty-state__hint">@Hint</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+    [Parameter] public string? Hint { get; set; }
+}

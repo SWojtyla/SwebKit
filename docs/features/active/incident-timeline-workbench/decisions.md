@@ -4,7 +4,7 @@
 
 title: "Decisions - incident-timeline-workbench"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 
 ---
 
@@ -167,3 +167,84 @@ Each new load or refresh cancels any in-flight request via linked CancellationTo
 
 - Alternative A - Allow concurrent requests and keep the first completed result: rejected because stale data can overwrite newer context.
 - Alternative B - Queue refresh requests: rejected because incident triage requires the latest scope immediately.
+
+---
+
+## Decision 007 - Use explicit workload mapping config for non-AKS sources
+
+**Status:** Accepted
+
+**Date:** 2026-04-12
+
+### Context
+
+The existing codebase already had AKS, Observability, Service Bus, and DevOps seams, but it did not have a durable way to say which non-AKS resources belong to one workload. Falling back to resource-name similarity would over-include evidence and violate the evidence-first constraint.
+
+### Decision
+
+Add `AppConfig.IncidentTimeline.WorkloadMappings` as an optional environment-scoped config model. App Insights, Service Bus, and DevOps evidence is included only when the selected workload has an explicit mapping for that source.
+
+### Consequences
+
+- Keeps the backend additive and safe by default.
+- Makes unmapped coverage visible instead of inventing ownership heuristics.
+- Pushes future frontend settings work toward explicit mapping editors rather than inference-heavy discovery.
+
+### Alternatives considered
+
+- Alternative A - Infer ownership from shared names across resources: rejected because it would over-include unrelated evidence.
+- Alternative B - Hide non-AKS sources entirely until a richer discovery system exists: rejected because explicit small mappings are enough for a safe v1 backend.
+
+---
+
+## Decision 008 - Keep the last loaded evidence visible while scope edits are pending
+
+**Status:** Accepted
+
+**Date:** 2026-04-12
+
+### Context
+
+V1 is manual-refresh only. If the page cleared the existing evidence timeline on every scope edit, operators would lose the currently loaded incident window before deciding whether the new scope is worth refreshing.
+
+### Decision
+
+The incident timeline page keeps the currently loaded evidence visible while the operator edits context, namespace, workload, time window, or source toggles. The page shows an explicit pending-refresh summary and coverage note until the user refreshes.
+
+### Consequences
+
+- Preserves the evidence already collected for the current investigation while the next scope is still being shaped.
+- Makes the v1 manual-refresh model explicit instead of silently requerying on every edit.
+- Requires a request fingerprint so the page can distinguish draft scope from the currently loaded result.
+
+### Alternatives considered
+
+- Alternative A - Auto-refresh on every scope change: rejected because it violates the v1 manual-refresh constraint and increases race pressure.
+- Alternative B - Clear the current evidence immediately on scope edit: rejected because it hides usable evidence before the user chooses to refresh.
+
+---
+
+## Decision 009 - Close the mapping-discoverability gap from the incident page
+
+**Status:** Accepted
+
+**Date:** 2026-04-12
+
+### Context
+
+Live usage showed that `Unmapped` coverage was technically accurate but operationally incomplete. Operators could see that a source had no workload mapping, but the app did not provide an obvious place to fix it.
+
+### Decision
+
+Expose workload mapping authoring in Settings under a dedicated Incident Timeline section and let the incident page deep-link directly into that section for the current workload scope whenever selected sources are `Unmapped` or `Not configured`.
+
+### Consequences
+
+- Turns coverage gaps into an actionable workflow instead of a documentation-only follow-up.
+- Keeps backend inclusion rules unchanged while improving operator discoverability.
+- Requires Settings to support query-driven section preselection so the handoff stays focused.
+
+### Alternatives considered
+
+- Alternative A - Keep mapping authoring out of the app and rely on manual profile editing: rejected because it leaves a high-friction dead end in the shipped UX.
+- Alternative B - Hide `Unmapped` entirely for non-AKS sources: rejected because it would trade discoverability for false confidence.

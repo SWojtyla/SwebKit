@@ -1,0 +1,43 @@
+.incident-timeline-list {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    overflow: hidden;
+}
+
+.incident-timeline-list__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(180deg, rgba(0, 120, 212, 0.08), transparent);
+}
+
+.incident-timeline-list__header h2 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+.incident-timeline-list__header p {
+    margin: 4px 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.incident-timeline-list__count {
+    white-space: nowrap;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.incident-timeline-list__rows {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}

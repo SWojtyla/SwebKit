@@ -44,6 +44,7 @@
         <Compile Include="..\..\src\SwebKit.App\Services\ServiceBusNamespaceBootstrapper.cs" Link="Services\ServiceBusNamespaceBootstrapper.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ShellErrorPresenter.cs" Link="Services\ShellErrorPresenter.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\TrayLifecycleState.cs" Link="Services\TrayLifecycleState.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\IncidentTimeline\IncidentTimelineDisplay.cs" Link="Components\IncidentTimeline\IncidentTimelineDisplay.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\NavItem.razor" Link="Components\Layout\NavItem.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\LeftNav.razor" Link="Components\Layout\LeftNav.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\TopBar.razor" Link="Components\Layout\TopBar.razor" />
@@ -69,11 +70,14 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\TemplatePicker.razor" Link="Components\ServiceBus\TemplatePicker.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ScheduledMessages.razor" Link="Components\ServiceBus\ScheduledMessages.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusConfigForm.razor" Link="Components\Pages\ServiceBusConfigForm.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelineConfigForm.razor" Link="Components\Pages\IncidentTimelineConfigForm.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor" Link="Components\Pages\AksPage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelinePage.razor" Link="Components\Pages\IncidentTimelinePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ServiceBus\NsState.cs" Link="Components\ServiceBus\NsState.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\*.razor" Link="Components\Aks\%(Filename)%(Extension)" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\IncidentTimeline\*.razor" Link="Components\IncidentTimeline\%(Filename)%(Extension)" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ObservabilityPage.razor" Link="Components\Pages\ObservabilityPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityAvailability.razor" Link="Components\Observability\ObservabilityAvailability.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityFailures.razor" Link="Components\Observability\ObservabilityFailures.razor" />

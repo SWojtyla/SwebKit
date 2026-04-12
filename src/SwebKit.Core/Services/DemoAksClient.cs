@@ -115,6 +115,10 @@ public class DemoAksClient : IAksClient
                 ["app"] = d.Name,
                 ["version"] = $"1.{Rng.Next(0, 12)}.{Rng.Next(0, 50)}",
                 ["team"] = d.Name.Contains("order") || d.Name.Contains("cart") ? "commerce" : "platform"
+            },
+            SelectorLabels = new Dictionary<string, string>
+            {
+                ["app"] = d.Name
             }
         }).ToList();
     }
@@ -796,7 +800,11 @@ public class DemoAksClient : IAksClient
             ReadyReplicas = s.Ready,
             CurrentRevision = s.CurrentRevision,
             UpdateRevision = s.UpdateRevision,
-            Labels = new Dictionary<string, string> { ["app"] = s.Name, ["team"] = "platform" }
+            Labels = new Dictionary<string, string> { ["app"] = s.Name, ["team"] = "platform" },
+            SelectorLabels = new Dictionary<string, string>
+            {
+                ["app"] = s.Name
+            }
         }).ToList();
     }
 

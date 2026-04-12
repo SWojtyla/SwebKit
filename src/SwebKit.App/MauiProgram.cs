@@ -3,11 +3,15 @@ using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Platforms.Windows;
 using SwebKit.App.Services;
+using SwebKit.Azure.ServiceBus.IncidentTimeline;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
+using SwebKit.DevOps.IncidentTimeline;
+using SwebKit.Kubernetes.IncidentTimeline;
 using SwebKit.Observability;
+using SwebKit.Observability.IncidentTimeline;
 using SelectionContext = SwebKit.App.Services.SelectionContext;
 
 namespace SwebKit.App;
@@ -84,6 +88,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<DemoDevOpsClient>();
         builder.Services.AddSingleton<ReleaseRepository>();
         builder.Services.AddSingleton<PageDataCache>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AksTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AppInsightsTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, ServiceBusEvidenceSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, DevOpsReleaseTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineService, IncidentTimelineService>();
 
         return builder.Build();
     }
