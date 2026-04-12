@@ -80,14 +80,29 @@
 
 1. **"Wait for a decision" deadlock.** The design health check instructs the agent to "wait for a decision" if it finds a design concern. When running as a subagent, there is no input channel to wait on. The agent parks waiting for a reply that never comes and produces no output.
 
-2. **Context window exhaustion from redundant loading.** Both the orchestrator and the expert agents were instructed to load `project-context` (architecture.md, design.md, codebase-guide.md, pitfall files). When the agent is invoked with a large delegation payload *and* tries to re-read the same files, the context window fills before any output is generated.
+2. **Context window exhaustion from redundant loading.** Both the orchestrator and the expert agents were instructed to load `project-context` (architecture.md, design.md, codebase-guide.md, pitfall files). When the agent is invoked with a large delegation payload _and_ tries to re-read the same files, the context window fills before any output is generated.
+
+3. **Oversized one-shot delegation.** A specialist agent receives a task that spans shell primitives, multiple routed pages, tests, docs, and cross-cutting polish in one prompt. Even with good context hygiene, the task is too broad for a one-shot subagent run and can terminate without returning structured output.
 
 **Fix:**
+
 - Expert agents under the orchestrator now skip `project-context` re-loading and use the context already provided in the delegation payload.
 - The design health check now has two branches: **standalone** → wait; **under orchestrator** → include a `Design concern:` note in the response and proceed.
 - The orchestrator delegation payload explicitly requires architecture constraints and pitfalls to be inlined so subagents don't need to reload them.
+- The orchestrator now decomposes large implementation work into smaller slices instead of delegating a whole multi-wave feature in one shot.
+- The expert agents now explicitly require a non-empty fallback for oversized tasks: complete one coherent slice or return `BLOCKED` with a recommended decomposition.
 
 See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting work".
+
+---
+
+## AW-9 — Repo without workspace instructions drifts back to generic delegation behavior
+
+**Symptom:** Shared global agent rules exist, but repo-specific execution still regresses toward oversized delegations or feature-blind implementation because the repository itself does not provide a local workspace instruction file.
+
+**Cause:** The repo relies only on global or toolkit-level agent configuration. Without a local `.github/copilot-instructions.md`, the agent has less project-specific guidance about how to split work in this codebase.
+
+**Fix:** Add a concise repo-level workspace instruction file that describes the local docs-first workflow, feature-folder expectations, and any repository-specific delegation constraints such as slicing large shell/UI work.
 
 ---
 

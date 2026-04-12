@@ -45,12 +45,16 @@
         <Compile Include="..\..\src\SwebKit.App\Services\ShellErrorPresenter.cs" Link="Services\ShellErrorPresenter.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\TrayLifecycleState.cs" Link="Services\TrayLifecycleState.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\IncidentTimeline\IncidentTimelineDisplay.cs" Link="Components\IncidentTimeline\IncidentTimelineDisplay.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Layout\ShellNavigation.cs" Link="Components\Layout\ShellNavigation.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\NavItem.razor" Link="Components\Layout\NavItem.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\LeftNav.razor" Link="Components\Layout\LeftNav.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\TopBar.razor" Link="Components\Layout\TopBar.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Layout\StatusBar.razor" Link="Components\Layout\StatusBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\CommandPalette.razor" Link="Components\Shared\CommandPalette.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfirmDialog.razor" Link="Components\Shared\ConfirmDialog.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\LoadingSpinner.razor" Link="Components\Shared\LoadingSpinner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageHeader.razor" Link="Components\Shared\PageHeader.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\RoutePageHeader.razor" Link="Components\Shared\RoutePageHeader.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ErrorCallout.razor" Link="Components\Shared\ErrorCallout.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\EmptyState.razor" Link="Components\Shared\EmptyState.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ContextMenu.razor" Link="Components\Shared\ContextMenu.razor" />
@@ -74,6 +78,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\ServiceBusPage.razor" Link="Components\Pages\ServiceBusPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\AksPage.razor" Link="Components\Pages\AksPage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\IncidentTimelinePage.razor" Link="Components\Pages\IncidentTimelinePage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Pages\StoragePage.razor" Link="Components\Pages\StoragePage.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusNamespacePanel.razor" Link="Components\ServiceBus\ServiceBusNamespacePanel.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\ServiceBus\NsState.cs" Link="Components\ServiceBus\NsState.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Aks\*.razor" Link="Components\Aks\%(Filename)%(Extension)" />
@@ -86,10 +91,12 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityPerformance.razor" Link="Components\Observability\ObservabilityPerformance.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ResourceSelectorDialog.razor" Link="Components\Observability\ResourceSelectorDialog.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\TimeRangePicker.razor" Link="Components\Observability\TimeRangePicker.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Notifications\NotificationHistory.razor" Link="Components\Notifications\NotificationHistory.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisNamespaceTreeNode.razor" Link="Components\Redis\RedisNamespaceTreeNode.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisKeyspaceHealthExplorer.razor" Link="Components\Redis\RedisKeyspaceHealthExplorer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageContainerTree.razor" Link="Components\Storage\StorageContainerTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageBlobList.razor" Link="Components\Storage\StorageBlobList.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobDetailPane.razor" Link="Components\Storage\BlobDetailPane.razor" />
     </ItemGroup>

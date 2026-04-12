@@ -10,6 +10,10 @@
     overflow: hidden;
 }
 
+.aks-page > .empty-state {
+    flex: 1;
+}
+
 /* ── Monitor bar (second toolbar row) ── */
 .aks-monitor-bar {
     display: flex;

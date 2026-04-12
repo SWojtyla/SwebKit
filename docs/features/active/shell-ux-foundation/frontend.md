@@ -4,13 +4,21 @@
 
 title: "Frontend Plan - shell-ux-foundation"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 
 ---
 
 ## Goal
 
 Give SwebKit one coherent shell and page-chrome language so that operators always know where they are, what environment they are in, what state the page is in, and what the next safe action is.
+
+## Closeout slice
+
+This final slice stayed intentionally narrow: mostly tests and docs, with room for one shell repair if validation exposed a real regression.
+
+- Stabilize the shared Playwright page so demo mode, route state, and persisted theme do not leak between E2E tests.
+- Add the smallest high-value shell closeout coverage that fits the current fixture: alias routing, theme persistence, and focus-on-navigate.
+- Leave `MainLayout`, `LeftNav`, `TopBar`, `StatusBar`, and routed page primitives untouched unless validation exposed a blocker.
 
 ## Impacted areas
 
@@ -42,7 +50,9 @@ Give SwebKit one coherent shell and page-chrome language so that operators alway
 - `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
 - Tests:
+- `tests/SwebKit.E2E.Tests/AppFixture.cs`
 - `tests/SwebKit.App.Tests/ComponentTests.cs`
+- `tests/SwebKit.App.Tests/ShellFoundationTests.cs`
 - `tests/SwebKit.App.Tests/NotificationServiceTests.cs`
 - `tests/SwebKit.E2E.Tests/AppUiTests.cs`
 
@@ -75,41 +85,42 @@ Give SwebKit one coherent shell and page-chrome language so that operators alway
 
 ### Wave 1 - Route-aware shell context [blazor-expert] (sequential root)
 
-- [ ] Replace purely imperative `CurrentArea` tracking with route-derived shell context.
-- [ ] Group left-nav items by operator intent rather than a flat list.
-- [ ] Extend top-bar context to show the current area, active environment, and any shell-level safety state.
-- [ ] Preserve existing refresh and shortcut behavior while moving shell state derivation closer to routing.
+- [x] Replace purely imperative `CurrentArea` tracking with route-derived shell context.
+- [x] Group left-nav items by operator intent rather than a flat list.
+- [x] Extend top-bar context to show the current area, active environment, and any shell-level safety state.
+- [x] Preserve existing refresh and shortcut behavior while moving shell state derivation closer to routing.
 
 ### Wave 2 - Shared page-header and state patterns [blazor-expert] (depends on Wave 1)
 
-- [ ] Introduce one shared top-level page-header pattern that all routed pages can adopt.
-- [ ] Normalize `h1` usage across routed pages so shell focus works consistently.
-- [ ] Roll out one structural pattern for loading, error, and empty states with CTA placement.
-- [ ] Update pages that currently use bespoke header stacks or passive empty text.
+- [x] Introduce one shared top-level page-header pattern that all routed pages can adopt.
+- [x] Normalize `h1` usage across routed pages so shell focus works consistently.
+- [x] Roll out one structural pattern for loading, error, and empty states with CTA placement.
+- [x] Update pages that currently use bespoke header stacks or passive empty text.
 
 ### Wave 3 - Status, notifications, and refresh trust [blazor-expert] (depends on Waves 1-2)
 
-- [ ] Align status-bar refresh language with page refresh behavior.
-- [ ] Improve notification-center presentation, unread behavior, and severity readability.
-- [ ] Reduce repeated inline top-bar and notification styling in favor of maintainable shell styles.
-- [ ] Ensure connection/status signals do not imply success when the page is unconfigured or partially failed.
+- [x] Align status-bar refresh language with page refresh behavior.
+- [x] Improve notification-center presentation, unread behavior, and severity readability.
+- [x] Reduce repeated inline top-bar and notification styling in favor of maintainable shell styles.
+- [x] Ensure connection/status signals do not imply success when the page is unconfigured or partially failed.
 
 ### Wave 4 - Theme and production-safety polish [blazor-expert] (depends on Waves 1-3)
 
-- [ ] Audit shell colors, tokens, and theme persistence behavior.
-- [ ] Surface environment production context consistently at shell level.
-- [ ] Standardize shared destructive-action emphasis so pages do not each invent their own production treatment.
-- [ ] Record the final shell-context and safety model in `decisions.md`.
+- [x] Audit shell colors, tokens, and theme persistence behavior.
+- [x] Surface environment production context consistently at shell level.
+- [x] Standardize shared destructive-action emphasis so pages do not each invent their own production treatment.
+- [x] Record the final shell-context and safety model in `decisions.md`.
 
 ### Wave 5 - Validation and rollout [blazor-expert] (depends on Waves 1-4)
 
-- [ ] Add component coverage for shell context, route state, notifications, and shared page headers.
-- [ ] Add E2E coverage for direct-route entry, shell nav behavior, and theme persistence.
-- [ ] Verify the updated shell pattern across all core routed pages before declaring the foundation stable.
+- [x] Add component coverage for shell context, route state, notifications, and shared page headers.
+- [x] Add E2E coverage for direct-route entry, shell nav behavior, and theme persistence.
+- [x] Verify the updated shell pattern across all core routed pages before declaring the foundation stable.
 
 ## Validation
 
-- Component tests: Not started.
+- Component tests: Passed via `tests/SwebKit.App.Tests/ComponentTests.cs` and `tests/SwebKit.App.Tests/ShellFoundationTests.cs`.
+- E2E tests: Passed via `tests/SwebKit.E2E.Tests/AppUiTests.cs` after adding per-test shell reset coverage, `/releases` alias routing checks, theme persistence checks, `FocusOnNavigate` heading focus checks, and a final `LeftNav` active-state repair exposed by the alias-route assertion.
 - Manual UX checks:
 - Open each top-level route directly and verify correct nav state, page header, and focus target.
 - Toggle between normal and production-marked environments and verify shell safety treatment.
@@ -124,3 +135,4 @@ Give SwebKit one coherent shell and page-chrome language so that operators alway
 - BL-11 - keep child-component CSS in child `.razor.css` files and shared shell tokens in global styles.
 - Relevant pitfalls from `docs/pitfalls/dotnet-csharp.md`:
 - CS-2 - do not swallow `OperationCanceledException` in shell refresh or notification flows.
+- Closeout note: the final validation slice used a fixture-level hard reset and reconnect seam, and the only late app-code change was the small `LeftNav` active-state correction required to make alias-route navigation truthful.

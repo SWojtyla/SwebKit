@@ -13,9 +13,34 @@
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject IJSRuntime JS
+@inject IAppEventBus Events
 @implements IDisposable
 
 <div class="obs-page">
+    <div class="page-shell-header">
+        <RoutePageHeader Area="observability"
+                         Subtitle="Inspect overview, failures, performance, logs, and availability for Application Insights resources.">
+            <Meta>
+                @if (_selectedResource is not null)
+                {
+                    <span class="shell-pill shell-pill--muted">@_selectedResource.Name</span>
+                }
+                @if (_provider is not null)
+                {
+                    <span class="shell-pill shell-pill--accent">@_provider.ProviderType</span>
+                }
+                @if (_autoRefreshEnabled)
+                {
+                    <span class="shell-pill shell-pill--muted">Auto refresh every @_autoRefreshSeconds seconds</span>
+                }
+                @if (AppState.UseDemoData)
+                {
+                    <span class="shell-pill shell-pill--warning">Demo mode</span>
+                }
+            </Meta>
+        </RoutePageHeader>
+    </div>
+
     <!-- Top toolbar: resource selector + time range + refresh -->
     <PageToolbar>
         <LeadingContent>
@@ -77,75 +102,73 @@
 
     @if (_provider is null)
     {
-        <div class="obs-no-resource">
-            <div class="obs-no-resource-icon">📊</div>
-            <div class="obs-no-resource-title">No resource selected</div>
-            <div class="obs-no-resource-hint">
-                @if (AppState.UseDemoData)
-                {
-                    <span>Click <strong>Select resource…</strong> to pick a demo Application Insights instance.</span>
-                }
-                else
-                {
-                    <span>Click <strong>Select resource…</strong> to scan your subscriptions and pick an Application Insights
-                        resource.</span>
+        <div class="obs-empty-state-wrap">
+            <EmptyState Icon="📊" Title="No resource selected"
+                        Subtitle="@(AppState.UseDemoData
+                                                                    ? "Pick a demo Application Insights resource to explore the observability workspace."
+                                                                    : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
+                <Actions>
+                    <button type="button" @onclick="ToggleResourceSelector">Select resource</button>
+                    @if (!AppState.UseDemoData)
+                    {
+                        <a href="/settings?section=observability">Review observability settings</a>
                     }
-                </div>
-            </div>
-        }
-    else
-        {
-            <!-- Tab bar -->
-            <div class="obs-tabs">
-                <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Overview)">Overview</button>
-                <button class="obs-tab @(_tab == Tab.Failures ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Failures)">Failures</button>
-                <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Performance)">Performance</button>
-                <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" data-testid="obs-tab-logs"
-                        @onclick="() => SetTab(Tab.Logs)">Logs</button>
-                <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Availability)">Availability</button>
-            </div>
-
-            <!-- Tab content -->
-            <div class="obs-tab-content @GetTabContentClass()">
-                @switch (_tab)
-                {
-                    case Tab.Overview:
-                        <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                        break;
-                    case Tab.Failures:
-                        <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
-                                               TzOffsetMinutes="_tzOffsetMinutes" OnDrillToLogs="DrillToLogsAsync" />
-                        break;
-                    case Tab.Performance:
-                        <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                        break;
-                    case Tab.Logs:
-                        <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
-                                           MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
-                                           SavedQueriesChanged="OnSavedQueriesChangedAsync"
-                                           PendingQuery="@_pendingLogsQuery" PendingQueryVersion="@_pendingLogsQueryVersion"
-                                           PendingQueryHandled="OnPendingLogsQueryHandledAsync"
-                                           Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
-                                           GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
-                        break;
-                    case Tab.Availability:
-                        <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
-                                                   TzOffsetMinutes="_tzOffsetMinutes" />
-                        break;
-                }
-            </div>
-        }
-    </div>
-
-    @* Click-outside to close resource selector *@
-    @if (_resourceSelectorOpen)
-    {
-        <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
+                </Actions>
+            </EmptyState>
+        </div>
     }
+    else
+    {
+        <!-- Tab bar -->
+        <div class="obs-tabs">
+            <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Overview)">Overview</button>
+            <button class="obs-tab @(_tab == Tab.Failures ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Failures)">Failures</button>
+            <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Performance)">Performance</button>
+            <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" data-testid="obs-tab-logs"
+                    @onclick="() => SetTab(Tab.Logs)">Logs</button>
+            <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Availability)">Availability</button>
+        </div>
+
+        <!-- Tab content -->
+        <div class="obs-tab-content @GetTabContentClass()">
+            @switch (_tab)
+            {
+                case Tab.Overview:
+                    <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                    break;
+                case Tab.Failures:
+                    <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
+                                           TzOffsetMinutes="_tzOffsetMinutes" OnDrillToLogs="DrillToLogsAsync" />
+                    break;
+                case Tab.Performance:
+                    <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                    break;
+                case Tab.Logs:
+                    <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
+                                       MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
+                                       SavedQueriesChanged="OnSavedQueriesChangedAsync" PendingQuery="@_pendingLogsQuery"
+                                       PendingQueryVersion="@_pendingLogsQueryVersion" PendingQueryHandled="OnPendingLogsQueryHandledAsync"
+                                       Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
+                                       GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
+                    break;
+                case Tab.Availability:
+                    <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
+                                               TzOffsetMinutes="_tzOffsetMinutes" />
+                    break;
+            }
+        </div>
+    }
+</div>
+
+@* Click-outside to close resource selector *@
+@if (_resourceSelectorOpen)
+{
+    <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
+}
 
 @code {
     private enum Tab { Overview, Failures, Performance, Logs, Availability }
@@ -186,6 +209,7 @@
     protected override async Task OnInitializedAsync()
     {
         AppState.DemoModeChanged += OnDemoModeChanged;
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterObsCommands();
         await TryRestoreLastResourceAsync();
     }
@@ -390,6 +414,16 @@
         StateHasChanged();
     });
 
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "observability", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(RefreshAsync);
+    }
+
     // OBS-7: Auto-refresh toggle
     private void ToggleAutoRefresh()
     {
@@ -452,6 +486,7 @@
             Commands.Unregister(id);
         Selection.SetSelection("observability", null);
         AppState.DemoModeChanged -= OnDemoModeChanged;
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         _cts.Cancel();
         _cts.Dispose();
     }

@@ -1,8 +1,17 @@
 /* FQ-19 – CSS isolation: structural styles extracted from ServiceBusPage.razor */
 
+.service-bus-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .service-bus-page-shell {
     display: flex;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     position: relative;
 }
@@ -12,6 +21,10 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+.service-bus-right-pane > .empty-state {
+    flex: 1;
 }
 
 .sb-status-error {

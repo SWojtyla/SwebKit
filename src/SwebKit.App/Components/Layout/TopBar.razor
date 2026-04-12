@@ -2,28 +2,52 @@
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
 @inject INotificationService Notifications
+@inject IConnectionStateService ConnectionStateService
 @implements IDisposable
 
 <div class="top-bar">
-    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
-            aria-label="Toggle sidebar">&#9776;</button>
-    <span class="app-logo-text" style="margin-right:8px;">SwebKit</span>
+    <div class="top-bar__start">
+    <button type="button" class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
+                aria-label="Toggle sidebar">&#9776;</button>
+        <span class="app-logo-text">SwebKit</span>
+        <div class="top-bar__context" aria-live="polite">
+            <span class="top-bar__context-eyebrow">@CurrentContext.GroupLabel</span>
+            <span class="top-bar__context-title">@CurrentContext.Title</span>
+            <span class="top-bar__context-summary">@CurrentContext.Summary</span>
+        </div>
+    </div>
 
-    <div style="display:flex; align-items:center; flex:1;"></div>
+    <div class="top-bar__spacer"></div>
+
+    <div class="top-bar__badges" aria-label="Environment and page status">
+        <span class="shell-pill shell-pill--muted">@CurrentContext.EnvironmentLabel</span>
+        @if (!string.IsNullOrWhiteSpace(ConnectionBadgeText))
+        {
+            <span class="shell-pill @ConnectionBadgeClass">@ConnectionBadgeText</span>
+        }
+        @if (CurrentContext.IsProduction)
+        {
+            <span class="shell-pill shell-pill--danger">Production</span>
+        }
+        @if (AppState.UseDemoData)
+        {
+            <span class="shell-pill shell-pill--warning">Demo</span>
+        }
+    </div>
 
     @if (!AppState.UseDemoData)
     {
-        <div style="position:relative; margin-right:8px;">
+        <div class="top-bar__popover-anchor">
             <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
                     aria-label="Enable demo mode">Demo</button>
             @if (_showDemoConfirm)
             {
                 <div class="demo-confirm-popover">
-                    <div style="font-weight:600; margin-bottom:6px;">Enable demo mode?</div>
-                    <div style="font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:10px; line-height:1.4;">
+                    <div class="demo-confirm-title">Enable demo mode?</div>
+                    <div class="demo-confirm-copy">
                         Live connections will be replaced with synthetic data.
                     </div>
-                    <div style="display:flex; gap:6px; justify-content:flex-end;">
+                    <div class="demo-confirm-actions">
                         <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
                         <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
                     </div>
@@ -32,128 +56,94 @@
         </div>
     }
 
-    <div style="position:relative; margin-right:8px;">
-        <button @onclick="ToggleHistory"
-                style="background:transparent; border:none; color:var(--env-text); font-size:18px; cursor:pointer; padding:4px 8px; position:relative; line-height:1;"
-                title="Notifications" aria-label="Notifications">
-            🔔
+    <div class="top-bar__popover-anchor">
+        <button class="top-bar-icon-btn" @onclick="ToggleHistory" title="Notifications"
+                aria-label="@NotificationButtonLabel" aria-expanded="@_isHistoryOpen" aria-haspopup="dialog">
+            <span aria-hidden="true">🔔</span>
             @if (UnreadCount > 0)
             {
-                <span
-                style="position:absolute; top:0; right:0; background:#EF4444; color:white; font-size:9px; font-weight:700; border-radius:8px; padding:1px 4px; line-height:1.4; min-width:14px; text-align:center;">@UnreadCount</span>
+                <span class="top-bar-icon-badge">@UnreadCount</span>
             }
         </button>
         @if (_isHistoryOpen)
         {
-            <div style="position:absolute; top:100%; right:0; z-index:8000;">
-                <NotificationHistory />
+            <div class="top-bar-popover top-bar-popover--history">
+                <NotificationHistory OnClose="CloseHistory" />
             </div>
         }
     </div>
 
-    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette"
-            style="background:rgba(127,127,127,0.15); color:var(--env-text); border:1px solid rgba(127,127,127,0.3); border-radius:var(--radius-sm); padding:4px 10px; font-size:var(--font-size-sm); cursor:pointer;">
-        &gt;_ Command Palette &nbsp;<kbd>Ctrl+P</kbd>
+    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette">
+        &gt;_ Command Palette <kbd>Ctrl+P</kbd>
     </button>
 </div>
 
-<style>
-    .nav-toggle {
-        background: transparent;
-        border: none;
-        color: var(--env-text);
-        font-size: 18px;
-        cursor: pointer;
-        padding: 4px 8px;
-    }
-
-    kbd {
-        background: rgba(0, 0, 0, 0.2);
-        padding: 1px 4px;
-        border-radius: 2px;
-        font-size: 10px;
-        color: var(--env-text);
-    }
-
-    .demo-toggle-btn {
-        background: rgba(127, 127, 127, 0.15);
-        border: 1px solid rgba(127, 127, 127, 0.3);
-        border-radius: var(--radius-sm);
-        color: var(--env-text);
-        opacity: 0.75;
-        font-size: var(--font-size-xs);
-        padding: 3px 10px;
-        cursor: pointer;
-    }
-
-    .demo-toggle-btn:hover {
-        opacity: 1;
-        background: rgba(127, 127, 127, 0.25);
-    }
-
-    .demo-confirm-popover {
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        background: var(--color-surface-2);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        padding: 12px 14px;
-        width: 230px;
-        box-shadow: var(--shadow-md);
-        z-index: 9000;
-        color: var(--color-text);
-        font-size: var(--font-size-sm);
-    }
-
-    .demo-confirm-cancel {
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-sm);
-        color: var(--color-text-muted);
-        font-size: var(--font-size-xs);
-        padding: 3px 10px;
-        cursor: pointer;
-    }
-
-    .demo-confirm-enable {
-        background: #d97706;
-        border: none;
-        border-radius: var(--radius-sm);
-        color: white;
-        font-size: var(--font-size-xs);
-        font-weight: 600;
-        padding: 3px 10px;
-        cursor: pointer;
-    }
-</style>
-
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
+    [Parameter]
+    public ShellRouteContext CurrentContext { get; set; } =
+ShellNavigation.CreateContext(ShellNavigation.Dashboard, "Default", false, false);
 
     private bool _isHistoryOpen;
     private bool _showDemoConfirm;
     private int _lastSeenCount;
+    private AreaConnectionState? CurrentAreaState => ConnectionStateService.States.TryGetValue(CurrentContext.Area, out var
+state) ? state : null;
     private int UnreadCount => Math.Max(0, Notifications.All.Count - _lastSeenCount);
+    private string NotificationButtonLabel => UnreadCount > 0
+        ? $"Notifications, {UnreadCount} unread"
+        : "Notifications";
+    private string? ConnectionBadgeText => CurrentAreaState?.State switch
+    {
+        ConnectionState.Connected => "Connected",
+        ConnectionState.Error => "Needs attention",
+        ConnectionState.NotConfigured => "Needs setup",
+        _ => null,
+    };
+    private string ConnectionBadgeClass => CurrentAreaState?.State switch
+    {
+        ConnectionState.Connected => "shell-pill--success",
+        ConnectionState.Error => "shell-pill--warning",
+        ConnectionState.NotConfigured => "shell-pill--muted",
+        _ => "shell-pill--muted",
+    };
 
     protected override void OnInitialized()
     {
         Notifications.NotificationsChanged += OnNotificationsChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
+        ConnectionStateService.StatesChanged += OnConnectionStateChanged;
     }
 
-    private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
+    private void OnNotificationsChanged()
+    {
+        if (_lastSeenCount > Notifications.All.Count)
+        {
+            _lastSeenCount = Notifications.All.Count;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnConnectionStateChanged() => InvokeAsync(StateHasChanged);
+
     private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
 
     private void ToggleHistory()
     {
         _isHistoryOpen = !_isHistoryOpen;
+        _showDemoConfirm = false;
         if (_isHistoryOpen)
+        {
             _lastSeenCount = Notifications.All.Count;
+        }
     }
+
+    private void CloseHistory() => _isHistoryOpen = false;
 
     private void ShowDemoConfirm()
     {
+        _isHistoryOpen = false;
         _showDemoConfirm = true;
     }
 
@@ -174,5 +164,6 @@
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
+        ConnectionStateService.StatesChanged -= OnConnectionStateChanged;
     }
 }

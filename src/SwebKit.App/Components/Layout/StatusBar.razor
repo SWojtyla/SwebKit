@@ -4,204 +4,114 @@
 @inject IAppEventBus EventBus
 @implements IDisposable
 
-<div class="status-bar">
+<div class="status-bar" aria-label="Shell status">
 
     @* ── Connection dots ── *@
-    <span class="status-section status-connections">
-        @foreach (var (area, label) in _areas)
+    <span class="status-section status-connections" aria-label="Connection status by area">
+        @foreach (var (area, shortLabel) in _areas)
         {
             ConnState.States.TryGetValue(area, out var s);
             var css = s?.State switch
             {
                 ConnectionState.Connected => "dot-connected",
                 ConnectionState.Error => "dot-error",
+                ConnectionState.NotConfigured => "dot-not-configured",
                 _ => "dot-unknown"
             } ?? "dot-unknown";
-            var tooltip = s?.State == ConnectionState.Error && s.ErrorMessage is not null
-                ? $"{label}: {s.ErrorMessage}"
-                : s is not null ? $"{label}: {s.State}" : $"{label}: Not connected";
-            <span class="connection-indicator" title="@tooltip" role="status" aria-label="@tooltip">
+            var route = ShellNavigation.ForArea(area);
+            var tooltip = s?.State switch
+            {
+                ConnectionState.Error when s.ErrorMessage is not null => $"{route.Label}: {s.ErrorMessage}",
+                ConnectionState.Error => $"{route.Label}: Needs attention",
+                ConnectionState.Connected => $"{route.Label}: Connected",
+                ConnectionState.NotConfigured => $"{route.Label}: Not configured",
+                _ => $"{route.Label}: Not ready"
+            };
+            <span class="connection-indicator @(area == CurrentArea ? "active" : string.Empty)" title="@tooltip"
+                  role="status" aria-label="@tooltip">
                 <span class="connection-dot @css">@(s?.State switch
-                {
-                    ConnectionState.Connected => "✓",
-                    ConnectionState.Error => "✗",
-                    _ => "·"
-                } ?? "·")</span>
-                <span class="connection-label">@label</span>
+                    {
+                        ConnectionState.Connected => "✓",
+                        ConnectionState.Error => "✗",
+                        ConnectionState.NotConfigured => "!",
+                        _ => "·"
+                    } ?? "·")</span>
+                    <span class="connection-label">@shortLabel</span>
+                </span>
+            }
+        </span>
+
+        @if (!string.IsNullOrWhiteSpace(CurrentAreaStatusText))
+        {
+            <span class="status-section status-current-area" role="status">@CurrentAreaStatusText</span>
+        }
+
+        @* ── Spacer ── *@
+        <span class="status-spacer"></span>
+
+        @* ── Last refresh timestamp ── *@
+        @if (_lastRefresh is not null)
+        {
+            <span class="status-section status-refresh" title="Most recent shell refresh request">
+                @FormatRefresh(_lastRefresh.Value, _lastRefreshArea)
             </span>
         }
-    </span>
 
-    @* ── Spacer ── *@
-    <span class="status-spacer"></span>
-
-    @* ── Last refresh timestamp ── *@
-    @if (_lastRefresh is not null)
-    {
-        <span class="status-section status-refresh" title="Last refresh">
-            @FormatRefresh(_lastRefresh.Value)
-        </span>
-    }
-
-    @* ── Port-forward count ── *@
-    @{
-        var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
-    }
-    @if (pfActive > 0)
-    {
-        <button class="status-bar-btn" title="Open port-forward sessions panel" aria-label="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
-            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
-            @pfActive pf
-        </button>
-    }
-
-    @* ── Background tasks ── *@
-    @{
-        var running = TaskQueue.Tasks.Where(t => t.Status == BackgroundTaskStatus.Running).ToList();
-    }
-    @if (running.Count == 1)
-    {
-        <span class="status-section status-task" title="@running[0].Title">
-            <FluentProgressRing Width="12px" />
-            @running[0].Title
-            @if (running[0].Total is > 0)
-            {
-                <span class="status-progress">@running[0].Progress / @running[0].Total</span>
-                <progress value="@running[0].Progress" max="@running[0].Total"
-                          style="width:60px; height:6px; margin-left:4px;" />
-            }
-        </span>
-    }
-    else if (running.Count > 1)
-    {
-        var totalDone = running.Sum(t => t.Progress ?? 0);
-        var totalWork = running.Sum(t => t.Total ?? 0);
-        <span class="status-section status-task">
-            <FluentProgressRing Width="12px" />
-            @running.Count tasks running
-            @if (totalWork > 0)
-            {
-                <span class="status-progress">@totalDone / @totalWork</span>
-            }
-        </span>
-    }
-
-</div>
-
-<style>
-    .status-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 0 10px;
-        height: 100%;
-    }
-
-    .status-section {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        color: var(--color-text-muted);
-    }
-
-    .status-spacer {
-        flex: 1;
-    }
-
-    .status-connections {
-        gap: 10px;
-    }
-
-    .connection-indicator {
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        cursor: default;
-    }
-
-    .connection-dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 8px;
-        font-weight: 700;
-        line-height: 1;
-        color: #fff;
-    }
-
-    .dot-connected { background: var(--color-success, #22c55e); }
-    .dot-error { background: var(--color-error, #ef4444); }
-    .dot-unknown { background: var(--color-text-muted, #6b7280); }
-
-    .connection-label {
-        font-size: 11px;
-        color: var(--color-text-muted);
-    }
-
-    .status-refresh {
-        font-size: 11px;
-        color: var(--color-text-muted);
-    }
-
-    .status-task {
-        color: var(--color-accent);
-        max-width: 200px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .status-bar-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        color: var(--color-accent);
-        font-size: 11px;
-        padding: 0 4px;
-    }
-
-        .status-bar-btn:hover {
-            text-decoration: underline;
+        @* ── Port-forward count ── *@
+        @{
+            var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or
+        PortForwardStatus.Active);
+        }
+        @if (pfActive > 0)
+        {
+            <button class="status-bar-btn" title="Open port-forward sessions panel"
+                    aria-label="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
+                @pfActive pf
+            </button>
         }
 
-    .status-progress {
-        font-size: 10px;
-        color: var(--color-text-muted);
-        margin-left: 4px;
-    }
-
-    progress {
-        appearance: none;
-        border: none;
-        border-radius: 3px;
-        overflow: hidden;
-        background: var(--color-surface-3);
-    }
-
-        progress::-webkit-progress-bar {
-            background: var(--color-surface-3);
-            border-radius: 3px;
+        @* ── Background tasks ── *@
+        @{
+            var running = TaskQueue.Tasks.Where(t => t.Status == BackgroundTaskStatus.Running).ToList();
+        }
+        @if (running.Count == 1)
+        {
+            <span class="status-section status-task" title="@running[0].Title">
+                <FluentProgressRing Width="12px" />
+                @running[0].Title
+                @if (running[0].Total is > 0)
+                {
+                    <span class="status-progress">@running[0].Progress / @running[0].Total</span>
+                    <progress value="@running[0].Progress" max="@running[0].Total"
+                              style="width:60px; height:6px; margin-left:4px;" />
+                }
+            </span>
+        }
+        else if (running.Count > 1)
+        {
+            var totalDone = running.Sum(t => t.Progress ?? 0);
+            var totalWork = running.Sum(t => t.Total ?? 0);
+            <span class="status-section status-task">
+                <FluentProgressRing Width="12px" />
+                @running.Count tasks running
+                @if (totalWork > 0)
+                {
+                    <span class="status-progress">@totalDone / @totalWork</span>
+                }
+            </span>
         }
 
-        progress::-webkit-progress-value {
-            background: var(--color-accent);
-            border-radius: 3px;
-        }
-</style>
+    </div>
 
 @code {
-    private static readonly (string area, string label)[] _areas =
+    [Parameter] public ShellNavEntry CurrentRoute { get; set; } = ShellNavigation.Dashboard;
+
+    private static readonly (string area, string shortLabel)[] _areas =
     [
         ("service-bus", "SB"),
         ("aks", "AKS"),
+        ("observability", "Obs"),
         ("incident-timeline", "Incident"),
         ("redis", "Redis"),
         ("storage", "Storage"),
@@ -209,8 +119,19 @@
     ];
 
     private DateTime? _lastRefresh;
+    private string? _lastRefreshArea;
     private PeriodicTimer? _clockTimer;
     private CancellationTokenSource _cts = new();
+    private string CurrentArea => CurrentRoute.Area;
+    private string? CurrentAreaStatusText => ConnState.States.TryGetValue(CurrentArea, out var state)
+        ? state.State switch
+        {
+            ConnectionState.Connected => $"{CurrentRoute.Label} ready",
+            ConnectionState.Error => $"{CurrentRoute.Label} needs attention",
+            ConnectionState.NotConfigured => $"{CurrentRoute.Label} not configured",
+            _ => $"{CurrentRoute.Label} starting"
+        }
+        : null;
 
     protected override void OnInitialized()
     {
@@ -239,19 +160,21 @@
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
-    private void OnRefreshRequested(RefreshRequestedEvent _)
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
     {
         _lastRefresh = DateTime.UtcNow;
+        _lastRefreshArea = refresh.Area;
         InvokeAsync(StateHasChanged);
     }
 
-    private static string FormatRefresh(DateTime utc)
+    private static string FormatRefresh(DateTime utc, string? area)
     {
+        var label = ShellNavigation.ForArea(area).Label;
         var elapsed = DateTime.UtcNow - utc;
-        if (elapsed.TotalSeconds < 5) return "Refreshed just now";
-        if (elapsed.TotalSeconds < 60) return $"Refreshed {(int)elapsed.TotalSeconds}s ago";
-        if (elapsed.TotalMinutes < 60) return $"Refreshed {(int)elapsed.TotalMinutes}m ago";
-        return $"Refreshed {(int)elapsed.TotalHours}h ago";
+        if (elapsed.TotalSeconds < 5) return $"{label} refresh requested just now";
+        if (elapsed.TotalSeconds < 60) return $"{label} refresh requested {(int)elapsed.TotalSeconds}s ago";
+        if (elapsed.TotalMinutes < 60) return $"{label} refresh requested {(int)elapsed.TotalMinutes}m ago";
+        return $"{label} refresh requested {(int)elapsed.TotalHours}h ago";
     }
 
     private void OpenPortForwardPanel()

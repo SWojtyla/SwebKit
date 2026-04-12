@@ -14,347 +14,365 @@
 @inject IAksClientBootstrapper AksBootstrapper
 
 <div class="aks-page" @oncontextmenu:preventDefault>
-    @* ── Toolbar ── *@
-    <AksConnectionBar Contexts="Contexts" ActiveContext="@ActiveContext" Namespaces="Namespaces"
-                      CurrentNamespace="@CurrentNamespace" IsLoading="@IsLoading" IsConnected="@(Client is not null)"
-                      ActiveResourceType="@ActiveResourceType" ShowEvents="@ShowEvents"
-                      ShowPortForwardSessions="@ShowPortForwardSessions" EventWarningCount="@(Events.Count(e => e.Type == "Warning"))"
-                      ActivePortForwardCount="@(SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active))"
-                      AutoRefreshPaused="@HasAnyPanel" OnContextChanged="HandleContextChangedAsync"
-                      OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
-                      OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
-                      OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
-
-    @* ── Monitor bar ── *@
-    <div class="aks-monitor-bar">
-        <button class="aks-monitor-btn @(Monitor.IsMonitoring ? "active" : "")" @onclick="ToggleMonitorPanel"
-                title="Pod health monitoring">
-            <FluentIcon Value="@(new Icons.Regular.Size16.Alert())" Width="14px" style="vertical-align:middle;" />
-            @(Monitor.IsMonitoring ? $" Monitor ({Monitor.MonitoredNamespaces.Count})" : " Monitor")
-            @if (_recentAlertCount > 0)
-            {
-                <span class="aks-alert-badge">@_recentAlertCount</span>
-            }
-        </button>
-    </div>
-
-    @* ── Error ── *@
-    @if (ErrorMessage is not null)
-    {
-        <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
-    }
-
-    @* ── Confirm bar ── *@
-    <AksConfirmBar @ref="Confirm" />
-
-    @* ── Empty / Loading / Content ── *@
-    @if (Client is null && !AppState.UseDemoData && AppState.Config.AksConfig is null)
-    {
-        <div class="aks-empty-state">
-            <div class="aks-empty-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size32.CloudCube())" Width="48px" />
-            </div>
-            <div class="aks-empty-title">No cluster configured</div>
-            <div class="aks-empty-subtitle">
-                Go to <a href="/settings">Settings</a> to configure your AKS connection.
-            </div>
+    <div class="page-shell-header">
+        <RoutePageHeader Area="aks"
+                         Subtitle="Inspect workloads, events, metrics, and operational shortcuts for the active cluster context.">
+            <Meta>
+                @if (!string.IsNullOrWhiteSpace(ActiveContext))
+                {
+                    <span class="shell-pill shell-pill--muted">@ActiveContext</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(CurrentNamespace))
+                {
+                    <span class="shell-pill shell-pill--accent">Namespace: @CurrentNamespace</span>
+                }
+                @if (Monitor.IsMonitoring)
+                {
+                    <span class="shell-pill shell-pill--warning">@Monitor.MonitoredNamespaces.Count
+                        namespace@(Monitor.MonitoredNamespaces.Count == 1 ? "" : "s") monitored</span>
+                    }
+                    @if (IsProduction)
+                    {
+                        <span class="shell-pill shell-pill--danger">Production environment</span>
+                    }
+                    @if (AppState.UseDemoData)
+                    {
+                        <span class="shell-pill shell-pill--warning">Demo mode</span>
+                    }
+                </Meta>
+            </RoutePageHeader>
         </div>
-    }
-    else if (IsLoading && !HasAnyData)
-    {
-        <LoadingSpinner Message="Connecting to cluster…" />
-    }
-    else
-    {
-        @* ── Monitor panel ── *@
-        @if (_showMonitorPanel)
+
+        @* ── Toolbar ── *@
+        <AksConnectionBar Contexts="Contexts" ActiveContext="@ActiveContext" Namespaces="Namespaces"
+                          CurrentNamespace="@CurrentNamespace" IsLoading="@IsLoading" IsConnected="@(Client is not null)"
+                          ActiveResourceType="@ActiveResourceType" ShowEvents="@ShowEvents"
+                          ShowPortForwardSessions="@ShowPortForwardSessions" EventWarningCount="@(Events.Count(e => e.Type == "Warning"))"
+                          ActivePortForwardCount="@(SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active))"
+                          AutoRefreshPaused="@HasAnyPanel" OnContextChanged="HandleContextChangedAsync"
+                          OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
+                          OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
+                          OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
+
+        @* ── Monitor bar ── *@
+        <div class="aks-monitor-bar">
+            <button class="aks-monitor-btn @(Monitor.IsMonitoring ? "active" : "")" @onclick="ToggleMonitorPanel"
+                    title="Pod health monitoring">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Alert())" Width="14px" style="vertical-align:middle;" />
+                @(Monitor.IsMonitoring ? $" Monitor ({Monitor.MonitoredNamespaces.Count})" : " Monitor")
+                @if (_recentAlertCount > 0)
+                {
+                    <span class="aks-alert-badge">@_recentAlertCount</span>
+                }
+            </button>
+        </div>
+
+        @* ── Error ── *@
+        @if (ErrorMessage is not null)
         {
-            <div class="aks-monitor-panel">
-                <NamespaceMonitorSelector AksClient="Client" CurrentClusterContext="@ActiveContext" />
-                <AlertHistoryPanel />
+            <ErrorCallout Message="@ErrorMessage" OnRetry="LoadAsync" />
+        }
+
+        @* ── Confirm bar ── *@
+        <AksConfirmBar @ref="Confirm" />
+
+        @* ── Empty / Loading / Content ── *@
+        @if (Client is null && !AppState.UseDemoData && AppState.Config.AksConfig is null)
+        {
+            <EmptyState Icon="☁" Title="No cluster configured"
+                        Subtitle="Connect a kubeconfig context and default namespace in Settings before opening the AKS workspace.">
+                <Actions>
+                    <a href="/settings?section=aks">Open AKS settings</a>
+                </Actions>
+            </EmptyState>
+        }
+        else if (IsLoading && !HasAnyData)
+        {
+            <LoadingSpinner Message="Connecting to cluster…" />
+        }
+        else
+        {
+            @* ── Monitor panel ── *@
+            @if (_showMonitorPanel)
+            {
+                <div class="aks-monitor-panel">
+                    <NamespaceMonitorSelector AksClient="Client" CurrentClusterContext="@ActiveContext" />
+                    <AlertHistoryPanel />
+                </div>
+            }
+
+            <div class="aks-content @(HasAnyPanel ? "side-open" : "")">
+                @* ── Main resource panel ── *@
+                <div class="aks-resource-panel">
+                    <div class="aks-section-header">
+                        <span class="aks-section-title">@ActiveResourceType</span>
+                        <span class="aks-section-count">@ActiveResourceCount</span>
+                    </div>
+                    <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
+                                    ValueChanged="OnFilterChanged" />
+                    <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault tabindex="0"
+                         @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
+                        @switch (ActiveResourceType)
+                        {
+                            case "Deployments":
+                                <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
+                                                SelectedDeployment="@SelectedDeployment"
+                                                OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
+                                                OnSelectRow="@((d) => { SelectedDeployment = d; Selection.SetSelection("aks", d); StateHasChanged(); })"
+                                                OnOpenHpa="@OpenHpaDetail"
+                                                OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                break;
+
+                            case "StatefulSets":
+                                <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
+                                                 SelectedStatefulSet="@SelectedStatefulSet"
+                                                 OnSelectRow="@((s) => { SelectedStatefulSet = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
+                                                 OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
+                                                 OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                break;
+
+                            case "ConfigMaps":
+                                @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
+                                {
+                                    <div class="aks-mns-notice">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                                    style="vertical-align:middle;" />
+                                        ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
+                                                   SelectedConfigMap="@SelectedConfigMap"
+                                                   OnSelectRow="@((cm) => { SelectedConfigMap = cm; Selection.SetSelection("aks", cm); StateHasChanged(); })"
+                                                   OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
+                                }
+                                break;
+
+                            case "Secrets":
+                                <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
+                                            SelectedSecret="@SelectedSecret"
+                                            OnSelectRow="@((s) => { SelectedSecret = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
+                                            OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
+                                break;
+
+                            case "Pods":
+                                <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
+                                         IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
+                                         CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
+                                         MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)"
+                                         OnSelectRow="@((p) => { SelectedPod = p; Selection.SetSelection("aks", p); StateHasChanged(); })"
+                                         OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                break;
+
+                            case "Ingresses":
+                                <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
+                                             OnSelectRow="@((i) => { SelectedIngress = i; Selection.SetSelection("aks", i); StateHasChanged(); })"
+                                             OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
+                                             OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
+                                break;
+
+                            case "Helm":
+                                <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
+                                          OnSelectRow="@((h) => { SelectedHelmRelease = h; Selection.SetSelection("aks", h); StateHasChanged(); })"
+                                          OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
+                                break;
+
+                            case "Jobs":
+                                <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace" SelectedJob="@SelectedJob"
+                                         OnSelectRow="@((job) => { SelectedJob = job; Selection.SetSelection("aks", job); StateHasChanged(); })"
+                                         OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
+                                         OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                break;
+
+                            case "CronJobs":
+                                <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
+                                             SelectedCronJob="@SelectedCronJob"
+                                             OnSelectRow="@((cj) => { SelectedCronJob = cj; Selection.SetSelection("aks", cj); StateHasChanged(); })"
+                                             OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
+                                             OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
+                                break;
+                        }
+                    </div>
+
+                    @* ── Keyboard hint bar ── *@
+                    <div class="aks-kbd-hints">
+                        <span class="aks-kbd-hint"><kbd>↑↓</kbd> navigate</span>
+                        @if (ActiveResourceType is "Deployments" or "StatefulSets" or "Pods")
+                        {
+                            <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
+                        }
+                        @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
+                                                                                                                                                                                                                                                                                                                        or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
+                        {
+                            <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
+                        }
+                        @if (ActiveResourceType is "Deployments" or "StatefulSets")
+                        {
+                            <span class="aks-kbd-hint"><kbd>r</kbd> restart</span>
+                        }
+                        @if (ActiveResourceType == "Pods")
+                        {
+                            <span class="aks-kbd-hint"><kbd>s</kbd> shell</span>
+                            <span class="aks-kbd-hint"><kbd>p</kbd> port-fwd</span>
+                            <span class="aks-kbd-hint"><kbd>d</kbd> kill</span>
+                        }
+                        @if (ActiveResourceType == "Helm")
+                        {
+                            <span class="aks-kbd-hint"><kbd>h</kbd> history</span>
+                            <span class="aks-kbd-hint"><kbd>v</kbd> values</span>
+                        }
+                        @if (ActiveResourceType is "ConfigMaps" or "Secrets")
+                        {
+                            <span class="aks-kbd-hint"><kbd>Enter</kbd> view keys</span>
+                        }
+                        <span class="aks-kbd-hint"><kbd>/</kbd> filter</span>
+                        <span class="aks-kbd-hint"><kbd>Esc</kbd> deselect</span>
+                    </div>
+                </div>
+
+                @* ── Side column: all detail panels ── *@
+                <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
+                                 Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments"
+                                 StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
+                                 OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged" />
+
             </div>
         }
 
-        <div class="aks-content @(HasAnyPanel ? "side-open" : "")">
-            @* ── Main resource panel ── *@
-            <div class="aks-resource-panel">
-                <div class="aks-section-header">
-                    <span class="aks-section-title">@ActiveResourceType</span>
-                    <span class="aks-section-count">@ActiveResourceCount</span>
-                </div>
-                <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
-                                ValueChanged="OnFilterChanged" />
-                <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault tabindex="0"
-                     @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
-                    @switch (ActiveResourceType)
-                    {
-                        case "Deployments":
-                            <DeploymentGrid FilteredItems="@FilteredDeployments" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
-                                            SelectedDeployment="@SelectedDeployment"
-                                            OnContextMenu="@((args) => ShowDeploymentMenu(args.Item1, args.Item2))"
-                                            OnSelectRow="@((d) => { SelectedDeployment = d; Selection.SetSelection("aks", d); StateHasChanged(); })"
-                                            OnOpenHpa="@OpenHpaDetail"
-                                            OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
-                            break;
-
-                        case "StatefulSets":
-                            <StatefulSetGrid FilteredItems="@FilteredStatefulSets" Hpas="@Hpas" IsMultiNamespace="@IsMultiNamespace"
-                                             SelectedStatefulSet="@SelectedStatefulSet"
-                                             OnSelectRow="@((s) => { SelectedStatefulSet = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
-                                             OnContextMenu="@((args) => ShowStatefulSetMenu(args.Item1, args.Item2))" OnOpenHpa="@OpenHpaDetail"
-                                             OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
-                            break;
-
-                        case "ConfigMaps":
-                            @if (IsMultiNamespace && ConfigMaps.Count == 0 && !IsLoading)
-                            {
-                                <div class="aks-mns-notice">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
-                                                style="vertical-align:middle;" />
-                                    ConfigMaps are not loaded in multi-namespace mode. Select a specific namespace to view them.
-                                </div>
-                            }
-                            else
-                            {
-                                <ConfigMapGrid FilteredItems="@FilteredConfigMaps" IsMultiNamespace="@IsMultiNamespace"
-                                               SelectedConfigMap="@SelectedConfigMap"
-                                               OnSelectRow="@((cm) => { SelectedConfigMap = cm; Selection.SetSelection("aks", cm); StateHasChanged(); })"
-                                               OnContextMenu="@((args) => ShowConfigMapMenu(args.Item1, args.Item2))" />
-                            }
-                            break;
-
-                        case "Secrets":
-                            <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
-                                        SelectedSecret="@SelectedSecret"
-                                        OnSelectRow="@((s) => { SelectedSecret = s; Selection.SetSelection("aks", s); StateHasChanged(); })"
-                                        OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
-                            break;
-
-                        case "Pods":
-                            @if (_metricsUnavailable)
-                            {
-                                <div class="aks-mns-notice" style="margin-bottom:8px;">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
-                                                style="vertical-align:middle;" />
-                                    Metrics unavailable — metrics-server may not be installed on this cluster.
-                                </div>
-                            }
-                            <PodGrid FilteredItems="@FilteredPods" PodMetricsList="@PodMetricsList"
-                                     IsMultiNamespace="@IsMultiNamespace" SelectedPod="@SelectedPod"
-                                     CpuCeiling="@(AppState.Config.AksConfig?.CpuBarCeilingMillicores ?? 500)"
-                                     MemoryCeiling="@(AppState.Config.AksConfig?.MemoryBarCeilingMi ?? 512)"
-                                     OnSelectRow="@((p) => { SelectedPod = p; Selection.SetSelection("aks", p); StateHasChanged(); })"
-                                     OnContextMenu="@((args) => ShowPodMenu(args.Item1, args.Item2))"
-                                     OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
-                            break;
-
-                        case "Ingresses":
-                            <IngressGrid FilteredItems="@FilteredIngresses" SelectedIngress="@SelectedIngress"
-                                         OnSelectRow="@((i) => { SelectedIngress = i; Selection.SetSelection("aks", i); StateHasChanged(); })"
-                                         OnContextMenu="@((args) => ShowIngressMenu(args.Item1, args.Item2))"
-                                         OnOpenUrl="@((url) => _ = OpenUrlAsync(url))" />
-                            break;
-
-                        case "Helm":
-                            <HelmGrid FilteredItems="@FilteredHelmReleases" SelectedHelm="@SelectedHelmRelease"
-                                      OnSelectRow="@((h) => { SelectedHelmRelease = h; Selection.SetSelection("aks", h); StateHasChanged(); })"
-                                      OnContextMenu="@((args) => ShowHelmMenu(args.Item1, args.Item2))" />
-                            break;
-
-                        case "Jobs":
-                            <JobGrid FilteredItems="@FilteredJobs" IsMultiNamespace="@IsMultiNamespace" SelectedJob="@SelectedJob"
-                                     OnSelectRow="@((job) => { SelectedJob = job; Selection.SetSelection("aks", job); StateHasChanged(); })"
-                                     OnContextMenu="@((args) => ShowJobMenu(args.Item1, args.Item2))"
-                                     OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
-                            break;
-
-                        case "CronJobs":
-                            <CronJobGrid FilteredItems="@FilteredCronJobs" IsMultiNamespace="@IsMultiNamespace"
-                                         SelectedCronJob="@SelectedCronJob"
-                                         OnSelectRow="@((cj) => { SelectedCronJob = cj; Selection.SetSelection("aks", cj); StateHasChanged(); })"
-                                         OnContextMenu="@((args) => ShowCronJobMenu(args.Item1, args.Item2))"
-                                         OnNamespaceClick="@((ns) => { CurrentNamespace = ns; _ = LoadAsync(); })" />
-                            break;
-                    }
-                </div>
-
-                @* ── Keyboard hint bar ── *@
-                <div class="aks-kbd-hints">
-                    <span class="aks-kbd-hint"><kbd>↑↓</kbd> navigate</span>
-                    @if (ActiveResourceType is "Deployments" or "StatefulSets" or "Pods")
-                    {
-                        <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
-                    }
-                    @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                        or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
-                    {
-                        <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
-                    }
-                    @if (ActiveResourceType is "Deployments" or "StatefulSets")
-                    {
-                        <span class="aks-kbd-hint"><kbd>r</kbd> restart</span>
-                    }
-                    @if (ActiveResourceType == "Pods")
-                    {
-                        <span class="aks-kbd-hint"><kbd>s</kbd> shell</span>
-                        <span class="aks-kbd-hint"><kbd>p</kbd> port-fwd</span>
-                        <span class="aks-kbd-hint"><kbd>d</kbd> kill</span>
-                    }
-                    @if (ActiveResourceType == "Helm")
-                    {
-                        <span class="aks-kbd-hint"><kbd>h</kbd> history</span>
-                        <span class="aks-kbd-hint"><kbd>v</kbd> values</span>
-                    }
-                    @if (ActiveResourceType is "ConfigMaps" or "Secrets")
-                    {
-                        <span class="aks-kbd-hint"><kbd>Enter</kbd> view keys</span>
-                    }
-                    <span class="aks-kbd-hint"><kbd>/</kbd> filter</span>
-                    <span class="aks-kbd-hint"><kbd>Esc</kbd> deselect</span>
-                </div>
-            </div>
-
-            @* ── Side column: all detail panels ── *@
-            <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
-                             Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments"
-                             StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
-                             OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged" />
-
-        </div>
-    }
-
-    @* ── Context menus ── *@
-    <ContextMenu @ref="DeploymentMenu">
-        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxDeployment?.Name)"><span
-            class="ctx-item-icon">📋</span> Copy name</button>
-            <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View
-                YAML</button>
-                <button class="ctx-item" @onclick="() => OnCtxEditYaml('D')"><span class="ctx-item-icon">✎</span> Edit
+        @* ── Context menus ── *@
+        <ContextMenu @ref="DeploymentMenu">
+            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxDeployment?.Name)"><span
+                class="ctx-item-icon">📋</span> Copy name</button>
+                <button class="ctx-item" @onclick="() => OnCtxViewYaml('D')"><span class="ctx-item-icon">{ }</span> View
                     YAML</button>
-                    <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View
-                        Logs</button>
-                        <button class="ctx-item" @onclick="OnCtxAllPodsLogs"><span class="ctx-item-icon">&#9782;</span> Logs for all
-                            pods</button>
-                            <button class="ctx-item" @onclick="OnCtxContainerDetailsDeployment"><span class="ctx-item-icon">&#9881;</span>
-                                Container Details</button>
-                                <div class="ctx-separator"></div>
-                                <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
-                                    Deployment</button>
-                                    <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
-                                        Scale...</button>
-                                    </ContextMenu>
+                    <button class="ctx-item" @onclick="() => OnCtxEditYaml('D')"><span class="ctx-item-icon">✎</span> Edit
+                        YAML</button>
+                        <button class="ctx-item" @onclick="OnCtxViewDeploymentLogs"><span class="ctx-item-icon">&#9776;</span> View
+                            Logs</button>
+                            <button class="ctx-item" @onclick="OnCtxAllPodsLogs"><span class="ctx-item-icon">&#9782;</span> Logs for all
+                                pods</button>
+                                <button class="ctx-item" @onclick="OnCtxContainerDetailsDeployment"><span class="ctx-item-icon">&#9881;</span>
+                                    Container Details</button>
+                                    <div class="ctx-separator"></div>
+                                    <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
+                                        Deployment</button>
+                                        <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
+                                            Scale...</button>
+                                        </ContextMenu>
 
-                                    <ContextMenu @ref="PodMenu">
-                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxPod?.Name)"><span
-                                            class="ctx-item-icon">📋</span> Copy name</button>
-                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
-                                                YAML</button>
-                                                <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
-                                                    Logs</button>
-                                                    <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
-                                                        Container Details</button>
-                                                        <div class="ctx-separator"></div>
-                                                        <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
-                                                            pod</button>
-                                                            <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span>
-                                                                Port-forward…</button>
-                                                                <div class="ctx-separator"></div>
-                                                                <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
-                                                                    Pod</button>
-                                                                </ContextMenu>
+                                        <ContextMenu @ref="PodMenu">
+                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxPod?.Name)"><span
+                                                class="ctx-item-icon">📋</span> Copy name</button>
+                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
+                                                    YAML</button>
+                                                    <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
+                                                        Logs</button>
+                                                        <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
+                                                            Container Details</button>
+                                                            <div class="ctx-separator"></div>
+                                                            <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
+                                                                pod</button>
+                                                                <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span>
+                                                                    Port-forward…</button>
+                                                                    <div class="ctx-separator"></div>
+                                                                    <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
+                                                                        Pod</button>
+                                                                    </ContextMenu>
 
-                                                                <ContextMenu @ref="IngressMenu">
-                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxIngress?.Name)"><span
-                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
-                                                                            YAML</button>
-                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
+                                                                    <ContextMenu @ref="IngressMenu">
+                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxIngress?.Name)"><span
+                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
                                                                                 YAML</button>
-                                                                                <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
-                                                                                    browser</button>
-                                                                                    <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
-                                                                                        URL</button>
-                                                                                    </ContextMenu>
+                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                    YAML</button>
+                                                                                    <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
+                                                                                        browser</button>
+                                                                                        <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
+                                                                                            URL</button>
+                                                                                        </ContextMenu>
 
-                                                                                    <ContextMenu @ref="HelmMenu">
-                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
-                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
-                                                                                                YAML</button>
-                                                                                                <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
-                                                                                                    Values</button>
-                                                                                                    <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
-                                                                                                        History</button>
-                                                                                                        <div class="ctx-separator"></div>
-                                                                                                        <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
-                                                                                                            Rollback...</button>
-                                                                                                        </ContextMenu>
+                                                                                        <ContextMenu @ref="HelmMenu">
+                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
+                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
+                                                                                                    YAML</button>
+                                                                                                    <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
+                                                                                                        Values</button>
+                                                                                                        <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
+                                                                                                            History</button>
+                                                                                                            <div class="ctx-separator"></div>
+                                                                                                            <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
+                                                                                                                Rollback...</button>
+                                                                                                            </ContextMenu>
 
-                                                                                                        <ContextMenu @ref="StatefulSetMenu">
-                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxStatefulSet?.Name)"><span
-                                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                    YAML</button>
-                                                                                                                    <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                            <ContextMenu @ref="StatefulSetMenu">
+                                                                                                                <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxStatefulSet?.Name)"><span
+                                                                                                                    class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                    <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
                                                                                                                         YAML</button>
-                                                                                                                        <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
-                                                                                                                            for all pods</button>
-                                                                                                                            <div class="ctx-separator"></div>
-                                                                                                                            <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
-                                                                                                                                Restart</button>
-                                                                                                                                <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
-                                                                                                                                    Scale...</button>
-                                                                                                                                </ContextMenu>
+                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                            YAML</button>
+                                                                                                                            <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
+                                                                                                                                for all pods</button>
+                                                                                                                                <div class="ctx-separator"></div>
+                                                                                                                                <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
+                                                                                                                                    Restart</button>
+                                                                                                                                    <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
+                                                                                                                                        Scale...</button>
+                                                                                                                                    </ContextMenu>
 
-                                                                                                                                <ContextMenu @ref="ConfigMapMenu">
-                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxConfigMap?.Name)"><span
-                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                            YAML</button>
-                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                    <ContextMenu @ref="ConfigMapMenu">
+                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxConfigMap?.Name)"><span
+                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                                 YAML</button>
-                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
-                                                                                                                                                    Keys</button>
-                                                                                                                                                </ContextMenu>
+                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                    YAML</button>
+                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
+                                                                                                                                                        Keys</button>
+                                                                                                                                                    </ContextMenu>
 
-                                                                                                                                                <ContextMenu @ref="SecretMenu">
-                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxSecret?.Name)"><span
-                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                            YAML</button>
-                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                    <ContextMenu @ref="SecretMenu">
+                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxSecret?.Name)"><span
+                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                                                 YAML</button>
-                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
-                                                                                                                                                                    Keys</button>
-                                                                                                                                                                </ContextMenu>
+                                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                    YAML</button>
+                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
+                                                                                                                                                                        Keys</button>
+                                                                                                                                                                    </ContextMenu>
 
-                                                                                                                                                                <ContextMenu @ref="JobMenu">
-                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxJob?.Name)"><span
-                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                            YAML</button>
-                                                                                                                                                                            <div class="ctx-separator"></div>
-                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
-                                                                                                                                                                                job</button>
-                                                                                                                                                                            </ContextMenu>
+                                                                                                                                                                    <ContextMenu @ref="JobMenu">
+                                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxJob?.Name)"><span
+                                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxViewYamlJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                YAML</button>
+                                                                                                                                                                                <div class="ctx-separator"></div>
+                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
+                                                                                                                                                                                    job</button>
+                                                                                                                                                                                </ContextMenu>
 
-                                                                                                                                                                            <ContextMenu @ref="CronJobMenu">
-                                                                                                                                                                                <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
-                                                                                                                                                                                    class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                        YAML</button>
-                                                                                                                                                                                        <div class="ctx-separator"></div>
-                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
-                                                                                                                                                                                            now</button>
-                                                                                                                                                                                        </ContextMenu>
+                                                                                                                                                                                <ContextMenu @ref="CronJobMenu">
+                                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                            YAML</button>
+                                                                                                                                                                                            <div class="ctx-separator"></div>
+                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
+                                                                                                                                                                                                now</button>
+                                                                                                                                                                                            </ContextMenu>
 
-                                                                                                                                                                                    </div>
+                                                                                                                                                                                        </div>
 
-                                                                                                                                                                                    @* ── Port-forward sessions panel ── *@
-                                                                                                                                                                                    @if (ShowPortForwardSessions)
-                                                                                                                                                                                    {
-                                                                                                                                                                                        <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
-                                                                                                                                                                                    }
+                                                                                                                                                                                        @* ── Port-forward sessions panel ── *@
+                                                                                                                                                                                        @if (ShowPortForwardSessions)
+                                                                                                                                                                                        {
+                                                                                                                                                                                            <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+                                                                                                                                                                                        }
 
 @* ── Port-forward start dialog ── *@
 <PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
@@ -487,7 +505,6 @@
 
     // Pod metrics
     private List<PodMetrics> PodMetricsList = [];
-    private bool _metricsUnavailable;
 
     // PERF-18: Snapshot record for PageDataCache
     private sealed record AksPageSnapshot(
@@ -586,6 +603,7 @@
     protected override void OnInitialized()
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnMonitorPodHealthDetected;
         RegisterAksCommands();
     }
@@ -685,6 +703,16 @@ OnCtxRestartDeployment();
     {
         ShowPortForwardSessions = true;
         InvokeAsync(StateHasChanged);
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "aks", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(LoadAsync);
     }
 
     protected override void OnParametersSet()
@@ -1703,6 +1731,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         cts?.Cancel();
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
+        EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected -= OnMonitorPodHealthDetected;
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })

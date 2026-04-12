@@ -4,7 +4,7 @@
 
 title: "Test Plan - shell-ux-foundation"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 created: "2026-04-12"
 updated: "2026-04-12"
 
@@ -35,10 +35,9 @@ Validate that the SwebKit shell becomes consistent, route-aware, accessible, and
 ## Automated coverage
 
 - Component tests: `tests/SwebKit.App.Tests`
-- Cover `MainLayout`, `LeftNav`, `NavItem`, `TopBar`, `StatusBar`, `NotificationHistory`, `NotificationToast`, and any shared page-header or empty-state wrapper introduced by this feature.
-- Add regression coverage for page-specific shells that adopt the shared pattern: `DashboardPage`, `ServiceBusPage`, `AksPage`, `RedisPage`, `StoragePage`, `PipelinesPage`, `ObservabilityPage`, `IncidentTimelinePage`, and `SettingsPage`.
+- Current passing shell coverage includes `ComponentTests.cs` and `ShellFoundationTests.cs`, covering nav item rendering, route metadata headers, top-bar context badges, notification center rendering/close behavior, and status-bar refresh language.
 - End-to-end tests: `tests/SwebKit.E2E.Tests`
-- Cover shell navigation, direct-route entry, notification center open/close behavior, theme persistence, and production-environment shell cues.
+- Current passing shell closeout coverage in `AppUiTests.cs` covers shared-page reset determinism, direct alias entry on `/releases` with correct Pipelines nav/header behavior, theme persistence via `swebkit-ui-theme` across reload and CDP reconnect, `FocusOnNavigate` heading focus, demo-mode enable/disable flows, and core shell chrome smoke coverage.
 - Unit tests: n/a unless shell metadata helpers or state-formatting helpers are extracted into pure .NET services.
 
 ## Test data and setup
@@ -72,8 +71,8 @@ Validate that the SwebKit shell becomes consistent, route-aware, accessible, and
 
 ## Validation status
 
-- Automated: Not started.
-- Manual: Not started.
+- Automated: Passed — `tests/SwebKit.E2E.Tests/AppUiTests.cs` (19/19), `tests/SwebKit.App.Tests/ComponentTests.cs` and `tests/SwebKit.App.Tests/ShellFoundationTests.cs` (23/23 combined).
+- Manual: Not rerun in this closeout slice. A final visual walkthrough remains optional review-stage confirmation rather than an implementation blocker.
 
 ## Sign-off
 

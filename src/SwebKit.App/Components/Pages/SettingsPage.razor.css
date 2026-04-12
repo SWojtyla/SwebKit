@@ -1,7 +1,7 @@
 /* FQ-19 – CSS isolation: repeated inline styles extracted from SettingsPage.razor */
 
-/* Applied to every section heading in the settings content well (7 occurrences) */
-.page-title {
+/* Shared routed-page header spacing inside the settings content well */
+.settings-content .page-header {
     margin-bottom: var(--spacing-lg);
 }
 

@@ -3,6 +3,7 @@ using Bunit.JSInterop;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Components.Layout;
 using SwebKit.App.Components.Pages;
 using SwebKit.App.Components.Shared;
@@ -28,9 +29,12 @@ public class ComponentTests : TestContext
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
         }
 
+        Services.AddFluentUIComponents();
+
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         Services.AddSingleton<IAppEventBus>(events);
         Services.AddSingleton(new AppStateService(new ProfileRepository(), new UiStateRepository(), events));
+        Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
     }
 
     [Fact]
@@ -41,7 +45,7 @@ public class ComponentTests : TestContext
             .Add(p => p.Label, "Projects")
             .Add(p => p.IsExpanded, false));
 
-        Assert.Empty(cut.FindAll("div.nav-item > span"));
+        Assert.Empty(cut.FindAll("button.nav-item > span.nav-item-label"));
     }
 
     [Fact]
@@ -62,7 +66,7 @@ public class ComponentTests : TestContext
             .Add(p => p.Area, "aks")
             .Add(p => p.OnNavigate, area => navigatedArea = area));
 
-        cut.Find("div.nav-item").Click();
+        cut.Find("button.nav-item").Click();
 
         Assert.Equal("aks", navigatedArea);
     }
@@ -268,6 +272,7 @@ public class ComponentTests : TestContext
         Services.AddSingleton<IAppEventBus>(bus);
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
+        Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
 
         var cut = RenderComponent<TopBar>();
         cut.Find("button.cmd-palette-btn").Click();
@@ -288,6 +293,23 @@ public class ComponentTests : TestContext
         Assert.Contains("No entities pinned yet", cut.Markup);
     }
 
+    [Fact]
+    public void StoragePage_NotConfigured_DoesNotRenderPastedSourceText()
+    {
+        Services.AddSingleton<ICredentialStore>(new InMemoryCredentialStore());
+        Services.AddSingleton(new DemoStorageClient());
+        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton<ISelectionContext>(new TestSelectionContext());
+        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
+
+        var cut = RenderComponent<StoragePage>();
+
+        Assert.Contains("Storage is not configured", cut.Markup);
+        Assert.Contains("Open Storage settings", cut.Markup);
+        Assert.DoesNotContain("private void RebuildClient()", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("private async Task DownloadSelectedBlobAsync", cut.Markup, StringComparison.Ordinal);
+    }
+
     private sealed class InMemoryCredentialStore : ICredentialStore
     {
         private readonly Dictionary<string, string> _secrets = new();
@@ -297,5 +319,21 @@ public class ComponentTests : TestContext
         public void Delete(string key) => _secrets.Remove(key);
         public IReadOnlyList<string> ListKeys(string prefix = "") =>
             _secrets.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private sealed class TestSelectionContext : ISelectionContext
+    {
+        private readonly Dictionary<string, object?> _selections = [];
+
+        public event Action? SelectionChanged;
+
+        public void SetSelection(string area, object? selected)
+        {
+            _selections[area] = selected;
+            SelectionChanged?.Invoke();
+        }
+
+        public T? GetSelection<T>(string area) where T : class =>
+            _selections.TryGetValue(area, out var selected) ? selected as T : null;
     }
 }

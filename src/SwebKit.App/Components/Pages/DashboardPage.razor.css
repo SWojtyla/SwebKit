@@ -36,6 +36,7 @@
     color: var(--color-text-muted);
     display: flex;
     align-items: center;
+    gap: 0.35rem;
     transition: border-color 0.15s, color 0.15s;
     flex-shrink: 0;
     margin-top: 0.25rem;

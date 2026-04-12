@@ -9,13 +9,11 @@
 
     @* ── Left navigation sidebar ── *@
     <nav class="settings-nav">
-        <button class="@GetNavItemClass(AppearanceSection)"
-                @onclick="@(() => SelectSection(AppearanceSection))">
+        <button class="@GetNavItemClass(AppearanceSection)" @onclick="@(() => SelectSection(AppearanceSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.PaintBrush())" Width="18px" />
             Appearance
         </button>
-        <button class="@GetNavItemClass(ServiceBusSection)"
-                @onclick="@(() => SelectSection(ServiceBusSection))">
+        <button class="@GetNavItemClass(ServiceBusSection)" @onclick="@(() => SelectSection(ServiceBusSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
             Service Bus
         </button>
@@ -36,13 +34,11 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Width="18px" />
             Incident Timeline
         </button>
-        <button class="@GetNavItemClass(StorageSection)"
-                @onclick="@(() => SelectSection(StorageSection))">
+        <button class="@GetNavItemClass(StorageSection)" @onclick="@(() => SelectSection(StorageSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
             Storage
         </button>
-        <button class="@GetNavItemClass(ObservabilitySection)"
-                @onclick="@(() => SelectSection(ObservabilitySection))">
+        <button class="@GetNavItemClass(ObservabilitySection)" @onclick="@(() => SelectSection(ObservabilitySection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="18px" />
             Observability
         </button>
@@ -50,6 +46,24 @@
 
     @* ── Right content well ── *@
     <div class="settings-content">
+        <RoutePageHeader Area="settings" Subtitle="@CurrentSectionSubtitle">
+            <Meta>
+                <span class="shell-pill shell-pill--muted">Section: @CurrentSectionTitle</span>
+                @if (IsDirty)
+                {
+                    <span class="shell-pill shell-pill--warning">Unsaved changes</span>
+                }
+                @if (AppState.Config.IsProduction)
+                {
+                    <span class="shell-pill shell-pill--danger">Production safeguards on</span>
+                }
+                @if (string.Equals(_active, ObservabilitySection, StringComparison.Ordinal))
+                {
+                    <span class="shell-pill shell-pill--muted">Azure CLI identity</span>
+                }
+            </Meta>
+        </RoutePageHeader>
+
         @if (IsDirty)
         {
             <div class="settings-unsaved-banner" role="status">
@@ -61,7 +75,6 @@
         @switch (_active)
         {
             case AppearanceSection:
-                <h3 class="page-title">Appearance</h3>
                 <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
 
                 <div class="settings-field-group">
@@ -77,42 +90,32 @@
                 break;
 
             case ServiceBusSection:
-                <h3 class="page-title">Service Bus</h3>
                 <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case AksSection:
-                <h3 class="page-title">AKS / Kubernetes</h3>
                 <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case RedisSection:
-                <h3 class="page-title">Redis</h3>
                 <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
             case DevOpsSection:
-                <h3 class="page-title">Azure DevOps (Releases)</h3>
                 <DevOpsConfigForm OnSaved="SaveAsync" />
                 break;
 
             case IncidentTimelineSection:
-                <h3 class="page-title">Incident Timeline</h3>
-                <IncidentTimelineConfigForm Environment="AppState.Config"
-                                            OnSaved="SaveAsync"
-                                            OnChanged="HandleDraftChangedAsync"
-                                            SuggestedNamespace="IncidentNamespace"
-                                            SuggestedWorkloadKind="IncidentWorkloadKind"
-                                            SuggestedWorkloadName="IncidentWorkloadName" />
+                <IncidentTimelineConfigForm Environment="AppState.Config" OnSaved="SaveAsync"
+                                            OnChanged="HandleDraftChangedAsync" SuggestedNamespace="IncidentNamespace"
+                                            SuggestedWorkloadKind="IncidentWorkloadKind" SuggestedWorkloadName="IncidentWorkloadName" />
                 break;
 
             case StorageSection:
-                <h3 class="page-title">Storage (Azure Blob)</h3>
                 <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
                 break;
 
             case ObservabilitySection:
-                <h3 class="page-title">Observability</h3>
                 <div class="settings-info-card">
                     <div class="settings-info-icon">🔑</div>
                     <div>
@@ -215,6 +218,32 @@
 
     private bool IsDirty => _configSnapshot.Length > 0
         && _configSnapshot != CurrentConfigJson();
+
+    private string CurrentSectionTitle => _active switch
+    {
+        AppearanceSection => "Appearance",
+        ServiceBusSection => "Service Bus",
+        AksSection => "AKS / Kubernetes",
+        RedisSection => "Redis",
+        DevOpsSection => "Azure DevOps (Releases)",
+        IncidentTimelineSection => "Incident Timeline",
+        StorageSection => "Storage (Azure Blob)",
+        ObservabilitySection => "Observability",
+        _ => "Settings"
+    };
+
+    private string CurrentSectionSubtitle => _active switch
+    {
+        AppearanceSection => "Tune shell themes, demo behavior, and safety defaults for this environment.",
+        ServiceBusSection => "Manage namespace connections and how messaging workspaces open by default.",
+        AksSection => "Choose the cluster context and namespace defaults that drive the AKS workspace.",
+        RedisSection => "Select the active cache and the connection profile used by Redis views.",
+        DevOpsSection => "Connect Azure DevOps so pipeline, release, and approval data can flow into the shell.",
+        IncidentTimelineSection => "Point timeline analysis at the namespace and workload metadata it should inspect.",
+        StorageSection => "Configure Azure Blob access for storage inspection and related workflows.",
+        ObservabilitySection => "Review query limits and the Azure CLI identity model used for Application Insights access.",
+        _ => "Manage workspace-specific configuration for the current environment."
+    };
 
     protected override void OnInitialized()
     {

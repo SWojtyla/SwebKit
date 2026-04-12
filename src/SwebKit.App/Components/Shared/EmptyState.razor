@@ -7,10 +7,15 @@
     {
         <div class="empty-state-subtitle">@Subtitle</div>
     }
+    @if (Actions is not null)
+    {
+        <div class="empty-state-actions">@Actions</div>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public string Icon { get; set; } = "";
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
 }

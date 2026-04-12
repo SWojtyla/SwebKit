@@ -11,14 +11,8 @@
 }
 else if (Error is not null)
 {
-    <div style="padding:16px; color:var(--color-status-danger, #d32f2f); font-size:13px;">
-        <span>⚠ @Error</span>
-        @if (OnRetry.HasDelegate)
-        {
-            <button style="margin-left:8px; padding:2px 8px; font-size:11px; cursor:pointer;
-            border:1px solid currentColor; border-radius:3px; background:transparent; color:inherit;"
-                    @onclick="OnRetry">Retry</button>
-        }
+    <div class="loading-container__error">
+        <ErrorCallout Title="Unable to load content" Message="@Error" OnRetry="OnRetry" />
     </div>
 }
 else

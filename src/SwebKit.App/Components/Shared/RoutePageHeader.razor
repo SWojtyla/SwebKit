@@ -1,0 +1,16 @@
+@using SwebKit.App.Components.Layout
+
+<PageHeader Eyebrow="@ResolvedEyebrow" Title="@ResolvedTitle" Subtitle="@Subtitle" Meta="@Meta" Actions="@Actions" />
+
+@code {
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Eyebrow { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? Meta { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private ShellNavEntry Entry => ShellNavigation.ForArea(Area);
+    private string ResolvedEyebrow => string.IsNullOrWhiteSpace(Eyebrow) ? Entry.Group : Eyebrow;
+    private string ResolvedTitle => string.IsNullOrWhiteSpace(Title) ? Entry.Label : Title;
+}

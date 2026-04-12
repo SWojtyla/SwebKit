@@ -3,21 +3,45 @@
 @inject AppStateService AppState
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
+@inject IAppEventBus Events
 @implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 
 <div class="redis-page">
+    <RoutePageHeader Area="redis" Subtitle="Explore keyspaces, health, and value operations for the active cache.">
+        <Meta>
+            @if (!string.IsNullOrWhiteSpace(ActiveCacheEntry?.DisplayName))
+            {
+                <span class="shell-pill shell-pill--muted">@ActiveCacheEntry.DisplayName</span>
+            }
+            @if (IsProduction)
+            {
+                <span class="shell-pill shell-pill--danger">Production environment</span>
+            }
+            @if (AppState.UseDemoData)
+            {
+                <span class="shell-pill shell-pill--warning">Demo mode</span>
+            }
+        </Meta>
+        <Actions>
+            <a class="page-header-action-btn" href="/settings?section=redis">Settings</a>
+        </Actions>
+    </RoutePageHeader>
+
     <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
                         SelectedCacheId="@SelectedCacheId" IsConnected="@(Client is not null)" ConnectionLabel="@ConnectionLabel"
                         OnCacheChanged="HandleCacheChanged" OnCacheNameChanged="HandleCacheNameChanged" />
 
     @if (!AppState.UseDemoData && !IsConfigured)
     {
-        <div class="not-configured">
-            Redis is not configured for this environment. Configure it in Settings.
-        </div>
+        <EmptyState Icon="🗄" Title="Redis is not configured"
+                    Subtitle="Configure the active cache in Settings before opening keyspace, health, and value operations.">
+            <Actions>
+                <a href="/settings?section=redis">Open Redis settings</a>
+            </Actions>
+        </EmptyState>
     }
     else
     {
@@ -51,7 +75,8 @@
                         @if (_hasMoreKeys)
                         {
                             <div class="load-more-bar">
-                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count loaded)
+                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count
+                                    loaded)
                                 </FluentButton>
                             </div>
                         }
@@ -184,7 +209,20 @@
 
     protected override void OnInitialized()
     {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterRedisCommands();
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "redis", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = SelectedKey is not null
+            ? InvokeAsync(RefreshSelectedAsync)
+            : InvokeAsync(StartFreshScanAsync);
     }
 
     private void RegisterRedisCommands()
@@ -475,7 +513,8 @@
         }
     }
 
-    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys, long scanSession, CancellationToken ct = default)
+    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys, long scanSession, CancellationToken ct =
+default)
     {
         if (Client is null || targetKeys.Count == 0 || !IsCurrentScanSession(scanSession))
             return;
@@ -1239,6 +1278,7 @@
         _cts.Cancel();
         _cts.Dispose();
         DisposeClient();
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
             Commands.Unregister(id);
         Selection.SetSelection("redis", null);

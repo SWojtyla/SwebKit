@@ -11,166 +11,173 @@
 
 <CascadingValue Value="ActiveClient" Name="DevOpsClient">
     <div class="pipelines-shell">
-        <div class="page-header">
-            <h2 class="page-title">Pipelines</h2>
-            @if (IsConfigured && !_showProjectPicker)
-            {
-                <div class="pipelines-scope-info">
-                    <span class="pipelines-scope-count">
-                        @if (EffectivePinnedProjects.Count == 0)
-                        {
-                            <text>All projects</text>
-                        }
-                        else
-                        {
-                            <text>@EffectivePinnedProjects.Count project@(EffectivePinnedProjects.Count == 1 ? "" : "s")</text>
+        <div class="page-shell-header">
+            <RoutePageHeader Area="pipelines"
+                             Subtitle="Track pipeline health, release activity, and pending approvals without leaving the shell.">
+                <Meta>
+                    @if (IsConfigured && !_showProjectPicker)
+                    {
+                        <span class="shell-pill shell-pill--muted">@ScopeSummary</span>
+                    }
+                    @if (_pendingApprovalCount > 0)
+                    {
+                        <span class="shell-pill shell-pill--accent">@_pendingApprovalCount pending
+                            approval@(_pendingApprovalCount == 1 ? "" : "s")</span>
                         }
                         @if (AppState.UseDemoData)
                         {
-                            <span class="pipelines-demo-tag">demo</span>
+                            <span class="shell-pill shell-pill--warning">Demo mode</span>
                         }
-                    </span>
-                    <button class="pipelines-scope-change-btn" @onclick="@(() => _showProjectPicker = true)">
-                        Change
+                    </Meta>
+                    <Actions>
+                        @if (IsConfigured && !_showProjectPicker)
+                        {
+                            <button class="pipelines-scope-change-btn" @onclick="@(() => _showProjectPicker = true)">
+                                Change scope
+                            </button>
+                        }
+                        <a class="page-header-action-btn" href="/settings?section=devops">Settings</a>
+                    </Actions>
+                </RoutePageHeader>
+            </div>
+
+            @if (!IsConfigured)
+            {
+                <div class="pipelines-empty-state-wrap">
+                    <EmptyState Icon="🚀" Title="Azure DevOps is not configured"
+                                Subtitle="Connect an organization and project in Settings before opening pipelines, releases, and approvals.">
+                        <Actions>
+                            <a href="/settings?section=devops">Open DevOps settings</a>
+                        </Actions>
+                    </EmptyState>
+                </div>
+            }
+            else if (_showProjectPicker)
+            {
+                <ProjectPicker CurrentPinned="EffectivePinnedProjects"
+                               AllowCancel="@(EffectivePinnedProjects.Count > 0 || AppState.UseDemoData)" IsDemoMode="AppState.UseDemoData"
+                               OnConfirmed="OnProjectsPinned" OnCancelled="@(() => _showProjectPicker = false)" />
+            }
+            else
+            {
+                @* ── Tab bar ── *@
+                <div class="pill-tab-bar">
+                    <button class="pill-tab @(ActiveTab == "pipelines" ? "active" : "")"
+                            @onclick="@(() => SetTab("pipelines"))">Pipelines</button>
+                    <button class="pill-tab @(ActiveTab == "activity" ? "active" : "")"
+                            @onclick="@(() => SetTab("activity"))">Activity</button>
+                    <button class="pill-tab @(ActiveTab == "releases" ? "active" : "")"
+                            @onclick="@(() => SetTab("releases"))">Releases</button>
+                    <button class="pill-tab @(ActiveTab == "approvals" ? "active" : "")"
+                            @onclick="@(() => SetTab("approvals"))">
+                        Approvals
+                        @if (_pendingApprovalCount > 0)
+                        {
+                            <span class="pill-badge">@_pendingApprovalCount</span>
+                        }
                     </button>
+                </div>
+
+                <div class="pipelines-tab-content">
+                    @switch (ActiveTab)
+                    {
+                        case "pipelines":
+                            <div class="pipeline-split">
+                                <div class="pipeline-split__left @(_leftCollapsed ? "pipeline-split__left--collapsed" : "")">
+                                    <PipelineTree SelectedProject="_selectedProject" SelectedPipeline="_selectedPipeline"
+                                                  OnPipelineSelected="OnPipelineSelected" Collapsed="_leftCollapsed"
+                                                  OnToggleCollapse="@(() => { _leftCollapsed = !_leftCollapsed; })"
+                                                  PinnedProjects="EffectivePinnedProjects" />
+                                </div>
+                                <div class="pipeline-split__right">
+                                    @if (_selectedPipeline is not null && _selectedProject is not null)
+                                    {
+                                        <PipelineDetail Project="_selectedProject" Pipeline="_selectedPipeline" />
+                                    }
+                                    else
+                                    {
+                                        <PipelinesOverview OnPipelineSelected="OnPipelineSelected"
+                                                           PinnedProjects="EffectivePinnedProjects" />
+                                    }
+                                </div>
+                            </div>
+                            break;
+
+                        case "activity":
+                            <PipelineActivity PinnedProjects="EffectivePinnedProjects" />
+                            break;
+
+                        case "releases":
+                            <div class="pipeline-split">
+                                <div class="pipeline-split__left pipeline-split__left--releases">
+                                    <ReleaseList Releases="EffectiveReleases" SelectedRelease="_selectedRelease"
+                                                 IsDemoMode="AppState.UseDemoData" OnCreate="CreateRelease" OnSelect="OnReleaseSelected" />
+                                </div>
+                                <div class="pipeline-split__right">
+                                    <ReleaseDetail Release="_selectedRelease" IsDemoOnly="IsSelectedReleaseDemoOnly"
+                                                   OnEditRelease="EditRelease" OnEditComponents="EditComponents"
+                                                   OnDeleteRelease="ConfirmDeleteRelease" />
+                                </div>
+                            </div>
+                            break;
+
+                        case "approvals":
+                            <div class="pipelines-approvals-wrap">
+                                <ApprovalCenter OnCountChanged="OnApprovalCountChanged" PinnedProjects="EffectivePinnedProjects" />
+                            </div>
+                            break;
+                    }
                 </div>
             }
         </div>
 
-        @if (!IsConfigured)
+        @* ── Modals ── *@
+        <ReleaseEditor Visible="ShowReleaseEditor" Release="EditingRelease" OnSaved="OnReleaseSaved"
+                       OnCancel="@(() => ShowReleaseEditor = false)" />
+
+        <ComponentScopeEditor Visible="ShowComponentEditor" Release="_selectedRelease" OnSaved="OnComponentsSaved"
+                              OnClose="@(() => ShowComponentEditor = false)" />
+
+        @if (ShowDeleteConfirm && _selectedRelease is not null)
         {
-            <div class="text-muted">
-                <p>Azure DevOps is not configured for this project.</p>
-                <p>Go to <strong>Settings</strong> and configure the <strong>Azure DevOps</strong> section to get started.
-                </p>
-            </div>
-        }
-        else if (_showProjectPicker)
-        {
-            <ProjectPicker CurrentPinned="EffectivePinnedProjects"
-                           AllowCancel="@(EffectivePinnedProjects.Count > 0 || AppState.UseDemoData)" IsDemoMode="AppState.UseDemoData"
-                           OnConfirmed="OnProjectsPinned" OnCancelled="@(() => _showProjectPicker = false)" />
-        }
-        else
-        {
-            @* ── Tab bar ── *@
-            <div class="pill-tab-bar">
-                <button class="pill-tab @(ActiveTab == "pipelines" ? "active" : "")"
-                        @onclick="@(() => SetTab("pipelines"))">Pipelines</button>
-                <button class="pill-tab @(ActiveTab == "activity" ? "active" : "")"
-                        @onclick="@(() => SetTab("activity"))">Activity</button>
-                <button class="pill-tab @(ActiveTab == "releases" ? "active" : "")"
-                        @onclick="@(() => SetTab("releases"))">Releases</button>
-                <button class="pill-tab @(ActiveTab == "approvals" ? "active" : "")"
-                        @onclick="@(() => SetTab("approvals"))">
-                    Approvals
-                    @if (_pendingApprovalCount > 0)
-                    {
-                        <span class="pill-badge">@_pendingApprovalCount</span>
-                    }
-                </button>
-            </div>
-
-            <div class="pipelines-tab-content">
-                @switch (ActiveTab)
-                {
-                    case "pipelines":
-                        <div class="pipeline-split">
-                            <div class="pipeline-split__left @(_leftCollapsed ? "pipeline-split__left--collapsed" : "")">
-                                <PipelineTree SelectedProject="_selectedProject" SelectedPipeline="_selectedPipeline"
-                                              OnPipelineSelected="OnPipelineSelected" Collapsed="_leftCollapsed"
-                                              OnToggleCollapse="@(() => { _leftCollapsed = !_leftCollapsed; })"
-                                              PinnedProjects="EffectivePinnedProjects" />
-                            </div>
-                            <div class="pipeline-split__right">
-                                @if (_selectedPipeline is not null && _selectedProject is not null)
-                                {
-                                    <PipelineDetail Project="_selectedProject" Pipeline="_selectedPipeline" />
-                                }
-                                else
-                                {
-                                    <PipelinesOverview OnPipelineSelected="OnPipelineSelected"
-                                                       PinnedProjects="EffectivePinnedProjects" />
-                                }
-                            </div>
-                        </div>
-                        break;
-
-                    case "activity":
-                        <PipelineActivity PinnedProjects="EffectivePinnedProjects" />
-                        break;
-
-                    case "releases":
-                        <div class="pipeline-split">
-                            <div class="pipeline-split__left pipeline-split__left--releases">
-                                <ReleaseList Releases="EffectiveReleases" SelectedRelease="_selectedRelease"
-                                             IsDemoMode="AppState.UseDemoData" OnCreate="CreateRelease" OnSelect="OnReleaseSelected" />
-                            </div>
-                            <div class="pipeline-split__right">
-                                <ReleaseDetail Release="_selectedRelease" IsDemoOnly="IsSelectedReleaseDemoOnly"
-                                               OnEditRelease="EditRelease" OnEditComponents="EditComponents"
-                                               OnDeleteRelease="ConfirmDeleteRelease" />
-                            </div>
-                        </div>
-                        break;
-
-                    case "approvals":
-                        <div class="pipelines-approvals-wrap">
-                            <ApprovalCenter OnCountChanged="OnApprovalCountChanged" PinnedProjects="EffectivePinnedProjects" />
-                        </div>
-                        break;
-                }
-            </div>
-        }
-    </div>
-
-    @* ── Modals ── *@
-    <ReleaseEditor Visible="ShowReleaseEditor" Release="EditingRelease" OnSaved="OnReleaseSaved"
-                   OnCancel="@(() => ShowReleaseEditor = false)" />
-
-    <ComponentScopeEditor Visible="ShowComponentEditor" Release="_selectedRelease" OnSaved="OnComponentsSaved"
-                          OnClose="@(() => ShowComponentEditor = false)" />
-
-    @if (ShowDeleteConfirm && _selectedRelease is not null)
-    {
-        <div class="releases-delete-overlay">
-            <div class="releases-delete-dialog">
-                <h3 style="margin:0 0 8px; font-size:var(--font-size-lg);">Delete Release</h3>
-                <p class="text-muted text-sm" style="margin:0 0 16px;">
-                    Are you sure you want to delete <strong>@_selectedRelease.Name</strong>? This cannot be undone.
-                </p>
-                <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button @onclick="@(() => ShowDeleteConfirm = false)"
-                            style="padding:6px 16px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-sm); color:var(--color-text-muted);">Cancel</button>
-                    <button @onclick="DeleteReleaseAsync"
-                            style="padding:6px 16px; background:var(--color-error); color:white; border:none; border-radius:var(--radius-sm); cursor:pointer;">Delete</button>
+            <div class="releases-delete-overlay">
+                <div class="releases-delete-dialog">
+                    <h3 style="margin:0 0 8px; font-size:var(--font-size-lg);">Delete Release</h3>
+                    <p class="text-muted text-sm" style="margin:0 0 16px;">
+                        Are you sure you want to delete <strong>@_selectedRelease.Name</strong>? This cannot be undone.
+                    </p>
+                    <div style="display:flex; gap:8px; justify-content:flex-end;">
+                        <button @onclick="@(() => ShowDeleteConfirm = false)"
+                                style="padding:6px 16px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-sm); color:var(--color-text-muted);">Cancel</button>
+                        <button @onclick="DeleteReleaseAsync"
+                                style="padding:6px 16px; background:var(--color-error); color:white; border:none; border-radius:var(--radius-sm); cursor:pointer;">Delete</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    }
-</CascadingValue>
+        }
+    </CascadingValue>
 
-<style>
-    .releases-delete-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        z-index: var(--z-modal);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+    <style>
+        .releases-delete-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: var(--z-modal);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    .releases-delete-dialog {
-        background: var(--color-surface-2);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        padding: 24px;
-        max-width: 400px;
-        width: 90%;
-        box-shadow: var(--shadow-lg);
-    }
-</style>
+        .releases-delete-dialog {
+            background: var(--color-surface-2);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+        }
+    </style>
 
 @code {
     private string ActiveTab = "pipelines";
@@ -205,6 +212,10 @@
 
     private List<string> PinnedProjects =>
         AppState.Config.DevOpsConfig?.PinnedProjects ?? [];
+
+    private string ScopeSummary => EffectivePinnedProjects.Count == 0
+        ? "All projects"
+        : $"{EffectivePinnedProjects.Count} project{(EffectivePinnedProjects.Count == 1 ? string.Empty : "s")}";
 
     /// <summary>In demo mode uses in-memory selection; in real mode uses persisted PinnedProjects.</summary>
     private List<string> EffectivePinnedProjects =>
@@ -371,7 +382,17 @@
     private void OnRefresh(RefreshRequestedEvent e)
     {
         if (e.Area is "pipelines" or "releases")
-            InvokeAsync(StateHasChanged);
+        {
+            _ = InvokeAsync(async () =>
+            {
+                if (!AppState.UseDemoData)
+                {
+                    await ReleaseRepo.LoadAsync();
+                }
+
+                StateHasChanged();
+            });
+        }
     }
 
     private void SetTab(string tab) => ActiveTab = tab;

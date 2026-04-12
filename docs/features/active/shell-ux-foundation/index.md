@@ -4,7 +4,7 @@
 
 title: "Feature Overview - shell-ux-foundation"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 jira: "not linked"
 created: "2026-04-12"
 updated: "2026-04-12"

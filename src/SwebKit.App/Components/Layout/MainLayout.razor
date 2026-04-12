@@ -9,15 +9,15 @@
 @inject IShellErrorPresenter ShellErrors
 @implements IDisposable
 
-<FluentDesignTheme StorageName="swebkit-theme"
-                   Mode="@(_currentTheme == "dark" ? DesignThemeModes.Dark : DesignThemeModes.Light)" />
+<FluentDesignTheme StorageName="swebkit-theme" Mode="@CurrentDesignMode" />
 
 <CascadingValue Value="AppState">
     <CascadingValue Value="this" Name="Layout">
         <a href="#main-content" class="skip-link">Skip to main content</a>
 
-        <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed")" data-theme="@_currentTheme">
-            <TopBar OnNavToggle="ToggleNav" />
+        <div class="app-shell @(IsNavExpanded ? "" : "nav-collapsed") @(AppState.Config.IsProduction ? "app-shell--production" : string.Empty)"
+             data-theme="@_currentTheme">
+            <TopBar OnNavToggle="ToggleNavAsync" CurrentContext="@CurrentShellContext" />
             @if (AppState.HasProfileLoadFailure)
             {
                 <div class="demo-banner">
@@ -45,7 +45,7 @@
                     <LoadingSpinner Message="Starting SwebKit\u2026" />
                 }
             </main>
-            <StatusBar />
+            <StatusBar CurrentRoute="@CurrentRoute" />
 
             @* Overlays must live inside the themed container so CSS variables resolve correctly *@
             @if (IsCommandPaletteOpen)
@@ -68,9 +68,32 @@
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
     private bool _isShortcutsPanelOpen;
-    private string CurrentArea = "dashboard";
     private DotNetObjectReference<MainLayout>? _jsRef;
     private string _currentTheme = "dark";
+    private ShellNavEntry _currentRoute = ShellNavigation.Dashboard;
+
+    private const string DefaultDarkTheme = "dark";
+    private const string DefaultLightTheme = "light";
+
+    private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        DefaultDarkTheme,
+        DefaultLightTheme,
+        "light-azure-bloom",
+        "light-coral-studio",
+        "light-forest-dev",
+        "light-violet-cloud",
+    };
+
+    private string CurrentArea => _currentRoute.Area;
+    private ShellNavEntry CurrentRoute => _currentRoute;
+    private ShellRouteContext CurrentShellContext => ShellNavigation.CreateContext(_currentRoute, EnvironmentLabel,
+AppState.Config.IsProduction, AppState.UseDemoData);
+    private string EnvironmentLabel => AppState.ActiveEnvironmentName ?? AppState.Config.Name;
+    private DesignThemeModes CurrentDesignMode => string.Equals(_currentTheme, DefaultDarkTheme,
+StringComparison.OrdinalIgnoreCase)
+        ? DesignThemeModes.Dark
+        : DesignThemeModes.Light;
 
     protected override async Task OnInitializedAsync()
     {
@@ -127,29 +150,41 @@
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "swebkit-ui-theme");
             if (!string.IsNullOrWhiteSpace(stored))
             {
-                _currentTheme = stored;
+                _currentTheme = NormalizeTheme(stored);
             }
             else
             {
-                _currentTheme = await JS.InvokeAsync<string>("SwebKit.getSystemTheme");
+                _currentTheme = NormalizeTheme(await JS.InvokeAsync<string?>("SwebKit.getSystemTheme"));
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
             // localStorage/matchMedia unavailable — keep default dark theme
+            _currentTheme = DefaultDarkTheme;
         }
 
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     public async Task SetThemeAsync(string theme)
     {
-        _currentTheme = theme;
+        _currentTheme = NormalizeTheme(theme);
         try
         {
-            await JS.InvokeVoidAsync("localStorage.setItem", "swebkit-ui-theme", theme);
+            await JS.InvokeVoidAsync("localStorage.setItem", "swebkit-ui-theme", _currentTheme);
         }
-        catch { /* ignore */ }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -157,11 +192,13 @@
 
     protected override void OnInitialized()
     {
+        UpdateCurrentRoute(Nav.Uri);
         Events.Subscribe<NavigateToAreaEvent>(OnNavigateToArea);
         Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
         Tabs.TabsChanged += StateHasChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
         AppState.Initialized += OnAppStateInitialized;
+        Nav.LocationChanged += OnLocationChanged;
     }
 
     private void OnAppStateInitialized() => InvokeAsync(StateHasChanged);
@@ -177,16 +214,24 @@
         return $"Configuration failed to load from {fileLabel}. Changes will stay in memory only until the file is repaired. {AppState.ProfileLoadResult.ErrorMessage}".Trim();
     }
 
-    private void ToggleNav() { IsNavExpanded = !IsNavExpanded; StateHasChanged(); }
+    private Task ToggleNavAsync()
+    {
+        IsNavExpanded = !IsNavExpanded;
+        return InvokeAsync(StateHasChanged);
+    }
 
     private void NavigateTo(string area)
     {
-        CurrentArea = area;
-        Nav.NavigateTo($"/{area}");
-        StateHasChanged();
+        Nav.NavigateTo(ShellNavigation.ForArea(area).Href);
     }
 
     private void OnNavigateToArea(NavigateToAreaEvent e) => InvokeAsync(() => NavigateTo(e.Area));
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateCurrentRoute(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
 
     private void OnCommandPaletteRequested(CommandPaletteRequestedEvent _) =>
         InvokeAsync(() =>
@@ -338,8 +383,32 @@
             Id = "toggle-nav",
             Label = "Toggle Sidebar",
             Category = "Actions",
-            Execute = () => { ToggleNav(); return Task.CompletedTask; }
+            Execute = ToggleNavAsync
         });
+    }
+
+    private void UpdateCurrentRoute(string location)
+    {
+        _currentRoute = ShellNavigation.ResolveUri(Nav.ToBaseRelativePath(location));
+    }
+
+    private static string NormalizeTheme(string? theme)
+    {
+        if (string.IsNullOrWhiteSpace(theme))
+        {
+            return DefaultDarkTheme;
+        }
+
+        var candidate = theme.Trim();
+        if (string.Equals(candidate, "light", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate, "light-azure-bloom", StringComparison.OrdinalIgnoreCase))
+        {
+            return DefaultLightTheme;
+        }
+
+        return SupportedThemes.Contains(candidate)
+            ? candidate.ToLowerInvariant()
+            : DefaultDarkTheme;
     }
 
     [JSInvokable]
@@ -398,6 +467,7 @@
         Tabs.TabsChanged -= StateHasChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
         AppState.Initialized -= OnAppStateInitialized;
+        Nav.LocationChanged -= OnLocationChanged;
         _jsRef?.Dispose();
     }
 }

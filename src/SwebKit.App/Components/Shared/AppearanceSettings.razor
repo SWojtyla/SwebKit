@@ -3,12 +3,9 @@
 <div class="appearance-section">
     <div class="form-field">
         <label class="form-label">Theme</label>
-        <FluentSelect TOption="string"
-                      Value="@CurrentTheme"
-                      ValueChanged="OnThemeChanged"
-                      style="max-width:300px;">
+        <FluentSelect TOption="string" Value="@CurrentTheme" ValueChanged="OnThemeChanged" style="max-width:300px;">
             <FluentOption Value="dark">Dark</FluentOption>
-            <FluentOption Value="light-azure-bloom">Light — Azure Bloom</FluentOption>
+            <FluentOption Value="light">Light — Azure Bloom</FluentOption>
             <FluentOption Value="light-coral-studio">Light — Coral Studio</FluentOption>
             <FluentOption Value="light-forest-dev">Light — Forest Dev</FluentOption>
             <FluentOption Value="light-violet-cloud">Light — Violet Cloud</FluentOption>
@@ -16,7 +13,8 @@
     </div>
 
     <div class="theme-preview-swatch">
-        <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--color-accent); flex-shrink:0;"></span>
+        <span
+        style="display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--color-accent); flex-shrink:0;"></span>
         <span>Preview: @ThemeLabel(CurrentTheme)</span>
     </div>
 </div>
@@ -27,11 +25,12 @@
 
     private static string ThemeLabel(string theme) => theme switch
     {
-        "dark"               => "Dark",
-        "light-azure-bloom"  => "Light — Azure Bloom",
+        "dark" => "Dark",
+        "light" => "Light — Azure Bloom",
+        "light-azure-bloom" => "Light — Azure Bloom",
         "light-coral-studio" => "Light — Coral Studio",
-        "light-forest-dev"   => "Light — Forest Dev",
+        "light-forest-dev" => "Light — Forest Dev",
         "light-violet-cloud" => "Light — Violet Cloud",
-        _                    => theme
+        _ => theme
     };
 }

@@ -2,6 +2,7 @@
 @using SwebKit.Azure.Storage
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject IAppEventBus Events
 @inject IConnectionStateService ConnectionState
 @inject SwebKit.Core.Services.DemoStorageClient DemoStorage
 @inject CommandRegistry Commands
@@ -11,74 +12,98 @@
 @implements IDisposable
 
 <div class="storage-page-shell">
+    <div class="page-shell-header">
+        <RoutePageHeader Area="storage"
+                         Subtitle="Inspect containers, blobs, and download flows for the active storage account.">
+            <Meta>
+                <span class="shell-pill shell-pill--muted">@_storageAccounts.Count account@(_storageAccounts.Count == 1 ? "" : "s")</span>
+                @if (!string.IsNullOrWhiteSpace(SelectedStorageAccountDisplayName))
+                {
+                    <span class="shell-pill shell-pill--accent">@SelectedStorageAccountDisplayName</span>
+                }
+                @if (AppState.UseDemoData)
+                {
+                    <span class="shell-pill shell-pill--warning">Demo mode</span>
+                }
+            </Meta>
+            <Actions>
+                <a class="page-header-action-btn" href="/settings?section=storage">Settings</a>
+            </Actions>
+        </RoutePageHeader>
+    </div>
 
     @if (_storageAccounts.Count == 0)
     {
         <div class="storage-not-configured">
-            <p style="margin:0 0 8px;">Storage is not configured for this environment.</p>
-            <p style="margin:0;">Go to <strong>Settings</strong> and configure the <strong>Storage (Azure Blob)</strong>
-                section.</p>
+            <EmptyState Icon="📦" Title="Storage is not configured"
+                        Subtitle="Connect an Azure Blob account in Settings before opening containers and blob detail views.">
+                <Actions>
+                    <a href="/settings?section=storage">Open Storage settings</a>
+                </Actions>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
+        @if (_storageAccounts.Count > 1)
+        {
+            <div class="storage-account-bar">
+                <span>Account:</span>
+                <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
+                    @foreach (var acc in _storageAccounts)
+                    {
+                        <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
+                    }
+                </select>
             </div>
         }
-    else
+
+        @if (_storageClient is null)
         {
-            @* ── Account selector (only when >1 account) ── *@
-            @if (_storageAccounts.Count > 1)
-            {
-                <div class="storage-account-bar">
-                    <span>Account:</span>
-                    <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
-                        @foreach (var acc in _storageAccounts)
-                        {
-                            <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
-                        }
-                    </select>
-                </div>
-            }
-
-            @if (_storageClient is null)
-            {
-                <div class="storage-not-configured">
-                    Selected storage account has invalid configuration.
-                </div>
-            }
-            else
-            {
-                <div class="storage-body">
-                    @* ── Left pane: containers ── *@
-                    <div class="storage-container-pane">
-                        <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
-                                              SelectedContainerChanged="OnContainerSelectedAsync" />
-                    </div>
-
-                    @* ── Right pane ── *@
-                    <div class="storage-blob-pane">
-                        @if (_selectedContainer is null)
-                        {
-                            <div class="storage-not-configured text-muted text-sm">Select a container.</div>
-                        }
-                        else
-                        {
-                            <div class="storage-blob-split">
-                                <div
-                                    style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
-                                    <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
-                                                     SelectedBlob="_selectedBlob" SelectedBlobChanged="OnBlobSelectedAsync" />
-                                </div>
-                                @if (_selectedBlob is not null)
-                                {
-                                    <div class="storage-detail-pane">
-                                        <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
+            <div class="storage-not-configured">
+                <EmptyState Icon="⚠" Title="Selected storage account is unavailable"
+                            Subtitle="The saved storage configuration is incomplete or invalid for this environment.">
+                    <Actions>
+                        <a href="/settings?section=storage">Review Storage settings</a>
+                    </Actions>
+                </EmptyState>
+            </div>
         }
+        else
+        {
+            <div class="storage-body">
+                <div class="storage-container-pane">
+                    <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
+                                          SelectedContainerChanged="OnContainerSelectedAsync" />
+                </div>
 
-    </div>
+                <div class="storage-blob-pane">
+                    @if (_selectedContainer is null)
+                    {
+                        <EmptyState Icon="📁" Title="Select a container"
+                                    Subtitle="Choose a container from the left pane to inspect blobs, metadata, and download options." />
+                    }
+                    else
+                    {
+                        <div class="storage-blob-split">
+                            <div
+                                style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
+                                <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
+                                                 SelectedBlob="_selectedBlob" SelectedBlobChanged="OnBlobSelectedAsync" />
+                            </div>
+                            @if (_selectedBlob is not null)
+                            {
+                                <div class="storage-detail-pane">
+                                    <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
 
 @code {
     private IStorageClient? _storageClient;
@@ -88,8 +113,12 @@
     private StorageBlobItem? _selectedBlob;
     private CancellationTokenSource _cts = new();
 
+    private string? SelectedStorageAccountDisplayName =>
+        _storageAccounts.FirstOrDefault(acc => acc.Id == _selectedAccountId)?.DisplayName;
+
     protected override void OnInitialized()
     {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RebuildClient();
         RegisterStorageCommands();
     }
@@ -102,7 +131,12 @@
             Label = "Refresh Blobs",
             Category = "Storage",
             AreaScope = "storage",
-            Execute = () => { RebuildClient(); InvokeAsync(StateHasChanged); return Task.CompletedTask; }
+            Execute = () =>
+            {
+                RebuildClient();
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            }
         });
         Commands.Register(new AppCommand
         {
@@ -128,9 +162,24 @@
     {
         _cts.Cancel();
         _cts.Dispose();
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         foreach (var id in new[] { "storage-refresh", "storage-download-blob", "storage-copy-sas" })
+        {
             Commands.Unregister(id);
+        }
+
         Selection.SetSelection("storage", null);
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "storage", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        RebuildClient();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void RebuildClient()
@@ -227,5 +276,4 @@
             Notifications.ShowError("Failed to copy SAS URL", ex: ex);
         }
     }
-
 }

@@ -2,12 +2,33 @@
 @inject INotificationService Notifications
 @inject UiStateRepository UiState
 
-<div class="nh-container">
+<div class="nh-container" role="dialog" aria-label="Notification center">
     <div class="nh-header">
-        <span style="color:white; font-size:13px; font-weight:600;">Notifications</span>
-        <button @onclick="Notifications.ClearAll" class="nh-clear-btn">
-            Clear all
-        </button>
+        <div>
+            <div class="nh-heading">Notifications</div>
+            <div class="nh-subtitle">@SummaryText</div>
+        </div>
+
+        <div class="nh-header-actions">
+            @if (UiState.State.NotificationHistory.Count > 0)
+            {
+                <button @onclick="ClearHistoryAsync" class="nh-clear-btn">
+                    Clear history
+                </button>
+            }
+            @if (Notifications.All.Count > 0)
+            {
+                <button @onclick="Notifications.ClearAll" class="nh-clear-btn">
+                    Clear all
+                </button>
+            }
+            @if (OnClose.HasDelegate)
+            {
+                <button @onclick="OnClose" class="nh-clear-btn" aria-label="Close notification center">
+                    Close
+                </button>
+            }
+        </div>
     </div>
 
     <div class="nh-scroll">
@@ -21,53 +42,70 @@
         {
             @if (Notifications.All.Count > 0)
             {
-                @foreach (var n in Notifications.All.Reverse())
-                {
-                    <div class="nh-row">
-                        <span class="nh-row-icon"
-                        style="color:@GetAccentColor(n.Severity);">@GetIcon(n.Severity)</span>
-                        <div class="nh-body">
-                            <div class="nh-title">
-                                @n.Message</div>
-                                @if (!string.IsNullOrEmpty(n.Detail))
-                                {
-                                    <div class="nh-detail">
-                                        @n.Detail</div>
-                                    }
-                                </div>
-                                <span class="nh-timestamp">@n.Timestamp.ToString("HH:mm:ss")</span>
-                            </div>
-                        }
-                    }
-
-                    @if (UiState.State.NotificationHistory.Count > 0)
+                <section class="nh-section" aria-label="Active notifications">
+                    <div class="nh-section-label">Active</div>
+                    @foreach (var notification in Notifications.All.Reverse())
                     {
-                        <div class="nh-history-label-row">
-                            <span style="color:rgba(255,255,255,0.5); font-size:11px; font-weight:600;">History</span>
-                        </div>
-                        @foreach (var h in UiState.State.NotificationHistory)
-                        {
-                            <div class="nh-history-row">
-                                <span class="nh-row-icon"
-                                style="color:@GetHistoryAccentColor(h.Severity);">@GetHistoryIcon(h.Severity)</span>
-                                <div class="nh-body">
-                                    <div class="nh-history-title">
-                                        @h.Message</div>
-                                        @if (!string.IsNullOrEmpty(h.Detail))
-                                        {
-                                            <div class="nh-history-detail">
-                                                @h.Detail</div>
-                                            }
-                                        </div>
-                                        <span class="nh-history-timestamp">@FormatHistoryTimestamp(h.Timestamp)</span>
-                                    </div>
+                        <div class="nh-row" role="listitem">
+                            <span
+                            class="nh-row-icon @GetSeverityClass(notification.Severity)">@GetIcon(notification.Severity)</span>
+                            <div class="nh-body">
+                                <div class="nh-title-row">
+                                    <div class="nh-title">@notification.Message</div>
+                                    <span
+                                    class="nh-badge @GetSeverityBadgeClass(notification.Severity)">@GetSeverityLabel(notification.Severity)</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(notification.Detail))
+                                {
+                                    <div class="nh-detail">@notification.Detail</div>
                                 }
-                            }
-                        }
-                    </div>
-                </div>
+                            </div>
+                            <span class="nh-timestamp">@FormatTimestamp(notification.Timestamp)</span>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (UiState.State.NotificationHistory.Count > 0)
+            {
+                <section class="nh-section" aria-label="Notification history">
+                    <div class="nh-section-label">Recent</div>
+                    @foreach (var notification in UiState.State.NotificationHistory)
+                    {
+                        <div class="nh-history-row" role="listitem">
+                            <span
+                            class="nh-row-icon @GetHistorySeverityClass(notification.Severity)">@GetHistoryIcon(notification.Severity)</span>
+                            <div class="nh-body">
+                                <div class="nh-title-row">
+                                    <div class="nh-history-title">@notification.Message</div>
+                                    <span
+                                    class="nh-badge @GetHistorySeverityBadgeClass(notification.Severity)">@notification.Severity</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(notification.Detail))
+                                {
+                                    <div class="nh-history-detail">@notification.Detail</div>
+                                }
+                            </div>
+                            <span class="nh-history-timestamp">@FormatTimestamp(notification.Timestamp)</span>
+                        </div>
+                    }
+                </section>
+            }
+        }
+    </div>
+</div>
 
 @code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string SummaryText => Notifications.All.Count switch
+    {
+        > 0 when UiState.State.NotificationHistory.Count > 0 => $"{Notifications.All.Count} active, {UiState.State.NotificationHistory.Count} recent",
+        > 0 => $"{Notifications.All.Count} active notification{(Notifications.All.Count == 1 ? string.Empty : "s")}",
+        _ when UiState.State.NotificationHistory.Count > 0 => $"{UiState.State.NotificationHistory.Count} recent notification{(UiState.State.NotificationHistory.Count == 1 ? string.Empty : "s")}",
+        _ => "No recent activity yet",
+    };
+
     protected override void OnInitialized()
     {
         Notifications.NotificationsChanged += OnNotificationsChanged;
@@ -82,7 +120,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private static string FormatHistoryTimestamp(DateTimeOffset ts)
+    private static string FormatTimestamp(DateTimeOffset ts)
     {
         var age = DateTimeOffset.UtcNow - ts;
         if (age.TotalMinutes < 1) return "just now";
@@ -91,12 +129,36 @@
         return ts.LocalDateTime.ToString("MMM d HH:mm");
     }
 
-    private static string GetAccentColor(NotificationSeverity severity) => severity switch
+    private static string GetSeverityLabel(NotificationSeverity severity) => severity switch
     {
-        NotificationSeverity.Success => "#22C55E",
-        NotificationSeverity.Warning => "#F59E0B",
-        NotificationSeverity.Error => "#EF4444",
-        _ => "#3B82F6",
+        NotificationSeverity.Success => "Success",
+        NotificationSeverity.Warning => "Warning",
+        NotificationSeverity.Error => "Error",
+        _ => "Info",
+    };
+
+    private static string GetSeverityClass(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Success => "nh-row-icon--success",
+        NotificationSeverity.Warning => "nh-row-icon--warning",
+        NotificationSeverity.Error => "nh-row-icon--error",
+        _ => "nh-row-icon--info",
+    };
+
+    private static string GetSeverityBadgeClass(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Success => "nh-badge--success",
+        NotificationSeverity.Warning => "nh-badge--warning",
+        NotificationSeverity.Error => "nh-badge--error",
+        _ => "nh-badge--info",
+    };
+
+    private static string GetHistorySeverityClass(string severity) => severity switch
+    {
+        "Success" => "nh-row-icon--success",
+        "Warning" => "nh-row-icon--warning",
+        "Error" => "nh-row-icon--error",
+        _ => "nh-row-icon--info",
     };
 
     private static string GetIcon(NotificationSeverity severity) => severity switch
@@ -107,12 +169,12 @@
         _ => "ℹ",
     };
 
-    private static string GetHistoryAccentColor(string severity) => severity switch
+    private static string GetHistorySeverityBadgeClass(string severity) => severity switch
     {
-        "Success" => "#22C55E",
-        "Warning" => "#F59E0B",
-        "Error" => "#EF4444",
-        _ => "#3B82F6",
+        "Success" => "nh-badge--success",
+        "Warning" => "nh-badge--warning",
+        "Error" => "nh-badge--error",
+        _ => "nh-badge--info",
     };
 
     private static string GetHistoryIcon(string severity) => severity switch
