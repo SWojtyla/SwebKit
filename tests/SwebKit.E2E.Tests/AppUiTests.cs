@@ -161,7 +161,7 @@ public sealed class AppUiTests : IClassFixture<AppFixture>, IAsyncLifetime
     }
 
     [Fact]
-    public async Task Navigation_DirectAliasRoute_UsesPipelinesNavAndHeader()
+    public async Task Navigation_DirectAliasRoute_UsesPipelinesNavAndHiddenRouteHeader()
     {
         await _fixture.HardNavigateAsync("/releases");
 
@@ -175,8 +175,13 @@ public sealed class AppUiTests : IClassFixture<AppFixture>, IAsyncLifetime
         await Assertions.Expect(pipelinesNav).ToHaveAttributeAsync("aria-current", "page");
         await Assertions.Expect(_fixture.Page.Locator(".top-bar__context-title"))
             .ToHaveTextAsync("Pipelines");
+        await Assertions.Expect(_fixture.Page.Locator(".page-shell-header .page-header-shell__copy")).ToHaveClassAsync(
+            new Regex(@"\bvisually-hidden\b"),
+            new LocatorAssertionsToHaveClassOptions { Timeout = 10_000 });
         await Assertions.Expect(_fixture.Page.Locator(".page-shell-header h1.page-title"))
             .ToHaveTextAsync("Pipelines");
+        await Assertions.Expect(_fixture.Page.Locator(".page-shell-header .page-header-shell__actions"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 
     // =========================================================================

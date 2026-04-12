@@ -1,5 +1,6 @@
 using Bunit;
 using Bunit.JSInterop;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -59,15 +60,65 @@ public sealed class ShellFoundationTests : TestContext
     }
 
     [Fact]
-    public void RoutePageHeader_UsesRouteMetadataByDefault()
+    public void RoutePageHeader_HidesBodyContextByDefault_AndKeepsActionsVisible()
     {
+        RenderFragment meta = builder =>
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", "shell-pill shell-pill--accent");
+            builder.AddContent(2, "Namespace: ops");
+            builder.CloseElement();
+        };
+
+        RenderFragment actions = builder =>
+        {
+            builder.OpenElement(0, "button");
+            builder.AddAttribute(1, "type", "button");
+            builder.AddContent(2, "Refresh");
+            builder.CloseElement();
+        };
+
         var cut = RenderComponent<RoutePageHeader>(parameters => parameters
             .Add(p => p.Area, "aks")
-            .Add(p => p.Subtitle, "Inspect workloads."));
+            .Add(p => p.Subtitle, "Inspect workloads.")
+            .Add(p => p.Meta, meta)
+            .Add(p => p.Actions, actions));
 
-        Assert.Contains("Workspaces", cut.Markup);
-        Assert.Contains("AKS", cut.Markup);
+        var copy = cut.Find(".page-header-shell__copy");
+
+        Assert.Contains("visually-hidden", copy.ClassName, StringComparison.Ordinal);
+        Assert.Equal("AKS", cut.Find("h1.page-title").TextContent.Trim());
+        Assert.DoesNotContain("Inspect workloads.", cut.Markup);
+        Assert.DoesNotContain("Namespace: ops", cut.Markup);
+        Assert.Contains("Refresh", cut.Markup);
+        Assert.Empty(cut.FindAll(".page-subtitle"));
+        Assert.Empty(cut.FindAll(".page-header-meta"));
+    }
+
+    [Fact]
+    public void RoutePageHeader_CanKeepSupportingContentInHiddenCopyWhenRequested()
+    {
+        RenderFragment meta = builder =>
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", "shell-pill shell-pill--accent");
+            builder.AddContent(2, "Namespace: ops");
+            builder.CloseElement();
+        };
+
+        var cut = RenderComponent<RoutePageHeader>(parameters => parameters
+            .Add(p => p.Area, "aks")
+            .Add(p => p.Subtitle, "Inspect workloads.")
+            .Add(p => p.ShowSupportingContent, true)
+            .Add(p => p.Meta, meta));
+
+        var copy = cut.Find(".page-header-shell__copy");
+
+        Assert.Contains("visually-hidden", copy.ClassName, StringComparison.Ordinal);
         Assert.Contains("Inspect workloads.", cut.Markup);
+        Assert.Contains("Namespace: ops", cut.Markup);
+        Assert.Single(cut.FindAll(".page-subtitle"));
+        Assert.Single(cut.FindAll(".page-header-meta"));
     }
 
     [Fact]

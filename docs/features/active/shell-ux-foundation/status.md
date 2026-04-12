@@ -47,6 +47,7 @@ Current focus: review the final validation evidence, avoid reopening stable shel
 
 - Landed the core shell primitives: route-derived shell context, grouped navigation, top-bar context, status-bar refresh language, notification-center polish, and production-safety shell cues.
 - Rolled the shared routed-page header plus loading, error, and empty-state pattern across the core routed pages.
+- Applied one narrow review-stage routed-page chrome adjustment by moving `RoutePageHeader` body copy into a visually hidden shell heading, leaving the top bar as the only visible page-context header while keeping route semantics and header actions intact.
 - Added component-level shell coverage, including a StoragePage regression that fails if pasted source text leaks into rendered markup.
 - Completed this stabilization repair slice by removing the duplicated StoragePage methods that were rendering as markup and by deleting the unsupported AKS metrics-unavailable banner state.
 - Stabilized the shared Playwright fixture so demo-mode tests and route-based checks no longer depend on leaked prior state from the previous test.
@@ -66,7 +67,7 @@ Current focus: review the final validation evidence, avoid reopening stable shel
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Targeted Playwright validation passed via `tests/SwebKit.E2E.Tests/AppUiTests.cs` (19/19). Shell component regression coverage passed via `tests/SwebKit.App.Tests/ComponentTests.cs` and `tests/SwebKit.App.Tests/ShellFoundationTests.cs` (23/23 combined). The only late app-code fix required by the closeout slice was the small `LeftNav` active-area binding correction exposed by the alias-route test.
+- Validation status: Targeted Playwright validation previously passed via `tests/SwebKit.E2E.Tests/AppUiTests.cs` (19/19). Shell component regression coverage previously passed via `tests/SwebKit.App.Tests/ComponentTests.cs` and `tests/SwebKit.App.Tests/ShellFoundationTests.cs` (23/23 combined). This review-stage hidden-route-header adjustment was rerun through the focused shell coverage: `RoutePageHeader_HidesBodyContextByDefault_AndKeepsActionsVisible`, `RoutePageHeader_CanKeepSupportingContentInHiddenCopyWhenRequested`, `Navigation_DirectAliasRoute_UsesPipelinesNavAndHiddenRouteHeader`, and `FocusOnNavigate_FocusesSettingsHeadingAfterRouteChange` all passed.
 
 ## Notes
 

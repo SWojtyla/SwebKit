@@ -1,5 +1,5 @@
-<header class="page-header page-header-shell">
-    <div class="page-header-shell__copy">
+<header class="@HeaderClass">
+    <div class="@CopyClass">
         @if (!string.IsNullOrWhiteSpace(Eyebrow))
         {
             <div class="page-eyebrow">@Eyebrow</div>
@@ -32,4 +32,13 @@
     [Parameter] public string? Subtitle { get; set; }
     [Parameter] public RenderFragment? Meta { get; set; }
     [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public bool VisuallyHideCopy { get; set; }
+
+    private string HeaderClass => VisuallyHideCopy
+        ? "page-header page-header-shell page-header-shell--context-hidden"
+        : "page-header page-header-shell";
+
+    private string CopyClass => VisuallyHideCopy
+        ? "page-header-shell__copy visually-hidden"
+        : "page-header-shell__copy";
 }
