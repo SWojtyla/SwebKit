@@ -4,7 +4,7 @@
 
 title: "Feature Overview - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Review"
 jira: "not linked"
 created: "2026-04-12"
 updated: "2026-04-13"
@@ -27,7 +27,7 @@ Right now an operator often discovers missing configuration or credential issues
 - First-run setup checklist and next-step guidance.
 - Credential/configuration health visibility across the major capability areas.
 - Connection-health overview that explains configured vs ready vs failing states.
-- Explicit operator readiness for Azure-focused workflows such as Service Bus, AKS, Observability, Storage, and DevOps.
+- Explicit operator readiness for Azure-focused workflows such as Service Bus, AKS, Observability, Storage, and DevOps, including explicit read-only live checks.
 - Out of scope:
 - New shell navigation/workspace capabilities.
 - New domain-specific operations inside feature pages.

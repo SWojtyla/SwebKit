@@ -67,3 +67,8 @@ public interface IStorageClient
     Task<string> GetContainerSasUrlAsync(
         string containerName, TimeSpan expiry, CancellationToken ct = default);
 }
+
+public interface IStorageClientFactory
+{
+    IStorageClient Create(StorageConfig config);
+}

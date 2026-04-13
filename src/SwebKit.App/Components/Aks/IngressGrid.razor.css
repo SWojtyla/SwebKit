@@ -12,22 +12,26 @@
 /* ── Ingress URL buttons ── */
 .aks-ingress-hosts-cell {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    min-height: 32px;
 }
 
 .aks-ingress-url-btn {
     background: transparent;
-    border: none;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
     color: var(--color-accent);
     cursor: pointer;
     font-size: var(--font-size-sm);
-    padding: 0;
+    padding: 2px 8px;
     text-align: left;
-    text-decoration: underline;
     line-height: 1.4;
+    max-width: 100%;
 }
 
 .aks-ingress-url-btn:hover {
-    opacity: 0.75;
+    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
 }

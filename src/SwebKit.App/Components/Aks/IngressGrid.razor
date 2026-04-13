@@ -1,7 +1,7 @@
 @* Renders the Ingresses FluentDataGrid. *@
 
-<FluentDataGrid Items="@FilteredItems" TGridItem="IngressInfo" Virtualize="true" ItemSize="36"
-                RowClass="@(i => i.Name == SelectedIngress?.Name ? "selected-row" : "")"
+<FluentDataGrid Items="@FilteredItems" TGridItem="IngressInfo"
+                RowClass="@(i => HasSameIdentity(i, SelectedIngress) ? "selected-row" : "")"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name" SortBy="@(GridSort<IngressInfo>.ByAscending(i => i.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
@@ -19,12 +19,11 @@
     <TemplateColumn Title="Hosts">
         <div class="aks-row-ctx aks-ingress-hosts-cell" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            @foreach (var rule in context.Rules.Where(r => r.Host is not null))
+            @foreach (var host in GetHosts(context))
             {
-                var host = rule.Host!;
                 var url = BuildIngressUrl(host);
-                <button class="aks-ingress-url-btn" @onclick="() => OnOpenUrl.InvokeAsync(url)" @onclick:stopPropagation
-                        title="Open @url">
+                <button class="aks-ingress-url-btn" @key="url" @onclick="() => OnOpenUrl.InvokeAsync(url)"
+                        @onclick:stopPropagation title="Open @url">
                     @host
                 </button>
             }
@@ -55,4 +54,16 @@
             return $"http://{host}";
         return $"https://{host}";
     }
+
+    private static bool HasSameIdentity(IngressInfo candidate, IngressInfo? selected) =>
+        selected is not null
+        && string.Equals(candidate.Name, selected.Name, StringComparison.Ordinal)
+        && string.Equals(candidate.Namespace, selected.Namespace, StringComparison.Ordinal);
+
+    private static IReadOnlyList<string> GetHosts(IngressInfo ingress) => ingress.Rules
+        .Select(rule => rule.Host)
+        .Where(host => !string.IsNullOrWhiteSpace(host))
+        .Select(host => host!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 }

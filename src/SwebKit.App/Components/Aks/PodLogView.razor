@@ -88,23 +88,33 @@
     private bool _filterDirty = true;
     private int _lastFilteredLineCount;
     private string _lastFilterText = "";
+    private readonly Lock _linesLock = new();
 
     private List<LogEntry> FilteredLines
     {
         get
         {
-            if (_filterDirty || Lines.Count != _lastFilteredLineCount || TextFilter != _lastFilterText)
+            var filterText = TextFilter;
+            string[] snapshot;
+
+            lock (_linesLock)
             {
-                _lastFilteredLineCount = Lines.Count;
-                _lastFilterText = TextFilter;
+                if (!_filterDirty && Lines.Count == _lastFilteredLineCount && filterText == _lastFilterText)
+                {
+                    return _filteredLinesCache;
+                }
+
+                snapshot = [.. Lines];
+                _lastFilteredLineCount = snapshot.Length;
+                _lastFilterText = filterText;
                 _filterDirty = false;
-
-                var source = string.IsNullOrEmpty(TextFilter)
-                    ? Lines.TakeLast(500)
-                    : Lines.Where(l => l.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).TakeLast(500);
-
-                _filteredLinesCache = source.Select(l => new LogEntry(l, GetLineClass(l))).ToList();
             }
+
+            var source = string.IsNullOrEmpty(filterText)
+                ? snapshot.TakeLast(500)
+                : snapshot.Where(line => line.Contains(filterText, StringComparison.OrdinalIgnoreCase)).TakeLast(500);
+
+            _filteredLinesCache = source.Select(line => new LogEntry(line, GetLineClass(line))).ToList();
             return _filteredLinesCache;
         }
     }
@@ -178,7 +188,7 @@
 
         IsLoading = true;
         _paused = false;
-        Lines.Clear();
+        ClearLineBuffer();
         _linesDirty = false;
         _filterDirty = true;
         await InvokeAsync(StateHasChanged);
@@ -236,8 +246,7 @@
             await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, token))
             {
                 if (!IsCurrentSession(token)) break;
-                Lines.Add(line);
-                if (Lines.Count > BufferSize) Lines.RemoveAt(0);
+                AppendLine(line);
                 _linesDirty = true;
             }
         }
@@ -252,6 +261,26 @@
                 StopRenderTimer();
                 await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
             }
+        }
+    }
+
+    private void AppendLine(string line)
+    {
+        lock (_linesLock)
+        {
+            Lines.Add(line);
+            if (Lines.Count > BufferSize)
+            {
+                Lines.RemoveAt(0);
+            }
+        }
+    }
+
+    private void ClearLineBuffer()
+    {
+        lock (_linesLock)
+        {
+            Lines.Clear();
         }
     }
 
@@ -284,7 +313,7 @@
         return opts;
     }
 
-    private void ClearLogs() { Lines.Clear(); _filterDirty = true; StateHasChanged(); }
+    private void ClearLogs() { ClearLineBuffer(); _filterDirty = true; StateHasChanged(); }
 
     private async Task ExportLogsAsync()
     {

@@ -15,7 +15,7 @@
 - Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
 - Non-fatal startup warning banner when `profiles.json` fails to load.
 - Dashboard readiness summary and setup checklist that deep-link into the owning Settings sections when setup or repair work is still needed, limited to actionable capability areas instead of already-healthy ones.
-- Settings page readiness summary for the current section, including safe credential-reference presence and capability-area status.
+- Settings page readiness summary for the current section, including safe credential-reference presence, explicit read-only live-check refresh, and per-area probe detail for the current session.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
 - Query-driven preselection of the Incident Timeline settings section when the incident page links into `/settings?section=incident-timeline`.
 
@@ -24,19 +24,23 @@
 1. `AppStateService.InitializeAsync()` calls `ProfileRepository.LoadAsync()` and keeps `ProfileLoadResult`, `HasProfileLoadFailure`, and blocked-persistence state available to the shell.
 2. `MainLayout` renders immediately, then shows a non-fatal warning banner if profile loading failed.
 3. Settings page reads `AppState.Config` (the global `AppConfig`) from `AppStateService`.
-4. `ConfigurationHealthService` derives safe area-level readiness, action items, and credential-reference presence from the current config plus `ICredentialStore` metadata.
-5. Accordion forms mutate the config objects directly on `AppConfig`.
-6. The Incident Timeline settings form edits `AppConfig.IncidentTimeline.WorkloadMappings`, including the per-workload App Insights, Service Bus, and Azure DevOps bindings used by the incident workbench.
-7. `ProfileRepository` normalizes and migrates `FavoriteResources` and `SavedWorkspaces` during load, including compatibility migration from legacy Service Bus links and legacy favorite entities.
-8. `UiStateRepository` persists local recent-resource history separately from the environment-scoped profile.
-9. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. If the last profile load failed, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`.
-10. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
+4. `ConfigurationHealthService` derives safe area-level readiness, action items, credential-reference presence, and cached live-probe outcomes from the current config plus `ICredentialStore` metadata.
+5. `ConfigurationProbeService` runs explicit, read-only, time-budgeted live checks against the existing AKS, Service Bus, Redis, Storage, DevOps, and Observability seams, then caches the results for the current session.
+6. Accordion forms mutate the config objects directly on `AppConfig`.
+7. The Incident Timeline settings form edits `AppConfig.IncidentTimeline.WorkloadMappings`, including the per-workload App Insights, Service Bus, and Azure DevOps bindings used by the incident workbench.
+8. `ProfileRepository` normalizes and migrates `FavoriteResources` and `SavedWorkspaces` during load, including compatibility migration from legacy Service Bus links and legacy favorite entities.
+9. `UiStateRepository` persists local recent-resource history separately from the environment-scoped profile.
+10. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. If the last profile load failed, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`. Saving also invalidates cached live-check results so the next readiness view cannot show stale verification.
+11. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
 
 ## Main Code Locations
 
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/DashboardPage.razor`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
+- `src/SwebKit.App/Components/Shared/ConfigurationReadinessDashboard.razor`
+- `src/SwebKit.App/Components/Shared/ConfigurationReadinessAreaCard.razor`
+- `src/SwebKit.App/Services/ConfigurationProbeService.cs`
 - `src/SwebKit.App/Components/Pages/DevOpsConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/IncidentTimelineConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusConfigForm.razor`
@@ -57,6 +61,7 @@
 
 - Settings are project-level data stored in one persisted app configuration.
 - Readiness uses a deliberate `Configured` vs `Ready` distinction: shell-facing local prerequisites can be present without the app claiming that live runtime identity or connectivity has already been verified.
+- Live readiness checks are explicit rather than automatic. Results are read-only, time-budgeted, and cached only for the current session.
 - Favorite resources and saved workspaces are environment-scoped profile data; recent resources remain local-machine UI state.
 - Incident Timeline mappings are additive workload metadata; they do not replace the base Service Bus, Observability, or DevOps settings those sources still depend on.
 - Secrets are expected in credential store and not in profile JSON.

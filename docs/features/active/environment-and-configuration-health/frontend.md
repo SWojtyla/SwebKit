@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Review"
 
 ---
 
@@ -74,23 +74,24 @@ Expose readiness in the shell and settings experience so operators can see setup
 
 ### Wave 3 - Readiness detail and configuration-gap drill-through [blazor-expert] (depends on Waves 1-2)
 
-- [ ] Add operator-readiness detail for Azure-facing flows that need CLI/credential/resource configuration.
-- [ ] Keep readiness data focused on actionable differences, not raw model dumps.
-- [ ] Ensure production-marked configurations remain visually explicit during readiness review.
+- [x] Add operator-readiness detail for Azure-facing flows that need CLI/credential/resource configuration.
+- [x] Keep readiness data focused on actionable differences, not raw model dumps.
+- [x] Ensure production-marked configurations remain visually explicit during readiness review.
 
 ### Wave 4 - Validation and adoption [blazor-expert] (depends on Waves 1-3)
 
-- [ ] Add component coverage for checklist states, readiness cards, configuration-gap rows, and settings handoff.
+- [x] Add component coverage for checklist states, readiness cards, configuration-gap rows, and settings handoff.
 - [ ] Add E2E coverage for first-run and partially configured flows.
-- [ ] Capture final copy and handoff decisions in `decisions.md`.
+- [x] Capture final copy and handoff decisions in `decisions.md`.
 
 ## Validation
 
-- Component tests: Not started.
+- Component tests: `ConfigurationReadinessComponentsTests` added and passing.
 - Manual UX checks:
 - Verify first-run experience does not require reading implementation details to understand next steps.
 - Verify readiness and configuration-gap views remain understandable with both partial success and partial failure states.
 - Verify no UI element exposes secret content while explaining credential health.
+- End-to-end readiness coverage still depends on the existing Playwright / Windows App SDK launch path becoming reliable in this environment.
 
 ## Notes
 
@@ -98,6 +99,6 @@ Expose readiness in the shell and settings experience so operators can see setup
 - BL-2 - readiness refresh UI must dispatch renders safely after async probe completion.
 - BL-5 - avoid duplicate health loads from parent rerenders on settings or dashboard pages.
 - BL-11 - keep shared health/checklist styles in the right component or global style scope.
-- Focused bUnit coverage for the dashboard and Settings route pages is still pending because these route-page types are not materialized reliably in the current app test project.
+- Focused bUnit coverage now targets extracted readiness components instead of the route pages because the current app test project still does not materialize `DashboardPage` and `SettingsPage` reliably.
 - Relevant pitfalls from `docs/pitfalls/dotnet-csharp.md`:
 - CS-2 - readiness refresh and explicit retry flows must propagate cancellation instead of reporting false errors.

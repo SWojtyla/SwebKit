@@ -27,26 +27,6 @@
     margin: 0;
 }
 
-.dashboard-refresh-btn {
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 0.4rem 0.6rem;
-    cursor: pointer;
-    color: var(--color-text-muted);
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    transition: border-color 0.15s, color 0.15s;
-    flex-shrink: 0;
-    margin-top: 0.25rem;
-}
-
-.dashboard-refresh-btn:hover {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
-}
-
 /* ── Hero stats row ── */
 
 .dashboard-hero-row {

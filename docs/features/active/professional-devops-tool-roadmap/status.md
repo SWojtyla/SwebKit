@@ -14,11 +14,11 @@ last_updated: "2026-04-13"
 
 ## Quick summary
 
-The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` is now in implementation with its first readiness-report/dashboard/settings slice landed.
+The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` now has its planned implementation and automated validation landed, pending manual UI validation and close-out.
 
 Jira: not linked
 
-Current focus: keep downstream references current while Wave 3 grows from local readiness reporting into live read-only probes, and prevent later-wave work from bypassing the roadmap order.
+Current focus: keep downstream references current while Wave 3 moves through review/manual validation, and prevent later-wave work from bypassing the roadmap order.
 
 ## Progress checklist
 
@@ -46,11 +46,12 @@ Current focus: keep downstream references current while Wave 3 grows from local 
 - Recorded that Wave 2 now has landed code plus focused validation, while still keeping Wave 3 and later work sequenced behind it.
 - Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
 - Advanced Wave 3 from planning into implementation by landing the first readiness-report contract plus dashboard/settings adoption slice.
+- Completed the Wave 3 live-probe and drill-through slice with extracted readiness components and focused automated validation.
 
 ## Remaining
 
 - Validate that wave entry and exit criteria are realistic for the current team bandwidth.
-- Keep this roadmap current as Wave 3 and later waves move through implementation and review.
+- Keep this roadmap current as Wave 3 moves through review/close-out and later waves move into implementation.
 - Use this roadmap to govern the order in which the already-created wave-4 and wave-5 feature folders move into implementation.
 
 ## Blockers

@@ -27,15 +27,16 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
                 "Demo mode marks the core operator workflows as ready with synthetic data.",
                 false,
                 [],
-                demoAreas);
+                demoAreas,
+                context.ProbeSnapshot);
         }
 
-        var serviceBusArea = BuildServiceBusArea(context.ServiceBusNamespaces);
-        var aksArea = BuildAksArea(context.Config.AksConfig);
-        var redisArea = BuildRedisArea(context.Config.RedisConfig);
-        var devOpsArea = BuildDevOpsArea(context.Config.DevOpsConfig);
-        var storageArea = BuildStorageArea(context.Config.StorageAccounts);
-        var observabilityArea = BuildObservabilityArea(context.Config.ObservabilityConfig);
+        var serviceBusArea = ApplyLiveProbe(BuildServiceBusArea(context.ServiceBusNamespaces), context);
+        var aksArea = ApplyLiveProbe(BuildAksArea(context.Config.AksConfig), context);
+        var redisArea = ApplyLiveProbe(BuildRedisArea(context.Config.RedisConfig), context);
+        var devOpsArea = ApplyLiveProbe(BuildDevOpsArea(context.Config.DevOpsConfig), context);
+        var storageArea = ApplyLiveProbe(BuildStorageArea(context.Config.StorageAccounts), context);
+        var observabilityArea = ApplyLiveProbe(BuildObservabilityArea(context.Config.ObservabilityConfig), context);
         var incidentTimelineArea = BuildIncidentTimelineArea(
             context.Config.IncidentTimeline,
             aksArea,
@@ -61,7 +62,7 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
         var overallStatus = ComputeOverallStatus(context, areas, isFirstRun);
         var summary = BuildOverallSummary(context, areas, actionItems, isFirstRun, overallStatus);
 
-        return new ConfigurationHealthReport(overallStatus, summary, isFirstRun, actionItems, areas);
+        return new ConfigurationHealthReport(overallStatus, summary, isFirstRun, actionItems, areas, context.ProbeSnapshot);
     }
 
     private IReadOnlyList<ConfigurationAreaHealth> BuildDemoAreas() =>
@@ -175,12 +176,13 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             ServiceBusSection,
             "Service Bus",
             ServiceBusSection,
-            ConfigurationCheckStatus.Ready,
+            ConfigurationCheckStatus.Configured,
             $"{namespaces.Count} namespace(s) are configured and credential references are available.",
             namespaces.Count == 1
                 ? $"Namespace '{DisplayServiceBusNamespace(namespaces[0])}' can be used immediately by messaging workspaces."
                 : "Messaging workspaces can use the configured namespace credential references.",
-            credentialReferences: credentialReferences);
+            credentialReferences: credentialReferences,
+            canRunLiveProbe: true);
     }
 
     private static ConfigurationAreaHealth BuildAksArea(AksConfig? config)
@@ -234,7 +236,8 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             AksSection,
             ConfigurationCheckStatus.Configured,
             "AKS defaults are configured.",
-            $"{scopeSummary} {pathSummary}");
+            $"{scopeSummary} {pathSummary}",
+            canRunLiveProbe: true);
     }
 
     private static ConfigurationAreaHealth BuildRedisArea(RedisConfig? config)
@@ -279,9 +282,10 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             RedisSection,
             "Redis",
             RedisSection,
-            ConfigurationCheckStatus.Ready,
+            ConfigurationCheckStatus.Configured,
             $"Redis cache '{activeCache.DisplayName}' is configured.",
-            $"The active cache targets database {activeCache.Database} and can be used immediately by Redis views.");
+            $"The active cache targets database {activeCache.Database} and is ready for a live connection check.",
+            canRunLiveProbe: true);
     }
 
     private ConfigurationAreaHealth BuildDevOpsArea(DevOpsConfig? config)
@@ -355,10 +359,11 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             DevOpsSection,
             "Azure DevOps",
             DevOpsSection,
-            ConfigurationCheckStatus.Ready,
+            ConfigurationCheckStatus.Configured,
             $"Azure DevOps organization '{config.Organization.Trim()}' is configured.",
             "The PAT reference is available, so pipeline and approval surfaces can authenticate.",
-            credentialReferences: credentialReferences);
+            credentialReferences: credentialReferences,
+            canRunLiveProbe: true);
     }
 
     private ConfigurationAreaHealth BuildStorageArea(IReadOnlyList<StorageConfig> storageAccounts)
@@ -432,28 +437,19 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
                 credentialReferences);
         }
 
-        if (aadAccountCount > 0)
-        {
-            return CreateArea(
-                StorageSection,
-                "Storage",
-                StorageSection,
-                ConfigurationCheckStatus.Configured,
-                $"{storageAccounts.Count} storage account(s) are configured.",
-                aadAccountCount == storageAccounts.Count
-                    ? "The configured accounts rely on Azure CLI / DefaultAzureCredential at runtime."
-                    : "Connection-string-backed accounts are ready, while AAD-backed accounts still rely on Azure CLI / DefaultAzureCredential at runtime.",
-                credentialReferences: credentialReferences);
-        }
-
         return CreateArea(
             StorageSection,
             "Storage",
             StorageSection,
-            ConfigurationCheckStatus.Ready,
+            ConfigurationCheckStatus.Configured,
             $"{storageAccounts.Count} storage account(s) are configured.",
-            "Connection-string references are available, so blob inspection can start immediately.",
-            credentialReferences: credentialReferences);
+            aadAccountCount == storageAccounts.Count
+                ? "The configured accounts rely on Azure CLI / DefaultAzureCredential at runtime."
+                : aadAccountCount > 0
+                    ? "Some accounts rely on Azure CLI / DefaultAzureCredential, while the rest use saved connection-string references."
+                    : "Saved connection-string references are available for the configured storage accounts.",
+            credentialReferences: credentialReferences,
+            canRunLiveProbe: true);
     }
 
     private static ConfigurationAreaHealth BuildObservabilityArea(ObservabilityConfig? config)
@@ -470,7 +466,8 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             "Observability uses Azure CLI / DefaultAzureCredential for Application Insights access.",
             selectedResource is null
                 ? "Run az login outside the app before browsing resources if discovery comes back empty."
-                : $"Last selected resource: {selectedResource}. Azure CLI / DefaultAzureCredential still controls live access.");
+                : $"Last selected resource: {selectedResource}. Azure CLI / DefaultAzureCredential still controls live access.",
+            canRunLiveProbe: true);
     }
 
     private static ConfigurationAreaHealth BuildIncidentTimelineArea(
@@ -526,13 +523,21 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
                 "Incident investigations stay evidence-first, but these base settings must exist before non-AKS signals can load.");
         }
 
+        var requiresServiceBus = config.WorkloadMappings.Any(mapping => mapping.ServiceBusEntities.Count > 0);
+        var requiresDevOps = config.WorkloadMappings.Any(mapping => mapping.DevOps is not null);
+        var supportingAreasReady = aksArea.Status == ConfigurationCheckStatus.Ready
+            && (!requiresServiceBus || serviceBusArea.Status == ConfigurationCheckStatus.Ready)
+            && (!requiresDevOps || devOpsArea.Status == ConfigurationCheckStatus.Ready);
+
         return CreateArea(
             IncidentTimelineSection,
             "Incident Timeline",
             IncidentTimelineSection,
-            ConfigurationCheckStatus.Configured,
+            supportingAreasReady ? ConfigurationCheckStatus.Ready : ConfigurationCheckStatus.Configured,
             $"{mappingCount} workload mapping(s) are configured.",
-            "Incident investigations can seed workload scope and preserve evidence provenance without mutating settings automatically.");
+            supportingAreasReady
+                ? "Incident investigations can load the mapped workload scope with live AKS and evidence dependencies already verified."
+                : "Workload mappings are saved, but incident investigations still depend on live AKS, Service Bus, or DevOps checks passing for the mapped evidence sources.");
     }
 
     private static bool IsFirstRun(ConfigurationHealthContext context)
@@ -604,9 +609,33 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
         return overallStatus switch
         {
             ConfigurationCheckStatus.Warning => $"{warningCount} capability area(s) need attention. {actionItems.Count} setup step(s) still block full readiness.",
-            ConfigurationCheckStatus.Ready => "All capability areas report local prerequisites as ready.",
+            ConfigurationCheckStatus.Ready => "All capability areas passed local prerequisites and the available live readiness checks.",
             _ when missingCount > 0 => $"{readyCount} capability area(s) are ready, {configuredCount} are configured, and {missingCount} still need setup.",
             _ => $"{readyCount} capability area(s) are ready. Remaining areas rely on external identities or runtime context rather than missing local configuration."
+        };
+    }
+
+    private static ConfigurationAreaHealth ApplyLiveProbe(ConfigurationAreaHealth area, ConfigurationHealthContext context)
+    {
+        if (!area.CanRunLiveProbe)
+        {
+            return area;
+        }
+
+        if (context.ProbeSnapshot?.AreaResults.TryGetValue(area.AreaKey, out var probe) != true || probe is null)
+        {
+            return area with
+            {
+                Detail = CombineDetails(area.Detail, "Run live checks to verify runtime access with the current profile.")
+            };
+        }
+
+        return area with
+        {
+            Status = probe.Status,
+            Summary = probe.Summary,
+            Detail = CombineDetails(area.Detail, probe.Detail),
+            LiveProbe = probe
         };
     }
 
@@ -634,6 +663,16 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
         _ => $"{string.Join(", ", items.Take(items.Count - 1))}, and {items[^1]}"
     };
 
+    private static string? CombineDetails(string? primary, string? secondary)
+    {
+        var parts = new[] { primary?.Trim(), secondary?.Trim() }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return parts.Length == 0 ? null : string.Join(" ", parts);
+    }
+
     private static ConfigurationActionItem CreateAction(
         string key,
         string title,
@@ -650,7 +689,9 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
         string summary,
         string? detail = null,
         IReadOnlyList<ConfigurationActionItem>? actionItems = null,
-        IReadOnlyList<CredentialReferenceHealth>? credentialReferences = null) =>
+        IReadOnlyList<CredentialReferenceHealth>? credentialReferences = null,
+        bool canRunLiveProbe = false,
+        ConfigurationAreaProbeResult? liveProbe = null) =>
         new(
             areaKey,
             title,
@@ -659,5 +700,7 @@ public sealed class ConfigurationHealthService(ICredentialStore credentialStore)
             summary,
             detail,
             actionItems ?? [],
-            credentialReferences ?? []);
+            credentialReferences ?? [],
+            canRunLiveProbe,
+            liveProbe);
 }

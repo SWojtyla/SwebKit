@@ -4,7 +4,7 @@
 
 title: "Decisions - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 
 ---
 
@@ -130,3 +130,29 @@ The readiness report uses `Configured` for areas such as AKS, Observability, and
 ### Alternatives considered
 
 - Alternative A - collapse `Configured` into `Ready`: rejected because it would overstate trust for flows that still depend on unverified runtime identity or connectivity.
+
+---
+
+## Decision 006 - Run live readiness checks only on explicit operator refresh
+
+**Status:** Accepted
+
+**Date:** 2026-04-13
+
+### Context
+
+The shell now has enough local information to explain what is configured, but live verification depends on external auth prompts, network reachability, and cloud latency. Running those checks automatically on every dashboard or settings render would make the shell noisy and brittle.
+
+### Decision
+
+Live readiness checks run only when the operator explicitly triggers them from the Settings readiness card. Results are cached for the current session and reused by the shared readiness report until the relevant configuration changes.
+
+### Consequences
+
+- The shell stays fast and deterministic on first render.
+- Operators can choose when to pay the cost of cloud verification and can rerun it after changing credentials or local auth state.
+- Dashboard and Settings can still surface failed live checks without duplicating probe logic.
+
+### Alternatives considered
+
+- Alternative A - run live checks automatically on each render: rejected because it would produce repeated auth/network churn and make readiness state harder to trust.

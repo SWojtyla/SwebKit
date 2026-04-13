@@ -4,9 +4,9 @@
 
 title: "Test Plan - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "Review"
 created: "2026-04-12"
-updated: "2026-04-12"
+updated: "2026-04-13"
 
 ---
 
@@ -72,7 +72,7 @@ Validate that SwebKit can explain readiness clearly and safely for the current c
 
 ## Validation status
 
-- Automated: `dotnet build SwebKit.slnx` succeeded and `ConfigurationHealthServiceTests` passed (4/4). Route-page UI coverage remains pending.
+- Automated: `dotnet build SwebKit.slnx` succeeded. `ConfigurationHealthServiceTests` passed (6/6). `ConfigurationProbeServiceTests` and `ConfigurationReadinessComponentsTests` passed in `tests/SwebKit.App.Tests` (7/7 total focused app tests). Route-page UI coverage is intentionally replaced by extracted component coverage. Planned Playwright readiness coverage remains pending because the current Windows App SDK launch path is unreliable in this environment.
 - Manual: Not started.
 
 ## Sign-off

@@ -2,6 +2,7 @@
 @page "/dashboard"
 @inject AppStateService AppState
 @inject IConfigurationHealthService ConfigurationHealth
+@inject IConfigurationProbeService ConfigurationProbes
 @inject IDevOpsClientFactory DevOpsClientFactory
 @inject IAppEventBus Events
 @inject ICredentialStore CredentialStore
@@ -15,7 +16,6 @@
     var pinnedItems = GetPinnedItems();
     var readinessReport = BuildReadinessReport();
     var showReadiness = readinessReport.RequiresDashboardAttention;
-    var readinessAreas = readinessReport.AttentionAreas;
 }
 
 <div class="dashboard-page">
@@ -32,72 +32,11 @@
                     namespace@(Monitor.MonitoredNamespaces.Count == 1 ? "" : "s") monitored</span>
                 }
             </Meta>
-            <Actions>
-                <button class="page-header-action-btn dashboard-refresh-btn" @onclick="RefreshAll"
-                        title="Refresh health data" aria-label="Refresh dashboard health">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="16px" />
-                    Refresh
-                </button>
-            </Actions>
         </RoutePageHeader>
 
         @if (showReadiness)
         {
-            <section class="dashboard-section dashboard-section--readiness" data-testid="dashboard-readiness">
-                <div class="dashboard-readiness-summary">
-                    <div>
-                        <p class="dashboard-readiness-eyebrow">Environment readiness</p>
-                        <h2 class="dashboard-readiness-title">
-                            @(readinessReport.IsFirstRun ? "Set up your operator workspace" : "Current configuration readiness")
-                        </h2>
-                        <p class="dashboard-readiness-body">@readinessReport.Summary</p>
-                    </div>
-                    <span class="dashboard-readiness-status @GetReadinessStatusClass(readinessReport.OverallStatus)">
-                        @GetReadinessLabel(readinessReport.OverallStatus)
-                    </span>
-                </div>
-
-                @if (readinessReport.ActionItems.Count > 0)
-                {
-                    <div class="dashboard-readiness-checklist" data-testid="dashboard-readiness-checklist">
-                        @foreach (var actionItem in readinessReport.ActionItems)
-                        {
-                            <article class="dashboard-readiness-item">
-                                <div class="dashboard-readiness-item__copy">
-                                    <h3>@actionItem.Title</h3>
-                                    <p>@actionItem.Summary</p>
-                                </div>
-                                <a class="dashboard-readiness-item__action" href="@GetSettingsHref(actionItem.SettingsSection)">
-                                    @actionItem.ActionLabel
-                                </a>
-                            </article>
-                        }
-                    </div>
-                }
-
-                <div class="dashboard-readiness-areas">
-                    @foreach (var area in readinessAreas)
-                    {
-                        <article class="dashboard-readiness-area @GetReadinessStatusClass(area.Status)">
-                            <div class="dashboard-readiness-area__header">
-                                <h3>@area.Title</h3>
-                                <span class="dashboard-readiness-area__badge">@GetReadinessLabel(area.Status)</span>
-                            </div>
-                            <p class="dashboard-readiness-area__summary">@area.Summary</p>
-                            @if (!string.IsNullOrWhiteSpace(area.Detail))
-                            {
-                                <p class="dashboard-readiness-area__detail">@area.Detail</p>
-                            }
-                            @if (area.ActionItems.Count > 0)
-                            {
-                                <a class="dashboard-readiness-area__link" href="@GetSettingsHref(area.SettingsSection)">
-                                    Review @area.Title settings
-                                </a>
-                            }
-                        </article>
-                    }
-                </div>
-            </section>
+            <ConfigurationReadinessDashboard Report="readinessReport" SettingsHrefBuilder="GetSettingsHref" />
         }
 
         @* ── Hero stats row ── *@
@@ -121,7 +60,7 @@
                     <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
                 </span>
                 <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                                                                                                                                            "—")</span>
+                                                                                                                                                                                                                    "—")</span>
                     <span class="hero-stat-label">Redis</span>
                 </div>
                 <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -129,7 +68,7 @@
                         <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                     </span>
                     <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                                                                                                                                                             "—")</span>
+                                                                                                                                                                                                                                                             "—")</span>
                         <span class="hero-stat-label">Pipelines</span>
                     </div>
                 </div>
@@ -291,8 +230,11 @@
     // ── Pinned entities ─────────────────────────────────────────────────────────────
     private sealed record DashboardPinnedItem(string DisplayPath, string Icon, WorkspaceSnapshot Snapshot);
 
+    private static readonly TimeSpan HealthRefreshBudget = TimeSpan.FromSeconds(8);
+
     // ── Lifecycle ───────────────────────────────────────────────────────────────────
     private readonly CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _healthRefreshGate = new(1, 1);
     private PeriodicTimer? _refreshTimer;
 
     protected override void OnInitialized()
@@ -374,19 +316,67 @@
 
     private async Task LoadHealthDataAsync(CancellationToken ct)
     {
+        var enteredGate = false;
+
         DetermineConfiguredState();
         await InvokeAsync(StateHasChanged);
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        linked.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            enteredGate = await _healthRefreshGate.WaitAsync(0, ct);
+            if (!enteredGate)
+            {
+                return;
+            }
 
-        await Task.WhenAll(
-            FetchServiceBusAsync(linked.Token),
-            FetchAksAsync(linked.Token),
-            FetchRedisAsync(linked.Token),
-            FetchReleasesAsync(linked.Token));
+            await Task.WhenAll(
+                RefreshHealthTileAsync("Service Bus", FetchServiceBusAsync, error => _sbError = error, ct),
+                RefreshHealthTileAsync("AKS", FetchAksAsync, error => _aksError = error, ct),
+                RefreshHealthTileAsync("Redis", FetchRedisAsync, error => _redisError = error, ct),
+                RefreshHealthTileAsync("Pipelines", FetchReleasesAsync, error => _releasesError = error, ct));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (enteredGate)
+            {
+                _healthRefreshGate.Release();
+            }
+        }
 
-        await InvokeAsync(StateHasChanged);
+        if (!ct.IsCancellationRequested)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshHealthTileAsync(
+        string areaName,
+        Func<CancellationToken, Task> refresh,
+        Action<string?> setError,
+        CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(HealthRefreshBudget);
+
+        try
+        {
+            await refresh(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            setError($"Timed out while refreshing {areaName}.");
+        }
+        catch (Exception ex)
+        {
+            setError(ex.Message);
+        }
     }
 
     private void DetermineConfiguredState()
@@ -432,9 +422,7 @@
     private static async Task<long> SumDlqAsync(IServiceBusClient client, CancellationToken ct)
     {
         var queues = await client.ListQueuesAsync(ct);
-        var statsTasks = queues.Select(q => client.GetEntityStatsAsync(q.EntityPath, ct));
-        var stats = await Task.WhenAll(statsTasks);
-        return stats.Sum(s => s.DeadLetterMessageCount);
+        return queues.Sum(queue => queue.Stats?.DeadLetterMessageCount ?? 0);
     }
 
     // ── AKS ─────────────────────────────────────────────────────────────────────────
@@ -526,33 +514,19 @@
 
     private void NavigateToSettings() => Events.Publish(new NavigateToAreaEvent("settings"));
 
-    private ConfigurationHealthReport BuildReadinessReport() =>
-        ConfigurationHealth.BuildReport(new ConfigurationHealthContext(
+    private ConfigurationHealthContext CreateReadinessContext()
+    {
+        var baseContext = new ConfigurationHealthContext(
             AppState.Config,
             AppState.ServiceBusNamespaces,
             AppState.UseDemoData,
             AppState.HasProfileLoadFailure,
-            AppState.ProfilePersistenceBlockedMessage));
+            AppState.ProfilePersistenceBlockedMessage);
 
-    private static string GetReadinessLabel(ConfigurationCheckStatus status) => status switch
-    {
-        ConfigurationCheckStatus.NotConfigured => "Not configured",
-        ConfigurationCheckStatus.Configured => "Configured",
-        ConfigurationCheckStatus.Ready => "Ready",
-        ConfigurationCheckStatus.Warning => "Needs attention",
-        ConfigurationCheckStatus.Error => "Error",
-        _ => "Skipped"
-    };
+        return baseContext with { ProbeSnapshot = ConfigurationProbes.GetLatest(baseContext) };
+    }
 
-    private static string GetReadinessStatusClass(ConfigurationCheckStatus status) => status switch
-    {
-        ConfigurationCheckStatus.NotConfigured => "readiness-status--muted",
-        ConfigurationCheckStatus.Configured => "readiness-status--info",
-        ConfigurationCheckStatus.Ready => "readiness-status--success",
-        ConfigurationCheckStatus.Warning => "readiness-status--warning",
-        ConfigurationCheckStatus.Error => "readiness-status--danger",
-        _ => "readiness-status--muted"
-    };
+    private ConfigurationHealthReport BuildReadinessReport() => ConfigurationHealth.BuildReport(CreateReadinessContext());
 
     private string GetSettingsHref(string section) => Nav.ToAbsoluteUri($"/settings?section={section}").PathAndQuery;
 
@@ -621,6 +595,7 @@
         Workspaces.Changed -= OnWorkspaceChanged;
         _cts.Cancel();
         _cts.Dispose();
+        _healthRefreshGate.Dispose();
         _refreshTimer?.Dispose();
     }
 }

@@ -197,7 +197,7 @@
                             <span class="aks-kbd-hint"><kbd>l</kbd> logs</span>
                         }
                         @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                                                or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                                        or "Ingresses" or "Pods" or "Jobs" or "CronJobs")
                         {
                             <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                         }
@@ -1212,7 +1212,7 @@ OnCtxRestartDeployment();
         "StatefulSets" => SelectedStatefulSet?.Name,
         "ConfigMaps" => SelectedConfigMap?.Name,
         "Secrets" => SelectedSecret?.Name,
-        "Ingresses" => SelectedIngress?.Name,
+        "Ingresses" => SelectedIngress is null ? null : GetIngressIdentity(SelectedIngress),
         "Helm" => SelectedHelmRelease?.Name,
         "Jobs" => SelectedJob?.Name,
         "CronJobs" => SelectedCronJob?.Name,
@@ -1253,7 +1253,9 @@ OnCtxRestartDeployment();
                 SelectedSecret = Secrets.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "ingress":
-                SelectedIngress = Ingresses.FirstOrDefault(item => item.Name == resourceName);
+                SelectedIngress = Ingresses.FirstOrDefault(item => string.Equals(GetIngressIdentity(item), resourceName,
+StringComparison.Ordinal))
+                    ?? Ingresses.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "helm":
                 SelectedHelmRelease = HelmReleases.FirstOrDefault(item => item.Name == resourceName);
@@ -1340,7 +1342,9 @@ s.Name); break;
                 SelectedConfigMap = NavigateInList(FilteredConfigMaps, SelectedConfigMap, delta, cm => cm.Name);
                 break;
             case "Secrets": SelectedSecret = NavigateInList(FilteredSecrets, SelectedSecret, delta, s => s.Name); break;
-            case "Ingresses": SelectedIngress = NavigateInList(FilteredIngresses, SelectedIngress, delta, i => i.Name); break;
+            case "Ingresses":
+                SelectedIngress = NavigateInList(FilteredIngresses, SelectedIngress, delta, GetIngressIdentity);
+                break;
             case "Helm": SelectedHelmRelease = NavigateInList(FilteredHelmReleases, SelectedHelmRelease, delta, h => h.Name); break;
             case "Jobs":
                 SelectedJob = NavigateInList(FilteredJobs, SelectedJob, delta, job => $"{job.Namespace}/{job.Name}");
@@ -1660,6 +1664,8 @@ $"{cj.Namespace}/{cj.Name}"); break;
             return $"http://{host}";
         return $"https://{host}";
     }
+
+    private static string GetIngressIdentity(IngressInfo ingress) => $"{ingress.Namespace}/{ingress.Name}";
 
     private static Task OpenUrlAsync(string url)
     {

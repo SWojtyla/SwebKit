@@ -1,3 +1,4 @@
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 
 namespace SwebKit.Core.Abstractions;
@@ -32,4 +33,9 @@ public interface IRedisClient : IDisposable
     Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default);
     Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default);
     Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default);
+}
+
+public interface IRedisClientFactory
+{
+    Task<IRedisClient> CreateAsync(RedisCacheEntry cacheEntry, CancellationToken ct = default);
 }

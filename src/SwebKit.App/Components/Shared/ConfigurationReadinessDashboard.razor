@@ -1,0 +1,92 @@
+@if (Report.RequiresDashboardAttention)
+{
+    var readinessAreas = Report.AttentionAreas;
+
+    <section class="dashboard-section dashboard-section--readiness" data-testid="dashboard-readiness">
+        <div class="dashboard-readiness-summary">
+            <div>
+                <p class="dashboard-readiness-eyebrow">Environment readiness</p>
+                <h2 class="dashboard-readiness-title">
+                    @(Report.IsFirstRun ? "Set up your operator workspace" : "Current configuration readiness")
+                </h2>
+                <p class="dashboard-readiness-body">@Report.Summary</p>
+                @if (Report.LastProbeCompletedAt is { } checkedAt)
+                {
+                    <p class="dashboard-readiness-meta">Last live check @FormatTimestamp(checkedAt)</p>
+                }
+            </div>
+            <span class="dashboard-readiness-status @GetReadinessStatusClass(Report.OverallStatus)">
+                @GetReadinessLabel(Report.OverallStatus)
+            </span>
+        </div>
+
+        @if (Report.ActionItems.Count > 0)
+        {
+            <div class="dashboard-readiness-checklist" data-testid="dashboard-readiness-checklist">
+                @foreach (var actionItem in Report.ActionItems)
+                {
+                    <article class="dashboard-readiness-item">
+                        <div class="dashboard-readiness-item__copy">
+                            <h3>@actionItem.Title</h3>
+                            <p>@actionItem.Summary</p>
+                        </div>
+                        <a class="dashboard-readiness-item__action" href="@SettingsHrefBuilder(actionItem.SettingsSection)">
+                            @actionItem.ActionLabel
+                        </a>
+                    </article>
+                }
+            </div>
+        }
+
+        <div class="dashboard-readiness-areas">
+            @foreach (var area in readinessAreas)
+            {
+                <article class="dashboard-readiness-area @GetReadinessStatusClass(area.Status)"
+                         data-testid="@($"dashboard-readiness-area-{area.AreaKey}")">
+                    <div class="dashboard-readiness-area__header">
+                        <h3>@area.Title</h3>
+                        <span class="dashboard-readiness-area__badge">@GetReadinessLabel(area.Status)</span>
+                    </div>
+                    <p class="dashboard-readiness-area__summary">@area.Summary</p>
+                    @if (!string.IsNullOrWhiteSpace(area.Detail))
+                    {
+                        <p class="dashboard-readiness-area__detail">@area.Detail</p>
+                    }
+                    <a class="dashboard-readiness-area__link" href="@SettingsHrefBuilder(area.SettingsSection)">
+                        Review @area.Title settings
+                    </a>
+                </article>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public ConfigurationHealthReport Report { get; set; } = default!;
+
+    [Parameter]
+    public Func<string, string> SettingsHrefBuilder { get; set; } = static section =>
+$"/settings?section={section}";
+
+    private static string GetReadinessLabel(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "Not configured",
+        ConfigurationCheckStatus.Configured => "Configured",
+        ConfigurationCheckStatus.Ready => "Ready",
+        ConfigurationCheckStatus.Warning => "Needs attention",
+        ConfigurationCheckStatus.Error => "Error",
+        _ => "Skipped"
+    };
+
+    private static string GetReadinessStatusClass(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "readiness-status--muted",
+        ConfigurationCheckStatus.Configured => "readiness-status--info",
+        ConfigurationCheckStatus.Ready => "readiness-status--success",
+        ConfigurationCheckStatus.Warning => "readiness-status--warning",
+        ConfigurationCheckStatus.Error => "readiness-status--danger",
+        _ => "readiness-status--muted"
+    };
+
+    private static string FormatTimestamp(DateTimeOffset timestamp) => timestamp.ToLocalTime().ToString("g");
+}

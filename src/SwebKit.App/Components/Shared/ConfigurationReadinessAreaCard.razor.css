@@ -1,0 +1,160 @@
+.settings-readiness-card {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+    border: 1px solid var(--color-border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 8%, var(--color-surface)) 0%, var(--color-surface) 100%);
+    color: var(--color-text);
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    gap: 0.9rem;
+}
+
+.settings-readiness-card__header,
+.settings-readiness-card__area-header,
+.settings-readiness-livecheck__header,
+.settings-readiness-credential {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.85rem;
+    align-items: flex-start;
+}
+
+.settings-readiness-card__eyebrow {
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.76rem;
+    color: var(--color-text-muted);
+}
+
+.settings-readiness-card__title,
+.settings-readiness-card__area-header h3 {
+    margin: 0;
+    color: var(--color-text);
+}
+
+.settings-readiness-card__meta,
+.settings-readiness-card__detail,
+.settings-readiness-card__area-header p,
+.settings-readiness-livecheck__summary,
+.settings-readiness-livecheck__meta,
+.settings-readiness-action span,
+.settings-readiness-credential__ref {
+    margin: 0.35rem 0 0;
+    color: var(--color-text-muted);
+}
+
+.settings-readiness-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.settings-readiness-status,
+.settings-readiness-credential__status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.settings-readiness-run {
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    padding: 0.45rem 0.9rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.settings-readiness-run:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-2));
+}
+
+.settings-readiness-run:disabled {
+    opacity: 0.65;
+    cursor: progress;
+}
+
+.settings-readiness-card__production,
+.settings-readiness-livecheck,
+.settings-readiness-actions,
+.settings-readiness-credentials {
+    border-radius: 14px;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+}
+
+.settings-readiness-card__production {
+    background: color-mix(in srgb, var(--color-error) 12%, var(--color-surface-2));
+    border-color: color-mix(in srgb, var(--color-error) 28%, var(--color-border));
+    color: var(--color-error);
+    font-weight: 600;
+}
+
+.settings-readiness-credentials,
+.settings-readiness-actions {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.settings-readiness-credential__ref {
+    display: block;
+    font-size: 0.84rem;
+}
+
+.settings-readiness-action {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.readiness-status--muted {
+    background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+    color: var(--color-text-muted);
+    border-color: color-mix(in srgb, var(--color-text-muted) 28%, transparent);
+}
+
+.readiness-status--info {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.readiness-status--success {
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.readiness-status--warning {
+    background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+    color: var(--color-warning);
+    border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+}
+
+.readiness-status--danger {
+    background: color-mix(in srgb, var(--color-error) 14%, transparent);
+    color: var(--color-error);
+    border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+}
+
+@media (max-width: 900px) {
+    .settings-readiness-card__header,
+    .settings-readiness-card__actions,
+    .settings-readiness-card__area-header,
+    .settings-readiness-livecheck__header,
+    .settings-readiness-credential {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

@@ -4,7 +4,7 @@
 
 title: "Backend Plan - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Review"
 
 ---
 
@@ -68,10 +68,10 @@ One aggregated service should combine those concerns into a single readiness rep
 
 ### Wave 2 - Read-only health providers [dotnet-expert] (depends on Wave 1)
 
-- [ ] Add or adapt read-only providers for Service Bus, AKS, Observability, Storage, DevOps, Redis, and Incident Timeline prerequisites.
-- [ ] Reuse current bootstrap or factory seams where possible instead of introducing duplicate clients.
-- [ ] Budget provider execution time and expose partial results cleanly.
-- [ ] Ensure providers can report `Configured but not ready` without pretending success.
+- [x] Add or adapt read-only providers for Service Bus, AKS, Observability, Storage, DevOps, Redis, and Incident Timeline prerequisites.
+- [x] Reuse current bootstrap or factory seams where possible instead of introducing duplicate clients.
+- [x] Budget provider execution time and expose partial results cleanly.
+- [x] Ensure providers can report `Configured but not ready` without pretending success.
 
 ### Wave 3 - Readiness aggregation and settings handoff [dotnet-expert] (depends on Waves 1-2)
 
@@ -82,9 +82,9 @@ One aggregated service should combine those concerns into a single readiness rep
 ### Wave 4 - Tests and hardening [dotnet-expert] (depends on Waves 1-3)
 
 - [x] Add unit coverage for report normalization, diff output, and readiness-state aggregation.
-- [ ] Add focused integration tests for any new probe logic against Azure/AKS/DevOps seams.
-- [ ] Prove partial timeouts and auth failures degrade only the affected area.
-- [ ] Record any compromises or probe limitations in `decisions.md`.
+- [x] Add focused service-level probe tests for the new Azure/AKS/DevOps readiness orchestration seams.
+- [x] Prove partial timeouts and auth failures degrade only the affected area.
+- [x] Record any compromises or probe limitations in `decisions.md`.
 
 ## Migration and runtime changes
 
@@ -94,8 +94,8 @@ One aggregated service should combine those concerns into a single readiness rep
 
 ## Validation
 
-- Unit tests: `ConfigurationHealthServiceTests` added and passing.
-- Integration tests: Not started.
+- Unit tests: `ConfigurationHealthServiceTests` updated and passing.
+- Service-level probe tests: `ConfigurationProbeServiceTests` added and passing in `tests/SwebKit.App.Tests`.
 - Manual checks:
 - Verify probes remain read-only.
 - Verify missing credentials and missing config can be distinguished.
