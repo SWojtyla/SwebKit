@@ -105,3 +105,28 @@ The first-run or not-ready checklist should be derived from current config and r
 ### Alternatives considered
 
 - Alternative A - store separate checklist completion flags: rejected because it creates a second source of truth.
+
+---
+
+## Decision 005 - Use `Configured` when local prerequisites exist but live readiness is not yet proven
+
+**Status:** Accepted
+
+**Date:** 2026-04-13
+
+### Context
+
+Some capability areas have enough local configuration to be trustworthy in the shell, but a true `Ready` state would still require a live read-only probe or an external identity path the app has not verified yet.
+
+### Decision
+
+The readiness report uses `Configured` for areas such as AKS, Observability, and AAD-backed Storage when local prerequisites are present but the feature has not yet run a live read-only verification. `Ready` is reserved for cases where the current slice can prove the local prerequisites are usable without leaking secrets.
+
+### Consequences
+
+- The UI can distinguish "you configured this" from "the app can trust this right now."
+- Later live-probe work can upgrade `Configured` to `Ready` without changing the shell-level contract.
+
+### Alternatives considered
+
+- Alternative A - collapse `Configured` into `Ready`: rejected because it would overstate trust for flows that still depend on unverified runtime identity or connectivity.

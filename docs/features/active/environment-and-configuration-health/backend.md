@@ -4,7 +4,7 @@
 
 title: "Backend Plan - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -61,10 +61,10 @@ One aggregated service should combine those concerns into a single readiness rep
 
 ### Wave 1 - Canonical report models [dotnet-expert] (sequential root)
 
-- [ ] Define the health-report and readiness models in `SwebKit.Core`.
-- [ ] Define normalization rules for configuration-gap summaries.
-- [ ] Decide which report fields are safe for logs, UI rendering, and persistence.
-- [ ] Keep secrets and raw credential values out of all report contracts.
+- [x] Define the health-report and readiness models in `SwebKit.Core`.
+- [x] Define normalization rules for configuration-gap summaries.
+- [x] Decide which report fields are safe for logs, UI rendering, and persistence.
+- [x] Keep secrets and raw credential values out of all report contracts.
 
 ### Wave 2 - Read-only health providers [dotnet-expert] (depends on Wave 1)
 
@@ -75,13 +75,13 @@ One aggregated service should combine those concerns into a single readiness rep
 
 ### Wave 3 - Readiness aggregation and settings handoff [dotnet-expert] (depends on Waves 1-2)
 
-- [ ] Aggregate per-area health into one operator-readiness summary.
-- [ ] Expose direct Settings handoff metadata where useful.
-- [ ] Keep readiness logic framework-agnostic so it is testable outside the UI.
+- [x] Aggregate per-area health into one operator-readiness summary.
+- [x] Expose direct Settings handoff metadata where useful.
+- [x] Keep readiness logic framework-agnostic so it is testable outside the UI.
 
 ### Wave 4 - Tests and hardening [dotnet-expert] (depends on Waves 1-3)
 
-- [ ] Add unit coverage for report normalization, diff output, and readiness-state aggregation.
+- [x] Add unit coverage for report normalization, diff output, and readiness-state aggregation.
 - [ ] Add focused integration tests for any new probe logic against Azure/AKS/DevOps seams.
 - [ ] Prove partial timeouts and auth failures degrade only the affected area.
 - [ ] Record any compromises or probe limitations in `decisions.md`.
@@ -94,7 +94,7 @@ One aggregated service should combine those concerns into a single readiness rep
 
 ## Validation
 
-- Unit tests: Not started.
+- Unit tests: `ConfigurationHealthServiceTests` added and passing.
 - Integration tests: Not started.
 - Manual checks:
 - Verify probes remain read-only.

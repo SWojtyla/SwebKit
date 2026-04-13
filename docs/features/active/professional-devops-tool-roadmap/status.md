@@ -8,17 +8,17 @@ state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-04-13"
 
 ---
 
 ## Quick summary
 
-The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` is now the next planned delivery slice.
+The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` is now in implementation with its first readiness-report/dashboard/settings slice landed.
 
 Jira: not linked
 
-Current focus: keep downstream references current after the Wave 2 archive, preserve the Wave 3 dependency boundary, and prevent later-wave work from bypassing the roadmap order.
+Current focus: keep downstream references current while Wave 3 grows from local readiness reporting into live read-only probes, and prevent later-wave work from bypassing the roadmap order.
 
 ## Progress checklist
 
@@ -45,6 +45,7 @@ Current focus: keep downstream references current after the Wave 2 archive, pres
 - Advanced the roadmap into execution by closing Wave 1 and activating Wave 2 as the next implementation slice.
 - Recorded that Wave 2 now has landed code plus focused validation, while still keeping Wave 3 and later work sequenced behind it.
 - Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
+- Advanced Wave 3 from planning into implementation by landing the first readiness-report contract plus dashboard/settings adoption slice.
 
 ## Remaining
 

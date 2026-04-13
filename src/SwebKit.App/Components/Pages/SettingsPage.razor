@@ -1,9 +1,15 @@
 @page "/settings"
 @inject AppStateService AppState
+@inject IConfigurationHealthService ConfigurationHealth
 @inject ICredentialStore CredentialStore
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @implements IDisposable
+
+@{
+    var readinessReport = BuildReadinessReport();
+    var currentAreaHealth = GetCurrentAreaHealth(readinessReport);
+}
 
 <div class="settings-shell">
 
@@ -71,6 +77,78 @@
                 Unsaved changes
             </div>
         }
+
+        <section class="settings-readiness-card" data-testid="settings-readiness">
+            <div class="settings-readiness-card__header">
+                <div>
+                    <p class="settings-readiness-card__eyebrow">Configuration readiness</p>
+                    <h2 class="settings-readiness-card__title">@readinessReport.Summary</h2>
+                </div>
+                <span class="settings-readiness-status @GetReadinessStatusClass(readinessReport.OverallStatus)">
+                    @GetReadinessLabel(readinessReport.OverallStatus)
+                </span>
+            </div>
+
+            @if (currentAreaHealth is null)
+            {
+                <p class="settings-readiness-card__detail">
+                    The current section does not own a separate external readiness contract.
+                </p>
+            }
+            else
+            {
+                <div class="settings-readiness-card__area">
+                    <div class="settings-readiness-card__area-header">
+                        <div>
+                            <h3>@currentAreaHealth.Title</h3>
+                            <p>@currentAreaHealth.Summary</p>
+                        </div>
+                        <span class="settings-readiness-status @GetReadinessStatusClass(currentAreaHealth.Status)">
+                            @GetReadinessLabel(currentAreaHealth.Status)
+                        </span>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(currentAreaHealth.Detail))
+                    {
+                        <p class="settings-readiness-card__detail">@currentAreaHealth.Detail</p>
+                    }
+
+                    @if (currentAreaHealth.CredentialReferences.Count > 0)
+                    {
+                        <div class="settings-readiness-credentials">
+                            @foreach (var credential in currentAreaHealth.CredentialReferences)
+                            {
+                                <div class="settings-readiness-credential">
+                                    <div>
+                                        <strong>@credential.Label</strong>
+                                        @if (!string.IsNullOrWhiteSpace(credential.ReferenceKey))
+                                        {
+                                            <span class="settings-readiness-credential__ref">@credential.ReferenceKey</span>
+                                        }
+                                    </div>
+                                    <span class="settings-readiness-credential__status @GetReadinessStatusClass(credential.IsPresent ? ConfigurationCheckStatus.Ready : ConfigurationCheckStatus.Warning)">
+                                        @(credential.IsPresent ? "Reference available" : "Reference missing")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (currentAreaHealth.ActionItems.Count > 0)
+                    {
+                        <div class="settings-readiness-actions">
+                            @foreach (var actionItem in currentAreaHealth.ActionItems)
+                            {
+                                <div class="settings-readiness-action">
+                                    <strong>@actionItem.Title</strong>
+                                    <span>@actionItem.Summary</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </section>
 
         @switch (_active)
         {
@@ -302,6 +380,37 @@
     private async Task HandleDraftChangedAsync() => await InvokeAsync(StateHasChanged);
 
     private void SelectSection(string section) => _active = section;
+
+    private ConfigurationHealthReport BuildReadinessReport() =>
+        ConfigurationHealth.BuildReport(new ConfigurationHealthContext(
+            AppState.Config,
+            AppState.ServiceBusNamespaces,
+            AppState.UseDemoData,
+            AppState.HasProfileLoadFailure,
+            AppState.ProfilePersistenceBlockedMessage));
+
+    private ConfigurationAreaHealth? GetCurrentAreaHealth(ConfigurationHealthReport readinessReport) =>
+        readinessReport.Areas.FirstOrDefault(area => string.Equals(area.SettingsSection, _active, StringComparison.Ordinal));
+
+    private static string GetReadinessLabel(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "Not configured",
+        ConfigurationCheckStatus.Configured => "Configured",
+        ConfigurationCheckStatus.Ready => "Ready",
+        ConfigurationCheckStatus.Warning => "Needs attention",
+        ConfigurationCheckStatus.Error => "Error",
+        _ => "Skipped"
+    };
+
+    private static string GetReadinessStatusClass(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "readiness-status--muted",
+        ConfigurationCheckStatus.Configured => "readiness-status--info",
+        ConfigurationCheckStatus.Ready => "readiness-status--success",
+        ConfigurationCheckStatus.Warning => "readiness-status--warning",
+        ConfigurationCheckStatus.Error => "readiness-status--danger",
+        _ => "readiness-status--muted"
+    };
 
     private string GetNavItemClass(string section) => string.Equals(_active, section, StringComparison.Ordinal)
         ? "settings-nav-item active"

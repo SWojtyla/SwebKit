@@ -72,7 +72,7 @@ Validate that SwebKit can explain readiness clearly and safely for the current c
 
 ## Validation status
 
-- Automated: Not started.
+- Automated: `dotnet build SwebKit.slnx` succeeded and `ConfigurationHealthServiceTests` passed (4/4). Route-page UI coverage remains pending.
 - Manual: Not started.
 
 ## Sign-off

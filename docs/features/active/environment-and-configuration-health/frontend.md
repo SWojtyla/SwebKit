@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -60,17 +60,17 @@ Expose readiness in the shell and settings experience so operators can see setup
 
 ### Wave 1 - First-run checklist and setup handoff [blazor-expert] (depends on `shell-ux-foundation`)
 
-- [ ] Add a first-run or not-ready checklist surface to the dashboard or a closely related shell view.
-- [ ] Deep-link checklist items into the correct Settings section.
-- [ ] Keep the checklist derived from real config/readiness state instead of from separate wizard state.
-- [ ] Make the checklist useful for both brand-new and partially configured setups.
+- [x] Add a first-run or not-ready checklist surface to the dashboard or a closely related shell view.
+- [x] Deep-link checklist items into the correct Settings section.
+- [x] Keep the checklist derived from real config/readiness state instead of from separate wizard state.
+- [x] Make the checklist useful for both brand-new and partially configured setups.
 
 ### Wave 2 - Health overview and status language [blazor-expert] (depends on Wave 1)
 
-- [ ] Add a richer connection/configuration health overview to replace or extend the current dashboard-only tiles.
-- [ ] Clarify the difference between "configured" and "ready" in the UI.
-- [ ] Reuse shell-level status and CTA patterns from `shell-ux-foundation`.
-- [ ] Surface partial failures without collapsing the whole readiness view.
+- [x] Add a richer connection/configuration health overview to replace or extend the current dashboard-only tiles.
+- [x] Clarify the difference between "configured" and "ready" in the UI.
+- [x] Reuse shell-level status and CTA patterns from `shell-ux-foundation`.
+- [x] Surface partial failures without collapsing the whole readiness view.
 
 ### Wave 3 - Readiness detail and configuration-gap drill-through [blazor-expert] (depends on Waves 1-2)
 
@@ -98,5 +98,6 @@ Expose readiness in the shell and settings experience so operators can see setup
 - BL-2 - readiness refresh UI must dispatch renders safely after async probe completion.
 - BL-5 - avoid duplicate health loads from parent rerenders on settings or dashboard pages.
 - BL-11 - keep shared health/checklist styles in the right component or global style scope.
+- Focused bUnit coverage for the dashboard and Settings route pages is still pending because these route-page types are not materialized reliably in the current app test project.
 - Relevant pitfalls from `docs/pitfalls/dotnet-csharp.md`:
 - CS-2 - readiness refresh and explicit retry flows must propagate cancellation instead of reporting false errors.

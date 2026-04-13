@@ -44,6 +44,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<UiStateRepository>();
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
+        builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
 
         // App UI services
         builder.Services.AddSingleton<IConnectionStateService, ConnectionStateService>();

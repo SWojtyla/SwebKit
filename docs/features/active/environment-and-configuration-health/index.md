@@ -4,10 +4,10 @@
 
 title: "Feature Overview - environment-and-configuration-health"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 jira: "not linked"
 created: "2026-04-12"
-updated: "2026-04-12"
+updated: "2026-04-13"
 
 ---
 
