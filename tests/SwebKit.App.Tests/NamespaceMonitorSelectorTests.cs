@@ -111,6 +111,12 @@ public class NamespaceMonitorSelectorTests : TestContext
         public Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<IngressInfo>>([]);
 
+        public Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<GatewayInfo>>([]);
+
+        public Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<HttpRouteInfo>>([]);
+
         public Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>([]);
 

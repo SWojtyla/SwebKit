@@ -1,7 +1,9 @@
 using System.Reflection;
+using System.Text.Json;
 using k8s;
 using k8s.Models;
 using SwebKit.Core.Constants;
+using SwebKit.Core.Models;
 using SwebKit.Kubernetes.AksClient;
 
 namespace SwebKit.Kubernetes.Tests;
@@ -153,6 +155,135 @@ users:
         var actual = KubernetesAksClient.TryParseChartVersion(chart);
 
         Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void MapGateways_MapsGatewayApiCustomObjects()
+    {
+        const string json = """
+                        {
+                            "items": [
+                                {
+                                    "metadata": {
+                                        "name": "payments-edge",
+                                        "namespace": "payments",
+                                        "labels": {
+                                            "gateway.envoyproxy.io/managed": "true"
+                                        }
+                                    },
+                                    "spec": {
+                                        "gatewayClassName": "envoy-gateway",
+                                        "listeners": [
+                                            {
+                                                "name": "https",
+                                                "protocol": "HTTPS",
+                                                "port": 443,
+                                                "hostname": "payments.example.com"
+                                            }
+                                        ]
+                                    },
+                                    "status": {
+                                        "addresses": [
+                                            {
+                                                "value": "20.10.0.11"
+                                            }
+                                        ],
+                                        "conditions": [
+                                            {
+                                                "type": "Programmed",
+                                                "status": "True"
+                                            }
+                                        ],
+                                        "listeners": [
+                                            {
+                                                "name": "https",
+                                                "attachedRoutes": 2
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                        """;
+
+        using var doc = JsonDocument.Parse(json);
+        var method = typeof(KubernetesAksClient).GetMethod("MapGateways", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = Assert.IsAssignableFrom<IReadOnlyList<GatewayInfo>>(method!.Invoke(null, [doc.RootElement, "default"]));
+        var gateway = Assert.Single(result);
+
+        Assert.Equal("payments-edge", gateway.Name);
+        Assert.Equal("payments", gateway.Namespace);
+        Assert.Equal("envoy-gateway", gateway.GatewayClassName);
+        Assert.Equal("Programmed", gateway.Status);
+        Assert.Equal(2, gateway.AttachedRoutes);
+        Assert.Equal("20.10.0.11", Assert.Single(gateway.Addresses));
+        Assert.Equal("payments.example.com", Assert.Single(gateway.Listeners).Hostname);
+    }
+
+    [Fact]
+    public void MapHttpRoutes_MapsGatewayApiCustomObjects()
+    {
+        const string json = """
+                        {
+                            "items": [
+                                {
+                                    "metadata": {
+                                        "name": "payments-api-route",
+                                        "namespace": "payments"
+                                    },
+                                    "spec": {
+                                        "hostnames": ["payments.example.com"],
+                                        "parentRefs": [
+                                            {
+                                                "name": "payments-edge",
+                                                "sectionName": "https"
+                                            }
+                                        ],
+                                        "rules": [
+                                            {
+                                                "backendRefs": [
+                                                    {
+                                                        "name": "payment-gateway",
+                                                        "port": 80
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "status": {
+                                        "parents": [
+                                            {
+                                                "conditions": [
+                                                    {
+                                                        "type": "Accepted",
+                                                        "status": "True"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                        """;
+
+        using var doc = JsonDocument.Parse(json);
+        var method = typeof(KubernetesAksClient).GetMethod("MapHttpRoutes", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = Assert.IsAssignableFrom<IReadOnlyList<HttpRouteInfo>>(method!.Invoke(null, [doc.RootElement, "default"]));
+        var route = Assert.Single(result);
+
+        Assert.Equal("payments-api-route", route.Name);
+        Assert.Equal("payments", route.Namespace);
+        Assert.Equal("Accepted", route.Status);
+        Assert.Equal("payments.example.com", Assert.Single(route.Hostnames));
+        Assert.Equal("payments-edge#https", Assert.Single(route.ParentRefs));
+        Assert.Equal("payment-gateway:80", Assert.Single(route.BackendRefs));
     }
 
     [Fact]

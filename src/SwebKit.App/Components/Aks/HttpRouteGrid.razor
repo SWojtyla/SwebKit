@@ -1,0 +1,82 @@
+@* Renders the Gateway API HTTPRoutes FluentDataGrid. *@
+
+<div class="aks-httproute-grid-shell">
+    <FluentDataGrid Items="@FilteredItems" TGridItem="HttpRouteInfo"
+                    RowClass="@(route => HasSameIdentity(route, SelectedHttpRoute) ? "selected-row" : "")"
+                    OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+        <TemplateColumn Title="Name" Width="230px" SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => route.Name))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-resource-name">@context.Name</span>
+            </div>
+        </TemplateColumn>
+        @if (IsMultiNamespace)
+        {
+            <TemplateColumn Title="Namespace" Width="140px"
+                            SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => route.Namespace))">
+                <span class="aks-ns-cell"
+                      @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+            </TemplateColumn>
+        }
+        <TemplateColumn Title="Hosts" Width="560px">
+            <div class="aks-row-ctx aks-httproute-chip-list"
+                 @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+                @foreach (var host in context.Hostnames)
+                {
+                    <span class="aks-httproute-chip" @key="host">@host</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Parents" Width="320px"
+                        SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => string.Join(",", route.ParentRefs)))">
+            <div class="aks-row-ctx aks-httproute-chip-list"
+                 @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+                @foreach (var parent in context.ParentRefs)
+                {
+                    <span class="aks-httproute-chip aks-httproute-chip--muted" @key="parent">@parent</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Backends" Width="240px"
+                        SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => string.Join(",", route.BackendRefs)))">
+            <div class="aks-row-ctx aks-httproute-chip-list"
+                 @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+                @foreach (var backend in context.BackendRefs)
+                {
+                    <span class="aks-httproute-chip aks-httproute-chip--backend" @key="backend">@backend</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Width="120px"
+                        SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => route.Status))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-status @GetStatusClass(context.Status)">@context.Status</span>
+            </div>
+        </TemplateColumn>
+    </FluentDataGrid>
+</div>
+
+@code {
+    [Parameter]
+    public IQueryable<HttpRouteInfo> FilteredItems { get; set; } =
+Enumerable.Empty<HttpRouteInfo>().AsQueryable();
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public HttpRouteInfo? SelectedHttpRoute { get; set; }
+    [Parameter] public EventCallback<HttpRouteInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, HttpRouteInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static bool HasSameIdentity(HttpRouteInfo candidate, HttpRouteInfo? selected) =>
+        selected is not null
+        && string.Equals(candidate.Name, selected.Name, StringComparison.Ordinal)
+        && string.Equals(candidate.Namespace, selected.Namespace, StringComparison.Ordinal);
+
+    private static string GetStatusClass(string status)
+        => status switch
+        {
+            "Accepted" or "ResolvedRefs" => "running",
+            "Pending" => "pending",
+            _ => "error"
+        };
+}

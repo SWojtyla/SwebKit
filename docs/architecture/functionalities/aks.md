@@ -8,9 +8,11 @@
 - Context switching and namespace filtering (single and all namespaces).
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, ingresses, Helm releases, Jobs, and CronJobs.
+- Browse Gateway API resources separately from classic Ingresses: Gateways and HTTPRoutes render in their own AKS tabs.
 - Jobs are a first-class AKS resource tab with browse, filter, row selection, and namespace-click behavior.
 - Jobs grid shows status, source provenance, progress, and recent timing metadata; namespace is shown in all-namespaces mode.
 - CronJobs remain visible in all-namespaces mode, and batch loads include default namespace entries.
+- Gateway and HTTPRoute tabs support all-namespaces mode, namespace-aware row selection/restore, and YAML viewing against the row namespace.
 - CronJob context menu supports `Run now`, which creates a new Job from the selected CronJob.
 - Job context menu supports `View YAML` and `Rerun job`, which creates a new sibling Job from the selected Job.
 - Batch actions always execute against the selected row namespace, not the namespace selector.
@@ -41,22 +43,25 @@
 
 1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
 2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
-3. Resource YAML for Jobs and CronJobs flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
-4. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
-5. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
-6. Long-running and side-panel operations keep the main grid responsive.
-7. Auto-refresh pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
-8. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
+3. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
+4. Resource YAML for Jobs, CronJobs, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
+5. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
+6. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
+7. Long-running and side-panel operations keep the main grid responsive.
+8. Auto-refresh pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
+9. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes
 
 - **Incident timeline anchor.** `AksTimelineSignalSource` is the anchor evidence adapter for the incident cockpit. It bootstraps the current `IAksClient`, resolves workload-owned pods from deployment/statefulset selector labels, and returns only workload-scoped pod lifecycle changes and events inside the requested UTC window. `DaemonSet` scopes are not yet supported by this adapter.
 - **Batch workload contract.** `IAksClient` now exposes additive Jobs and trigger methods: `GetJobsAsync`, `TriggerCronJobAsync`, and `RerunJobAsync`. Default multi-namespace overloads for `GetJobsAsync` and `GetCronJobsAsync` let the AKS page keep both resource types visible in all-namespaces mode without special client wrappers.
+- **Gateway API contract.** `IAksClient` exposes `GetGatewaysAsync` and `GetHttpRoutesAsync`. `KubernetesAksClient` queries Gateway API CRDs through the custom-objects client with `v1`/`v1beta1`/`v1alpha2` fallback so Envoy Gateway migrations remain visible even when classic `Ingress` is empty.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
 - **Batch YAML parity.** `GetResourceYamlAsync` explicitly supports `job` and `cronjob`. `DemoAksClient` emits batch/v1 YAML for both resource kinds, matching the live-client viewer flow.
 - **Trigger provenance and sanitization.** `KubernetesAksClient` clones CronJob job templates or Job specs, strips controller-owned metadata and selectors, and annotates created Jobs with `swebkit.io/source-kind` and `swebkit.io/source-name`. Source mapping prefers owner references first, then these annotations.
 - **Row-scoped batch actions.** In all-namespaces mode, `AksPage.razor` resolves Job and CronJob actions from the selected row object, not `CurrentNamespace`, which prevents accidental cross-namespace execution.
+- **Gateway API identity.** Gateway and HTTPRoute selection, keyboard navigation, and workspace restore use `namespace/name` identity, matching the existing ingress namespace fix and avoiding collisions in all-namespaces mode.
 - **Workspace integration.** `AksPage` registers a restore handler with `OperatorWorkspaceService`, publishes semantic snapshots for context, namespace, active resource tab, filters, panel flags, and current selection, and suppresses duplicate recent-resource writes while replaying a restore.
 - **Unified side-panel column.** All side panels (YAML, Helm history/values, scale, logs, container details, ConfigMap/Secret detail, HPA) are rendered inside a single `aks-panels-col` flex container. Events sit at the bottom of this column as a collapsible inset (`aks-events-inset`), so multiple open panels never overflow the grid. When nothing is open the column is hidden and a thin vertical `aks-events-collapsed-tab` appears instead.
 - **YAML search** is implemented entirely in `yamlHighlight.js` (`searchInPre`, `clearSearch`). Blazor calls JSInterop on each input change; match count is displayed in the search bar.
@@ -77,6 +82,8 @@
 - `src/SwebKit.App/Components/Aks/NamespaceMonitorSelector.razor`
 - `src/SwebKit.App/Components/Aks/CronJobGrid.razor`
 - `src/SwebKit.App/Components/Aks/JobGrid.razor`
+- `src/SwebKit.App/Components/Aks/GatewayGrid.razor`
+- `src/SwebKit.App/Components/Aks/HttpRouteGrid.razor`
 - `src/SwebKit.App/Components/Aks/PodLogView.razor`
 - `src/SwebKit.App/Components/Aks/MultiPodLogView.razor`
 - `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor`

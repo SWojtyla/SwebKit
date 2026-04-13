@@ -1,0 +1,35 @@
+.aks-httproute-grid-shell {
+    min-width: 1320px;
+}
+
+.aks-httproute-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+    min-width: 0;
+}
+
+.aks-httproute-chip {
+    display: inline-flex;
+    align-items: flex-start;
+    max-width: 100%;
+    padding: 5px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    font-size: 12px;
+}
+
+.aks-httproute-chip--muted {
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+}
+
+.aks-httproute-chip--backend {
+    background: rgba(26, 115, 232, 0.1);
+}

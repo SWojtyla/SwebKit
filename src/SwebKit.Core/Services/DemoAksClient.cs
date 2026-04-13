@@ -306,6 +306,119 @@ public class DemoAksClient : IAksClient
         };
     }
 
+    public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(180, ct);
+        return new List<GatewayInfo>
+        {
+            new()
+            {
+                Name = "public-gateway",
+                Namespace = ns,
+                GatewayClassName = "envoy-gateway",
+                Status = "Programmed",
+                AttachedRoutes = 2,
+                Addresses = ["20.93.141.52"],
+                Listeners =
+                [
+                    new GatewayListenerInfo
+                    {
+                        Name = "https-api",
+                        Port = 443,
+                        Protocol = "HTTPS",
+                        Hostname = "api.ecommerce.example.com",
+                        AttachedRoutes = 1
+                    },
+                    new GatewayListenerInfo
+                    {
+                        Name = "https-admin",
+                        Port = 443,
+                        Protocol = "HTTPS",
+                        Hostname = "admin.ecommerce.example.com",
+                        AttachedRoutes = 1
+                    }
+                ],
+                Labels = new Dictionary<string, string>
+                {
+                    ["gateway.envoyproxy.io/managed"] = "true",
+                    ["app.kubernetes.io/managed-by"] = "Helm"
+                }
+            },
+            new()
+            {
+                Name = "internal-gateway",
+                Namespace = ns,
+                GatewayClassName = "envoy-gateway",
+                Status = "Accepted",
+                AttachedRoutes = 1,
+                Addresses = ["10.0.12.24"],
+                Listeners =
+                [
+                    new GatewayListenerInfo
+                    {
+                        Name = "http-metrics",
+                        Port = 80,
+                        Protocol = "HTTP",
+                        Hostname = "metrics.internal.example.com",
+                        AttachedRoutes = 1
+                    }
+                ],
+                Labels = new Dictionary<string, string>
+                {
+                    ["gateway.envoyproxy.io/managed"] = "true",
+                    ["tier"] = "internal"
+                }
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(180, ct);
+        return new List<HttpRouteInfo>
+        {
+            new()
+            {
+                Name = "orders-api-route",
+                Namespace = ns,
+                Status = "Accepted",
+                Hostnames = ["api.ecommerce.example.com"],
+                ParentRefs = ["public-gateway#https-api"],
+                BackendRefs = ["order-api:80"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "order-api"
+                }
+            },
+            new()
+            {
+                Name = "admin-ui-route",
+                Namespace = ns,
+                Status = "Accepted",
+                Hostnames = ["admin.ecommerce.example.com"],
+                ParentRefs = ["public-gateway#https-admin"],
+                BackendRefs = ["admin-dashboard:8080"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "admin-dashboard"
+                }
+            },
+            new()
+            {
+                Name = "metrics-route",
+                Namespace = ns,
+                Status = "ResolvedRefs",
+                Hostnames = ["metrics.internal.example.com"],
+                ParentRefs = ["internal-gateway#http-metrics"],
+                BackendRefs = ["prometheus-server:9090"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "prometheus-server"
+                }
+            }
+        };
+    }
+
     public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<string>>(["default", "ecommerce", "payments", "infrastructure", "monitoring"]);
@@ -466,6 +579,69 @@ public class DemoAksClient : IAksClient
                   webhook-secret: d2hzZWMtZGVtby14eXo3ODk=
                 """;
             return Task.FromResult(secretYaml);
+        }
+
+        if (kind.Equals("Gateway", StringComparison.OrdinalIgnoreCase))
+        {
+            var gatewayYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: Gateway
+                                metadata:
+                                    name: {name}
+                                    namespace: {ns}
+                                    labels:
+                                        gateway.envoyproxy.io/managed: "true"
+                                spec:
+                                    gatewayClassName: envoy-gateway
+                                    listeners:
+                                    - name: https-api
+                                        hostname: api.ecommerce.example.com
+                                        port: 443
+                                        protocol: HTTPS
+                                        tls:
+                                            mode: Terminate
+                                            certificateRefs:
+                                            - kind: Secret
+                                                name: edge-tls
+                                status:
+                                    conditions:
+                                    - type: Programmed
+                                        status: "True"
+                                """;
+            return Task.FromResult(gatewayYaml);
+        }
+
+        if (kind.Equals("HTTPRoute", StringComparison.OrdinalIgnoreCase))
+        {
+            var routeYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: HTTPRoute
+                                metadata:
+                                    name: {name}
+                                    namespace: {ns}
+                                spec:
+                                    parentRefs:
+                                    - name: public-gateway
+                                        sectionName: https-api
+                                    hostnames:
+                                    - api.ecommerce.example.com
+                                    rules:
+                                    - matches:
+                                        - path:
+                                                type: PathPrefix
+                                                value: /
+                                        backendRefs:
+                                        - name: order-api
+                                            port: 80
+                                status:
+                                    parents:
+                                    - parentRef:
+                                            name: public-gateway
+                                        conditions:
+                                        - type: Accepted
+                                            status: "True"
+                                """;
+            return Task.FromResult(routeYaml);
         }
 
         if (kind.Equals("HorizontalPodAutoscaler", StringComparison.OrdinalIgnoreCase) ||

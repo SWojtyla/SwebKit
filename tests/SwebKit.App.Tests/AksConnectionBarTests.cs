@@ -66,4 +66,13 @@ public class AksConnectionBarTests : TestContext
 
         Assert.Contains(">Jobs<", cut.Markup, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AksConnectionBar_RendersGatewayApiResourceTabs()
+    {
+        var cut = RenderComponent<AksConnectionBar>();
+
+        Assert.Contains(">Gateways<", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(">HTTPRoutes<", cut.Markup, StringComparison.Ordinal);
+    }
 }

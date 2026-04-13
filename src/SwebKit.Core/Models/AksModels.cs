@@ -100,6 +100,38 @@ public class IngressPath
     public int? ServicePort { get; set; }
 }
 
+public class GatewayInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? GatewayClassName { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int AttachedRoutes { get; set; }
+    public List<string> Addresses { get; set; } = [];
+    public List<GatewayListenerInfo> Listeners { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+public class GatewayListenerInfo
+{
+    public required string Name { get; set; }
+    public int Port { get; set; }
+    public string? Protocol { get; set; }
+    public string? Hostname { get; set; }
+    public int AttachedRoutes { get; set; }
+}
+
+public class HttpRouteInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string Status { get; set; } = "Pending";
+    public List<string> Hostnames { get; set; } = [];
+    public List<string> ParentRefs { get; set; } = [];
+    public List<string> BackendRefs { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
 public class HelmReleaseInfo
 {
     public required string Name { get; set; }

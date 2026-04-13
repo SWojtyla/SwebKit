@@ -12,6 +12,8 @@ public interface IAksClient
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
     Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default);
     Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default);
@@ -78,6 +80,20 @@ public interface IAksClient
     async Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
         var tasks = namespaces.Select(ns => GetStatefulSetsAsync(ns, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetGatewaysAsync(ns, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetHttpRoutesAsync(ns, ct));
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(r => r).ToList();
     }

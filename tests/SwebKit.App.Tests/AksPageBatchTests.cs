@@ -127,6 +127,58 @@ public sealed class AksPageBatchTests : TestContext
     }
 
     [Fact]
+    public void AksPage_GatewaysTab_BrowsesGatewayApiResourcesInAllNamespacesMode()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Gateways");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("orders-edge", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments-edge", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("orders", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("envoy-gateway", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AksPage_HttpRoutesTab_BrowsesGatewayApiRoutesInAllNamespacesMode()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "HTTPRoutes");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("orders-api-route", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments-api-route", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("order-api:80", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payment-gateway:80", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AksPage_HttpRouteYaml_UsesSelectedRowNamespaceInAllNamespacesMode()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "HTTPRoutes");
+        OpenHttpRouteMenu(cut, client.FindHttpRoute("payments", "payments-api-route"));
+        ClickContextMenuButton(cut, "View YAML");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.YamlRequests,
+                request => request.Namespace == "payments"
+                    && request.Kind == "HTTPRoute"
+                    && request.Name == "payments-api-route"));
+    }
+
+    [Fact]
     public void AksPage_JobYaml_UsesSelectedRowNamespaceInAllNamespacesMode()
     {
         var client = new TrackingAksClient();
@@ -259,6 +311,11 @@ public sealed class AksPageBatchTests : TestContext
         InvokePrivateMenuHelper(cut, "ShowCronJobMenu", cronJob);
     }
 
+    private static void OpenHttpRouteMenu(IRenderedComponent<AksPage> cut, HttpRouteInfo httpRoute)
+    {
+        InvokePrivateMenuHelper(cut, "ShowHttpRouteMenu", httpRoute);
+    }
+
     private static void InvokePrivateMenuHelper<TItem>(IRenderedComponent<AksPage> cut, string methodName, TItem item)
     {
         var method = typeof(AksPage).GetMethod(methodName,
@@ -294,6 +351,8 @@ public sealed class AksPageBatchTests : TestContext
         private readonly Dictionary<string, List<JobInfo>> _baseJobsByNamespace;
         private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace;
         private readonly Dictionary<string, List<CronJobInfo>> _cronJobsByNamespace;
+        private readonly Dictionary<string, List<GatewayInfo>> _gatewaysByNamespace;
+        private readonly Dictionary<string, List<HttpRouteInfo>> _httpRoutesByNamespace;
         private readonly IReadOnlyList<string> _namespaces;
         private readonly bool _cancelCronJobTrigger;
         private readonly bool _cancelJobRerun;
@@ -367,6 +426,84 @@ public sealed class AksPageBatchTests : TestContext
                 ]
             };
 
+            _gatewaysByNamespace = new Dictionary<string, List<GatewayInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new GatewayInfo
+                    {
+                        Name = "orders-edge",
+                        Namespace = "orders",
+                        GatewayClassName = "envoy-gateway",
+                        Status = "Programmed",
+                        AttachedRoutes = 1,
+                        Addresses = ["20.10.0.10"],
+                        Listeners =
+                        [
+                            new GatewayListenerInfo
+                            {
+                                Name = "https",
+                                Port = 443,
+                                Protocol = "HTTPS",
+                                Hostname = "orders.example.com",
+                                AttachedRoutes = 1
+                            }
+                        ]
+                    }
+                ],
+                ["payments"] =
+                [
+                    new GatewayInfo
+                    {
+                        Name = "payments-edge",
+                        Namespace = "payments",
+                        GatewayClassName = "envoy-gateway",
+                        Status = "Accepted",
+                        AttachedRoutes = 1,
+                        Addresses = ["20.10.0.11"],
+                        Listeners =
+                        [
+                            new GatewayListenerInfo
+                            {
+                                Name = "https",
+                                Port = 443,
+                                Protocol = "HTTPS",
+                                Hostname = "payments.example.com",
+                                AttachedRoutes = 1
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            _httpRoutesByNamespace = new Dictionary<string, List<HttpRouteInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new HttpRouteInfo
+                    {
+                        Name = "orders-api-route",
+                        Namespace = "orders",
+                        Status = "Accepted",
+                        Hostnames = ["orders.example.com"],
+                        ParentRefs = ["orders-edge#https"],
+                        BackendRefs = ["order-api:80"]
+                    }
+                ],
+                ["payments"] =
+                [
+                    new HttpRouteInfo
+                    {
+                        Name = "payments-api-route",
+                        Namespace = "payments",
+                        Status = "Accepted",
+                        Hostnames = ["payments.example.com"],
+                        ParentRefs = ["payments-edge#https"],
+                        BackendRefs = ["payment-gateway:80"]
+                    }
+                ]
+            };
+
             if (includeDefaultNamespaceBatchData)
             {
                 _baseJobsByNamespace["default"] =
@@ -396,12 +533,51 @@ public sealed class AksPageBatchTests : TestContext
                         LastSuccessfulTime = DateTimeOffset.UtcNow.AddMinutes(-10)
                     }
                 ];
+
+                _gatewaysByNamespace["default"] =
+                [
+                    new GatewayInfo
+                    {
+                        Name = "default-edge",
+                        Namespace = "default",
+                        GatewayClassName = "envoy-gateway",
+                        Status = "Programmed",
+                        AttachedRoutes = 1,
+                        Addresses = ["20.10.0.12"],
+                        Listeners =
+                        [
+                            new GatewayListenerInfo
+                            {
+                                Name = "https",
+                                Port = 443,
+                                Protocol = "HTTPS",
+                                Hostname = "default.example.com",
+                                AttachedRoutes = 1
+                            }
+                        ]
+                    }
+                ];
+
+                _httpRoutesByNamespace["default"] =
+                [
+                    new HttpRouteInfo
+                    {
+                        Name = "platform-route",
+                        Namespace = "default",
+                        Status = "Accepted",
+                        Hostnames = ["default.example.com"],
+                        ParentRefs = ["default-edge#https"],
+                        BackendRefs = ["platform-api:80"]
+                    }
+                ];
             }
 
             foreach (var ns in _namespaces)
             {
                 _baseJobsByNamespace.TryAdd(ns, []);
                 _cronJobsByNamespace.TryAdd(ns, []);
+                _gatewaysByNamespace.TryAdd(ns, []);
+                _httpRoutesByNamespace.TryAdd(ns, []);
             }
 
             _createdJobsByNamespace = _baseJobsByNamespace.Keys
@@ -420,6 +596,9 @@ public sealed class AksPageBatchTests : TestContext
 
         public CronJobInfo FindCronJob(string ns, string name)
             => _cronJobsByNamespace[ns].Single(job => job.Name == name);
+
+        public HttpRouteInfo FindHttpRoute(string ns, string name)
+            => _httpRoutesByNamespace[ns].Single(route => route.Name == name);
 
         public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<DeploymentInfo>>([]);
@@ -454,6 +633,12 @@ public sealed class AksPageBatchTests : TestContext
 
         public Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<IngressInfo>>([]);
+
+        public Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<GatewayInfo>>(_gatewaysByNamespace[ns].ToList());
+
+        public Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<HttpRouteInfo>>(_httpRoutesByNamespace[ns].ToList());
 
         public Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>([]);

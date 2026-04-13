@@ -1,0 +1,87 @@
+@* Renders the Gateway API Gateways FluentDataGrid. *@
+
+<div class="aks-gateway-grid-shell">
+    <FluentDataGrid Items="@FilteredItems" TGridItem="GatewayInfo"
+                    RowClass="@(gateway => HasSameIdentity(gateway, SelectedGateway) ? "selected-row" : "")"
+                    OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+        <TemplateColumn Title="Name" Width="230px"
+                        SortBy="@(GridSort<GatewayInfo>.ByAscending(gateway => gateway.Name))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-resource-name">@context.Name</span>
+            </div>
+        </TemplateColumn>
+        @if (IsMultiNamespace)
+        {
+            <TemplateColumn Title="Namespace" Width="140px"
+                            SortBy="@(GridSort<GatewayInfo>.ByAscending(gateway => gateway.Namespace))">
+                <span class="aks-ns-cell"
+                      @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+            </TemplateColumn>
+        }
+        <TemplateColumn Title="Class" Width="180px"
+                        SortBy="@(GridSort<GatewayInfo>.ByAscending(gateway => gateway.GatewayClassName ?? ""))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                @context.GatewayClassName
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Listeners" Width="560px">
+            <div class="aks-row-ctx aks-gateway-listeners-cell"
+                 @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
+                @foreach (var listener in context.Listeners)
+                {
+                    <span class="aks-gateway-listener-chip" @key="listener.Name">
+                        <span class="aks-gateway-listener-name">@FormatListener(listener)</span>
+                        <span class="aks-gateway-listener-routes">@listener.AttachedRoutes route@(listener.AttachedRoutes ==
+                                                    1 ? "" : "s")</span>
+                        </span>
+                    }
+                </div>
+            </TemplateColumn>
+            <TemplateColumn Title="Address" Width="220px"
+                            SortBy="@(GridSort<GatewayInfo>.ByAscending(gateway => string.Join(",", gateway.Addresses)))">
+                <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                     @oncontextmenu:preventDefault>
+                    <span class="aks-gateway-address">@string.Join(", ", context.Addresses)</span>
+                </div>
+            </TemplateColumn>
+            <TemplateColumn Title="Status" Width="120px"
+                            SortBy="@(GridSort<GatewayInfo>.ByAscending(gateway => gateway.Status))">
+                <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                     @oncontextmenu:preventDefault>
+                    <span class="aks-status @GetStatusClass(context.Status)">@context.Status</span>
+                </div>
+            </TemplateColumn>
+        </FluentDataGrid>
+    </div>
+
+@code {
+    [Parameter] public IQueryable<GatewayInfo> FilteredItems { get; set; } = Enumerable.Empty<GatewayInfo>().AsQueryable();
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public GatewayInfo? SelectedGateway { get; set; }
+    [Parameter] public EventCallback<GatewayInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, GatewayInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static bool HasSameIdentity(GatewayInfo candidate, GatewayInfo? selected) =>
+        selected is not null
+        && string.Equals(candidate.Name, selected.Name, StringComparison.Ordinal)
+        && string.Equals(candidate.Namespace, selected.Namespace, StringComparison.Ordinal);
+
+    private static string FormatListener(GatewayListenerInfo listener)
+    {
+        var protocol = string.IsNullOrWhiteSpace(listener.Protocol) ? "TCP" : listener.Protocol;
+        return string.IsNullOrWhiteSpace(listener.Hostname)
+            ? $"{protocol} {listener.Port}"
+            : $"{protocol} {listener.Port} {listener.Hostname}";
+    }
+
+    private static string GetStatusClass(string status)
+        => status switch
+        {
+            "Programmed" or "Accepted" or "Addressed" => "running",
+            "Pending" => "pending",
+            _ => "error"
+        };
+}

@@ -11,8 +11,10 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using YamlDotNet.Serialization;
 
 namespace SwebKit.Kubernetes.AksClient;
 
@@ -20,6 +22,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 {
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
     private const int MaxGeneratedJobNamePrefixLength = 52;
+    private const string GatewayApiGroup = "gateway.networking.k8s.io";
+
+    private static readonly string[] GatewayApiVersions = ["v1", "v1beta1", "v1alpha2"];
 
     private static readonly HashSet<string> ControllerOwnedJobLabelKeys =
     [
@@ -313,6 +318,34 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         });
     }
 
+    public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await ListGatewayApiCustomObjectsAsync(ns, "gateways", ct);
+            if (result is null)
+                return [];
+
+            var json = JsonSerializer.Serialize(result);
+            using var doc = JsonDocument.Parse(json);
+            return MapGateways(doc.RootElement, ns);
+        });
+    }
+
+    public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await ListGatewayApiCustomObjectsAsync(ns, "httproutes", ct);
+            if (result is null)
+                return [];
+
+            var json = JsonSerializer.Serialize(result);
+            using var doc = JsonDocument.Parse(json);
+            return MapHttpRoutes(doc.RootElement, ns);
+        });
+    }
+
     public async Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
@@ -414,6 +447,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         if (kind.Equals("helm", StringComparison.OrdinalIgnoreCase))
             return await GetHelmManifestAsync(ns, name, ct);
 
+        if (kind.Equals("gateway", StringComparison.OrdinalIgnoreCase))
+        {
+            return await WithAuthRetryAsync(async () =>
+                SerializeCustomObjectYaml(await ReadGatewayApiCustomObjectAsync(ns, "gateways", name, ct)));
+        }
+
+        if (kind.Equals("httproute", StringComparison.OrdinalIgnoreCase))
+        {
+            return await WithAuthRetryAsync(async () =>
+                SerializeCustomObjectYaml(await ReadGatewayApiCustomObjectAsync(ns, "httproutes", name, ct)));
+        }
+
         return await WithAuthRetryAsync(async () =>
         {
             object resource = kind.ToLowerInvariant() switch
@@ -433,6 +478,532 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
             return KubernetesYaml.Serialize(resource);
         });
+    }
+
+    private async Task<object?> ListGatewayApiCustomObjectsAsync(string ns, string plural, CancellationToken ct)
+    {
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                return await _client.CustomObjects.ListNamespacedCustomObjectAsync(
+                    GatewayApiGroup,
+                    version,
+                    ns,
+                    plural,
+                    cancellationToken: ct);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<object> ReadGatewayApiCustomObjectAsync(string ns, string plural, string name, CancellationToken ct)
+    {
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                return await _client.CustomObjects.GetNamespacedCustomObjectAsync(
+                    GatewayApiGroup,
+                    version,
+                    ns,
+                    plural,
+                    name,
+                    cancellationToken: ct);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Gateway API resource '{plural}/{name}' is not available in namespace '{ns}'.");
+    }
+
+    private static List<GatewayInfo> MapGateways(JsonElement root, string fallbackNamespace)
+    {
+        if (!TryGetProperty(root, "items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var gateways = new List<GatewayInfo>();
+
+        foreach (var item in items.EnumerateArray())
+        {
+            var name = GetMetadataName(item);
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var listenerRouteCounts = GetGatewayListenerRouteCounts(item);
+            var listeners = GetGatewayListeners(item, listenerRouteCounts);
+            var addresses = GetGatewayAddresses(item);
+
+            gateways.Add(new GatewayInfo
+            {
+                Name = name,
+                Namespace = GetMetadataNamespace(item, fallbackNamespace),
+                GatewayClassName = TryGetProperty(item, "spec", out var spec)
+                    ? GetStringProperty(spec, "gatewayClassName")
+                    : null,
+                Status = GetGatewayStatus(item, addresses),
+                AttachedRoutes = listeners.Sum(listener => listener.AttachedRoutes),
+                Addresses = addresses,
+                Listeners = listeners,
+                Labels = GetMetadataLabels(item)
+            });
+        }
+
+        return gateways
+            .OrderBy(gateway => gateway.Namespace, StringComparer.Ordinal)
+            .ThenBy(gateway => gateway.Name, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static List<HttpRouteInfo> MapHttpRoutes(JsonElement root, string fallbackNamespace)
+    {
+        if (!TryGetProperty(root, "items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var routes = new List<HttpRouteInfo>();
+
+        foreach (var item in items.EnumerateArray())
+        {
+            var name = GetMetadataName(item);
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var routeNamespace = GetMetadataNamespace(item, fallbackNamespace);
+            routes.Add(new HttpRouteInfo
+            {
+                Name = name,
+                Namespace = routeNamespace,
+                Status = GetHttpRouteStatus(item),
+                Hostnames = GetHttpRouteHostnames(item),
+                ParentRefs = GetHttpRouteParentRefs(item, routeNamespace),
+                BackendRefs = GetHttpRouteBackendRefs(item, routeNamespace),
+                Labels = GetMetadataLabels(item)
+            });
+        }
+
+        return routes
+            .OrderBy(route => route.Namespace, StringComparer.Ordinal)
+            .ThenBy(route => route.Name, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static List<GatewayListenerInfo> GetGatewayListeners(
+        JsonElement item,
+        IReadOnlyDictionary<string, int> listenerRouteCounts)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "listeners", out var listeners)
+            || listeners.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var results = new List<GatewayListenerInfo>();
+        foreach (var listener in listeners.EnumerateArray())
+        {
+            var listenerName = GetStringProperty(listener, "name");
+            if (string.IsNullOrWhiteSpace(listenerName))
+                continue;
+
+            results.Add(new GatewayListenerInfo
+            {
+                Name = listenerName,
+                Port = GetIntProperty(listener, "port"),
+                Protocol = GetStringProperty(listener, "protocol"),
+                Hostname = GetStringProperty(listener, "hostname"),
+                AttachedRoutes = listenerRouteCounts.TryGetValue(listenerName, out var attachedRoutes)
+                    ? attachedRoutes
+                    : 0
+            });
+        }
+
+        return results;
+    }
+
+    private static Dictionary<string, int> GetGatewayListenerRouteCounts(JsonElement item)
+    {
+        var results = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "listeners", out var listeners)
+            || listeners.ValueKind != JsonValueKind.Array)
+        {
+            return results;
+        }
+
+        foreach (var listener in listeners.EnumerateArray())
+        {
+            var listenerName = GetStringProperty(listener, "name");
+            if (string.IsNullOrWhiteSpace(listenerName))
+                continue;
+
+            results[listenerName] = GetIntProperty(listener, "attachedRoutes");
+        }
+
+        return results;
+    }
+
+    private static List<string> GetGatewayAddresses(JsonElement item)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "addresses", out var addresses)
+            || addresses.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return addresses.EnumerateArray()
+            .Select(address => GetStringProperty(address, "value"))
+            .Where(address => !string.IsNullOrWhiteSpace(address))
+            .Select(address => address!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string GetGatewayStatus(JsonElement item, IReadOnlyList<string> addresses)
+    {
+        if (HasTopLevelCondition(item, "Programmed"))
+            return "Programmed";
+
+        if (HasTopLevelCondition(item, "Accepted"))
+            return "Accepted";
+
+        if (TryGetFirstTopLevelFailingCondition(item, out var failingCondition))
+            return failingCondition;
+
+        return addresses.Count > 0 ? "Addressed" : "Pending";
+    }
+
+    private static List<string> GetHttpRouteHostnames(JsonElement item)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "hostnames", out var hostnames)
+            || hostnames.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return hostnames.EnumerateArray()
+            .Where(hostname => hostname.ValueKind == JsonValueKind.String)
+            .Select(hostname => hostname.GetString())
+            .Where(hostname => !string.IsNullOrWhiteSpace(hostname))
+            .Select(hostname => hostname!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<string> GetHttpRouteParentRefs(JsonElement item, string routeNamespace)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "parentRefs", out var parents)
+            || parents.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return parents.EnumerateArray()
+            .Select(parent => FormatParentRef(parent, routeNamespace))
+            .Where(parent => !string.IsNullOrWhiteSpace(parent))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string FormatParentRef(JsonElement parent, string routeNamespace)
+    {
+        var name = GetStringProperty(parent, "name");
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var kind = GetStringProperty(parent, "kind");
+        var parentNamespace = GetStringProperty(parent, "namespace");
+        var sectionName = GetStringProperty(parent, "sectionName");
+
+        var prefix = !string.IsNullOrWhiteSpace(kind) && !string.Equals(kind, "Gateway", StringComparison.OrdinalIgnoreCase)
+            ? $"{kind}/"
+            : string.Empty;
+        var namespacePrefix = !string.IsNullOrWhiteSpace(parentNamespace)
+            && !string.Equals(parentNamespace, routeNamespace, StringComparison.Ordinal)
+            ? $"{parentNamespace}/"
+            : string.Empty;
+
+        return $"{prefix}{namespacePrefix}{name}{(string.IsNullOrWhiteSpace(sectionName) ? string.Empty : $"#{sectionName}")}";
+    }
+
+    private static List<string> GetHttpRouteBackendRefs(JsonElement item, string routeNamespace)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "rules", out var rules)
+            || rules.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var backends = new List<string>();
+
+        foreach (var rule in rules.EnumerateArray())
+        {
+            if (!TryGetProperty(rule, "backendRefs", out var backendRefs)
+                || backendRefs.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var backend in backendRefs.EnumerateArray())
+            {
+                var formatted = FormatBackendRef(backend, routeNamespace);
+                if (!string.IsNullOrWhiteSpace(formatted))
+                    backends.Add(formatted);
+            }
+        }
+
+        return backends.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static string FormatBackendRef(JsonElement backend, string routeNamespace)
+    {
+        var name = GetStringProperty(backend, "name");
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var kind = GetStringProperty(backend, "kind");
+        var backendNamespace = GetStringProperty(backend, "namespace");
+        var port = TryGetIntProperty(backend, "port");
+
+        var prefix = !string.IsNullOrWhiteSpace(kind) && !string.Equals(kind, "Service", StringComparison.OrdinalIgnoreCase)
+            ? $"{kind}/"
+            : string.Empty;
+        var namespacePrefix = !string.IsNullOrWhiteSpace(backendNamespace)
+            && !string.Equals(backendNamespace, routeNamespace, StringComparison.Ordinal)
+            ? $"{backendNamespace}/"
+            : string.Empty;
+
+        return $"{prefix}{namespacePrefix}{name}{(port.HasValue ? $":{port.Value}" : string.Empty)}";
+    }
+
+    private static string GetHttpRouteStatus(JsonElement item)
+    {
+        if (HasParentCondition(item, "Accepted"))
+            return "Accepted";
+
+        if (HasParentCondition(item, "ResolvedRefs"))
+            return "ResolvedRefs";
+
+        if (TryGetFirstFailingParentCondition(item, out var failingCondition))
+            return failingCondition;
+
+        return "Pending";
+    }
+
+    private static bool HasTopLevelCondition(JsonElement item, string type)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "conditions", out var conditions)
+            || conditions.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        return conditions.EnumerateArray().Any(condition =>
+            string.Equals(GetStringProperty(condition, "type"), type, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(GetStringProperty(condition, "status"), "True", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryGetFirstTopLevelFailingCondition(JsonElement item, out string conditionType)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "conditions", out var conditions)
+            || conditions.ValueKind != JsonValueKind.Array)
+        {
+            conditionType = string.Empty;
+            return false;
+        }
+
+        foreach (var condition in conditions.EnumerateArray())
+        {
+            if (!string.Equals(GetStringProperty(condition, "status"), "True", StringComparison.OrdinalIgnoreCase))
+            {
+                conditionType = GetStringProperty(condition, "type") ?? "Pending";
+                return true;
+            }
+        }
+
+        conditionType = string.Empty;
+        return false;
+    }
+
+    private static bool HasParentCondition(JsonElement item, string type)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "parents", out var parents)
+            || parents.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var parent in parents.EnumerateArray())
+        {
+            if (!TryGetProperty(parent, "conditions", out var conditions)
+                || conditions.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            if (conditions.EnumerateArray().Any(condition =>
+                string.Equals(GetStringProperty(condition, "type"), type, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(GetStringProperty(condition, "status"), "True", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFirstFailingParentCondition(JsonElement item, out string conditionType)
+    {
+        if (!TryGetProperty(item, "status", out var status)
+            || !TryGetProperty(status, "parents", out var parents)
+            || parents.ValueKind != JsonValueKind.Array)
+        {
+            conditionType = string.Empty;
+            return false;
+        }
+
+        foreach (var parent in parents.EnumerateArray())
+        {
+            if (!TryGetProperty(parent, "conditions", out var conditions)
+                || conditions.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var condition in conditions.EnumerateArray())
+            {
+                if (!string.Equals(GetStringProperty(condition, "status"), "True", StringComparison.OrdinalIgnoreCase))
+                {
+                    conditionType = GetStringProperty(condition, "type") ?? "Pending";
+                    return true;
+                }
+            }
+        }
+
+        conditionType = string.Empty;
+        return false;
+    }
+
+    private static string SerializeCustomObjectYaml(object resource)
+    {
+        var json = JsonSerializer.Serialize(resource);
+        using var document = JsonDocument.Parse(json);
+        var serializer = new SerializerBuilder().Build();
+        return serializer.Serialize(ConvertJsonElement(document.RootElement));
+    }
+
+    private static object? ConvertJsonElement(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => element.EnumerateObject()
+                .ToDictionary(property => property.Name, property => ConvertJsonElement(property.Value), StringComparer.Ordinal),
+            JsonValueKind.Array => element.EnumerateArray().Select(ConvertJsonElement).ToList(),
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.TryGetInt64(out var longValue)
+                ? longValue
+                : element.TryGetDouble(out var doubleValue)
+                    ? doubleValue
+                    : element.GetDecimal(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => element.ToString()
+        };
+    }
+
+    private static bool TryGetProperty(JsonElement parent, string propertyName, out JsonElement value)
+    {
+        if (parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(propertyName, out value))
+            return true;
+
+        value = default;
+        return false;
+    }
+
+    private static string? GetStringProperty(JsonElement parent, string propertyName)
+    {
+        if (!TryGetProperty(parent, propertyName, out var value))
+            return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.ToString(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            _ => null
+        };
+    }
+
+    private static int GetIntProperty(JsonElement parent, string propertyName)
+        => TryGetIntProperty(parent, propertyName) ?? 0;
+
+    private static int? TryGetIntProperty(JsonElement parent, string propertyName)
+    {
+        if (!TryGetProperty(parent, propertyName, out var value))
+            return null;
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var intValue))
+            return intValue;
+
+        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out intValue))
+            return intValue;
+
+        return null;
+    }
+
+    private static string GetMetadataNamespace(JsonElement item, string fallbackNamespace)
+    {
+        if (TryGetProperty(item, "metadata", out var metadata))
+        {
+            var itemNamespace = GetStringProperty(metadata, "namespace");
+            if (!string.IsNullOrWhiteSpace(itemNamespace))
+                return itemNamespace;
+        }
+
+        return fallbackNamespace;
+    }
+
+    private static string? GetMetadataName(JsonElement item)
+    {
+        if (!TryGetProperty(item, "metadata", out var metadata))
+            return null;
+
+        return GetStringProperty(metadata, "name");
+    }
+
+    private static Dictionary<string, string> GetMetadataLabels(JsonElement item)
+    {
+        if (!TryGetProperty(item, "metadata", out var metadata)
+            || !TryGetProperty(metadata, "labels", out var labels)
+            || labels.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var property in labels.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+                result[property.Name] = property.Value.GetString() ?? string.Empty;
+        }
+
+        return result;
     }
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
