@@ -318,6 +318,20 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         });
     }
 
+    public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            var result = await ListClusterGatewayApiCustomObjectsAsync("gatewayclasses", ct);
+            if (result is null)
+                return [];
+
+            var json = JsonSerializer.Serialize(result);
+            using var doc = JsonDocument.Parse(json);
+            return MapGatewayClasses(doc.RootElement);
+        });
+    }
+
     public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
@@ -453,6 +467,12 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 SerializeCustomObjectYaml(await ReadGatewayApiCustomObjectAsync(ns, "gateways", name, ct)));
         }
 
+        if (kind.Equals("gatewayclass", StringComparison.OrdinalIgnoreCase))
+        {
+            return await WithAuthRetryAsync(async () =>
+                SerializeCustomObjectYaml(await ReadClusterGatewayApiCustomObjectAsync("gatewayclasses", name, ct)));
+        }
+
         if (kind.Equals("httproute", StringComparison.OrdinalIgnoreCase))
         {
             return await WithAuthRetryAsync(async () =>
@@ -501,6 +521,26 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         return null;
     }
 
+    private async Task<object?> ListClusterGatewayApiCustomObjectsAsync(string plural, CancellationToken ct)
+    {
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                return await _client.CustomObjects.ListClusterCustomObjectAsync(
+                    GatewayApiGroup,
+                    version,
+                    plural,
+                    cancellationToken: ct);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        return null;
+    }
+
     private async Task<object> ReadGatewayApiCustomObjectAsync(string ns, string plural, string name, CancellationToken ct)
     {
         foreach (var version in GatewayApiVersions)
@@ -522,6 +562,65 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
         throw new InvalidOperationException(
             $"Gateway API resource '{plural}/{name}' is not available in namespace '{ns}'.");
+    }
+
+    private async Task<object> ReadClusterGatewayApiCustomObjectAsync(string plural, string name, CancellationToken ct)
+    {
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                return await _client.CustomObjects.GetClusterCustomObjectAsync(
+                    GatewayApiGroup,
+                    version,
+                    plural,
+                    name,
+                    cancellationToken: ct);
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Gateway API resource '{plural}/{name}' is not available at cluster scope.");
+    }
+
+    private static List<GatewayClassInfo> MapGatewayClasses(JsonElement root)
+    {
+        if (!TryGetProperty(root, "items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var gatewayClasses = new List<GatewayClassInfo>();
+
+        foreach (var item in items.EnumerateArray())
+        {
+            var name = GetMetadataName(item);
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            gatewayClasses.Add(new GatewayClassInfo
+            {
+                Name = name,
+                ControllerName = TryGetProperty(item, "spec", out var spec)
+                    ? GetStringProperty(spec, "controllerName")
+                    : null,
+                Status = GetGatewayClassStatus(item),
+                Description = TryGetProperty(item, "spec", out spec)
+                    ? GetStringProperty(spec, "description")
+                    : null,
+                ParametersReference = GetGatewayClassParametersReference(item),
+                IsDefault = string.Equals(
+                    GetMetadataAnnotationValue(item, "gateway.networking.k8s.io/default-gatewayclass"),
+                    bool.TrueString,
+                    StringComparison.OrdinalIgnoreCase),
+                Labels = GetMetadataLabels(item)
+            });
+        }
+
+        return gatewayClasses
+            .OrderBy(gatewayClass => gatewayClass.Name, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static List<GatewayInfo> MapGateways(JsonElement root, string fallbackNamespace)
@@ -926,6 +1025,48 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         };
     }
 
+
+    private static string GetGatewayClassStatus(JsonElement item)
+    {
+        if (HasTopLevelCondition(item, "Accepted"))
+            return "Accepted";
+
+        if (HasTopLevelCondition(item, "SupportedVersion"))
+            return "SupportedVersion";
+
+        if (TryGetFirstTopLevelFailingCondition(item, out var failingCondition))
+            return failingCondition;
+
+        return "Pending";
+    }
+
+    private static string? GetGatewayClassParametersReference(JsonElement item)
+    {
+        if (!TryGetProperty(item, "spec", out var spec)
+            || !TryGetProperty(spec, "parametersRef", out var parametersRef)
+            || parametersRef.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var name = GetStringProperty(parametersRef, "name");
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var kind = GetStringProperty(parametersRef, "kind");
+        var group = GetStringProperty(parametersRef, "group");
+        var ns = GetStringProperty(parametersRef, "namespace");
+        var typePrefix = string.IsNullOrWhiteSpace(kind)
+            ? group
+            : string.IsNullOrWhiteSpace(group)
+                ? kind
+                : $"{group}/{kind}";
+        var nameRef = string.IsNullOrWhiteSpace(ns) ? name : $"{ns}/{name}";
+
+        return string.IsNullOrWhiteSpace(typePrefix)
+            ? nameRef
+            : $"{typePrefix} {nameRef}";
+    }
     private static bool TryGetProperty(JsonElement parent, string propertyName, out JsonElement value)
     {
         if (parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(propertyName, out value))
@@ -1004,6 +1145,21 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
 
         return result;
+    }
+
+    private static string? GetMetadataAnnotationValue(JsonElement item, string annotationName)
+    {
+        if (!TryGetProperty(item, "metadata", out var metadata)
+            || !TryGetProperty(metadata, "annotations", out var annotations)
+            || annotations.ValueKind != JsonValueKind.Object
+            || !annotations.TryGetProperty(annotationName, out var annotationValue))
+        {
+            return null;
+        }
+
+        return annotationValue.ValueKind == JsonValueKind.String
+            ? annotationValue.GetString()
+            : annotationValue.ToString();
     }
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)

@@ -12,6 +12,8 @@ public interface IAksClient
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
     Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default);
     Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default);
+    Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<GatewayClassInfo>>([]);
     Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default);

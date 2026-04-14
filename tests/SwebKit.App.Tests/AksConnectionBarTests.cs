@@ -72,6 +72,7 @@ public class AksConnectionBarTests : TestContext
     {
         var cut = RenderComponent<AksConnectionBar>();
 
+        Assert.Contains(">GatewayClasses<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">Gateways<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">HTTPRoutes<", cut.Markup, StringComparison.Ordinal);
     }

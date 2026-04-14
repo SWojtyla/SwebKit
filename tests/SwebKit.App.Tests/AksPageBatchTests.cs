@@ -145,6 +145,23 @@ public sealed class AksPageBatchTests : TestContext
     }
 
     [Fact]
+    public void AksPage_GatewayClassesTab_BrowsesClusterScopedGatewayApiClasses()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "GatewayClasses");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("envoy-gateway", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("envoy-internal", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("gateway.envoyproxy.io/gatewayclass-controller", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Default", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void AksPage_HttpRoutesTab_BrowsesGatewayApiRoutesInAllNamespacesMode()
     {
         var client = new TrackingAksClient();
@@ -176,6 +193,23 @@ public sealed class AksPageBatchTests : TestContext
                 request => request.Namespace == "payments"
                     && request.Kind == "HTTPRoute"
                     && request.Name == "payments-api-route"));
+    }
+
+    [Fact]
+    public void AksPage_GatewayClassYaml_UsesClusterScopedResourceKind()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "GatewayClasses");
+        OpenGatewayClassMenu(cut, client.FindGatewayClass("envoy-gateway"));
+        ClickContextMenuButton(cut, "View YAML");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.YamlRequests,
+                request => string.IsNullOrEmpty(request.Namespace)
+                    && request.Kind == "GatewayClass"
+                    && request.Name == "envoy-gateway"));
     }
 
     [Fact]
@@ -316,6 +350,11 @@ public sealed class AksPageBatchTests : TestContext
         InvokePrivateMenuHelper(cut, "ShowHttpRouteMenu", httpRoute);
     }
 
+    private static void OpenGatewayClassMenu(IRenderedComponent<AksPage> cut, GatewayClassInfo gatewayClass)
+    {
+        InvokePrivateMenuHelper(cut, "ShowGatewayClassMenu", gatewayClass);
+    }
+
     private static void InvokePrivateMenuHelper<TItem>(IRenderedComponent<AksPage> cut, string methodName, TItem item)
     {
         var method = typeof(AksPage).GetMethod(methodName,
@@ -351,6 +390,7 @@ public sealed class AksPageBatchTests : TestContext
         private readonly Dictionary<string, List<JobInfo>> _baseJobsByNamespace;
         private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace;
         private readonly Dictionary<string, List<CronJobInfo>> _cronJobsByNamespace;
+        private readonly List<GatewayClassInfo> _gatewayClasses;
         private readonly Dictionary<string, List<GatewayInfo>> _gatewaysByNamespace;
         private readonly Dictionary<string, List<HttpRouteInfo>> _httpRoutesByNamespace;
         private readonly IReadOnlyList<string> _namespaces;
@@ -425,6 +465,27 @@ public sealed class AksPageBatchTests : TestContext
                     }
                 ]
             };
+
+            _gatewayClasses =
+            [
+                new GatewayClassInfo
+                {
+                    Name = "envoy-gateway",
+                    ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                    Status = "Accepted",
+                    Description = "Default Envoy Gateway class for internet-facing traffic.",
+                    ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-gateway-config",
+                    IsDefault = true
+                },
+                new GatewayClassInfo
+                {
+                    Name = "envoy-internal",
+                    ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                    Status = "Accepted",
+                    Description = "Internal Envoy Gateway class for private workloads.",
+                    ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-internal-config"
+                }
+            ];
 
             _gatewaysByNamespace = new Dictionary<string, List<GatewayInfo>>(StringComparer.Ordinal)
             {
@@ -597,6 +658,9 @@ public sealed class AksPageBatchTests : TestContext
         public CronJobInfo FindCronJob(string ns, string name)
             => _cronJobsByNamespace[ns].Single(job => job.Name == name);
 
+        public GatewayClassInfo FindGatewayClass(string name)
+            => _gatewayClasses.Single(gatewayClass => gatewayClass.Name == name);
+
         public HttpRouteInfo FindHttpRoute(string ns, string name)
             => _httpRoutesByNamespace[ns].Single(route => route.Name == name);
 
@@ -633,6 +697,9 @@ public sealed class AksPageBatchTests : TestContext
 
         public Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<IngressInfo>>([]);
+
+        public Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<GatewayClassInfo>>(_gatewayClasses.ToList());
 
         public Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<GatewayInfo>>(_gatewaysByNamespace[ns].ToList());

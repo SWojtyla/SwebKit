@@ -306,6 +306,39 @@ public class DemoAksClient : IAksClient
         };
     }
 
+    public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+        return new List<GatewayClassInfo>
+        {
+            new()
+            {
+                Name = "envoy-gateway",
+                ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                Status = "Accepted",
+                Description = "Default Envoy Gateway class for internet-facing traffic.",
+                ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-gateway-config",
+                IsDefault = true,
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/managed-by"] = "Helm"
+                }
+            },
+            new()
+            {
+                Name = "envoy-internal",
+                ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                Status = "Accepted",
+                Description = "Internal Envoy Gateway class for private workloads.",
+                ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-internal-config",
+                Labels = new Dictionary<string, string>
+                {
+                    ["tier"] = "internal"
+                }
+            }
+        };
+    }
+
     public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(180, ct);
@@ -609,6 +642,30 @@ public class DemoAksClient : IAksClient
                                         status: "True"
                                 """;
             return Task.FromResult(gatewayYaml);
+        }
+
+        if (kind.Equals("GatewayClass", StringComparison.OrdinalIgnoreCase))
+        {
+            var isInternal = name.Contains("internal", StringComparison.OrdinalIgnoreCase);
+            var gatewayClassYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: GatewayClass
+                                metadata:
+                                    name: {name}
+                                {(!isInternal ? "  annotations:\n    gateway.networking.k8s.io/default-gatewayclass: \"true\"\n" : string.Empty)}spec:
+                                    controllerName: gateway.envoyproxy.io/gatewayclass-controller
+                                    description: {(isInternal ? "Internal Envoy Gateway class for private workloads." : "Default Envoy Gateway class for internet-facing traffic.")}
+                                    parametersRef:
+                                        group: gateway.envoyproxy.io
+                                        kind: EnvoyProxy
+                                        namespace: infrastructure
+                                        name: {(isInternal ? "envoy-internal-config" : "envoy-gateway-config")}
+                                status:
+                                    conditions:
+                                    - type: Accepted
+                                        status: "True"
+                                """;
+            return Task.FromResult(gatewayClassYaml.ReplaceLineEndings("\n"));
         }
 
         if (kind.Equals("HTTPRoute", StringComparison.OrdinalIgnoreCase))

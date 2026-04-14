@@ -84,7 +84,7 @@
 
 @code {
     private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
-        "Ingresses", "Gateways", "HTTPRoutes", "Helm", "Jobs", "CronJobs"];
+        "Ingresses", "GatewayClasses", "Gateways", "HTTPRoutes", "Helm", "Jobs", "CronJobs"];
 
     [Parameter] public List<KubeContextInfo> Contexts { get; set; } = [];
     [Parameter] public string ActiveContext { get; set; } = "";

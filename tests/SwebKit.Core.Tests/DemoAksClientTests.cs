@@ -130,6 +130,20 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task GetGatewayClassesAsync_ReturnsClusterScopedGatewayClasses()
+    {
+        var gatewayClasses = await _client.GetGatewayClassesAsync();
+
+        Assert.NotEmpty(gatewayClasses);
+        Assert.Contains(gatewayClasses, gatewayClass => gatewayClass.IsDefault);
+        Assert.All(gatewayClasses, gatewayClass =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(gatewayClass.Name));
+            Assert.False(string.IsNullOrWhiteSpace(gatewayClass.ControllerName));
+        });
+    }
+
+    [Fact]
     public async Task GetNamespacesAsync_ReturnsKnownNamespaces()
     {
         var namespaces = await _client.GetNamespacesAsync();
@@ -245,6 +259,20 @@ public class DemoAksClientTests
         Assert.Contains("apiVersion: batch/v1", yaml);
         Assert.Contains("kind: Job", yaml);
         Assert.Contains($"name: {job.Name}", yaml);
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_GatewayClass_ReturnsClusterScopedGatewayApiYaml()
+    {
+        var gatewayClass = (await _client.GetGatewayClassesAsync()).First();
+
+        var yaml = await _client.GetResourceYamlAsync(string.Empty, "GatewayClass", gatewayClass.Name);
+        var normalizedYaml = yaml.ReplaceLineEndings("\n");
+
+        Assert.Contains("apiVersion: gateway.networking.k8s.io/v1", yaml);
+        Assert.Contains("kind: GatewayClass", yaml);
+        Assert.Contains($"name: {gatewayClass.Name}", yaml);
+        Assert.DoesNotContain($"metadata:\n  name: {gatewayClass.Name}\n  namespace:", normalizedYaml, StringComparison.Ordinal);
     }
 
     [Fact]

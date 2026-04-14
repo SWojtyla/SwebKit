@@ -224,6 +224,58 @@ users:
     }
 
     [Fact]
+    public void MapGatewayClasses_MapsGatewayApiCustomObjects()
+    {
+        const string json = """
+                        {
+                            "items": [
+                                {
+                                    "metadata": {
+                                        "name": "envoy-gateway",
+                                        "annotations": {
+                                            "gateway.networking.k8s.io/default-gatewayclass": "true"
+                                        }
+                                    },
+                                    "spec": {
+                                        "controllerName": "gateway.envoyproxy.io/gatewayclass-controller",
+                                        "description": "Default Envoy Gateway class.",
+                                        "parametersRef": {
+                                            "group": "gateway.envoyproxy.io",
+                                            "kind": "EnvoyProxy",
+                                            "namespace": "infrastructure",
+                                            "name": "envoy-gateway-config"
+                                        }
+                                    },
+                                    "status": {
+                                        "conditions": [
+                                            {
+                                                "type": "Accepted",
+                                                "status": "True"
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                        """;
+
+        using var doc = JsonDocument.Parse(json);
+        var method = typeof(KubernetesAksClient).GetMethod("MapGatewayClasses", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = Assert.IsAssignableFrom<IReadOnlyList<GatewayClassInfo>>(method!.Invoke(null, [doc.RootElement]));
+        var gatewayClass = Assert.Single(result);
+
+        Assert.Equal("envoy-gateway", gatewayClass.Name);
+        Assert.Equal("gateway.envoyproxy.io/gatewayclass-controller", gatewayClass.ControllerName);
+        Assert.Equal("Accepted", gatewayClass.Status);
+        Assert.Equal("Default Envoy Gateway class.", gatewayClass.Description);
+        Assert.Equal("gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-gateway-config", gatewayClass.ParametersReference);
+        Assert.True(gatewayClass.IsDefault);
+    }
+
+    [Fact]
     public void MapHttpRoutes_MapsGatewayApiCustomObjects()
     {
         const string json = """

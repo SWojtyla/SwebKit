@@ -100,6 +100,17 @@ public class IngressPath
     public int? ServicePort { get; set; }
 }
 
+public class GatewayClassInfo
+{
+    public required string Name { get; set; }
+    public string? ControllerName { get; set; }
+    public string Status { get; set; } = "Pending";
+    public string? Description { get; set; }
+    public string? ParametersReference { get; set; }
+    public bool IsDefault { get; set; }
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
 public class GatewayInfo
 {
     public required string Name { get; set; }
