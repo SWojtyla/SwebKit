@@ -40,6 +40,19 @@ public sealed class OperatorWorkspaceService
     public WorkspaceSnapshot? GetCurrentSnapshot(string area) =>
         _currentSnapshots.TryGetValue(area, out var snapshot) ? snapshot.Clone() : null;
 
+    public FavoriteResource? GetFavoriteResource(string resourceKey)
+    {
+        if (string.IsNullOrWhiteSpace(resourceKey))
+        {
+            return null;
+        }
+
+        var favorite = _appState.Config.FavoriteResources.FirstOrDefault(candidate =>
+            string.Equals(candidate.Snapshot.Resource.Key, resourceKey, StringComparison.OrdinalIgnoreCase));
+
+        return favorite?.Clone();
+    }
+
     public void ClearCurrentSnapshot(string area)
     {
         if (_currentSnapshots.Remove(area))
@@ -88,6 +101,22 @@ public sealed class OperatorWorkspaceService
             .ToList();
     }
 
+    public IReadOnlyList<FavoriteResource> SearchFavorites(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return GetFavoriteResources();
+        }
+
+        return _appState.Config.FavoriteResources
+            .Select(favorite => (Favorite: favorite, Score: SearchScoring.FuzzyScore(query, BuildSearchText(favorite))))
+            .Where(candidate => candidate.Score > 0)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => BuildFavoriteName(candidate.Favorite.Name, candidate.Favorite.Snapshot), StringComparer.OrdinalIgnoreCase)
+            .Select(candidate => candidate.Favorite.Clone())
+            .ToList();
+    }
+
     public IReadOnlyList<SavedWorkspace> SearchSavedWorkspaces(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -127,24 +156,66 @@ public sealed class OperatorWorkspaceService
     public async Task ToggleFavoriteAsync(WorkspaceSnapshot snapshot)
     {
         var normalized = NormalizeSnapshot(snapshot);
-        var existing = _appState.Config.FavoriteResources.FirstOrDefault(favorite =>
-            string.Equals(favorite.Snapshot.Resource.Key, normalized.Resource.Key, StringComparison.OrdinalIgnoreCase));
-
-        if (existing is not null)
+        if (IsFavorite(normalized.Resource.Key))
         {
-            _appState.Config.FavoriteResources.Remove(existing);
-            SyncLegacyServiceBusLink(normalized, shouldExist: false);
+            await RemoveFavoriteAsync(normalized.Resource.Key);
         }
         else
         {
+            await SaveFavoriteAsync(normalized);
+        }
+    }
+
+    public async Task SaveFavoriteAsync(WorkspaceSnapshot snapshot, string? name = null)
+    {
+        var normalized = NormalizeSnapshot(snapshot);
+        if (string.IsNullOrWhiteSpace(normalized.Resource.Key))
+        {
+            return;
+        }
+
+        var favoriteName = BuildFavoriteName(name, normalized);
+        var existing = _appState.Config.FavoriteResources.FirstOrDefault(favorite =>
+            string.Equals(favorite.Snapshot.Resource.Key, normalized.Resource.Key, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
             _appState.Config.FavoriteResources.Add(new FavoriteResource
             {
+                Name = favoriteName,
                 Snapshot = normalized.Clone(),
                 PinnedAt = DateTimeOffset.UtcNow,
             });
-            SyncLegacyServiceBusLink(normalized, shouldExist: true);
+        }
+        else
+        {
+            existing.Name = favoriteName;
+            existing.Snapshot = normalized.Clone();
+            existing.PinnedAt = DateTimeOffset.UtcNow;
         }
 
+        SyncLegacyServiceBusLink(normalized, shouldExist: true);
+        await _appState.SaveConfigAsync();
+        NotifyChanged();
+    }
+
+    public async Task RemoveFavoriteAsync(string resourceKey)
+    {
+        if (string.IsNullOrWhiteSpace(resourceKey))
+        {
+            return;
+        }
+
+        var existing = _appState.Config.FavoriteResources.FirstOrDefault(favorite =>
+            string.Equals(favorite.Snapshot.Resource.Key, resourceKey, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
+            return;
+        }
+
+        _appState.Config.FavoriteResources.Remove(existing);
+        SyncLegacyServiceBusLink(existing.Snapshot, shouldExist: false);
         await _appState.SaveConfigAsync();
         NotifyChanged();
     }
@@ -400,6 +471,12 @@ public sealed class OperatorWorkspaceService
         return string.Join(' ', parts.Where(static value => !string.IsNullOrWhiteSpace(value)));
     }
 
+    private static string BuildSearchText(FavoriteResource favorite) => string.Join(' ', new[]
+    {
+        favorite.Name,
+        BuildSearchText(favorite.Snapshot),
+    }.Where(static value => !string.IsNullOrWhiteSpace(value)));
+
     private static string BuildSearchText(SavedWorkspace workspace) => string.Join(' ', new[]
     {
         workspace.Name,
@@ -408,6 +485,14 @@ public sealed class OperatorWorkspaceService
         workspace.Snapshot.Resource.Summary ?? string.Empty,
         workspace.Snapshot.Resource.Area,
     }.Where(static value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string BuildFavoriteName(string? name, WorkspaceSnapshot snapshot)
+    {
+        var favoriteName = name?.Trim();
+        return string.IsNullOrWhiteSpace(favoriteName)
+            ? snapshot.Resource.DisplayPath ?? snapshot.Resource.DisplayName
+            : favoriteName;
+    }
 
     private void NotifyChanged() => Changed?.Invoke();
 }

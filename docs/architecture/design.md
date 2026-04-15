@@ -54,8 +54,9 @@ sequenceDiagram
 ### Design Notes
 
 - `MainLayout` uses two-phase startup: immediate shell render, then full state hydration.
-- `ProfileRepository.LoadAsync()` returns `ProfileLoadResult`; `AppStateService` keeps startup non-fatal but blocks profile persistence after a failed load so `profiles.json` is not overwritten.
+- `ProfileRepository.LoadAsync()` returns `ProfileLoadResult`; it first attempts the primary `profiles.json`, then recovers from a `.bak` copy when the primary file is missing or unreadable. `AppStateService` keeps startup non-fatal, only blocks persistence when both the primary file and backup fail to load, and surfaces a shell banner when recovery was needed.
 - `MainLayout` renders the shell even on profile-load failure and surfaces a non-fatal warning banner from `AppState.HasProfileLoadFailure`.
+- Profile, UI-state, and user-settings saves now write to a temp file, replace the primary file atomically, and refresh a sibling `.bak` file so rebuild/relaunch cycles do not depend on an in-place overwrite completing cleanly.
 - `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
 - Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
 
@@ -63,7 +64,7 @@ sequenceDiagram
 
 ### Intent
 
-Keep resource search, recent resources, favorites, and saved workspaces on one semantic model while letting routed pages own their restore details.
+Keep resource search, recent resources, and named favorites on one semantic model while letting routed pages own their restore details.
 
 ### High-Level Sequence
 
@@ -80,10 +81,10 @@ sequenceDiagram
     Page->>Workspace: PublishSnapshotAsync(snapshot, recordRecent?)
     Workspace->>UiState: Save recent resources when needed
     Workspace-->>Shell: Raise Changed event
-    User->>Shell: Favorite or save current workspace
-    Shell->>Workspace: ToggleFavoriteAsync / SaveCurrentWorkspaceAsync
+    User->>Shell: Save, rename, or remove current favorite
+    Shell->>Workspace: SaveFavoriteAsync / RemoveFavoriteAsync
     Workspace->>Profiles: Persist environment-scoped data via AppState
-    User->>Shell: Reopen recent/favorite/workspace/resource result
+    User->>Shell: Reopen recent/favorite/resource result
     Shell->>Workspace: OpenSnapshotAsync(...)
     Workspace->>Page: Invoke restore handler if already on target route
     Workspace->>Shell: Otherwise navigate to target area route
@@ -93,8 +94,8 @@ sequenceDiagram
 
 ### Design Notes
 
-- Durable favorites and saved workspaces live in `profiles.json`; recent resources stay in local `ui-state.json`.
-- `OperatorWorkspaceService` owns current snapshots, provider-backed search, favorites, recents, saved workspaces, and pending route-first restores.
+- Durable named favorites live in `profiles.json`; recent resources stay in local `ui-state.json`.
+- `OperatorWorkspaceService` owns current snapshots, provider-backed search, favorites, recents, and pending route-first restores.
 - Participating pages register one area restore handler and publish semantic snapshots only; they never serialize live component objects or service graphs.
 - Search providers are additive. New capability areas can contribute resource candidates without reopening one central palette branch.
 

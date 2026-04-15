@@ -43,6 +43,33 @@ public sealed class AppStateServiceProfileLoadTests
     }
 
     [Fact]
+    public async Task InitializeAsync_WithCorruptedProfilesJsonAndBackup_RecoversAndKeepsPersistenceEnabled()
+    {
+        using var appDataRoot = new TemporaryAppDataRoot();
+
+        var writer = CreateAppStateService();
+        writer.Config.Name = "RecoveredProfile";
+        Assert.True(await writer.SaveConfigAsync());
+
+        var profilePath = Path.Combine(appDataRoot.Root, "profiles.json");
+        var backupPath = $"{profilePath}.bak";
+        Assert.True(File.Exists(backupPath));
+
+        await File.WriteAllTextAsync(profilePath, "{ invalid json");
+
+        var reader = CreateAppStateService();
+        await reader.InitializeAsync();
+
+        Assert.True(reader.IsInitialized);
+        Assert.False(reader.HasProfileLoadFailure);
+        Assert.True(reader.HasProfileLoadRecovery);
+        Assert.False(reader.IsProfilePersistenceBlocked);
+        Assert.Equal(ProfileLoadStatus.Recovered, reader.ProfileLoadResult.Status);
+        Assert.Equal("RecoveredProfile", reader.Config.Name);
+        Assert.True(await reader.SaveConfigAsync());
+    }
+
+    [Fact]
     public async Task InitializeAsync_WithLegacyProfilesJson_MigratesToSingleConfigOnSave()
     {
         using var appDataRoot = new TemporaryAppDataRoot();

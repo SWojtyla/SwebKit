@@ -246,26 +246,17 @@ public sealed class AppUiTests : IClassFixture<AppFixture>, IAsyncLifetime
     [Fact]
     public async Task ThemePersistence_RestoresStoredThemeAcrossReloadAndReconnect()
     {
-        await _fixture.Page.EvaluateAsync(
-            """
-            () => {
-                localStorage.setItem('swebkit-ui-theme', 'light');
-            }
-            """);
+        await _fixture.SetThemeAsync("light-coral-studio");
 
         await _fixture.ReloadAsync();
 
         var appShell = _fixture.Page.Locator(".app-shell");
-        await Assertions.Expect(appShell).ToHaveAttributeAsync("data-theme", "light");
-
-        var storedTheme = await _fixture.Page.EvaluateAsync<string?>(
-            "() => localStorage.getItem('swebkit-ui-theme')");
-        Assert.Equal("light", storedTheme);
+        await Assertions.Expect(appShell).ToHaveAttributeAsync("data-theme", "light-coral-studio");
 
         await _fixture.ReconnectAsync();
 
         await Assertions.Expect(_fixture.Page.Locator(".app-shell"))
-            .ToHaveAttributeAsync("data-theme", "light");
+            .ToHaveAttributeAsync("data-theme", "light-coral-studio");
     }
 
     [Fact]

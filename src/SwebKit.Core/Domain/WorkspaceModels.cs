@@ -40,11 +40,13 @@ public class WorkspaceSnapshot
 
 public class FavoriteResource
 {
+    public string Name { get; set; } = string.Empty;
     public WorkspaceSnapshot Snapshot { get; set; } = new();
     public DateTimeOffset PinnedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public FavoriteResource Clone() => new()
     {
+        Name = Name,
         Snapshot = Snapshot.Clone(),
         PinnedAt = PinnedAt,
     };

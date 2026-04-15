@@ -11,7 +11,7 @@
 - Empty, partial, truncation, and all-sources-failed states that stay evidence-first and never imply root cause.
 - Cancellation-first request handling with last-request-wins versioning so rapid refreshes or scope edits do not flash stale evidence.
 - Mapping-backed workload suggestions with a free-text workload name field so AKS-only investigations remain possible even when non-AKS mappings are absent.
-- Shared workspace integration for context, namespace, workload kind/name, time window, and source toggles, allowing recent/favorite reopen and named workspace restore from shell surfaces.
+- Shared workspace integration for context, namespace, workload kind/name, time window, and source toggles, allowing recent/favorite reopen and named favorite restore from shell surfaces.
 
 ## Core Runtime Flow
 

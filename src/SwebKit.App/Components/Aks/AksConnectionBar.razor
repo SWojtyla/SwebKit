@@ -62,7 +62,8 @@
             @(ActivePortForwardCount > 0 ? $" {ActivePortForwardCount} pf" : " Sessions")
         </button>
 
-        <AutoRefreshToggle OnRefresh="OnRefresh" Paused="@AutoRefreshPaused" />
+        <AutoRefreshToggle OnRefresh="OnRefresh" Paused="@AutoRefreshPaused" InitialInterval="10"
+                   InitialEnabled="true" />
 
         <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="OnRefresh" Title="Refresh (F5)">
             @(IsLoading ? "Loading…" : "↻ Refresh")

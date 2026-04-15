@@ -14,7 +14,7 @@
 - Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
 - Copy blob direct URL to clipboard (no SAS expiry).
 - Copy SAS URL with 24-hour expiry generated client-side via the SDK.
-- Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named workspaces can reopen Storage context.
+- Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named favorites can reopen Storage context.
 - Storage config form in Settings page (Account Name, Use AAD, Connection String Ref, Test Connection).
 
 ## Core Runtime Flow

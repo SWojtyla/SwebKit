@@ -91,6 +91,8 @@ Used by `PipelineDetail.razor` to drive the environments table.
 | `DeploymentSnapshot`        | `releases.json` in AppData | Audit trail of deployments                 |
 | `PipelineEnvironmentStatus` | In-memory only             | Latest stage status per env for a pipeline |
 
+`releases.json` now uses the same atomic temp-file replace and sibling `.bak` recovery path as the rest of the app-data layer, so a partial write or crash no longer drops release groupings and deployment snapshots on the next launch.
+
 ## Key implementation notes
 
 - `DevOpsReleaseTimelineSignalSource` is the incident cockpit backend adapter for Azure DevOps. It reads explicit pipeline bindings from `AppConfig.IncidentTimeline.WorkloadMappings`, reuses local `ReleaseRepository` data, and optionally augments it with live pipeline runs from `IDevOpsClientFactory`. Missing live DevOps config degrades only that source when local release evidence is still available.

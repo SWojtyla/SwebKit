@@ -37,7 +37,7 @@
 - YAML viewer includes inline search (highlight + scroll to match).
 - Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
 - CronJob rows show schedule, active count, last schedule time, last success time, and suspended state badge.
-- Publish current AKS context, namespace, resource type, filter state, and selected resource into the shared shell workspace model so favorites, recents, and saved workspaces can reopen AKS context.
+- Publish current AKS context, namespace, resource type, filter state, and selected resource into the shared shell workspace model so favorites, recents, and named favorites can reopen AKS context.
 - Windows tray continuity for monitoring — Minimize and Close hide the app to tray, monitoring continues in the existing `PodHealthMonitorService`, and hidden pod alerts increment tray unread state.
 
 ## Core Runtime Flow
@@ -49,7 +49,7 @@
 5. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
 6. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
 7. Long-running and side-panel operations keep the main grid responsive.
-8. Auto-refresh pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
+8. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
 9. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes

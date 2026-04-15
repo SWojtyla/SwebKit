@@ -18,12 +18,12 @@ public class ScheduledMessageRepository
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        if (!File.Exists(AppDataPaths.ScheduledMessagesJson)) return;
+        if (!AppDataFileStore.Exists(AppDataPaths.ScheduledMessagesJson)) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.ScheduledMessagesJson);
-            _entries = JsonSerializer.Deserialize<List<ScheduledMessageEntry>>(json, Options) ?? [];
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ScheduledMessagesJson, DeserializeEntries);
+            _entries = loadResult.Value;
         }
         catch
         {
@@ -35,7 +35,7 @@ public class ScheduledMessageRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_entries, Options);
-        await File.WriteAllTextAsync(AppDataPaths.ScheduledMessagesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ScheduledMessagesJson, json);
     }
 
     public async Task AddAsync(ScheduledMessageEntry entry)
@@ -56,4 +56,7 @@ public class ScheduledMessageRepository
     public IReadOnlyList<ScheduledMessageEntry> GetByEntity(Guid namespaceId, string entityPath) =>
         _entries.Where(e => e.NamespaceId == namespaceId &&
                             string.Equals(e.EntityPath, entityPath, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private static List<ScheduledMessageEntry> DeserializeEntries(string json) =>
+        JsonSerializer.Deserialize<List<ScheduledMessageEntry>>(json, Options) ?? [];
 }

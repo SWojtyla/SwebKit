@@ -10,6 +10,7 @@ using SwebKit.App.Components.Shared;
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
@@ -146,6 +147,47 @@ public sealed class ShellFoundationTests : TestContext
         Assert.Contains("Signals", cut.Markup);
         Assert.Contains("Observability", cut.Markup);
         Assert.Contains("Needs setup", cut.Markup);
+    }
+
+    [Fact]
+    public void TopBar_WorkspaceHub_ShowsNamedFavoritesOnly()
+    {
+        var appState = Services.GetRequiredService<AppStateService>();
+        appState.Config.FavoriteResources.Add(new FavoriteResource
+        {
+            Name = "Prod API",
+            Snapshot = new WorkspaceSnapshot
+            {
+                Resource = new OperatorResourceReference
+                {
+                    Key = "aks:deployment:ops:api",
+                    Area = "aks",
+                    Kind = "deployment",
+                    DisplayName = "api",
+                    DisplayPath = "ops/api",
+                    Summary = "ops",
+                    Icon = "☁",
+                },
+                RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["resourceType"] = "Deployments",
+                    ["namespace"] = "ops",
+                },
+            },
+            PinnedAt = DateTimeOffset.UtcNow,
+        });
+
+        var cut = RenderComponent<TopBar>(parameters => parameters
+            .Add(p => p.CurrentContext, ShellNavigation.CreateContext(ShellNavigation.Aks, false, false)));
+
+        cut.Find("button[aria-label='Resources and favorites']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Prod API", cut.Markup);
+            Assert.Contains("Favorites", cut.Markup);
+            Assert.DoesNotContain("<div class=\"workspace-hub__section-title\">Workspaces</div>", cut.Markup, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

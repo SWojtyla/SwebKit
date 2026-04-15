@@ -8,26 +8,27 @@ Update this file when project/folder structure changes, entry points move, or na
 
 ## Entry Points by Task Type
 
-| Task                                                                  | Starting file                                                                                                                                                                  |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| App startup and dependency registration                               | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
-| Incident timeline frontend route and workbench                        | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor` and `src/SwebKit.App/Components/IncidentTimeline/`                                                               |
-| Incident timeline backend contracts and aggregation                   | `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` and `src/SwebKit.Core/Services/IncidentTimelineService.cs`                                                         |
-| MAUI lifecycle and shutdown hooks                                     | `src/SwebKit.App/App.xaml.cs`                                                                                                                                                  |
-| Blazor shell and global layout behavior                               | `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                                                                                           |
-| Route wiring and page entry URLs                                      | `src/SwebKit.App/Components/Routes.razor`                                                                                                                                      |
-| Shell-level resource search, favorites, recents, or workspace restore | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Components/Shared/CommandPalette.razor`, and `src/SwebKit.Core/Domain/WorkspaceModels.cs`             |
-| Sidebar navigation area mapping                                       | `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                                                              |
-| Profile/config persistence                                            | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                                          |
-| UI state persistence (tabs, filters, preferences)                     | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                                          |
-| Secret storage and retrieval                                          | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                  |
-| Service Bus behavior or queue/DLQ operations                          | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
-| AKS operations (logs, YAML, port-forward, shell)                      | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
-| Redis operations and key-level actions                                | `src/SwebKit.Core/Abstractions/IRedisClient.cs` and `src/SwebKit.Redis/RedisClient.cs`                                                                                         |
-| Blob Storage operations                                               | `src/SwebKit.Core/Abstractions/IStorageClient.cs` and `src/SwebKit.Azure/Storage/AzureStorageClient.cs`                                                                        |
-| Azure DevOps pipelines/releases/approvals integration                 | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |
-| Observability queries and App Insights discovery                      | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
-| Global commands and keyboard shortcuts                                | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                            |
+| Task                                                                       | Starting file                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| App startup and dependency registration                                    | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
+| Incident timeline frontend route and workbench                             | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor` and `src/SwebKit.App/Components/IncidentTimeline/`                                                               |
+| Incident timeline backend contracts and aggregation                        | `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` and `src/SwebKit.Core/Services/IncidentTimelineService.cs`                                                         |
+| MAUI lifecycle and shutdown hooks                                          | `src/SwebKit.App/App.xaml.cs`                                                                                                                                                  |
+| Blazor shell and global layout behavior                                    | `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                                                                                           |
+| Route wiring and page entry URLs                                           | `src/SwebKit.App/Components/Routes.razor`                                                                                                                                      |
+| Shell-level resource search, named favorites, recents, or snapshot restore | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Components/Shared/CommandPalette.razor`, and `src/SwebKit.Core/Domain/WorkspaceModels.cs`             |
+| Sidebar navigation area mapping                                            | `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                                                              |
+| Profile/config persistence                                                 | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                                          |
+| UI state persistence (tabs, filters, preferences)                          | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                                          |
+| Shell appearance persistence                                               | `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`                                                                                                                     |
+| Secret storage and retrieval                                               | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                  |
+| Service Bus behavior or queue/DLQ operations                               | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
+| AKS operations (logs, YAML, port-forward, shell)                           | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
+| Redis operations and key-level actions                                     | `src/SwebKit.Core/Abstractions/IRedisClient.cs` and `src/SwebKit.Redis/RedisClient.cs`                                                                                         |
+| Blob Storage operations                                                    | `src/SwebKit.Core/Abstractions/IStorageClient.cs` and `src/SwebKit.Azure/Storage/AzureStorageClient.cs`                                                                        |
+| Azure DevOps pipelines/releases/approvals integration                      | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |
+| Observability queries and App Insights discovery                           | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
+| Global commands and keyboard shortcuts                                     | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                            |
 
 ## Key Folders and Responsibilities
 
@@ -47,7 +48,7 @@ src/
 │   │   ├── Observability/        # Overview/failures/performance/logs/availability tabs
 │   │   ├── Notifications/        # Notification toast and history components
 │   │   └── Shared/               # Shared primitives and base components
-│   ├── Services/                 # App-layer orchestration services (commands, tabs, notifications, workspaces)
+│   ├── Services/                 # App-layer orchestration services (commands, tabs, notifications, named favorites)
 │   ├── Platforms/Windows/        # Windows-specific implementations (credential store, notifications)
 │   └── wwwroot/js/               # JS interop for keyboard, YAML highlighting, splitters, and UI helpers
 │
@@ -107,7 +108,8 @@ tests/
 | Event bus                              | `src/SwebKit.Core/Services/AppEventBus.cs`                                                                                                                          |
 | Profile persistence (`profiles.json`)  | `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                                                               |
 | UI state persistence (`ui-state.json`) | `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                                                               |
-| Workspace/favorites/recent restore     | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Services/OperatorResourceSearchProviders.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs` |
+| User settings (`user-settings.json`)   | `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`                                                                                                          |
+| Named favorites/recent restore         | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Services/OperatorResourceSearchProviders.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs` |
 | Release persistence (`releases.json`)  | `src/SwebKit.Core/Configuration/ReleaseRepository.cs`                                                                                                               |
 | Credential storage                     | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                       |
 | Background queueing                    | `src/SwebKit.Core/Services/TaskQueueService.cs`                                                                                                                     |

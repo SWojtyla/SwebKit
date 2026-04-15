@@ -40,7 +40,7 @@
 6. `MessageComposer` can save templates to profile-backed app state and apply templates selected from `TemplatePicker` before send/replay/schedule actions.
 7. `TemplatePicker` supports in-dialog search and inline validation for invalid template rename/edit inputs, then persists template mutations through `AppStateService`.
 8. Destructive mutations are gated by `ConfirmDialog`, and post-mutation refresh is handled via list reload plus refresh-token wiring for DLQ flows.
-9. `ServiceBusPage` publishes semantic workspace snapshots for the active tab and tab set; shell-level recent/favorite/workspace reopen flows navigate first and then rehydrate the page state.
+9. `ServiceBusPage` publishes semantic workspace snapshots for the active tab and tab set; shell-level recent/favorite reopen flows navigate first and then rehydrate the page state.
 
 ## Main Code Locations
 
@@ -86,9 +86,10 @@
 - Favorite and unfavorite changes update immediately in the entity list, and the dashboard pinned panel plus shell workspace surfaces reflect the same canonical Service Bus resource list.
 - `ServiceBusPage` keeps legacy `ServiceBusEntityLinks` synchronized for compatibility, but the canonical shell-level contract is now `FavoriteResources` plus page-owned semantic restore state.
 - Message list row density and column profiles are persisted in `UiStateRepository` per `{namespaceId}:{entityPath}:{mode}` scope and can be reset to defaults from the column chooser.
-- Namespace pane collapsed/expanded state remains persisted in local storage.
-- Named workspaces and recent-resource reopen flows restore route-first, then rebuild tabs from semantic tab-state payloads after the namespace reconnect fan-out completes.
+- Namespace pane collapsed/expanded state is now persisted in `UiStateRepository`, so it survives the same atomic app-data save and backup recovery path as the rest of the local UI state.
+- Named favorites and recent-resource reopen flows restore route-first, then rebuild tabs from semantic tab-state payloads after the namespace reconnect fan-out completes.
 - Demo namespaces and cached reconnect semantics are composed through `IServiceBusNamespaceBootstrapper`; `ServiceBusPage` preserves the visible namespace list and per-row progress while the background reconnect fan-out runs.
+- Local scheduled-message metadata now persists through the same atomic write and `.bak` recovery path used by the other app-data repositories, so a partial write does not wipe the scheduled-message history list.
 - Service Bus settings remain reachable from shell navigation and unconfigured-state CTAs; the main route header no longer reserves space for a one-off Settings button.
 
 ## Validation Pointers

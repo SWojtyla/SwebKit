@@ -69,6 +69,21 @@ public sealed class ServiceBusPageTests : TestContext
     }
 
     [Fact]
+    public async Task NamespacePanelToggle_RestoresPersistedCollapsedState()
+    {
+        var uiState = Services.GetRequiredService<UiStateRepository>();
+        await uiState.SaveViewStateAsync("service-bus:namespace-pane-collapsed", true);
+
+        var cut = RenderComponent<ServiceBusPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
+            Assert.Contains("collapsed", cut.Find(".sb-entity-panel").ClassName, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void RouteHeader_DoesNotRenderServiceBusSettingsActionButton()
     {
         var cut = RenderComponent<ServiceBusPage>();

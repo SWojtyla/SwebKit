@@ -23,9 +23,9 @@ public class ProfileRepository
     public async Task<ProfileLoadResult> LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        var filePath = File.Exists(AppDataPaths.ProfilesJson)
+        var filePath = AppDataFileStore.Exists(AppDataPaths.ProfilesJson)
             ? AppDataPaths.ProfilesJson
-            : (File.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
+            : (AppDataFileStore.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
 
         if (filePath is null)
         {
@@ -35,9 +35,11 @@ public class ProfileRepository
 
         try
         {
-            var json = await File.ReadAllTextAsync(filePath);
-            _data = DeserializeProfileData(json);
-            _lastLoadResult = ProfileLoadResult.Loaded(filePath);
+            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeProfileData);
+            _data = loadResult.Value;
+            _lastLoadResult = loadResult.WasRecovered
+                ? ProfileLoadResult.Recovered(filePath, loadResult.SourcePath, loadResult.PrimaryErrorMessage)
+                : ProfileLoadResult.Loaded(filePath);
         }
         catch (Exception ex)
         {
@@ -56,7 +58,7 @@ public class ProfileRepository
 
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_data, Options);
-        await File.WriteAllTextAsync(AppDataPaths.ProfilesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json);
         return true;
     }
 
@@ -153,17 +155,21 @@ public class ProfileRepository
             MigrateLegacyFavorites(config, namespaces);
         }
 
+        if (config.SavedWorkspaces.Count > 0)
+        {
+            MigrateSavedWorkspacesToFavorites(config);
+            config.SavedWorkspaces.Clear();
+        }
+
         foreach (var favorite in config.FavoriteResources)
         {
+            favorite.Name = favorite.Name?.Trim() ?? string.Empty;
             NormalizeSnapshot(favorite.Snapshot);
         }
 
-        foreach (var workspace in config.SavedWorkspaces)
-        {
-            workspace.Name ??= string.Empty;
-            workspace.SchemaVersion = Math.Max(workspace.SchemaVersion, 1);
-            NormalizeSnapshot(workspace.Snapshot);
-        }
+        config.FavoriteResources = config.FavoriteResources
+            .OrderByDescending(static favorite => favorite.PinnedAt)
+            .ToList();
     }
 
     private static void NormalizeSnapshot(WorkspaceSnapshot snapshot)
@@ -202,6 +208,54 @@ public class ProfileRepository
         config.FavoriteResources = migrated
             .OrderByDescending(static favorite => favorite.PinnedAt)
             .ToList();
+    }
+
+    private static void MigrateSavedWorkspacesToFavorites(AppConfig config)
+    {
+        foreach (var workspace in config.SavedWorkspaces.OrderByDescending(static workspace => workspace.SavedAt))
+        {
+            workspace.Name ??= string.Empty;
+            workspace.SchemaVersion = Math.Max(workspace.SchemaVersion, 1);
+            NormalizeSnapshot(workspace.Snapshot);
+
+            if (string.IsNullOrWhiteSpace(workspace.Snapshot.Resource.Key))
+            {
+                continue;
+            }
+
+            var pinnedAt = workspace.SavedAt == default
+                ? DateTimeOffset.UtcNow
+                : workspace.SavedAt;
+
+            var existing = config.FavoriteResources.FirstOrDefault(favorite =>
+                string.Equals(
+                    favorite.Snapshot.Resource.Key,
+                    workspace.Snapshot.Resource.Key,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null)
+            {
+                config.FavoriteResources.Add(new FavoriteResource
+                {
+                    Name = workspace.Name.Trim(),
+                    Snapshot = workspace.Snapshot.Clone(),
+                    PinnedAt = pinnedAt,
+                });
+
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(workspace.Name))
+            {
+                existing.Name = workspace.Name.Trim();
+            }
+
+            existing.Snapshot = workspace.Snapshot.Clone();
+            if (pinnedAt > existing.PinnedAt)
+            {
+                existing.PinnedAt = pinnedAt;
+            }
+        }
     }
 
     private static bool TryCreateServiceBusFavorite(
@@ -384,6 +438,7 @@ public enum ProfileLoadStatus
     NotStarted,
     NotFound,
     Loaded,
+    Recovered,
     Failed
 }
 
@@ -392,9 +447,18 @@ public sealed record ProfileLoadResult(ProfileLoadStatus Status, string? FilePat
     public static ProfileLoadResult NotStarted { get; } = new(ProfileLoadStatus.NotStarted, null, null);
     public static ProfileLoadResult NotFound { get; } = new(ProfileLoadStatus.NotFound, null, null);
 
+    public string? RecoverySourcePath { get; init; }
+
     public bool IsFailure => Status == ProfileLoadStatus.Failed;
+    public bool IsRecovery => Status == ProfileLoadStatus.Recovered;
 
     public static ProfileLoadResult Loaded(string filePath) => new(ProfileLoadStatus.Loaded, filePath, null);
+
+    public static ProfileLoadResult Recovered(string filePath, string recoverySourcePath, string? primaryErrorMessage) =>
+        new(ProfileLoadStatus.Recovered, filePath, primaryErrorMessage)
+        {
+            RecoverySourcePath = recoverySourcePath
+        };
 
     public static ProfileLoadResult Failed(string filePath, string errorMessage) =>
         new(ProfileLoadStatus.Failed, filePath, errorMessage);

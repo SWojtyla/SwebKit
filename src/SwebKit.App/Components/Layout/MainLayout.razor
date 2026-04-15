@@ -3,13 +3,14 @@
 @inject IAppEventBus Events
 @inject TabService Tabs
 @inject UiStateRepository UiState
+@inject UserSettingsRepository UserSettings
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject CommandRegistry Commands
 @inject IShellErrorPresenter ShellErrors
 @implements IDisposable
 
-<FluentDesignTheme StorageName="swebkit-theme" Mode="@CurrentDesignMode" />
+<FluentDesignTheme Mode="@CurrentDesignMode" />
 
 <CascadingValue Value="AppState">
     <CascadingValue Value="this" Name="Layout">
@@ -22,6 +23,12 @@
             {
                 <div class="demo-banner">
                     <span>@GetProfileLoadWarningText()</span>
+                </div>
+            }
+            else if (AppState.HasProfileLoadRecovery)
+            {
+                <div class="demo-banner">
+                    <span>@GetProfileLoadRecoveryText()</span>
                 </div>
             }
             @if (AppState.UseDemoData)
@@ -74,6 +81,8 @@
 
     private const string DefaultDarkTheme = "dark";
     private const string DefaultLightTheme = "light";
+    private const string LegacyThemeStorageKey = "swebkit-ui-theme";
+    private const string LegacyFluentThemeStorageKey = "swebkit-theme";
 
     private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -143,28 +152,7 @@ StringComparison.OrdinalIgnoreCase)
             ShellErrors.PresentKeyboardShortcutRegistrationFailure(ex);
         }
 
-        // Load persisted theme preference, fallback to OS preference (BL-6: must run in OnAfterRenderAsync)
-        try
-        {
-            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "swebkit-ui-theme");
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                _currentTheme = NormalizeTheme(stored);
-            }
-            else
-            {
-                _currentTheme = NormalizeTheme(await JS.InvokeAsync<string?>("SwebKit.getSystemTheme"));
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            // localStorage/matchMedia unavailable — keep default dark theme
-            _currentTheme = DefaultDarkTheme;
-        }
+        await LoadThemeAsync();
 
         await InvokeAsync(StateHasChanged);
     }
@@ -172,17 +160,8 @@ StringComparison.OrdinalIgnoreCase)
     public async Task SetThemeAsync(string theme)
     {
         _currentTheme = NormalizeTheme(theme);
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", "swebkit-ui-theme", _currentTheme);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-        }
+        await PersistThemeAsync();
+        await ClearLegacyThemeStorageAsync();
 
         await InvokeAsync(StateHasChanged);
     }
@@ -211,6 +190,20 @@ StringComparison.OrdinalIgnoreCase)
             : AppState.ProfileLoadResult.FilePath;
 
         return $"Configuration failed to load from {fileLabel}. Changes will stay in memory only until the file is repaired. {AppState.ProfileLoadResult.ErrorMessage}".Trim();
+    }
+
+    private string GetProfileLoadRecoveryText()
+    {
+        var fileLabel = string.IsNullOrWhiteSpace(AppState.ProfileLoadResult.FilePath)
+            ? "profiles.json"
+            : AppState.ProfileLoadResult.FilePath;
+
+        if (string.IsNullOrWhiteSpace(AppState.ProfileLoadResult.ErrorMessage))
+        {
+            return $"Configuration was recovered from the last known good backup because {fileLabel} was missing.";
+        }
+
+        return $"Configuration was recovered from the last known good backup after {fileLabel} failed to load. The primary file will be refreshed on the next successful save. {AppState.ProfileLoadResult.ErrorMessage}".Trim();
     }
 
     private Task ToggleNavAsync()
@@ -408,6 +401,80 @@ StringComparison.OrdinalIgnoreCase)
         return SupportedThemes.Contains(candidate)
             ? candidate.ToLowerInvariant()
             : DefaultDarkTheme;
+    }
+
+    private async Task LoadThemeAsync()
+    {
+        try
+        {
+            await UserSettings.LoadAsync();
+            if (!string.IsNullOrWhiteSpace(UserSettings.Settings.Theme))
+            {
+                _currentTheme = NormalizeTheme(UserSettings.Settings.Theme);
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", LegacyThemeStorageKey);
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                _currentTheme = NormalizeTheme(stored);
+                await PersistThemeAsync();
+                await ClearLegacyThemeStorageAsync();
+                return;
+            }
+
+            _currentTheme = NormalizeTheme(await JS.InvokeAsync<string?>("SwebKit.getSystemTheme"));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            _currentTheme = DefaultDarkTheme;
+        }
+    }
+
+    private async Task PersistThemeAsync()
+    {
+        try
+        {
+            UserSettings.Settings.Theme = _currentTheme;
+            await UserSettings.SaveAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task ClearLegacyThemeStorageAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", LegacyThemeStorageKey);
+            await JS.InvokeVoidAsync("localStorage.removeItem", LegacyFluentThemeStorageKey);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+        }
     }
 
     [JSInvokable]

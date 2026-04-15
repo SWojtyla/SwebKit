@@ -27,6 +27,15 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
+    public void AksConnectionBar_AutoRefreshStartsEnabledAtTenSeconds()
+    {
+        var cut = RenderComponent<AksConnectionBar>();
+
+        Assert.Contains("active", cut.Find("button.auto-refresh-btn").ClassName, StringComparison.Ordinal);
+        Assert.Equal("10", cut.Find("select.auto-refresh-select").GetAttribute("value"));
+    }
+
+    [Fact]
     public void AksConnectionBar_NotConnected_ShowsDotUnknownClass()
     {
         var cut = RenderComponent<AksConnectionBar>(ps => ps

@@ -44,6 +44,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITaskQueue, TaskQueueService>();
         builder.Services.AddSingleton<ProfileRepository>();
         builder.Services.AddSingleton<UiStateRepository>();
+        builder.Services.AddSingleton<UserSettingsRepository>();
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
         builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
@@ -89,7 +90,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
 
         // DevOps / Releases
-        builder.Services.AddSingleton<DevOpsAuthHandler>();
+        builder.Services.AddTransient<DevOpsAuthHandler>();
         builder.Services.AddHttpClient("AzureDevOps")
             .AddHttpMessageHandler<DevOpsAuthHandler>()
             .AddStandardResilienceHandler(options =>

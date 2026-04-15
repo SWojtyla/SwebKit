@@ -119,6 +119,43 @@ public class UiStateFilterTests
     }
 
     [Fact]
+    public async Task LoadAsync_WithCorruptedPrimaryAndBackup_RecoversFilters()
+    {
+        using var _ = new AppDataSandbox();
+
+        var writer = new UiStateRepository();
+        await writer.SaveFilterAsync(ScopeKey, new SavedFilter { Name = "errors", Value = "level=error" });
+
+        var backupPath = $"{AppDataPaths.UiStateJson}.bak";
+        Assert.True(File.Exists(backupPath));
+
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, "{ invalid json");
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        var result = reader.GetFilters(ScopeKey);
+        Assert.Single(result);
+        Assert.Equal("errors", result[0].Name);
+        Assert.Equal("level=error", result[0].Value);
+    }
+
+    [Fact]
+    public async Task ViewState_PersistenceRoundtrip_RestoresBooleanFlag()
+    {
+        using var _ = new AppDataSandbox();
+
+        var writer = new UiStateRepository();
+        await writer.SaveViewStateAsync("service-bus:namespace-pane-collapsed", true);
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        Assert.True(reader.GetViewState("service-bus:namespace-pane-collapsed", defaultValue: false));
+        Assert.False(reader.GetViewState("service-bus:missing-pane-state", defaultValue: false));
+    }
+
+    [Fact]
     public async Task MessageListPreferences_PersistenceRoundtrip_RestoresColumnsAndDensity()
     {
         using var _ = new AppDataSandbox();

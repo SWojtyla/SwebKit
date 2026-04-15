@@ -175,19 +175,11 @@
             }
 
             var favorites = Workspaces.GetFavoriteResources()
-                .Select(favorite => CreateSnapshotItem(favorite.Snapshot, BuildResourceSummary(favorite.Snapshot)))
+                .Select(CreateFavoriteItem)
                 .ToList();
             if (favorites.Count > 0)
             {
                 result.Add(new PaletteSection("Favorites", favorites));
-            }
-
-            var workspaces = Workspaces.GetSavedWorkspaces()
-                .Select(CreateWorkspaceItem)
-                .ToList();
-            if (workspaces.Count > 0)
-            {
-                result.Add(new PaletteSection("Workspaces", workspaces));
             }
 
             foreach (var group in available
@@ -200,20 +192,20 @@
         }
         else
         {
+            var matchingFavorites = Workspaces.SearchFavorites(resourceQuery)
+                .Select(CreateFavoriteItem)
+                .ToList();
+            if (matchingFavorites.Count > 0)
+            {
+                result.Add(new PaletteSection("Favorites", matchingFavorites));
+            }
+
             var matchingResources = Workspaces.SearchResources(resourceQuery)
                 .Select(snapshot => CreateSnapshotItem(snapshot, BuildResourceSummary(snapshot)))
                 .ToList();
             if (matchingResources.Count > 0)
             {
                 result.Add(new PaletteSection("Resources", matchingResources));
-            }
-
-            var matchingWorkspaces = Workspaces.SearchSavedWorkspaces(resourceQuery)
-                .Select(CreateWorkspaceItem)
-                .ToList();
-            if (matchingWorkspaces.Count > 0)
-            {
-                result.Add(new PaletteSection("Workspaces", matchingWorkspaces));
             }
 
             if (!resourceOnlyMode)
@@ -255,14 +247,14 @@
         null,
         summary);
 
-    private PaletteItem CreateWorkspaceItem(SavedWorkspace workspace) => new(
-        workspace.Id.ToString("N"),
-        workspace.Name,
-        () => Workspaces.OpenWorkspaceAsync(workspace.Id),
-        workspace.Snapshot.Resource.Icon,
+    private PaletteItem CreateFavoriteItem(FavoriteResource favorite) => new(
+        favorite.Snapshot.Resource.Key,
+        GetFavoriteLabel(favorite),
+        () => Workspaces.OpenSnapshotAsync(favorite.Snapshot, recordRecent: true),
+        favorite.Snapshot.Resource.Icon,
         null,
         null,
-        workspace.Snapshot.Resource.DisplayPath ?? workspace.Snapshot.Resource.DisplayName);
+        BuildFavoriteSummary(favorite));
 
     private static string BuildResourceSummary(WorkspaceSnapshot snapshot)
     {
@@ -270,6 +262,23 @@
         return string.IsNullOrWhiteSpace(snapshot.Resource.Summary)
             ? areaLabel
             : $"{areaLabel} | {snapshot.Resource.Summary}";
+    }
+
+    private static string GetFavoriteLabel(FavoriteResource favorite)
+    {
+        var configuredName = favorite.Name.Trim();
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName
+            : configuredName;
+    }
+
+    private static string BuildFavoriteSummary(FavoriteResource favorite)
+    {
+        var resourceLabel = favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName;
+        var resourceSummary = BuildResourceSummary(favorite.Snapshot);
+        return string.Equals(GetFavoriteLabel(favorite), resourceLabel, StringComparison.Ordinal)
+            ? resourceSummary
+            : $"{resourceLabel} | {resourceSummary}";
     }
 
     private static int CategoryOrder(string cat) => cat switch

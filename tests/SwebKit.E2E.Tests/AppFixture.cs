@@ -49,12 +49,7 @@ public sealed class AppFixture : IAsyncLifetime
             await WaitForShellAsync();
         }
 
-        await Page.EvaluateAsync(
-            """
-            () => {
-                localStorage.setItem('swebkit-ui-theme', 'dark');
-            }
-            """);
+        await SetThemeAsync("dark");
 
         await HardNavigateAsync("/");
         await Page.ReloadAsync();
@@ -66,6 +61,43 @@ public sealed class AppFixture : IAsyncLifetime
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
         await Assertions.Expect(Page.Locator(".app-shell"))
             .ToHaveAttributeAsync("data-theme", "dark");
+    }
+
+    public async Task SetThemeAsync(string theme)
+    {
+        await HardNavigateAsync("/settings");
+
+        await Page.WaitForFunctionAsync(
+            """
+            () => !!document.querySelector('.appearance-section fluent-select')
+            """,
+            null,
+            new PageWaitForFunctionOptions { Timeout = ShellTimeoutMs });
+
+        var applied = await Page.EvaluateAsync<bool>(
+            """
+            value => {
+                const select = document.querySelector('.appearance-section fluent-select');
+                if (!select) {
+                    return false;
+                }
+
+                select.value = value;
+                select.setAttribute('value', value);
+                select.dispatchEvent(new Event('input', { bubbles: true }));
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+            """,
+            theme);
+
+        if (!applied)
+        {
+            throw new InvalidOperationException("Could not locate the theme selector in Settings.");
+        }
+
+        await Assertions.Expect(Page.Locator(".app-shell"))
+            .ToHaveAttributeAsync("data-theme", NormalizeTheme(theme));
     }
 
     public async Task HardNavigateAsync(string relativePath)
@@ -279,4 +311,8 @@ public sealed class AppFixture : IAsyncLifetime
             && string.Equals(currentUri.Query, targetUri.Query, StringComparison.Ordinal)
             && string.Equals(currentUri.Fragment, targetUri.Fragment, StringComparison.Ordinal);
     }
+
+    private static string NormalizeTheme(string theme) => string.Equals(theme, "light-azure-bloom", StringComparison.OrdinalIgnoreCase)
+        ? "light"
+        : theme;
 }

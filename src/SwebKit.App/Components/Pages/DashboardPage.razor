@@ -25,7 +25,7 @@
             {
                 <span class="shell-pill shell-pill--warning">Demo mode</span>
             }
-            <span class="shell-pill shell-pill--muted">@pinnedItems.Count pinned</span>
+            <span class="shell-pill shell-pill--muted">@pinnedItems.Count favorite@(pinnedItems.Count == 1 ? "" : "s")</span>
             @if (Monitor.IsMonitoring)
             {
                 <span class="shell-pill shell-pill--accent">@Monitor.MonitoredNamespaces.Count
@@ -186,11 +186,11 @@
                     </section>
 
                     <aside class="dashboard-pinned-panel">
-                        <h2 class="dashboard-section-title">Pinned</h2>
+                        <h2 class="dashboard-section-title">Favorites</h2>
                         @if (pinnedItems.Count == 0)
                         {
-                            <EmptyState Icon="⌘" Title="No pinned items"
-                                        Subtitle="Pin queues, topics, subscriptions, or workloads from their workspace to keep them close.">
+                            <EmptyState Icon="⌘" Title="No favorites"
+                                        Subtitle="Save queues, topics, subscriptions, or workloads as favorites to keep them close.">
                                 <Actions>
                                     <a href="/service-bus">Browse Service Bus</a>
                                     <a href="/aks">Browse AKS</a>
@@ -202,7 +202,8 @@
                             <div class="pinned-chips">
                                 @foreach (var pin in pinnedItems)
                                 {
-                                    <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
+                                    <button class="pinned-chip" @onclick="() => NavigateToPin(pin)"
+                                            title="@(pin.Snapshot.Resource.DisplayPath ?? pin.Snapshot.Resource.DisplayName)">
                                         <span class="pinned-chip-icon">@pin.Icon</span>
                                         <span class="pinned-chip-name">@pin.DisplayPath</span>
                                     </button>
@@ -560,9 +561,17 @@
         };
 
         return new DashboardPinnedItem(
-            favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName,
+            GetFavoriteLabel(favorite),
             icon,
             favorite.Snapshot.Clone());
+    }
+
+    private static string GetFavoriteLabel(FavoriteResource favorite)
+    {
+        var configuredName = favorite.Name.Trim();
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName
+            : configuredName;
     }
 
     private static void AddPinnedItem(

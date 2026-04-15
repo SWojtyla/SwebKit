@@ -17,12 +17,12 @@ public class ReleaseRepository
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        if (!File.Exists(AppDataPaths.ReleasesJson)) return;
+        if (!AppDataFileStore.Exists(AppDataPaths.ReleasesJson)) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(AppDataPaths.ReleasesJson);
-            var data = JsonSerializer.Deserialize<ReleaseStoreData>(json, Options);
+            var loadResult = await AppDataFileStore.LoadAsync(AppDataPaths.ReleasesJson, DeserializeStoreData);
+            var data = loadResult.Value;
             _releases = data?.Releases ?? [];
             _snapshots = data?.Snapshots ?? [];
         }
@@ -38,7 +38,7 @@ public class ReleaseRepository
         AppDataPaths.EnsureDirectoryExists();
         var data = new ReleaseStoreData { Releases = _releases, Snapshots = _snapshots };
         var json = JsonSerializer.Serialize(data, Options);
-        await File.WriteAllTextAsync(AppDataPaths.ReleasesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ReleasesJson, json);
     }
 
     public async Task AddReleaseAsync(ReleaseRecord release)
@@ -78,4 +78,7 @@ public class ReleaseRepository
         public List<ReleaseRecord> Releases { get; set; } = [];
         public List<DeploymentSnapshot> Snapshots { get; set; } = [];
     }
+
+    private static ReleaseStoreData? DeserializeStoreData(string json) =>
+        JsonSerializer.Deserialize<ReleaseStoreData>(json, Options);
 }

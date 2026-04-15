@@ -29,6 +29,7 @@ public class AppStateService
     public bool IsInitialized { get; private set; }
     public ProfileLoadResult ProfileLoadResult { get; private set; } = ProfileLoadResult.NotStarted;
     public bool HasProfileLoadFailure => ProfileLoadResult.IsFailure;
+    public bool HasProfileLoadRecovery => ProfileLoadResult.IsRecovery;
     public bool IsProfilePersistenceBlocked => _profiles.IsPersistenceBlocked;
     public string? ProfilePersistenceBlockedMessage =>
         IsProfilePersistenceBlocked ? _profiles.CreatePersistenceBlockedException().Message : null;
