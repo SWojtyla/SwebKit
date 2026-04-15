@@ -95,3 +95,23 @@
     padding-left: 5px;
     margin-left: 1px;
 }
+
+.aks-analysis-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 120, 212, 0.22);
+    background: rgba(0, 120, 212, 0.08);
+    color: var(--color-accent);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.aks-analysis-btn:hover {
+    background: rgba(0, 120, 212, 0.16);
+    border-color: var(--color-accent);
+}

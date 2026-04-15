@@ -1,0 +1,224 @@
+@implements IDisposable
+
+<div class="netpol-analysis-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Analyzing network policies..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="netpol-analysis-error">@_error</div>
+    }
+    else if (_analysis is null)
+    {
+        <div class="netpol-analysis-empty">No network policy analysis is available.</div>
+    }
+    else
+    {
+        <div class="netpol-analysis-toolbar">
+            <div>
+                <div class="netpol-analysis-name">@_analysis.WorkloadName</div>
+                <div class="netpol-analysis-meta">@_analysis.WorkloadKind in namespace @Namespace</div>
+            </div>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        <div class="netpol-analysis-summary">
+            <span class="netpol-analysis-summary-label">Summary</span>
+            <p>@_analysis.Summary</p>
+        </div>
+
+        <div class="netpol-analysis-badges">
+            <span class="netpol-analysis-badge @(_analysis.IngressIsolated ? "is-isolated" : "is-open")">
+                Ingress @(_analysis.IngressIsolated ? "isolated" : "open")
+            </span>
+            <span class="netpol-analysis-badge @(_analysis.EgressIsolated ? "is-isolated" : "is-open")">
+                Egress @(_analysis.EgressIsolated ? "isolated" : "open")
+            </span>
+            <span class="netpol-analysis-badge is-neutral">@_analysis.MatchingPodCount pod(s) matched</span>
+        </div>
+
+        @if (_analysis.SelectorLabels.Count > 0)
+        {
+            <div class="netpol-analysis-section">
+                <div class="netpol-analysis-section-title">Selector evidence</div>
+                <div class="netpol-analysis-chip-row">
+                    @foreach (var label in _analysis.SelectorLabels)
+                    {
+                        <span class="netpol-analysis-chip">@label.Key=@label.Value</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="netpol-analysis-grid">
+            <div class="netpol-analysis-card">
+                <div class="netpol-analysis-card-title">Services</div>
+                @if (_analysis.Services.Count == 0)
+                {
+                    <div class="netpol-analysis-muted">No Services select this workload.</div>
+                }
+                else
+                {
+                    <ul class="netpol-analysis-list">
+                        @foreach (var service in _analysis.Services)
+                        {
+                            <li>@service</li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="netpol-analysis-card">
+                <div class="netpol-analysis-card-title">Ingress exposure</div>
+                @if (_analysis.ExposedByIngresses.Count == 0)
+                {
+                    <div class="netpol-analysis-muted">No Ingress objects reference the selected Services.</div>
+                }
+                else
+                {
+                    <ul class="netpol-analysis-list">
+                        @foreach (var ingress in _analysis.ExposedByIngresses)
+                        {
+                            <li>@ingress</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+        <div class="netpol-analysis-section">
+            <div class="netpol-analysis-section-title">Findings</div>
+            <ul class="netpol-analysis-list">
+                @foreach (var finding in _analysis.Findings)
+                {
+                    <li>@finding</li>
+                }
+            </ul>
+        </div>
+
+        <div class="netpol-analysis-section">
+            <div class="netpol-analysis-section-title">Policy evidence</div>
+            @if (_analysis.Policies.Count == 0)
+            {
+                <div class="netpol-analysis-card">
+                    <div class="netpol-analysis-muted">No NetworkPolicy objects selected the workload.</div>
+                </div>
+            }
+            else
+            {
+                <div class="netpol-analysis-policy-list">
+                    @foreach (var policy in _analysis.Policies)
+                    {
+                        <div class="netpol-analysis-card">
+                            <div class="netpol-analysis-policy-header">
+                                <span class="netpol-analysis-policy-name">@policy.Name</span>
+                                <span class="netpol-analysis-muted">@string.Join(", ", policy.PolicyTypes)</span>
+                            </div>
+
+                            @if (policy.IngressRules.Count > 0)
+                            {
+                                <div class="netpol-analysis-rule-group">
+                                    <div class="netpol-analysis-rule-title">Ingress rules</div>
+                                    <ul class="netpol-analysis-list">
+                                        @foreach (var rule in policy.IngressRules)
+                                        {
+                                            <li>@rule</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+
+                            @if (policy.EgressRules.Count > 0)
+                            {
+                                <div class="netpol-analysis-rule-group">
+                                    <div class="netpol-analysis-rule-title">Egress rules</div>
+                                    <ul class="netpol-analysis-list">
+                                        @foreach (var rule in policy.EgressRules)
+                                        {
+                                            <li>@rule</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="netpol-analysis-footnote">@_analysis.Limitation</div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public string? WorkloadKind { get; set; }
+    [Parameter] public string? WorkloadName { get; set; }
+
+    private NetworkPolicyAnalysis? _analysis;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Namespace}/{WorkloadKind}/{WorkloadName}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(WorkloadKind) || string.IsNullOrWhiteSpace(WorkloadName))
+        {
+            _analysis = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _analysis = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _analysis = await Client.AnalyzeNetworkPoliciesAsync(Namespace, WorkloadKind, WorkloadName, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

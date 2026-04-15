@@ -77,10 +77,15 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
-    public void AksConnectionBar_RendersGatewayApiResourceTabs()
+    public void AksConnectionBar_NetworkMenu_OpensWithServiceAndGatewayTabs()
     {
         var cut = RenderComponent<AksConnectionBar>();
 
+        cut.FindAll("button.aks-resource-tab--toggle")
+            .Single(button => button.TextContent.Contains("Network", StringComparison.Ordinal))
+            .Click();
+
+        Assert.Contains(">Services<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">GatewayClasses<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">Gateways<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">HTTPRoutes<", cut.Markup, StringComparison.Ordinal);

@@ -7,7 +7,8 @@
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
 - Context switching and namespace filtering (single and all namespaces).
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
-- Browse deployments, pods, ingresses, Helm releases, Jobs, and CronJobs.
+- Browse deployments, pods, Services, ingresses, Helm releases, Jobs, and CronJobs.
+- Network-oriented AKS resources are grouped behind an expandable `Network` menu so Services, Ingresses, and Gateway API resources stay available without flattening the main toolbar.
 - Browse Gateway API resources separately from classic Ingresses: GatewayClasses, Gateways, and HTTPRoutes render in their own AKS tabs.
 - Jobs are a first-class AKS resource tab with browse, filter, row selection, and namespace-click behavior.
 - Jobs grid shows status, source provenance, progress, and recent timing metadata; namespace is shown in all-namespaces mode.
@@ -44,18 +45,21 @@
 
 1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
 2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
-3. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`GatewayClass`, `Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
-4. Resource YAML for Jobs, CronJobs, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
-5. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
-6. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
-7. Long-running and side-panel operations keep the main grid responsive.
-8. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
-9. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
+3. Services are loaded alongside the other namespace-scoped resources and support all-namespaces browse, selection, and YAML viewing against the selected row namespace.
+4. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`GatewayClass`, `Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
+5. Resource YAML for Services, Jobs, CronJobs, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
+6. Table and context-menu actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
+7. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
+8. Long-running and side-panel operations keep the main grid responsive.
+9. HTTPRoute rows render in a non-virtualized grid path so variable-height route chips do not hide later rows when several routes are present.
+10. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, etc.) is open or the Events section is expanded, and resumes on panel close.
+11. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes
 
 - **Incident timeline anchor.** `AksTimelineSignalSource` is the anchor evidence adapter for the incident cockpit. It bootstraps the current `IAksClient`, resolves workload-owned pods from deployment/statefulset selector labels, and returns only workload-scoped pod lifecycle changes and events inside the requested UTC window. `DaemonSet` scopes are not yet supported by this adapter.
 - **Batch workload contract.** `IAksClient` now exposes additive Jobs and trigger methods: `GetJobsAsync`, `TriggerCronJobAsync`, and `RerunJobAsync`. Default multi-namespace overloads for `GetJobsAsync` and `GetCronJobsAsync` let the AKS page keep both resource types visible in all-namespaces mode without special client wrappers.
+- **Service inventory contract.** `IAksClient` now exposes `GetServicesAsync`. The AKS page treats Services as a first-class network resource with all-namespaces browse and row-namespace-aware YAML requests.
 - **Gateway API contract.** `IAksClient` exposes `GetGatewayClassesAsync`, `GetGatewaysAsync`, and `GetHttpRoutesAsync`. `KubernetesAksClient` queries Gateway API CRDs through the custom-objects client with `v1`/`v1beta1`/`v1alpha2` fallback so Envoy Gateway migrations remain visible even when classic `Ingress` is empty.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
@@ -87,6 +91,7 @@
 - `src/SwebKit.App/Components/Aks/GatewayClassGrid.razor`
 - `src/SwebKit.App/Components/Aks/GatewayGrid.razor`
 - `src/SwebKit.App/Components/Aks/HttpRouteGrid.razor`
+- `src/SwebKit.App/Components/Aks/ServiceGrid.razor`
 - `src/SwebKit.App/Components/Aks/PodLogView.razor`
 - `src/SwebKit.App/Components/Aks/MultiPodLogView.razor`
 - `src/SwebKit.App/Components/Aks/ConfigMapDetailPanel.razor`

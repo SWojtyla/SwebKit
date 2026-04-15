@@ -11,7 +11,14 @@ public interface IAksClient
     Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default);
     Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default);
     Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default);
+    Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default);
     Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default);
+    Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default);
+    Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default);
     Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<GatewayClassInfo>>([]);
     Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default);
@@ -75,6 +82,13 @@ public interface IAksClient
     async Task<IReadOnlyList<PodInfo>> GetPodsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
     {
         var tasks = namespaces.Select(ns => GetPodsAsync(ns, null, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
+    async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetServicesAsync(ns, ct));
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(r => r).ToList();
     }

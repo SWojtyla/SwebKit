@@ -28,6 +28,26 @@
     overflow-x: auto;
 }
 
+.aks-network-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 0 var(--spacing-sm) 6px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    overflow-x: auto;
+}
+
+.aks-network-tab-label {
+    padding: 0 var(--spacing-sm);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
 .aks-context-label {
     font-size: var(--font-size-sm);
     color: var(--color-text);
@@ -141,6 +161,44 @@
 }
 
 .aks-resource-tab.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(0, 120, 212, 0.08);
+}
+
+.aks-resource-tab--toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.aks-resource-tab-caret {
+    font-size: 10px;
+    transition: transform 0.1s ease;
+}
+
+.aks-resource-tab--toggle[aria-expanded="true"] .aks-resource-tab-caret {
+    transform: rotate(180deg);
+}
+
+.aks-resource-subtab {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+}
+
+.aks-resource-subtab:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.aks-resource-subtab.active {
     color: var(--color-accent);
     border-color: var(--color-accent);
     background: rgba(0, 120, 212, 0.08);

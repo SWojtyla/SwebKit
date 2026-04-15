@@ -54,6 +54,15 @@
             }
         </div>
     </TemplateColumn>
+    <TemplateColumn Title="Network" Width="110px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <button class="aks-analysis-btn" @onclick="() => OnOpenNetworkAnalysis.InvokeAsync(context)"
+                    @onclick:stopPropagation>
+                Inspect
+            </button>
+        </div>
+    </TemplateColumn>
 </FluentDataGrid>
 
 @code {
@@ -66,5 +75,6 @@ Enumerable.Empty<DeploymentInfo>().AsQueryable();
     [Parameter] public EventCallback<(MouseEventArgs, DeploymentInfo)> OnContextMenu { get; set; }
     [Parameter] public EventCallback<DeploymentInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
+    [Parameter] public EventCallback<DeploymentInfo> OnOpenNetworkAnalysis { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
 }

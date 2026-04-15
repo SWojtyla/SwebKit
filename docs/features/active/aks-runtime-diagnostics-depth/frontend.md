@@ -22,6 +22,8 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 - `src/SwebKit.App/Components/Aks/PodGrid.razor`
 - `src/SwebKit.App/Components/Aks/DeploymentGrid.razor`
 - `src/SwebKit.App/Components/Aks/StatefulSetGrid.razor`
+- `src/SwebKit.App/Components/Aks/AksConnectionBar.razor`
+- `src/SwebKit.App/Components/Aks/ServiceGrid.razor`
 - `src/SwebKit.App/Components/Aks/IngressGrid.razor`
 - `src/SwebKit.App/Components/Aks/HelmGrid.razor`
 - `src/SwebKit.App/Components/Aks/AksHelmPanel.razor`
@@ -39,6 +41,8 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 - Panel model.
 - Reuse the existing `AksDetailPanels` column rather than create a new route or modal-first experience.
 - New diagnostics should open from the currently selected resource row, namespace context, or Helm selection.
+- Navigation density.
+- Keep the main AKS tab row workload-focused. Group Services, Ingresses, and Gateway API resources behind one expandable `Network` menu instead of flattening every network resource into the top row.
 - Evidence phrasing.
 - Probe panels should say what failed, how often, and what recent events support the observation.
 - Placement panels should separate declared constraints from observed scheduling failures.
@@ -69,6 +73,9 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 
 ### Wave 2 - network and ingress diagnostics [blazor-expert]
 
+- [x] Group network resource browse tabs under an expandable `Network` menu.
+- [x] Add first-class Services browse support with namespace-aware YAML viewing.
+- [x] Keep HTTPRoute list rendering stable when route rows wrap.
 - [ ] Add ingress and network-policy analysis panels.
 - [ ] Add links from ingress and workload rows into those panels.
 - [ ] Keep wording explicit about what was inspected.
@@ -82,6 +89,7 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 ## Validation
 
 - Component tests: Not started. Extend `AksDetailPanelsTests`, `AksHelmPanelTests`, and add focused tests for each new diagnostics panel.
+- Add or extend focused AKS page tests for the `Network` menu, Services tab, and multi-route HTTPRoute rendering.
 - Manual UX checks:
 - Verify a constrained namespace is diagnosable without leaving the page.
 - Verify probe and placement panels distinguish observed evidence from interpretation.

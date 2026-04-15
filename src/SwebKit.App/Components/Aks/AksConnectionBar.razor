@@ -70,22 +70,45 @@
         </FluentButton>
     </div>
 
-    @* ── Row 2: resource type tabs ── *@
+    @* ── Row 2: primary resource tabs ── *@
     <div class="aks-tab-bar">
-        @foreach (var rt in ResourceTypes)
+        @foreach (var rt in DirectResourceTypes)
         {
             <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
-                    @onclick="() => OnResourceTypeChanged.InvokeAsync(rt)">
+                    @onclick="() => SelectDirectResourceTypeAsync(rt)">
                 @rt
             </button>
         }
+
+        <button class="aks-resource-tab aks-resource-tab--toggle @((IsNetworkResourceType(ActiveResourceType) || _networkMenuOpen) ? "active" : "")"
+                aria-expanded="@_networkMenuOpen"
+                @onclick="ToggleNetworkMenu">
+            Network
+            <span class="aks-resource-tab-caret">▾</span>
+        </button>
     </div>
+
+    @* ── Row 3: expandable network submenu ── *@
+    @if (_networkMenuOpen)
+    {
+        <div class="aks-network-tab-bar">
+            <span class="aks-network-tab-label">Network</span>
+            @foreach (var rt in NetworkResourceTypes)
+            {
+                <button class="aks-resource-subtab @(rt == ActiveResourceType ? "active" : "")"
+                        @onclick="() => SelectNetworkResourceTypeAsync(rt)">
+                    @rt
+                </button>
+            }
+        </div>
+    }
 
 </div>
 
 @code {
-    private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
-        "Ingresses", "GatewayClasses", "Gateways", "HTTPRoutes", "Helm", "Jobs", "CronJobs"];
+    private static readonly string[] DirectResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
+        "Helm", "Jobs", "CronJobs"];
+    private static readonly string[] NetworkResourceTypes = ["Services", "Ingresses", "GatewayClasses", "Gateways", "HTTPRoutes"];
 
     [Parameter] public List<KubeContextInfo> Contexts { get; set; } = [];
     [Parameter] public string ActiveContext { get; set; } = "";
@@ -110,6 +133,17 @@
     // ── Namespace picker internal state ──
     private bool _nsDropOpen;
     private string _nsSearchText = string.Empty;
+    private bool _networkMenuOpen;
+    private string _lastActiveResourceType = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(_lastActiveResourceType, ActiveResourceType, StringComparison.Ordinal))
+        {
+            _networkMenuOpen = IsNetworkResourceType(ActiveResourceType);
+            _lastActiveResourceType = ActiveResourceType;
+        }
+    }
 
     private IEnumerable<string> NsFiltered
     {
@@ -153,6 +187,26 @@
     {
         var newContext = e.Value?.ToString() ?? "";
         await OnContextChanged.InvokeAsync(newContext);
+    }
+
+    private static bool IsNetworkResourceType(string resourceType)
+        => NetworkResourceTypes.Contains(resourceType, StringComparer.Ordinal);
+
+    private void ToggleNetworkMenu()
+    {
+        _networkMenuOpen = !_networkMenuOpen;
+    }
+
+    private async Task SelectDirectResourceTypeAsync(string resourceType)
+    {
+        _networkMenuOpen = false;
+        await OnResourceTypeChanged.InvokeAsync(resourceType);
+    }
+
+    private async Task SelectNetworkResourceTypeAsync(string resourceType)
+    {
+        _networkMenuOpen = true;
+        await OnResourceTypeChanged.InvokeAsync(resourceType);
     }
 
     private async Task HandleToggleEvents()

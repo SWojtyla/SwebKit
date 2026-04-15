@@ -1,0 +1,130 @@
+.ingress-analysis-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    color: var(--color-text);
+}
+
+.ingress-analysis-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.ingress-analysis-name {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+}
+
+.ingress-analysis-meta,
+.ingress-analysis-muted,
+.ingress-analysis-footnote {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.ingress-analysis-summary {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface-2);
+}
+
+.ingress-analysis-summary-label,
+.ingress-analysis-section-title {
+    display: block;
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.ingress-analysis-summary p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.ingress-analysis-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.ingress-analysis-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+}
+
+.ingress-analysis-badge,
+.ingress-analysis-ok {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-sm);
+}
+
+.ingress-analysis-badge {
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
+    color: var(--color-accent);
+}
+
+.ingress-analysis-ok {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.ingress-analysis-list,
+.ingress-analysis-inline-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.ingress-analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.ingress-analysis-table th,
+.ingress-analysis-table td {
+    padding: 10px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+}
+
+.ingress-analysis-table th {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.ingress-analysis-route-host {
+    font-weight: 600;
+}
+
+.ingress-analysis-route-path {
+    color: var(--color-accent);
+    font-family: var(--font-family-mono, 'Cascadia Code', 'Consolas', monospace);
+    font-size: var(--font-size-sm);
+}
+
+.ingress-analysis-error,
+.ingress-analysis-empty {
+    padding: var(--spacing-md);
+    border-radius: 10px;
+    background: var(--color-surface-2);
+}
+
+.ingress-analysis-error {
+    color: var(--color-error);
+    border: 1px solid color-mix(in srgb, var(--color-error) 25%, var(--color-border));
+}

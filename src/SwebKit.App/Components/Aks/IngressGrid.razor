@@ -36,6 +36,15 @@
             @string.Join(", ", context.Addresses)
         </div>
     </TemplateColumn>
+    <TemplateColumn Title="Inspect" Width="110px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <button class="aks-analysis-btn" @onclick="() => OnOpenAnalysis.InvokeAsync(context)"
+                    @onclick:stopPropagation>
+                Inspect
+            </button>
+        </div>
+    </TemplateColumn>
 </FluentDataGrid>
 
 @code {
@@ -44,6 +53,7 @@
     [Parameter] public EventCallback<IngressInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, IngressInfo)> OnContextMenu { get; set; }
     [Parameter] public EventCallback<string> OnOpenUrl { get; set; }
+    [Parameter] public EventCallback<IngressInfo> OnOpenAnalysis { get; set; }
 
     private static string BuildIngressUrl(string host)
     {

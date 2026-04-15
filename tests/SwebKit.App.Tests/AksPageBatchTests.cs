@@ -162,6 +162,24 @@ public sealed class AksPageBatchTests : TestContext
     }
 
     [Fact]
+    public void AksPage_ServicesTab_BrowsesServicesInAllNamespacesMode()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Services");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("order-api", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payment-gateway", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("orders", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("20.10.0.21", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void AksPage_HttpRoutesTab_BrowsesGatewayApiRoutesInAllNamespacesMode()
     {
         var client = new TrackingAksClient();
@@ -175,6 +193,24 @@ public sealed class AksPageBatchTests : TestContext
             Assert.Contains("payments-api-route", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("order-api:80", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("payment-gateway:80", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AksPage_HttpRoutesTab_RendersAllRoutesWhenThreeArePresent()
+    {
+        var client = new TrackingAksClient(
+            namespaces: ["default", "orders", "payments"],
+            includeDefaultNamespaceBatchData: true);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "HTTPRoutes");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("platform-route", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("orders-api-route", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments-api-route", cut.Markup, StringComparison.Ordinal);
         });
     }
 
@@ -193,6 +229,23 @@ public sealed class AksPageBatchTests : TestContext
                 request => request.Namespace == "payments"
                     && request.Kind == "HTTPRoute"
                     && request.Name == "payments-api-route"));
+    }
+
+    [Fact]
+    public void AksPage_ServiceYaml_UsesSelectedRowNamespaceInAllNamespacesMode()
+    {
+        var client = new TrackingAksClient();
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Services");
+        OpenServiceMenu(cut, client.FindService("payments", "payment-gateway"));
+        ClickContextMenuButton(cut, "View YAML");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.YamlRequests,
+                request => request.Namespace == "payments"
+                    && request.Kind == "Service"
+                    && request.Name == "payment-gateway"));
     }
 
     [Fact]
@@ -315,17 +368,93 @@ public sealed class AksPageBatchTests : TestContext
         Assert.Empty(_notifications.All);
     }
 
+    [Fact]
+    public void AksPage_DeploymentInspectButton_OpensNetworkAnalysisPanel()
+    {
+        var client = new TrackingAksClient(namespaces: ["orders"]);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Deployments");
+
+        cut.WaitForAssertion(() => Assert.Contains("order-api", cut.Markup, StringComparison.Ordinal));
+
+        Assert.Single(cut.FindAll("button.aks-analysis-btn"));
+        cut.Find("button.aks-analysis-btn").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.NetworkPolicyAnalysisCalls,
+                call => call.Namespace == "orders"
+                    && call.WorkloadKind == "Deployment"
+                    && call.WorkloadName == "order-api"));
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Network Policies: order-api", cut.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AksPage_PodAnalyzeNetwork_ContextMenu_UsesSelectedRowNamespace()
+    {
+        var client = new TrackingAksClient(namespaces: ["orders"]);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Pods");
+        OpenPodMenu(cut, client.FindPod("orders", "order-api-7b4d9-xk2m1"));
+        ClickContextMenuButton(cut, "Analyze network");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.NetworkPolicyAnalysisCalls,
+                call => call.Namespace == "orders"
+                    && call.WorkloadKind == "Pod"
+                    && call.WorkloadName == "order-api-7b4d9-xk2m1"));
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Network Policies: order-api-7b4d9-xk2m1", cut.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AksPage_IngressInspect_KeyboardShortcut_OpensIngressAnalysisPanel()
+    {
+        var client = new TrackingAksClient(namespaces: ["orders"]);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Ingresses");
+        InvokePrivateMethod(cut, "SelectIngress", client.FindIngress("orders", "orders-public"));
+        InvokePrivateMethod(cut, "HandleLetterActionAsync", "i");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(client.IngressAnalysisCalls,
+                call => call.Namespace == "orders"
+                    && call.IngressName == "orders-public"));
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Ingress Analysis: orders-public", cut.Markup, StringComparison.Ordinal));
+    }
+
     private IRenderedComponent<AksPage> RenderAksPage(TrackingAksClient client)
         => RenderComponent<AksPage>(parameters => parameters
             .Add(page => page.ClientOverride, client));
 
     private static void OpenResourceTab(IRenderedComponent<AksPage> cut, string tabText)
     {
+        var directButtons = cut.FindAll("button.aks-resource-tab")
+            .Where(button => string.Equals(button.TextContent.Trim(), tabText, StringComparison.Ordinal))
+            .ToList();
+
+        if (directButtons.Count == 1)
+        {
+            directButtons[0].Click();
+            return;
+        }
+
+        cut.FindAll("button.aks-resource-tab--toggle")
+            .Single(button => NormalizeText(button.TextContent).Contains("Network", StringComparison.OrdinalIgnoreCase))
+            .Click();
+
         cut.WaitForAssertion(() =>
-            Assert.Contains(cut.FindAll("button.aks-resource-tab"),
+            Assert.Contains(cut.FindAll("button.aks-resource-subtab"),
                 button => string.Equals(button.TextContent.Trim(), tabText, StringComparison.Ordinal)));
 
-        cut.FindAll("button.aks-resource-tab")
+        cut.FindAll("button.aks-resource-subtab")
             .Single(button => string.Equals(button.TextContent.Trim(), tabText, StringComparison.Ordinal))
             .Click();
     }
@@ -338,6 +467,16 @@ public sealed class AksPageBatchTests : TestContext
     private static void OpenJobMenu(IRenderedComponent<AksPage> cut, JobInfo job)
     {
         InvokePrivateMenuHelper(cut, "ShowJobMenu", job);
+    }
+
+    private static void OpenServiceMenu(IRenderedComponent<AksPage> cut, ServiceInfo service)
+    {
+        InvokePrivateMenuHelper(cut, "ShowServiceMenu", service);
+    }
+
+    private static void OpenPodMenu(IRenderedComponent<AksPage> cut, PodInfo pod)
+    {
+        InvokePrivateMenuHelper(cut, "ShowPodMenu", pod);
     }
 
     private static void OpenCronJobMenu(IRenderedComponent<AksPage> cut, CronJobInfo cronJob)
@@ -369,6 +508,23 @@ public sealed class AksPageBatchTests : TestContext
         }).GetAwaiter().GetResult();
     }
 
+    private static void InvokePrivateMethod(IRenderedComponent<AksPage> cut, string methodName, params object?[] args)
+    {
+        var method = typeof(AksPage).GetMethod(methodName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        cut.InvokeAsync(async () =>
+        {
+            var result = method!.Invoke(cut.Instance, args);
+            if (result is Task task)
+            {
+                await task;
+            }
+        }).GetAwaiter().GetResult();
+    }
+
     private static void ClickContextMenuButton(IRenderedComponent<AksPage> cut, string buttonText)
     {
         var normalizedTarget = NormalizeText(buttonText);
@@ -387,9 +543,14 @@ public sealed class AksPageBatchTests : TestContext
 
     private sealed class TrackingAksClient : IAksClient
     {
+        private readonly Dictionary<string, List<DeploymentInfo>> _deploymentsByNamespace;
+        private readonly Dictionary<string, List<StatefulSetInfo>> _statefulSetsByNamespace;
+        private readonly Dictionary<string, List<PodInfo>> _podsByNamespace;
         private readonly Dictionary<string, List<JobInfo>> _baseJobsByNamespace;
         private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace;
         private readonly Dictionary<string, List<CronJobInfo>> _cronJobsByNamespace;
+        private readonly Dictionary<string, List<ServiceInfo>> _servicesByNamespace;
+        private readonly Dictionary<string, List<IngressInfo>> _ingressesByNamespace;
         private readonly List<GatewayClassInfo> _gatewayClasses;
         private readonly Dictionary<string, List<GatewayInfo>> _gatewaysByNamespace;
         private readonly Dictionary<string, List<HttpRouteInfo>> _httpRoutesByNamespace;
@@ -406,6 +567,104 @@ public sealed class AksPageBatchTests : TestContext
             _namespaces = namespaces?.ToList() ?? ["orders", "payments"];
             _cancelCronJobTrigger = cancelCronJobTrigger;
             _cancelJobRerun = cancelJobRerun;
+
+            _deploymentsByNamespace = new Dictionary<string, List<DeploymentInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new DeploymentInfo
+                    {
+                        Name = "order-api",
+                        Namespace = "orders",
+                        Replicas = 2,
+                        ReadyReplicas = 2,
+                        Status = "Available",
+                        Labels = new Dictionary<string, string> { ["app"] = "order-api", ["team"] = "commerce" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "order-api" }
+                    }
+                ],
+                ["payments"] =
+                [
+                    new DeploymentInfo
+                    {
+                        Name = "payment-gateway",
+                        Namespace = "payments",
+                        Replicas = 1,
+                        ReadyReplicas = 1,
+                        Status = "Available",
+                        Labels = new Dictionary<string, string> { ["app"] = "payment-gateway", ["team"] = "payments" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "payment-gateway" }
+                    }
+                ]
+            };
+
+            _statefulSetsByNamespace = new Dictionary<string, List<StatefulSetInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new StatefulSetInfo
+                    {
+                        Name = "order-cache",
+                        Namespace = "orders",
+                        Replicas = 1,
+                        ReadyReplicas = 1,
+                        CurrentRevision = "order-cache-77f7f9f5d9",
+                        UpdateRevision = "order-cache-77f7f9f5d9",
+                        Labels = new Dictionary<string, string> { ["app"] = "order-cache" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "order-cache" }
+                    }
+                ],
+                ["payments"] =
+                [
+                    new StatefulSetInfo
+                    {
+                        Name = "settlement-store",
+                        Namespace = "payments",
+                        Replicas = 1,
+                        ReadyReplicas = 1,
+                        CurrentRevision = "settlement-store-6ccf5c98c6",
+                        UpdateRevision = "settlement-store-6ccf5c98c6",
+                        Labels = new Dictionary<string, string> { ["app"] = "settlement-store" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "settlement-store" }
+                    }
+                ]
+            };
+
+            _podsByNamespace = new Dictionary<string, List<PodInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new PodInfo
+                    {
+                        Name = "order-api-7b4d9-xk2m1",
+                        Namespace = "orders",
+                        Phase = "Running",
+                        Status = "Running",
+                        Ready = true,
+                        ReadyContainers = 2,
+                        TotalContainers = 2,
+                        Containers = ["order-api", "istio-proxy"],
+                        PodIP = "10.16.34.21",
+                        Labels = new Dictionary<string, string> { ["app"] = "order-api", ["pod-template-hash"] = "7b4d9" }
+                    }
+                ],
+                ["payments"] =
+                [
+                    new PodInfo
+                    {
+                        Name = "payment-gateway-6d7c9-p2m4r",
+                        Namespace = "payments",
+                        Phase = "Running",
+                        Status = "Running",
+                        Ready = true,
+                        ReadyContainers = 2,
+                        TotalContainers = 2,
+                        Containers = ["payment-gateway", "istio-proxy"],
+                        PodIP = "10.16.35.18",
+                        Labels = new Dictionary<string, string> { ["app"] = "payment-gateway", ["pod-template-hash"] = "6d7c9" }
+                    }
+                ]
+            };
 
             _baseJobsByNamespace = new Dictionary<string, List<JobInfo>>(StringComparer.Ordinal)
             {
@@ -462,6 +721,85 @@ public sealed class AksPageBatchTests : TestContext
                         Schedule = "0 */2 * * *",
                         LastScheduleTime = DateTimeOffset.UtcNow.AddMinutes(-30),
                         LastSuccessfulTime = DateTimeOffset.UtcNow.AddMinutes(-30)
+                    }
+                ]
+            };
+
+            _servicesByNamespace = new Dictionary<string, List<ServiceInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new ServiceInfo
+                    {
+                        Name = "order-api",
+                        Namespace = "orders",
+                        Type = "ClusterIP",
+                        ClusterIp = "10.0.12.10",
+                        Ports =
+                        [
+                            new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                        ]
+                    }
+                ],
+                ["payments"] =
+                [
+                    new ServiceInfo
+                    {
+                        Name = "payment-gateway",
+                        Namespace = "payments",
+                        Type = "LoadBalancer",
+                        ClusterIp = "10.0.12.24",
+                        ExternalAddresses = ["20.10.0.21"],
+                        Ports =
+                        [
+                            new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                        ]
+                    }
+                ]
+            };
+
+            _ingressesByNamespace = new Dictionary<string, List<IngressInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new IngressInfo
+                    {
+                        Name = "orders-public",
+                        Namespace = "orders",
+                        IngressClass = "nginx",
+                        Addresses = ["20.10.0.30"],
+                        Rules =
+                        [
+                            new IngressRule
+                            {
+                                Host = "orders.example.com",
+                                Paths =
+                                [
+                                    new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "order-api", ServicePort = 80 }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                ["payments"] =
+                [
+                    new IngressInfo
+                    {
+                        Name = "payments-public",
+                        Namespace = "payments",
+                        IngressClass = "nginx",
+                        Addresses = ["20.10.0.31"],
+                        Rules =
+                        [
+                            new IngressRule
+                            {
+                                Host = "payments.example.com",
+                                Paths =
+                                [
+                                    new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "payment-gateway", ServicePort = 80 }
+                                ]
+                            }
+                        ]
                     }
                 ]
             };
@@ -595,6 +933,89 @@ public sealed class AksPageBatchTests : TestContext
                     }
                 ];
 
+                _servicesByNamespace["default"] =
+                [
+                    new ServiceInfo
+                    {
+                        Name = "platform-api",
+                        Namespace = "default",
+                        Type = "ClusterIP",
+                        ClusterIp = "10.0.12.12",
+                        Ports =
+                        [
+                            new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                        ]
+                    }
+                ];
+
+                _deploymentsByNamespace["default"] =
+                [
+                    new DeploymentInfo
+                    {
+                        Name = "platform-api",
+                        Namespace = "default",
+                        Replicas = 1,
+                        ReadyReplicas = 1,
+                        Status = "Available",
+                        Labels = new Dictionary<string, string> { ["app"] = "platform-api" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "platform-api" }
+                    }
+                ];
+
+                _statefulSetsByNamespace["default"] =
+                [
+                    new StatefulSetInfo
+                    {
+                        Name = "platform-store",
+                        Namespace = "default",
+                        Replicas = 1,
+                        ReadyReplicas = 1,
+                        CurrentRevision = "platform-store-75bc98f55c",
+                        UpdateRevision = "platform-store-75bc98f55c",
+                        Labels = new Dictionary<string, string> { ["app"] = "platform-store" },
+                        SelectorLabels = new Dictionary<string, string> { ["app"] = "platform-store" }
+                    }
+                ];
+
+                _podsByNamespace["default"] =
+                [
+                    new PodInfo
+                    {
+                        Name = "platform-api-5f84c-rw8lq",
+                        Namespace = "default",
+                        Phase = "Running",
+                        Status = "Running",
+                        Ready = true,
+                        ReadyContainers = 2,
+                        TotalContainers = 2,
+                        Containers = ["platform-api", "istio-proxy"],
+                        PodIP = "10.16.30.12",
+                        Labels = new Dictionary<string, string> { ["app"] = "platform-api", ["pod-template-hash"] = "5f84c" }
+                    }
+                ];
+
+                _ingressesByNamespace["default"] =
+                [
+                    new IngressInfo
+                    {
+                        Name = "platform-public",
+                        Namespace = "default",
+                        IngressClass = "nginx",
+                        Addresses = ["20.10.0.12"],
+                        Rules =
+                        [
+                            new IngressRule
+                            {
+                                Host = "default.example.com",
+                                Paths =
+                                [
+                                    new IngressPath { Path = "/", PathType = "Prefix", ServiceName = "platform-api", ServicePort = 80 }
+                                ]
+                            }
+                        ]
+                    }
+                ];
+
                 _gatewaysByNamespace["default"] =
                 [
                     new GatewayInfo
@@ -635,8 +1056,13 @@ public sealed class AksPageBatchTests : TestContext
 
             foreach (var ns in _namespaces)
             {
+                _deploymentsByNamespace.TryAdd(ns, []);
+                _statefulSetsByNamespace.TryAdd(ns, []);
+                _podsByNamespace.TryAdd(ns, []);
                 _baseJobsByNamespace.TryAdd(ns, []);
                 _cronJobsByNamespace.TryAdd(ns, []);
+                _servicesByNamespace.TryAdd(ns, []);
+                _ingressesByNamespace.TryAdd(ns, []);
                 _gatewaysByNamespace.TryAdd(ns, []);
                 _httpRoutesByNamespace.TryAdd(ns, []);
             }
@@ -649,6 +1075,14 @@ public sealed class AksPageBatchTests : TestContext
         public List<(string Namespace, string Kind, string Name)> YamlRequests { get; } = [];
         public List<(string Namespace, string Name)> TriggerCronJobCalls { get; } = [];
         public List<(string Namespace, string Name)> RerunJobCalls { get; } = [];
+        public List<(string Namespace, string IngressName)> IngressAnalysisCalls { get; } = [];
+        public List<(string Namespace, string WorkloadKind, string WorkloadName)> NetworkPolicyAnalysisCalls { get; } = [];
+
+        public DeploymentInfo FindDeployment(string ns, string name)
+            => _deploymentsByNamespace[ns].Single(deployment => deployment.Name == name);
+
+        public PodInfo FindPod(string ns, string name)
+            => _podsByNamespace[ns].Single(pod => pod.Name == name);
 
         public JobInfo FindJob(string ns, string name)
             => _baseJobsByNamespace[ns]
@@ -658,17 +1092,39 @@ public sealed class AksPageBatchTests : TestContext
         public CronJobInfo FindCronJob(string ns, string name)
             => _cronJobsByNamespace[ns].Single(job => job.Name == name);
 
+        public ServiceInfo FindService(string ns, string name)
+            => _servicesByNamespace[ns].Single(service => service.Name == name);
+
         public GatewayClassInfo FindGatewayClass(string name)
             => _gatewayClasses.Single(gatewayClass => gatewayClass.Name == name);
+
+        public IngressInfo FindIngress(string ns, string name)
+            => _ingressesByNamespace[ns].Single(ingress => ingress.Name == name);
 
         public HttpRouteInfo FindHttpRoute(string ns, string name)
             => _httpRoutesByNamespace[ns].Single(route => route.Name == name);
 
         public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<DeploymentInfo>>([]);
+            => Task.FromResult<IReadOnlyList<DeploymentInfo>>(_deploymentsByNamespace[ns].ToList());
 
         public Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<PodInfo>>([]);
+        {
+            var pods = _podsByNamespace[ns].ToList();
+
+            if (!string.IsNullOrWhiteSpace(labelSelector))
+            {
+                var parts = labelSelector.Split('=', 2, StringSplitOptions.TrimEntries);
+                if (parts.Length == 2)
+                {
+                    pods = pods
+                        .Where(pod => pod.Labels.TryGetValue(parts[0], out var value)
+                            && string.Equals(value, parts[1], StringComparison.Ordinal))
+                        .ToList();
+                }
+            }
+
+            return Task.FromResult<IReadOnlyList<PodInfo>>(pods);
+        }
 
         public Task<IReadOnlyList<KubernetesEvent>> GetEventsAsync(string ns, string? involvedObjectName = null,
             CancellationToken ct = default)
@@ -695,8 +1151,121 @@ public sealed class AksPageBatchTests : TestContext
         public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default)
             => Task.CompletedTask;
 
+        public Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ServiceInfo>>(_servicesByNamespace[ns].ToList());
+
         public Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<IngressInfo>>([]);
+            => Task.FromResult<IReadOnlyList<IngressInfo>>(_ingressesByNamespace[ns].ToList());
+
+        public Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default)
+        {
+            IngressAnalysisCalls.Add((ns, ingressName));
+
+            var ingress = FindIngress(ns, ingressName);
+            var path = ingress.Rules.SelectMany(rule => rule.Paths.Select(routePath => (rule, routePath))).First();
+            var service = _servicesByNamespace[ns].FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, path.routePath.ServiceName, StringComparison.Ordinal));
+            var matchingPods = service is null
+                ? []
+                : _podsByNamespace[ns]
+                    .Where(pod => MatchesSelector(pod.Labels, service.SelectorLabels))
+                    .Select(pod => pod.Name)
+                    .ToList();
+
+            return Task.FromResult(new IngressAnalysis
+            {
+                Namespace = ns,
+                IngressName = ingressName,
+                IngressClass = ingress.IngressClass,
+                Summary = $"{ingressName} routes Kubernetes ingress traffic to {service?.Name ?? "an unresolved Service"}.",
+                Addresses = ingress.Addresses.ToList(),
+                Findings =
+                [
+                    service is null
+                        ? $"Service {path.routePath.ServiceName} was not found in namespace {ns}."
+                        : $"Service {service.Name} exposes {matchingPods.Count} matching pod(s) through Kubernetes Service selectors."
+                ],
+                Backends =
+                [
+                    new IngressBackendAnalysis
+                    {
+                        Host = path.rule.Host ?? "*",
+                        Path = path.routePath.Path,
+                        PathType = path.routePath.PathType,
+                        ServiceName = path.routePath.ServiceName,
+                        ServiceNamespace = ns,
+                        RequestedPort = path.routePath.ServicePort?.ToString() ?? "default",
+                        ServiceExists = service is not null,
+                        ServiceType = service?.Type,
+                        ServicePortResolved = service?.Ports.Any(port => port.Port == path.routePath.ServicePort) == true,
+                        ResolvedServicePort = service?.Ports.FirstOrDefault(port => port.Port == path.routePath.ServicePort) is { } port
+                            ? $"{port.Port}/{port.Protocol} -> {port.TargetPort ?? port.Port.ToString()}"
+                            : null,
+                        HasSelector = service?.SelectorLabels.Count > 0,
+                        MatchingPodCount = matchingPods.Count,
+                        ReadyPodCount = matchingPods.Count,
+                        MatchingPods = matchingPods,
+                        Findings = service is null
+                            ? [$"Ingress backend {path.routePath.ServiceName}:{path.routePath.ServicePort} does not resolve to a Service object."]
+                            : [$"Service {service.Name} selects {matchingPods.Count} ready pod(s) in namespace {ns}."]
+                    }
+                ]
+            });
+        }
+
+        public Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(string ns, string workloadKind, string workloadName, CancellationToken ct = default)
+        {
+            NetworkPolicyAnalysisCalls.Add((ns, workloadKind, workloadName));
+
+            var selector = ResolveSelector(ns, workloadKind, workloadName);
+            var matchingPods = ResolveMatchingPods(ns, workloadKind, workloadName, selector);
+            var matchingServices = _servicesByNamespace[ns]
+                .Where(service => service.SelectorLabels.Count > 0 && MatchesSelector(selector, service.SelectorLabels))
+                .ToList();
+            var exposedIngresses = _ingressesByNamespace[ns]
+                .Where(ingress => ingress.Rules.SelectMany(rule => rule.Paths)
+                    .Any(path => matchingServices.Any(service => string.Equals(service.Name, path.ServiceName, StringComparison.Ordinal))))
+                .Select(ingress => ingress.Name)
+                .ToList();
+            var selectorLabel = selector.TryGetValue("app", out var appLabel) ? appLabel : workloadName;
+
+            return Task.FromResult(new NetworkPolicyAnalysis
+            {
+                Namespace = ns,
+                WorkloadKind = workloadKind,
+                WorkloadName = workloadName,
+                Summary = $"{workloadKind} {workloadName} is isolated on ingress and still reachable through the selected Kubernetes Services.",
+                MatchingPodCount = matchingPods.Count,
+                MatchingPods = matchingPods,
+                SelectorLabels = selector,
+                Services = matchingServices.Select(service => $"{service.Name} ({service.Type})").ToList(),
+                ExposedByIngresses = exposedIngresses,
+                IngressIsolated = true,
+                EgressIsolated = false,
+                Findings =
+                [
+                    $"Matched {matchingPods.Count} pod(s) for {workloadKind} {workloadName}.",
+                    matchingServices.Count == 0
+                        ? "No Services select the workload."
+                        : $"{matchingServices.Count} Service object(s) select the workload."
+                ],
+                Policies =
+                [
+                    new NetworkPolicyMatch
+                    {
+                        Name = $"{selectorLabel}-allow-from-ingress",
+                        PolicyTypes = ["Ingress"],
+                        IngressRules = ["Allow traffic from ingress controller pods on TCP/80."]
+                    },
+                    new NetworkPolicyMatch
+                    {
+                        Name = $"{selectorLabel}-egress-dependencies",
+                        PolicyTypes = ["Egress"],
+                        EgressRules = ["Allow egress to kube-dns and upstream dependency endpoints."]
+                    }
+                ]
+            });
+        }
 
         public Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<GatewayClassInfo>>(_gatewayClasses.ToList());
@@ -764,7 +1333,7 @@ public sealed class AksPageBatchTests : TestContext
             => EmptyAggregatedLogLines();
 
         public Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<StatefulSetInfo>>([]);
+            => Task.FromResult<IReadOnlyList<StatefulSetInfo>>(_statefulSetsByNamespace[ns].ToList());
 
         public Task RestartStatefulSetAsync(string ns, string name, CancellationToken ct = default)
             => Task.CompletedTask;
@@ -843,6 +1412,45 @@ public sealed class AksPageBatchTests : TestContext
 
             return Task.FromResult(createdJobName);
         }
+
+        private Dictionary<string, string> ResolveSelector(string ns, string workloadKind, string workloadName)
+        {
+            if (string.Equals(workloadKind, "Deployment", StringComparison.Ordinal))
+            {
+                return new Dictionary<string, string>(FindDeployment(ns, workloadName).SelectorLabels, StringComparer.Ordinal);
+            }
+
+            if (string.Equals(workloadKind, "StatefulSet", StringComparison.Ordinal))
+            {
+                return new Dictionary<string, string>(
+                    _statefulSetsByNamespace[ns].Single(statefulSet => statefulSet.Name == workloadName).SelectorLabels,
+                    StringComparer.Ordinal);
+            }
+
+            if (string.Equals(workloadKind, "Pod", StringComparison.Ordinal))
+            {
+                return new Dictionary<string, string>(FindPod(ns, workloadName).Labels, StringComparer.Ordinal);
+            }
+
+            return new Dictionary<string, string>(StringComparer.Ordinal) { ["app"] = workloadName };
+        }
+
+        private List<string> ResolveMatchingPods(string ns, string workloadKind, string workloadName, IReadOnlyDictionary<string, string> selector)
+        {
+            if (string.Equals(workloadKind, "Pod", StringComparison.Ordinal))
+            {
+                return [workloadName];
+            }
+
+            return _podsByNamespace[ns]
+                .Where(pod => MatchesSelector(pod.Labels, selector))
+                .Select(pod => pod.Name)
+                .ToList();
+        }
+
+        private static bool MatchesSelector(IReadOnlyDictionary<string, string> candidate, IReadOnlyDictionary<string, string> selector)
+            => selector.All(label => candidate.TryGetValue(label.Key, out var value)
+                && string.Equals(value, label.Value, StringComparison.Ordinal));
 
         private static async IAsyncEnumerable<string> EmptyLogLines()
         {

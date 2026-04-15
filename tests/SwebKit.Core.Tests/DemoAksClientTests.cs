@@ -130,6 +130,45 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task AnalyzeIngressAsync_ReturnsBackendEvidence()
+    {
+        var analysis = await _client.AnalyzeIngressAsync("default", "main-ingress");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.Equal("main-ingress", analysis.IngressName);
+        Assert.NotEmpty(analysis.Backends);
+        Assert.Contains(analysis.Backends, backend => backend.ServiceName == "order-api" && backend.MatchingPodCount > 0);
+        Assert.NotEmpty(analysis.Findings);
+    }
+
+    [Fact]
+    public async Task AnalyzeNetworkPoliciesAsync_ReturnsPolicyEvidenceForDeployment()
+    {
+        var analysis = await _client.AnalyzeNetworkPoliciesAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.Equal("Deployment", analysis.WorkloadKind);
+        Assert.Equal("order-api", analysis.WorkloadName);
+        Assert.True(analysis.MatchingPodCount > 0);
+        Assert.Contains(analysis.Services, service => service.Contains("order-api", StringComparison.Ordinal));
+        Assert.NotEmpty(analysis.Policies);
+    }
+
+    [Fact]
+    public async Task GetServicesAsync_ReturnsServicesWithPorts()
+    {
+        var services = await _client.GetServicesAsync("default");
+
+        Assert.NotEmpty(services);
+        Assert.Contains(services, service => service.Type == "LoadBalancer");
+        Assert.All(services, service =>
+        {
+            Assert.Equal("default", service.Namespace);
+            Assert.NotEmpty(service.Ports);
+        });
+    }
+
+    [Fact]
     public async Task GetGatewayClassesAsync_ReturnsClusterScopedGatewayClasses()
     {
         var gatewayClasses = await _client.GetGatewayClassesAsync();
@@ -273,6 +312,18 @@ public class DemoAksClientTests
         Assert.Contains("kind: GatewayClass", yaml);
         Assert.Contains($"name: {gatewayClass.Name}", yaml);
         Assert.DoesNotContain($"metadata:\n  name: {gatewayClass.Name}\n  namespace:", normalizedYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_Service_ReturnsServiceYaml()
+    {
+        var service = (await _client.GetServicesAsync("default")).First();
+
+        var yaml = await _client.GetResourceYamlAsync("default", "Service", service.Name);
+
+        Assert.Contains("apiVersion: v1", yaml);
+        Assert.Contains("kind: Service", yaml);
+        Assert.Contains($"name: {service.Name}", yaml);
     }
 
     [Fact]

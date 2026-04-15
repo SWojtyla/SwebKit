@@ -4,21 +4,21 @@
 
 title: "Status - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-04-15"
 
 ---
 
 ## Quick summary
 
-Planning is ready for implementation. The next step is to lock the additive `IAksClient` contracts for quota, disruption-budget, probe, placement, and Helm preview data before changing the page layout.
+Wave 2 UI work has started on the existing `/aks` surface. The AKS toolbar now groups network resources behind an expandable `Network` menu, Services are browseable as a first-class AKS resource, and the HTTPRoute grid has been hardened so variable-height route rows do not disappear when several routes are present.
 
 Jira: not linked
 
-Current focus: Wave 1 contract and model definition for namespace and workload constraints.
+Current focus: keep extending the AKS page toward evidence-first network and ingress diagnostics without fragmenting the page navigation.
 
 ## Progress checklist
 
@@ -30,6 +30,9 @@ Current focus: Wave 1 contract and model definition for namespace and workload c
 
 ### Wave 2 - network and ingress diagnostics
 
+- [x] Group network-oriented AKS resources behind an expandable `Network` menu
+- [x] Add Services as a first-class AKS browse and YAML surface
+- [x] Keep HTTPRoute browse stable when several route rows are present
 - [ ] Define network policy and ingress analysis models
 - [ ] Decide how far analysis should go without implying packet-level certainty
 - [ ] Add drill points from pods and ingresses into the new panels
@@ -44,6 +47,9 @@ Current focus: Wave 1 contract and model definition for namespace and workload c
 - Confirmed the feature should deepen the current `/aks` route instead of creating a separate diagnostics experience.
 - Identified namespace constraints, probe failures, network policy or ingress analysis, placement constraints, and Helm preview as the highest-value gaps.
 - Scoped the feature toward evidence summaries and away from scheduler or network simulation.
+- Grouped Services, Ingresses, and Gateway API resources under an expandable `Network` menu in the AKS toolbar.
+- Added Services browse support to the AKS page, demo client, live client, and page-level YAML flow.
+- Switched the HTTPRoute grid onto a non-virtualized render path so later route rows stay visible when route cells wrap.
 
 ## Remaining
 
@@ -59,7 +65,7 @@ Current focus: Wave 1 contract and model definition for namespace and workload c
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: Targeted AKS component and client tests in progress
 
 ## Notes
 

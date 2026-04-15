@@ -3,6 +3,7 @@ using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.App.Components.Aks;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
@@ -55,5 +56,47 @@ public class AksDetailPanelsTests : TestContext
         await cut.InvokeAsync(() => cut.Instance.ShowPodLogs("api-pod-xyz"));
 
         Assert.True(cut.Instance.IsOpen);
+    }
+
+    [Fact]
+    public async Task AksDetailPanels_ShowIngressAnalysis_RendersIngressPanel()
+    {
+        var cut = RenderComponent<AksDetailPanels>(ps => ps
+            .Add(p => p.Client, new DemoAksClient())
+            .Add(p => p.Namespace, "default"));
+
+        await cut.InvokeAsync(() =>
+        {
+            cut.Instance.ShowIngressAnalysis("main-ingress");
+            return Task.CompletedTask;
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(cut.Instance.IsOpen);
+            Assert.Contains("Ingress Analysis: main-ingress", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Backend evidence", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task AksDetailPanels_ShowNetworkPolicyAnalysis_RendersNetworkPanel()
+    {
+        var cut = RenderComponent<AksDetailPanels>(ps => ps
+            .Add(p => p.Client, new DemoAksClient())
+            .Add(p => p.Namespace, "default"));
+
+        await cut.InvokeAsync(() =>
+        {
+            cut.Instance.ShowNetworkPolicyAnalysis("Deployment", "order-api");
+            return Task.CompletedTask;
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(cut.Instance.IsOpen);
+            Assert.Contains("Network Policies: order-api", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Policy evidence", cut.Markup, StringComparison.Ordinal);
+        });
     }
 }

@@ -1,7 +1,7 @@
 @* Renders the Gateway API HTTPRoutes FluentDataGrid. *@
 
 <div class="aks-httproute-grid-shell">
-    <FluentDataGrid Items="@FilteredItems" TGridItem="HttpRouteInfo"
+    <FluentDataGrid Items="@FilteredItems" TGridItem="HttpRouteInfo" Virtualize="false"
                     RowClass="@(route => HasSameIdentity(route, SelectedHttpRoute) ? "selected-row" : "")"
                     OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
         <TemplateColumn Title="Name" Width="230px" SortBy="@(GridSort<HttpRouteInfo>.ByAscending(route => route.Name))">

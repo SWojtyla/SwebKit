@@ -17,6 +17,7 @@ Validate that the AKS page can surface deeper runtime diagnostics and read-only 
 ## Scope
 
 - In scope: namespace quota and limit visibility, PodDisruptionBudget status, probe-failure surfacing, placement analysis, network policy and ingress analysis, Helm diff or upgrade preview.
+- Also in scope for current AKS page hardening: network resource navigation, Services browse support, and stable HTTPRoute list rendering.
 - Out of scope: mutating Kubernetes policy objects, packet tracing, full scheduler simulation, and automatic repair.
 
 ## Main scenarios (priority)
@@ -31,11 +32,14 @@ Validate that the AKS page can surface deeper runtime diagnostics and read-only 
 8. Scenario: Helm diff preview is requested when supporting CLI tooling is available. Expected result: a read-only preview renders and remains searchable.
 9. Scenario: Helm diff preview is requested when supporting tooling is unavailable. Expected result: the page shows an explicit capability limitation or degraded fallback.
 10. Scenario: multiple diagnostics panels are opened while auto-refresh would normally run. Expected result: the main grid remains stable and auto-refresh pause behavior still works.
+11. Scenario: the operator opens the AKS `Network` menu. Expected result: Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes are all reachable without flattening the main toolbar.
+12. Scenario: all-namespaces mode contains Services from more than one namespace. Expected result: the Services tab shows row namespace, service type, and route-to-YAML behavior against the selected row namespace.
+13. Scenario: three or more HTTPRoutes are present and route cells wrap. Expected result: every route remains visible in the UI and later rows are still reachable.
 
 ## Automated coverage
 
 - Component tests: `tests/SwebKit.App.Tests`
-- Extend `AksDetailPanelsTests`, `AksHelmPanelTests`, `AksPageBatchTests`, `AksYamlViewerTests`, and add focused tests for new diagnostics panels.
+- Extend `AksDetailPanelsTests`, `AksHelmPanelTests`, `AksPageBatchTests`, `AksConnectionBarTests`, `AksYamlViewerTests`, and add focused tests for new diagnostics panels.
 - Unit tests: `tests/SwebKit.Core.Tests`
 - Add model and summary tests if placement or probe summarization logic lives in Core helpers.
 - Integration tests: `tests/SwebKit.Kubernetes.Tests`
@@ -56,6 +60,7 @@ Validate that the AKS page can surface deeper runtime diagnostics and read-only 
 - Check: namespace diagnostics. Steps: open `/aks`, select a constrained namespace, and verify quota and limit details are visible and understandable.
 - Check: probe and placement explanation. Steps: inspect a failing pod and verify the panel distinguishes observed failures from inferred next steps.
 - Check: network and ingress analysis. Steps: select an ingress or workload with policy restrictions and confirm the page shows what objects were inspected.
+- Check: network menu browse. Steps: open the AKS `Network` menu, switch between Services, Ingresses, and HTTPRoutes, and confirm the active resource list and count update correctly.
 - Check: Helm preview. Steps: request a preview and verify plugin-supported and unsupported paths are both explicit.
 
 ## Regression risks & mitigations

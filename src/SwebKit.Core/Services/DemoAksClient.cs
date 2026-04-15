@@ -128,6 +128,11 @@ public class DemoAksClient : IAksClient
         await Task.Delay(200, ct);
 
         var tick = Interlocked.Increment(ref _demoTick);
+        return BuildDemoPods(ns, tick, labelSelector);
+    }
+
+    private static IReadOnlyList<PodInfo> BuildDemoPods(string ns, int tick, string? labelSelector = null)
+    {
         var pods = new List<PodInfo>();
         foreach (var d in DemoDeployments)
         {
@@ -304,6 +309,324 @@ public class DemoAksClient : IAksClient
                 Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm", ["tier"] = "monitoring" }
             }
         };
+    }
+
+    public async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+        return new List<ServiceInfo>
+        {
+            new()
+            {
+                Name = "order-api",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.10",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "order-api" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "order-api" }
+            },
+            new()
+            {
+                Name = "payment-gateway",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.24",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "payment-gateway" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "payment-gateway" }
+            },
+            new()
+            {
+                Name = "ingress-nginx-controller",
+                Namespace = ns,
+                Type = "LoadBalancer",
+                ClusterIp = "10.0.12.52",
+                ExternalAddresses = ["20.93.141.52"],
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "80" },
+                    new ServicePortInfo { Name = "https", Protocol = "TCP", Port = 443, TargetPort = "443" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "ingress-nginx" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "prometheus-server",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.88",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 9090, TargetPort = "9090" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "prometheus-server" },
+                Labels = new Dictionary<string, string> { ["tier"] = "monitoring" }
+            }
+        };
+    }
+
+    public async Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var ingress = (await GetIngressesAsync(ns, ct)).FirstOrDefault(item =>
+            string.Equals(item.Name, ingressName, StringComparison.Ordinal));
+        if (ingress is null)
+        {
+            throw new InvalidOperationException($"Ingress '{ingressName}' was not found in namespace '{ns}'.");
+        }
+
+        var services = (await GetServicesAsync(ns, ct)).ToDictionary(service => service.Name, StringComparer.Ordinal);
+        var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
+        var backends = new List<IngressBackendAnalysis>();
+
+        foreach (var rule in ingress.Rules)
+        {
+            foreach (var path in rule.Paths)
+            {
+                services.TryGetValue(path.ServiceName ?? string.Empty, out var service);
+                var matchingPods = service?.SelectorLabels.Count > 0
+                    ? pods.Where(pod => service.SelectorLabels.All(selector =>
+                        pod.Labels.TryGetValue(selector.Key, out var value)
+                        && string.Equals(value, selector.Value, StringComparison.Ordinal))).ToList()
+                    : [];
+
+                var requestedPort = path.ServicePort?.ToString() ?? "unspecified";
+                var matchingPort = service?.Ports.FirstOrDefault(port => port.Port == path.ServicePort);
+                var backendFindings = new List<string>();
+
+                if (service is null)
+                {
+                    backendFindings.Add($"Service '{path.ServiceName ?? "(missing)"}' was not found.");
+                }
+                else
+                {
+                    if (matchingPort is null)
+                    {
+                        backendFindings.Add($"Requested port '{requestedPort}' does not exist on Service '{service.Name}'.");
+                    }
+
+                    if (service.SelectorLabels.Count == 0)
+                    {
+                        backendFindings.Add($"Service '{service.Name}' has no pod selector, so backend readiness could not be inferred from pods.");
+                    }
+                    else if (matchingPods.Count == 0)
+                    {
+                        backendFindings.Add($"Service '{service.Name}' selector matched no pods.");
+                    }
+                    else
+                    {
+                        var readyPods = matchingPods.Count(pod => pod.Ready);
+                        if (readyPods == 0)
+                        {
+                            backendFindings.Add($"Service '{service.Name}' matched {matchingPods.Count} pod(s), but none were Ready.");
+                        }
+                        else if (readyPods < matchingPods.Count)
+                        {
+                            backendFindings.Add($"Service '{service.Name}' matched {readyPods}/{matchingPods.Count} Ready pod(s).");
+                        }
+                    }
+                }
+
+                backends.Add(new IngressBackendAnalysis
+                {
+                    Host = rule.Host ?? "*",
+                    Path = path.Path,
+                    PathType = path.PathType,
+                    ServiceName = path.ServiceName,
+                    ServiceNamespace = ns,
+                    RequestedPort = requestedPort,
+                    ServiceExists = service is not null,
+                    ServiceType = service?.Type,
+                    ServicePortResolved = matchingPort is not null,
+                    ResolvedServicePort = matchingPort is null
+                        ? null
+                        : $"{matchingPort.Port}/{matchingPort.Protocol} → {(matchingPort.TargetPort ?? matchingPort.Port.ToString())}",
+                    HasSelector = service?.SelectorLabels.Count > 0,
+                    MatchingPodCount = matchingPods.Count,
+                    ReadyPodCount = matchingPods.Count(pod => pod.Ready),
+                    MatchingPods = matchingPods.Select(pod => pod.Name).Take(6).ToList(),
+                    Findings = backendFindings
+                });
+            }
+        }
+
+        var findings = backends.SelectMany(backend => backend.Findings).Distinct(StringComparer.Ordinal).ToList();
+        if (ingress.Addresses.Count == 0)
+        {
+            findings.Insert(0, "The ingress has no published load balancer address yet.");
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add("All inspected ingress backends resolved to Services with matching Ready pods.");
+        }
+
+        return new IngressAnalysis
+        {
+            Namespace = ns,
+            IngressName = ingress.Name,
+            IngressClass = ingress.IngressClass,
+            Summary = findings.Count == 1 && findings[0].StartsWith("All inspected", StringComparison.Ordinal)
+                ? $"All {backends.Count} inspected ingress backend(s) resolved to Services with matching Ready pods."
+                : $"{backends.Count(backend => backend.Findings.Count > 0)} of {backends.Count} inspected ingress backend(s) need attention.",
+            Addresses = ingress.Addresses.ToList(),
+            Findings = findings,
+            Backends = backends
+        };
+    }
+
+    public async Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
+        var selectedPods = workloadKind.Trim().ToLowerInvariant() switch
+        {
+            "deployment" or "statefulset" => pods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList(),
+            "pod" => pods.Where(pod => string.Equals(pod.Name, workloadName, StringComparison.Ordinal)).ToList(),
+            _ => throw new NotSupportedException($"Network policy analysis is not supported for workload kind '{workloadKind}'.")
+        };
+
+        var selectorLabels = workloadKind.Trim().Equals("pod", StringComparison.OrdinalIgnoreCase)
+            ? selectedPods.FirstOrDefault()?.Labels is { Count: > 0 } labels
+                ? new Dictionary<string, string>(labels)
+                : []
+            : new Dictionary<string, string> { ["app"] = workloadName };
+
+        var services = (await GetServicesAsync(ns, ct))
+            .Where(service => service.SelectorLabels.Count > 0 && selectedPods.Any(pod =>
+                service.SelectorLabels.All(selector =>
+                    pod.Labels.TryGetValue(selector.Key, out var value)
+                    && string.Equals(value, selector.Value, StringComparison.Ordinal))))
+            .Select(service => service.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var ingresses = (await GetIngressesAsync(ns, ct))
+            .Where(ingress => ingress.Rules.Any(rule => rule.Paths.Any(path =>
+                !string.IsNullOrWhiteSpace(path.ServiceName)
+                && services.Contains(path.ServiceName, StringComparer.Ordinal))))
+            .Select(ingress => ingress.Name)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var policies = BuildDemoNetworkPolicies(workloadName);
+        var ingressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Ingress", StringComparer.OrdinalIgnoreCase));
+        var egressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Egress", StringComparer.OrdinalIgnoreCase));
+
+        var findings = new List<string>();
+        if (selectedPods.Count == 0)
+        {
+            findings.Add("No live pods matched the workload selector while the analysis ran.");
+        }
+
+        if (policies.Count == 0)
+        {
+            findings.Add("No NetworkPolicy objects currently select this workload.");
+        }
+
+        if (services.Count == 0)
+        {
+            findings.Add("No Services in this namespace currently select the workload's pods.");
+        }
+
+        if (ingresses.Count > 0)
+        {
+            findings.Add($"Referenced by ingress resources: {string.Join(", ", ingresses)}.");
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add("The workload is selected by Services and NetworkPolicy objects with no immediate object-level gaps detected.");
+        }
+
+        var summary = selectedPods.Count == 0
+            ? "No live pods matched the workload during analysis, so policy impact could not be confirmed from pod evidence."
+            : policies.Count == 0
+                ? $"No network policies currently select the {selectedPods.Count} matched pod(s)."
+                : $"{policies.Count} network polic{(policies.Count == 1 ? "y" : "ies")} select {selectedPods.Count} pod(s). Ingress is {(ingressIsolated ? "isolated" : "open")}; egress is {(egressIsolated ? "isolated" : "open")}.";
+
+        return new NetworkPolicyAnalysis
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            Summary = summary,
+            MatchingPodCount = selectedPods.Count,
+            MatchingPods = selectedPods.Select(pod => pod.Name).Take(6).ToList(),
+            SelectorLabels = selectorLabels,
+            Services = services,
+            ExposedByIngresses = ingresses,
+            IngressIsolated = ingressIsolated,
+            EgressIsolated = egressIsolated,
+            Findings = findings,
+            Policies = policies
+        };
+    }
+
+    private static List<NetworkPolicyMatch> BuildDemoNetworkPolicies(string workloadName)
+    {
+        if (string.Equals(workloadName, "order-api", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "order-api-allow-from-ingress",
+                    PolicyTypes = ["Ingress"],
+                    IngressRules = ["Allows ingress from namespaces [app.kubernetes.io/name=ingress-nginx] on TCP/8080."]
+                },
+                new NetworkPolicyMatch
+                {
+                    Name = "order-api-egress-dependencies",
+                    PolicyTypes = ["Egress"],
+                    EgressRules = ["Allows egress to namespaces [team=platform] on TCP/443, TCP/5671."]
+                }
+            ];
+        }
+
+        if (string.Equals(workloadName, "payment-gateway", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "payment-gateway-restrict-egress",
+                    PolicyTypes = ["Egress"],
+                    EgressRules = ["Allows egress to CIDR 10.20.0.0/24 on TCP/443."]
+                }
+            ];
+        }
+
+        if (string.Equals(workloadName, "search-indexer", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "search-indexer-default-deny",
+                    PolicyTypes = ["Ingress", "Egress"]
+                }
+            ];
+        }
+
+        return [];
     }
 
     public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)

@@ -47,7 +47,7 @@
                 <div class="aks-metric-cell">
                     <span class="aks-metric @CpuClass(cpuMetric.Value)"
                           title="@($"{cpuMetric.Value * 1000:F0}m / ~{CpuCeiling}m")">@($"{cpuMetric.Value *
-                                                                    1000:F0}m")</span>
+                                                                                            1000:F0}m")</span>
                         <div class="aks-metric-bar-track">
                             <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)" style="width:@($"{cpuPct:F0}")%"></div>
                         </div>
@@ -131,6 +131,15 @@
                 }
             </div>
         </TemplateColumn>
+        <TemplateColumn Title="Network" Width="110px">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <button class="aks-analysis-btn" @onclick="() => OnOpenNetworkAnalysis.InvokeAsync(context)"
+                        @onclick:stopPropagation>
+                    Inspect
+                </button>
+            </div>
+        </TemplateColumn>
     </FluentDataGrid>
 
 @code {
@@ -144,6 +153,7 @@
     [Parameter] public int CpuCeiling { get; set; } = 500;
     [Parameter] public int MemoryCeiling { get; set; } = 512;
     [Parameter] public EventCallback<string> OnCopyName { get; set; }
+    [Parameter] public EventCallback<PodInfo> OnOpenNetworkAnalysis { get; set; }
 
     private double? GetPodCpu(string podName)
     {

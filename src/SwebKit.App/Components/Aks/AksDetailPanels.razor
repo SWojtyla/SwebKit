@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                        ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                        : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -76,7 +76,7 @@
 
                 @* ── Container details ── *@
                 @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                                        _logDeploymentName is null)
+                                                                                        _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -133,6 +133,43 @@
                     </div>
                 }
 
+                @* ── Ingress analysis ── *@
+                @if (_ingressAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Ingress Analysis: @_ingressAnalysisTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseIngressAnalysis" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <IngressAnalysisPanel Client="Client" Namespace="@_ingressAnalysisTarget.Namespace"
+                                                  IngressName="@_ingressAnalysisTarget.Name" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Network policy analysis ── *@
+                @if (_networkPolicyAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Network Policies: @_networkPolicyAnalysisTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseNetworkPolicyAnalysis" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <NetworkPolicyAnalysisPanel Client="Client" Namespace="@_networkPolicyAnalysisTarget.Namespace"
+                                                        WorkloadKind="@_networkPolicyAnalysisTarget.WorkloadKind"
+                                                        WorkloadName="@_networkPolicyAnalysisTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
                 @* ── Events panel ── *@
                 @if (ShowEvents)
                 {
@@ -144,7 +181,7 @@
                             {
                                 <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                     <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                    == "Warning")
+                                                                                                                                                                                                        == "Warning")
                                 </span>
                             }
                             <span class="aks-toolbar-spacer"></span>
@@ -219,6 +256,8 @@
 
     // ── Pending-open state (BL-6: @ref inside @if cannot be used until after first render) ──
     private enum HelmPendingAction { History, Values, Rollback }
+    private sealed record IngressAnalysisTarget(string Name, string Namespace);
+    private sealed record NetworkPolicyAnalysisTarget(string WorkloadKind, string WorkloadName, string Namespace);
     private (string Kind, string Name, bool EditMode, string? Namespace)? _pendingYamlOpen;
     private (string ReleaseName, HelmPendingAction Action)? _pendingHelmOpen;
 
@@ -229,6 +268,8 @@
     private ConfigMapInfo? _configMapDetailTarget;
     private SecretInfo? _secretDetailTarget;
     private HpaInfo? _hpaDetailTarget;
+    private IngressAnalysisTarget? _ingressAnalysisTarget;
+    private NetworkPolicyAnalysisTarget? _networkPolicyAnalysisTarget;
     private string? _scaleTarget;
     private int _scaleReplicas;
     private bool _scaleIsStatefulSet;
@@ -250,6 +291,8 @@
         _secretDetailTarget is not null ||
         _containerDetailPodName is not null ||
         _hpaDetailTarget is not null ||
+        _ingressAnalysisTarget is not null ||
+        _networkPolicyAnalysisTarget is not null ||
         _yamlViewer?.IsEditing == true ||
         ShowEvents;
 
@@ -351,6 +394,22 @@
         NotifyPanelStateChanged();
     }
 
+    public void ShowIngressAnalysis(string ingressName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _ingressAnalysisTarget = new(ingressName, targetNamespace ?? Namespace);
+        _networkPolicyAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowNetworkPolicyAnalysis(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _networkPolicyAnalysisTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        _ingressAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
     // ── Lifecycle ──
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -445,6 +504,18 @@
         NotifyPanelStateChanged();
     }
 
+    private void CloseIngressAnalysis()
+    {
+        _ingressAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseNetworkPolicyAnalysis()
+    {
+        _networkPolicyAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
     private async Task CloseEvents()
     {
         await OnShowEventsChanged.InvokeAsync();
@@ -461,6 +532,18 @@
     {
         StateHasChanged();
         _ = OnPanelStateChanged.InvokeAsync();
+    }
+
+    private void ResetTransientPanels()
+    {
+        _yamlViewer?.Close();
+        _logPodName = null;
+        _logDeploymentName = null;
+        _containerDetailPodName = null;
+        _configMapDetailTarget = null;
+        _secretDetailTarget = null;
+        _hpaDetailTarget = null;
+        _scaleTarget = null;
     }
 
     private static string TruncatePodName(string name)

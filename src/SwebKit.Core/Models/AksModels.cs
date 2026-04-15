@@ -76,6 +76,27 @@ public class KubernetesEvent
     public int Count { get; set; }
 }
 
+public class ServiceInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string Type { get; set; } = "ClusterIP";
+    public string ClusterIp { get; set; } = "None";
+    public List<string> ExternalAddresses { get; set; } = [];
+    public List<ServicePortInfo> Ports { get; set; } = [];
+    public Dictionary<string, string> SelectorLabels { get; set; } = [];
+    public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+public class ServicePortInfo
+{
+    public string? Name { get; set; }
+    public string Protocol { get; set; } = "TCP";
+    public int Port { get; set; }
+    public string? TargetPort { get; set; }
+    public int? NodePort { get; set; }
+}
+
 public class IngressInfo
 {
     public required string Name { get; set; }
@@ -324,4 +345,65 @@ public class CronJobInfo
     public DateTimeOffset? LastScheduleTime { get; set; }
     public DateTimeOffset? LastSuccessfulTime { get; set; }
     public Dictionary<string, string> Labels { get; set; } = [];
+}
+
+// ── Runtime diagnostics ─────────────────────────────────────────────────────
+
+public class IngressAnalysis
+{
+    public required string Namespace { get; set; }
+    public required string IngressName { get; set; }
+    public string? IngressClass { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public string Limitation { get; set; } =
+        "Inspects Kubernetes objects only. It does not prove live packet-path success, cloud edge reachability, or controller health.";
+    public List<string> Addresses { get; set; } = [];
+    public List<string> Findings { get; set; } = [];
+    public List<IngressBackendAnalysis> Backends { get; set; } = [];
+}
+
+public class IngressBackendAnalysis
+{
+    public string Host { get; set; } = "*";
+    public string Path { get; set; } = "/";
+    public string? PathType { get; set; }
+    public string? ServiceName { get; set; }
+    public string? ServiceNamespace { get; set; }
+    public string RequestedPort { get; set; } = string.Empty;
+    public bool ServiceExists { get; set; }
+    public string? ServiceType { get; set; }
+    public bool ServicePortResolved { get; set; }
+    public string? ResolvedServicePort { get; set; }
+    public bool HasSelector { get; set; }
+    public int MatchingPodCount { get; set; }
+    public int ReadyPodCount { get; set; }
+    public List<string> MatchingPods { get; set; } = [];
+    public List<string> Findings { get; set; } = [];
+}
+
+public class NetworkPolicyAnalysis
+{
+    public required string Namespace { get; set; }
+    public required string WorkloadKind { get; set; }
+    public required string WorkloadName { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public string Limitation { get; set; } =
+        "Inspects namespace-scoped Kubernetes resources only. It does not prove live packet flow, cross-namespace intent, or external firewall behavior.";
+    public int MatchingPodCount { get; set; }
+    public List<string> MatchingPods { get; set; } = [];
+    public Dictionary<string, string> SelectorLabels { get; set; } = [];
+    public List<string> Services { get; set; } = [];
+    public List<string> ExposedByIngresses { get; set; } = [];
+    public bool IngressIsolated { get; set; }
+    public bool EgressIsolated { get; set; }
+    public List<string> Findings { get; set; } = [];
+    public List<NetworkPolicyMatch> Policies { get; set; } = [];
+}
+
+public class NetworkPolicyMatch
+{
+    public required string Name { get; set; }
+    public List<string> PolicyTypes { get; set; } = [];
+    public List<string> IngressRules { get; set; } = [];
+    public List<string> EgressRules { get; set; } = [];
 }
