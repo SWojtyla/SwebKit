@@ -4,7 +4,7 @@
 
 title: "Decisions - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -113,3 +113,30 @@ The first delivery will scope new diagnostics to the active namespace and select
 
 - Alternative A - Start with cluster-wide overviews. Rejected because it broadens the feature and the data volume too early.
 - Alternative B - Restrict diagnostics to pods only. Rejected because namespace and Helm context are core parts of operator diagnosis.
+
+---
+
+## Decision 005 - Load Wave 2 diagnostics on demand inside the existing panel column
+
+**Status:** Accepted
+
+**Date:** 2026-04-15
+
+### Context
+
+Ingress and network-policy analysis needs cluster reads that are heavier and more situational than the main browse grids. Folding that data into the page-level cache and refresh loop would increase background load and complicate the existing panel pause behavior.
+
+### Decision
+
+Implement Wave 2 diagnostics as self-loading side panels that fetch analysis only when the operator opens them.
+
+### Consequences
+
+- Keeps the main browse-data cache and periodic refresh path stable.
+- Reuses the existing side-panel open state to pause auto-refresh.
+- Requires explicit refresh actions inside the diagnostics panels and focused panel-host tests.
+
+### Alternatives considered
+
+- Alternative A - Preload analysis with the main page data. Rejected because most operators will not inspect every workload or ingress and the extra reads would be wasted.
+- Alternative B - Create a second diagnostics route. Rejected because it would duplicate the AKS page selection and panel model.

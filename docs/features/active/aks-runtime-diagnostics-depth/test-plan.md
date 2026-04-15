@@ -4,9 +4,9 @@
 
 title: "Test Plan - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-status: "Not started"
+status: "In Progress"
 created: "2026-04-12"
-updated: "2026-04-12"
+updated: "2026-04-15"
 
 ---
 
@@ -46,6 +46,11 @@ Validate that the AKS page can surface deeper runtime diagnostics and read-only 
 - Extend `KubernetesAksClientTests` for quotas, PDBs, probe data extraction, ingress analysis, network policy reads, and Helm preview capability detection.
 - Demo-mode coverage: `tests/SwebKit.Core.Tests/DemoAksClientTests.cs`
 - Extend demo client fixtures if the new diagnostics are exposed in demo mode.
+- Current validated slice:
+- `tests/SwebKit.App.Tests/AksPageBatchTests.cs`
+- `tests/SwebKit.App.Tests/AksDetailPanelsTests.cs`
+- `tests/SwebKit.Core.Tests/DemoAksClientTests.cs`
+- `tests/SwebKit.Kubernetes.Tests/AksTimelineSignalSourceTests.cs`
 
 ## Test data and setup
 
@@ -78,7 +83,7 @@ Validate that the AKS page can surface deeper runtime diagnostics and read-only 
 
 ## Validation status
 
-- Automated: Not started
+- Automated: Focused Wave 2 AKS diagnostics coverage passed on 2026-04-15 for app, core, and Kubernetes compatibility slices
 - Manual: Not started
 
 ## Sign-off

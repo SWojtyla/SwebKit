@@ -2,7 +2,7 @@
 
 @if (HasOpenPanel)
 {
-    <ResizablePanel DefaultWidth="420" MinWidth="280" MaxWidth="900">
+    <ResizablePanel DefaultWidth="620" MinWidth="320" MaxWidth="1600">
         <div class="aks-panels-col">
 
             @* ── YAML viewer / editor ── *@
@@ -56,7 +56,7 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
                         </div>
-                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" />
+                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" Containers="@_logPodContainers" />
                     </div>
                 }
 
@@ -244,6 +244,7 @@
     [Parameter] public List<KubernetesEvent> Events { get; set; } = [];
     [Parameter] public List<DeploymentInfo> Deployments { get; set; } = [];
     [Parameter] public List<StatefulSetInfo> StatefulSets { get; set; } = [];
+    [Parameter] public List<PodInfo> Pods { get; set; } = [];
     [Parameter] public bool ShowEvents { get; set; }
     [Parameter] public EventCallback OnShowEventsChanged { get; set; }
     [Parameter] public EventCallback<string> OnError { get; set; }
@@ -264,6 +265,7 @@
     // ── Internal state ──
     private string? _logPodName;
     private string? _logDeploymentName;
+    private IReadOnlyList<string> _logPodContainers = [];
     private string? _containerDetailPodName;
     private ConfigMapInfo? _configMapDetailTarget;
     private SecretInfo? _secretDetailTarget;
@@ -348,10 +350,13 @@
     }
 
     // Pod logs
-    public void ShowPodLogs(string podName)
+    public void ShowPodLogs(string podName, IReadOnlyList<string>? containers = null)
     {
         _yamlViewer?.Close();
         _logPodName = podName;
+        _logPodContainers = containers?.Count > 0
+            ? [.. containers]
+            : [.. Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Containers ?? []];
         NotifyPanelStateChanged();
     }
 
@@ -359,6 +364,7 @@
     {
         _logPodName = null;
         _logDeploymentName = deploymentName;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -366,6 +372,7 @@
     {
         _logPodName = null;
         _logDeploymentName = null;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -477,6 +484,7 @@
     private void CloseDeploymentLogs()
     {
         _logDeploymentName = null;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -539,6 +547,7 @@
         _yamlViewer?.Close();
         _logPodName = null;
         _logDeploymentName = null;
+        _logPodContainers = [];
         _containerDetailPodName = null;
         _configMapDetailTarget = null;
         _secretDetailTarget = null;

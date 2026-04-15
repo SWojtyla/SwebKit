@@ -2,6 +2,9 @@ using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.App.Components.Aks;
+using SwebKit.App.Services;
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
@@ -13,10 +16,15 @@ public class AksDetailPanelsTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
+        var uiState = new UiStateRepository();
+
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
         if (libConfigType is not null)
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
+
+        Services.AddSingleton(uiState);
+        Services.AddSingleton<INotificationService>(new NotificationService(uiState));
     }
 
     [Fact]
@@ -56,6 +64,28 @@ public class AksDetailPanelsTests : TestContext
         await cut.InvokeAsync(() => cut.Instance.ShowPodLogs("api-pod-xyz"));
 
         Assert.True(cut.Instance.IsOpen);
+    }
+
+    [Fact]
+    public async Task AksDetailPanels_ShowPodLogs_UsesProvidedContainers()
+    {
+        var cut = RenderComponent<AksDetailPanels>(ps => ps
+            .Add(p => p.Pods, [new PodInfo
+            {
+                Name = "api-pod-xyz",
+                Namespace = "default",
+                Containers = ["api", "sidecar"]
+            }]));
+
+        await cut.InvokeAsync(() => cut.Instance.ShowPodLogs("api-pod-xyz"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var options = cut.FindAll("select.log-container-select option");
+            Assert.Equal(2, options.Count);
+            Assert.Contains(options, option => option.TextContent.Contains("api", StringComparison.Ordinal));
+            Assert.Contains(options, option => option.TextContent.Contains("sidecar", StringComparison.Ordinal));
+        });
     }
 
     [Fact]

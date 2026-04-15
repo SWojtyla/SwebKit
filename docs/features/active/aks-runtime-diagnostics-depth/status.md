@@ -14,11 +14,11 @@ last_updated: "2026-04-15"
 
 ## Quick summary
 
-Wave 2 UI work has started on the existing `/aks` surface. The AKS toolbar now groups network resources behind an expandable `Network` menu, Services are browseable as a first-class AKS resource, and the HTTPRoute grid has been hardened so variable-height route rows do not disappear when several routes are present.
+Wave 2 now extends the existing `/aks` surface with evidence-first ingress and network-policy diagnostics. The AKS toolbar groups network resources behind an expandable `Network` menu, Services remain browseable as a first-class AKS resource, HTTPRoute rows stay visible when route cells wrap, and workload or ingress rows can now open self-loading analysis panels from the same page.
 
 Jira: not linked
 
-Current focus: keep extending the AKS page toward evidence-first network and ingress diagnostics without fragmenting the page navigation.
+Current focus: carry the same evidence-first approach into the remaining namespace, workload-constraint, and Helm-preview waves without fragmenting the existing AKS page model.
 
 ## Progress checklist
 
@@ -33,9 +33,9 @@ Current focus: keep extending the AKS page toward evidence-first network and ing
 - [x] Group network-oriented AKS resources behind an expandable `Network` menu
 - [x] Add Services as a first-class AKS browse and YAML surface
 - [x] Keep HTTPRoute browse stable when several route rows are present
-- [ ] Define network policy and ingress analysis models
-- [ ] Decide how far analysis should go without implying packet-level certainty
-- [ ] Add drill points from pods and ingresses into the new panels
+- [x] Define network policy and ingress analysis models
+- [x] Decide how far analysis should go without implying packet-level certainty
+- [x] Add drill points from workloads and ingresses into the new panels
 
 ### Wave 3 - Helm preview
 
@@ -50,12 +50,18 @@ Current focus: keep extending the AKS page toward evidence-first network and ing
 - Grouped Services, Ingresses, and Gateway API resources under an expandable `Network` menu in the AKS toolbar.
 - Added Services browse support to the AKS page, demo client, live client, and page-level YAML flow.
 - Switched the HTTPRoute grid onto a non-virtualized render path so later route rows stay visible when route cells wrap.
+- Added typed ingress and network-policy analysis contracts to `AksModels.cs` and additive analysis methods to `IAksClient`.
+- Implemented ingress and workload-scoped network analysis in both `KubernetesAksClient` and `DemoAksClient` with explicit limitation wording.
+- Added self-loading `IngressAnalysisPanel` and `NetworkPolicyAnalysisPanel` surfaces to the existing AKS side-panel column.
+- Added row, context-menu, and keyboard diagnostics entry points for Deployments, StatefulSets, Pods, and Ingresses.
+- Extended focused AKS app, core, and Kubernetes test coverage for the new diagnostics paths.
 
 ## Remaining
 
 - Write the additive `IAksClient` and `AksModels.cs` design.
-- Align panel layout and auto-refresh pause behavior with the new diagnostics.
-- Define focused automated coverage for large namespaces, missing Helm diff support, and evidence wording.
+- Add the remaining namespace and workload-constraint diagnostics (quota, limit-range, PDB, probe, placement).
+- Add Helm preview capability detection and read-only preview behavior.
+- Broaden Kubernetes-client coverage for ingress and network-policy edge cases beyond the current focused validation slice.
 
 ## Blockers
 
@@ -65,9 +71,10 @@ Current focus: keep extending the AKS page toward evidence-first network and ing
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Targeted AKS component and client tests in progress
+- Validation status: Focused AKS diagnostics tests passed on 2026-04-15 (`AksPageBatchTests`, `AksDetailPanelsTests`, `DemoAksClientTests`, `AksTimelineSignalSourceTests`)
 
 ## Notes
 
 - The page already pauses auto-refresh when detail panels are open. New diagnostics should reuse that behavior instead of inventing special polling rules.
 - Evidence wording matters here too. The UI should show what the cluster reports, not over-translate it into certainty.
+- Wave 2 diagnostics load on demand from the side-panel components instead of joining the main browse-data cache and periodic refresh path.

@@ -265,7 +265,7 @@
 
                 @* ── Side column: all detail panels ── *@
                 <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
-                                 Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments"
+                                 Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments" Pods="@Pods"
                                  StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
                                  OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged" />
 
@@ -1902,7 +1902,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         if (deployment is null) return;
         _detailPanels?.CloseYaml();
         var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
-        if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name);
+        if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name, pod.Containers);
     }
 
     private void OnCtxViewPodLogs()
@@ -1911,7 +1911,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         CloseAllMenus();
         if (pod is null) return;
         _detailPanels?.CloseYaml();
-        _detailPanels?.ShowPodLogs(pod.Name);
+        _detailPanels?.ShowPodLogs(pod.Name, pod.Containers);
     }
 
     private async Task OnCtxRestartDeployment()

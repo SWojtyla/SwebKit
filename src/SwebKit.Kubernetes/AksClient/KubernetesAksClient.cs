@@ -23,6 +23,9 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private const string DefaultAksServerAppId = "6dae42f8-4368-4678-94ff-3960e28e3630";
     private const int MaxGeneratedJobNamePrefixLength = 52;
     private const string GatewayApiGroup = "gateway.networking.k8s.io";
+    private static readonly Regex LogTimestampPrefixRegex = new(
+        @"^(?<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly string[] GatewayApiVersions = ["v1", "v1beta1", "v1alpha2"];
 
@@ -790,7 +793,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private static string DescribeIngressRule(V1NetworkPolicyIngressRule rule)
     {
-        var peers = DescribePeers(rule._From);
+        var peers = DescribePeers(rule.FromProperty);
         var ports = DescribePorts(rule.Ports);
         return $"Allows ingress from {peers} on {ports}.";
     }
@@ -1046,6 +1049,15 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private static bool IsPodReady(V1Pod pod) =>
         pod.Status?.ContainerStatuses is { Count: > 0 } statuses
         && statuses.All(status => status.Ready);
+
+    private static DateTimeOffset? TryExtractLogTimestamp(string line)
+    {
+        var match = LogTimestampPrefixRegex.Match(line);
+        if (match.Success && DateTimeOffset.TryParse(match.Groups["timestamp"].Value, out var parsed))
+            return parsed;
+
+        return null;
+    }
 
     public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
     {
@@ -2478,7 +2490,12 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     await foreach (var line in StreamPodLogsAsync(ns, pod.Name, container, opts, linkedCts.Token))
                     {
                         await channel.Writer.WriteAsync(
-                            new AggregatedLogLine { PodName = pod.Name, Line = line },
+                            new AggregatedLogLine
+                            {
+                                PodName = pod.Name,
+                                Line = line,
+                                Timestamp = TryExtractLogTimestamp(line)
+                            },
                             linkedCts.Token);
                     }
                 }

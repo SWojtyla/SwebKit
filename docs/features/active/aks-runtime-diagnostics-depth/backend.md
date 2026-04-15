@@ -4,7 +4,7 @@
 
 title: "Backend Plan - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -22,15 +22,22 @@ Extend the AKS client and models so the existing page can retrieve higher-signal
 - `src/SwebKit.Core/Services/DemoAksClient.cs`
 - Existing downstream consumer that may later benefit from clearer evidence:
 - `src/SwebKit.Kubernetes/IncidentTimeline/AksTimelineSignalSource.cs`
-- Planned additive contracts:
-- `NamespaceQuotaInfo`, `LimitRangeInfo`, `PodDisruptionBudgetInfo`, `ProbeFailureSummary`, `PlacementAnalysis`, `NetworkPolicyAnalysis`, and `HelmDiffPreview` in `AksModels.cs`
-- Planned additive client methods:
+- Implemented Wave 2 additive contracts:
+- `IngressAnalysis`
+- `IngressBackendAnalysis`
+- `NetworkPolicyAnalysis`
+- `NetworkPolicyMatch`
+- Planned later additive contracts:
+- `NamespaceQuotaInfo`, `LimitRangeInfo`, `PodDisruptionBudgetInfo`, `ProbeFailureSummary`, `PlacementAnalysis`, and `HelmDiffPreview` in `AksModels.cs`
+- Implemented Wave 2 additive client methods:
+- `AnalyzeIngressAsync`
+- `AnalyzeNetworkPoliciesAsync`
+- Planned later additive client methods:
 - `GetResourceQuotasAsync`
 - `GetLimitRangesAsync`
 - `GetPodDisruptionBudgetsAsync`
 - `GetProbeFailureSummaryAsync` or equivalent bounded summary retrieval
 - `GetPlacementAnalysisAsync`
-- `GetNetworkPoliciesAsync` and `AnalyzeIngressAsync`
 - `PreviewHelmUpgradeAsync` or `GetHelmDiffAsync`
 
 ## Design
@@ -41,11 +48,13 @@ The backend should return typed evidence summaries instead of leaving the UI to 
 2. Workload diagnostics should combine workload spec, pod status, and recent Kubernetes events into a bounded probe or placement summary.
 3. Network and ingress diagnostics should inspect Kubernetes objects that are already available through the API server and explain what they imply, while remaining explicit about what they cannot prove.
 4. Helm preview should remain read-only. If the environment cannot produce a full diff, the backend should return an explicit capability or fallback state instead of failing opaquely.
+5. Wave 2 diagnostics should remain point-in-time reads. They do not join the page-level refresh cache and are loaded only when a panel requests them.
 
 ## API / Contracts
 
 - Additive model changes in `AksModels.cs` should prefer small, UI-friendly summaries plus optional raw supporting items.
 - `IAksClient` should stay additive and read-oriented. No policy mutation APIs are planned.
+- Wave 2 analysis contracts include limitation text so the UI can stay explicit about what the backend did and did not prove.
 - Probe and placement diagnostics may need helper models that preserve both summary text and supporting event records.
 - Helm preview should distinguish full diff, degraded preview, and unsupported states explicitly so the UI can render them safely.
 - Backward compatibility:
@@ -62,9 +71,9 @@ The backend should return typed evidence summaries instead of leaving the UI to 
 
 ### Wave 2 - network and ingress diagnostics [dotnet-expert]
 
-- [ ] Add network policy and ingress analysis contracts.
-- [ ] Implement bounded object reads and summary logic in `KubernetesAksClient`.
-- [ ] Ensure unsupported resource types or missing permissions degrade clearly.
+- [x] Add network policy and ingress analysis contracts.
+- [x] Implement bounded object reads and summary logic in `KubernetesAksClient`.
+- [x] Ensure unsupported resource types or missing permissions degrade clearly.
 
 ### Wave 3 - Helm preview [dotnet-expert]
 
@@ -80,8 +89,8 @@ The backend should return typed evidence summaries instead of leaving the UI to 
 
 ## Validation
 
-- Unit tests: Not started. Add summary or helper tests in `tests/SwebKit.Core.Tests` if shared analysis logic is introduced.
-- Integration tests: Not started. Extend `tests/SwebKit.Kubernetes.Tests/KubernetesAksClientTests.cs` heavily for the new client surface.
+- Unit tests: Focused demo-mode coverage added in `tests/SwebKit.Core.Tests/DemoAksClientTests.cs` for both new Wave 2 analysis methods.
+- Integration tests: The live client build and `tests/SwebKit.Kubernetes.Tests/AksTimelineSignalSourceTests.cs` compatibility slice passed on 2026-04-15. Direct `KubernetesAksClient` analysis-edge tests are still outstanding.
 - Manual checks: verify that unsupported Helm preview capability and missing cluster objects degrade clearly.
 
 ## Notes

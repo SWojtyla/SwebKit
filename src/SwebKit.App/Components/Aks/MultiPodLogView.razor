@@ -1,4 +1,6 @@
-@inject IAppEventBus Events
+@using SwebKit.Core.Constants
+@inject IJSRuntime JS
+@inject INotificationService Notify
 @implements IAsyncDisposable
 
 <div class="log-viewer">
@@ -17,12 +19,28 @@
         </select>
         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
                class="log-filter-input" />
-        <span class="log-line-count">@FilteredLines.Count lines</span>
+        <span class="log-line-count">@WindowSummaryText</span>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
+                      Title="Show older buffered lines">Older</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowNewer" Disabled="@(!CanShowNewer)"
+                      Title="Show newer buffered lines">Newer</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="JumpToLatest" Disabled="@(!CanJumpToLatest)"
+                      Title="Jump back to the newest buffered lines">@LatestButtonText</FluentButton>
+        @if (CanLoadOlderHistory)
+        {
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOlderHistoryAsync" Disabled="@_historyReloading"
+                          Title="Request more All-history lines from Kubernetes">
+                @(_historyReloading ? "Loading older…" : $"Load older +{HistoryExpansionLabel}")
+            </FluentButton>
+        }
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
-        <label class="log-live-toggle" title="Sort interleaved lines by timestamp">
-            <input type="checkbox" @bind="_mergeSort" @bind:after="InvalidateFilter" />
-            ⇅ Merge
-        </label>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync" Disabled="@(VisibleLines.Count == 0)"
+                      Title="Copy the currently visible merged log window to the clipboard">Copy visible</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
+                      Disabled="@(Client is null || Namespace is null || DeploymentName is null || _exportingAllLogs)"
+                      Title="Export the full merged deployment log stream as text">
+            @(_exportingAllLogs ? "Exporting…" : "Export all")
+        </FluentButton>
         @if (IsLive && IsLoading)
         {
             <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
@@ -32,37 +50,65 @@
         }
     </div>
 
+    <div class="log-status-bar">
+        <span>@BufferSummaryText</span>
+        @if (IsAllRangeSelected)
+        {
+            <span>Requested tail: @_requestedTailLines:N0 lines</span>
+        }
+        @if (_paused)
+        {
+            <span>Paused: new lines are buffered until you resume or jump latest</span>
+        }
+        else if (_pageIndexFromNewest > 0)
+        {
+            <span>Browsing history: latest lines are buffered in the background</span>
+        }
+        <span>Merged by timestamp</span>
+        @if (HasFocusedPod)
+        {
+            <button type="button" class="log-jump-btn" @onclick="ClearFocusedPod">All pods: @TruncatePodSuffix(_focusedPodName!)</button>
+        }
+        @if (_pendingNewLineCount > 0 && CanJumpToLatest)
+        {
+            <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
+        }
+    </div>
+
     @* Pod legend *@
-    @if (_podColorIndex.Count > 0)
+    @if (PodLegend.Count > 0)
     {
         <div class="mplog-legend">
-            @foreach (var kv in _podColorIndex)
+            @foreach (var kv in PodLegend)
             {
-                <span class="mplog-legend-item">
+                <button type="button"
+                        class="mplog-legend-item @(IsPodFocused(kv.Key) ? "focused" : string.Empty)"
+                        @onclick="() => ToggleFocusedPod(kv.Key)"
+                        title="Focus or clear focus for pod @kv.Key in the merged view">
                     <span class="mplog-dot mplog-pod-@kv.Value"></span>
                     <span class="mplog-legend-name">@TruncatePodSuffix(kv.Key)</span>
-                </span>
+                </button>
             }
         </div>
     }
 
     <div class="log-output" @ref="_logContainer">
-        @if (FilteredLines.Count == 0 && !IsLoading)
+        @if (VisibleLines.Count == 0 && !IsLoading)
         {
-            <div class="log-empty">No log lines yet</div>
+            <div class="log-empty">@EmptyStateText</div>
         }
         else
         {
-            <Virtualize Items="@FilteredLines" Context="entry" ItemSize="22">
+            <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
                 <div class="log-line mplog-pod-@entry.ColorIndex">
                     <span class="mplog-pod-tag">@entry.PodTag</span>
                     @entry.Line
                 </div>
             </Virtualize>
-            @if (IsLive && IsLoading)
+            @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
             {
                 <div class="log-tailing">
-                    <FluentProgressRing Width="12px" /> Tailing…
+                    <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
                 </div>
             }
         }
@@ -73,7 +119,7 @@
     [Parameter] public IAksClient? Client { get; set; }
     [Parameter] public string? Namespace { get; set; }
     [Parameter] public string? DeploymentName { get; set; }
-    [Parameter] public int BufferSize { get; set; } = 10_000;
+    [Parameter] public int BufferSize { get; set; } = Limits.LogBufferMaxLines;
 
     // PERF2-3: Precomputed display record for Virtualize
     private readonly record struct MultiLogEntry(string PodName, string PodTag, int ColorIndex, string Line);
@@ -89,16 +135,27 @@
     private readonly Dictionary<string, int> _podColorIndex = [];
     private int _nextColorIdx;
     private LogRange _selectedRange = LogRange.Last5m;
-    private bool _mergeSort;
     private bool _paused;
+    private bool _historyReloading;
+    private bool _exportingAllLogs;
+    private string? _activeStreamSignature;
+    private string? _focusedPodName;
+    private int _requestedTailLines = Limits.LogTailInitialLines;
+    private int _pageIndexFromNewest;
+    private int _pendingNewLineCount;
+    private int? _frozenFilteredLineCount;
+    private bool _frozenAnchorNeedsRefresh;
     private bool IsPreviousContainerSelected => _selectedRange == LogRange.PreviousContainer;
+    private bool IsAllRangeSelected => _selectedRange == LogRange.All;
+    private bool IsWindowFrozen => _paused || _pageIndexFromNewest > 0;
+    private readonly Lock _linesLock = new();
 
     // PERF2-3: Cached filtered lines — recomputed only when dirty
     private List<MultiLogEntry> _filteredLinesCache = [];
     private bool _filterDirty = true;
     private int _lastFilteredLineCount;
     private string _lastFilterText = "";
-    private bool _lastMergeSort;
+    private int _lastPodColorCount;
 
     // PERF2-2: Render-batching timer state
     private PeriodicTimer? _renderTimer;
@@ -106,44 +163,158 @@
     private volatile bool _linesDirty;
 
     private static readonly System.Text.RegularExpressions.Regex TimestampRegex = new(
-        @"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s",
-        System.Text.RegularExpressions.RegexOptions.Compiled);
+        @"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private List<MultiLogEntry> FilteredLines
     {
         get
         {
-            if (_filterDirty || Lines.Count != _lastFilteredLineCount || TextFilter != _lastFilterText || _mergeSort !=
-_lastMergeSort)
+            var filterText = TextFilter;
+            AggregatedLogLine[] snapshot;
+            Dictionary<string, int> colorMapSnapshot;
+
+            lock (_linesLock)
             {
-                _lastFilteredLineCount = Lines.Count;
-                _lastFilterText = TextFilter;
-                _lastMergeSort = _mergeSort;
-                _filterDirty = false;
-
-                IEnumerable<AggregatedLogLine> source = string.IsNullOrEmpty(TextFilter)
-                    ? Lines
-                    : Lines.Where(l => l.Line.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)
-                        || l.PodName.Contains(TextFilter, StringComparison.OrdinalIgnoreCase));
-
-                if (_mergeSort)
-                    source = source.OrderBy(l => l.Timestamp ?? l.ReceivedAt);
-
-                _filteredLinesCache = source.TakeLast(500).Select(l =>
+                if (!_filterDirty
+                    && Lines.Count == _lastFilteredLineCount
+                    && filterText == _lastFilterText
+                    && _podColorIndex.Count == _lastPodColorCount)
                 {
-                    var colorIdx = _podColorIndex.TryGetValue(l.PodName, out var c) ? c : 0;
-                    return new MultiLogEntry(l.PodName, TruncatePodSuffix(l.PodName), colorIdx, l.Line);
-                }).ToList();
+                    return _filteredLinesCache;
+                }
+
+                snapshot = [.. Lines];
+                colorMapSnapshot = new Dictionary<string, int>(_podColorIndex);
+                _lastFilteredLineCount = snapshot.Length;
+                _lastFilterText = filterText;
+                _lastPodColorCount = colorMapSnapshot.Count;
+                _filterDirty = false;
             }
+
+            IEnumerable<AggregatedLogLine> source = string.IsNullOrEmpty(filterText)
+                ? snapshot
+                : snapshot.Where(line =>
+                    line.Line.Contains(filterText, StringComparison.OrdinalIgnoreCase)
+                    || line.PodName.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+
+            if (HasFocusedPod)
+                source = source.Where(line => string.Equals(line.PodName, _focusedPodName, StringComparison.Ordinal));
+
+            _filteredLinesCache = source
+                .OrderBy(line => line.Timestamp ?? line.ReceivedAt)
+                .Select(line =>
+                {
+                    var colorIndex = colorMapSnapshot.TryGetValue(line.PodName, out var color) ? color : 0;
+                    return new MultiLogEntry(line.PodName, TruncatePodSuffix(line.PodName), colorIndex, line.Line);
+                })
+                .ToList();
+
+            ClampPageIndex(_filteredLinesCache.Count);
             return _filteredLinesCache;
         }
     }
 
-    private void InvalidateFilter() => _filterDirty = true;
+    private List<MultiLogEntry> VisibleLines
+    {
+        get
+        {
+            var filtered = FilteredLines;
+            if (filtered.Count == 0)
+                return [];
+
+            var (start, endExclusive) = GetVisibleBounds(filtered.Count);
+            return filtered.GetRange(start, endExclusive - start);
+        }
+    }
+
+    private IReadOnlyList<KeyValuePair<string, int>> PodLegend
+    {
+        get
+        {
+            lock (_linesLock)
+            {
+                return [.. _podColorIndex
+                    .OrderBy(entry => entry.Value)
+                    .ThenBy(entry => entry.Key, StringComparer.Ordinal)];
+            }
+        }
+    }
+
+    private string WindowSummaryText
+    {
+        get
+        {
+            var total = FilteredLines.Count;
+            if (total == 0)
+                return "0 lines";
+
+            var (start, endExclusive) = GetVisibleBounds(total);
+            return $"Showing {start + 1:N0}-{endExclusive:N0} of {total:N0}";
+        }
+    }
+
+    private string BufferSummaryText
+    {
+        get
+        {
+            var bufferedCount = GetBufferedLineCount();
+            if (bufferedCount >= EffectiveBufferSize)
+                return $"Buffer holding newest {bufferedCount:N0} lines";
+
+            return $"Buffer holding {bufferedCount:N0} lines";
+        }
+    }
+
+    private string PendingLinesSummary
+        => _pendingNewLineCount == 1
+            ? "1 newer line buffered"
+            : $"{_pendingNewLineCount:N0} newer lines buffered";
+
+    private string LatestButtonText
+        => _pendingNewLineCount > 0 ? $"Latest ({_pendingNewLineCount:N0})" : "Latest";
+
+    private string HistoryExpansionLabel => $"{Limits.LogHistoryExpansionLines:N0}";
+
+    private bool CanShowOlder => _pageIndexFromNewest < GetMaxPageIndex(FilteredLines.Count);
+    private bool CanShowNewer => _pageIndexFromNewest > 0;
+    private bool CanJumpToLatest => _pageIndexFromNewest > 0 || _pendingNewLineCount > 0;
+    private bool CanLoadOlderHistory =>
+        IsAllRangeSelected
+        && _requestedTailLines < Limits.LogHistoryHardCapLines
+        && Client is not null
+        && Namespace is not null
+        && DeploymentName is not null;
+
+    private bool HasFocusedPod => !string.IsNullOrWhiteSpace(_focusedPodName);
+
+    private string EmptyStateText
+        => HasFocusedPod
+            ? $"No log lines match pod {TruncatePodSuffix(_focusedPodName!)} in the current window"
+            : string.IsNullOrWhiteSpace(TextFilter)
+                ? "No log lines yet"
+                : "No log lines match the current filter";
+
+    private int EffectiveBufferSize =>
+        Math.Min(Math.Max(BufferSize, _requestedTailLines + Limits.LogVisibleWindowLines), Limits.LogHistoryHardCapLines);
+
+    private void InvalidateFilter()
+    {
+        _filterDirty = true;
+        RequestFrozenAnchorRefresh();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Client is not null && DeploymentName is not null && Namespace is not null && IsLive)
+        if (Client is null || DeploymentName is null || Namespace is null)
+        {
+            _activeStreamSignature = null;
+            StopTailing();
+            return;
+        }
+
+        var signature = BuildStreamSignature();
+        if (!string.Equals(_activeStreamSignature, signature, StringComparison.Ordinal))
             await StartTailingAsync();
     }
 
@@ -157,7 +328,14 @@ _lastMergeSort)
         }
 
         if (IsLive) await StartTailingAsync();
-        else { StopTailing(); IsLoading = false; _paused = false; }
+        else
+        {
+            StopTailing();
+            IsLoading = false;
+            _paused = false;
+            _activeStreamSignature = BuildStreamSignature();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task OnRangeChanged()
@@ -168,6 +346,9 @@ _lastMergeSort)
             _paused = false;
         }
 
+        if (!IsAllRangeSelected)
+            _requestedTailLines = Limits.LogTailInitialLines;
+
         if (Client is null || Namespace is null || DeploymentName is null)
             return;
         await StartTailingAsync();
@@ -176,12 +357,44 @@ _lastMergeSort)
     private void TogglePause()
     {
         _paused = !_paused;
-        if (!_paused)
-            InvokeAsync(StateHasChanged);
+        if (_paused)
+        {
+            CaptureVisibleWindowAnchor();
+        }
+        else if (_pageIndexFromNewest == 0)
+        {
+            _pendingNewLineCount = 0;
+            ReleaseVisibleWindowAnchor();
+        }
+
+        _ = InvokeAsync(StateHasChanged);
     }
 
-    private async Task StartTailingAsync()
+    private async Task LoadOlderHistoryAsync()
     {
+        if (!CanLoadOlderHistory || _historyReloading)
+            return;
+
+        _historyReloading = true;
+        _requestedTailLines = Math.Min(
+            Limits.LogHistoryHardCapLines,
+            _requestedTailLines + Limits.LogHistoryExpansionLines);
+
+        try
+        {
+            await StartTailingAsync(preserveView: true);
+        }
+        finally
+        {
+            _historyReloading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task StartTailingAsync(bool preserveView = false)
+    {
+        _activeStreamSignature = BuildStreamSignature();
+
         // PERF2-4: Interlocked swap for thread-safe CTS lifecycle
         var newCts = new CancellationTokenSource();
         var oldCts = Interlocked.Exchange(ref _cts, newCts);
@@ -191,9 +404,14 @@ _lastMergeSort)
 
         IsLoading = true;
         _paused = false;
-        Lines.Clear();
-        _podColorIndex.Clear();
-        _nextColorIdx = 0;
+        ReleaseVisibleWindowAnchor();
+        if (!preserveView)
+        {
+            _pageIndexFromNewest = 0;
+            _pendingNewLineCount = 0;
+            _focusedPodName = null;
+        }
+        ClearLineBuffer();
         _linesDirty = false;
         _filterDirty = true;
         await InvokeAsync(StateHasChanged);
@@ -215,7 +433,7 @@ _lastMergeSort)
     // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
     private void StartRenderTimer(CancellationToken token)
     {
-        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Limits.LogRenderBatchIntervalMs));
         _renderTimer = timer;
         _renderTimerTask = Task.Run(async () =>
         {
@@ -223,10 +441,12 @@ _lastMergeSort)
             {
                 while (await timer.WaitForNextTickAsync(token))
                 {
-                    if (_paused || !_linesDirty) continue;
+                    if (!_linesDirty) continue;
                     _linesDirty = false;
                     _filterDirty = true;
                     await InvokeAsync(StateHasChanged);
+                    if (IsLive && !_paused && _pageIndexFromNewest == 0)
+                        await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
                 }
             }
             catch (OperationCanceledException) { }
@@ -248,26 +468,7 @@ _lastMergeSort)
             await foreach (var line in Client!.StreamDeploymentLogsAsync(Namespace!, DeploymentName!, opts, token))
             {
                 if (!IsCurrentSession(token)) break;
-                if (!_podColorIndex.ContainsKey(line.PodName))
-                    _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
-
-                // Parse timestamp from log line for merge sort
-                if (line.Timestamp is null)
-                {
-                    var match = TimestampRegex.Match(line.Line);
-                    if (match.Success && DateTimeOffset.TryParse(match.Groups[1].Value, out var ts))
-                        line.Timestamp = ts;
-                }
-
-                Lines.Add(line);
-                if (Lines.Count > BufferSize)
-                {
-                    var removed = Lines[0];
-                    Lines.RemoveAt(0);
-                    // PERF2-15: Clean stale pod entries when buffer rotates
-                    if (!Lines.Any(l => l.PodName == removed.PodName))
-                        _podColorIndex.Remove(removed.PodName);
-                }
+                AppendLine(line);
                 _linesDirty = true;
             }
         }
@@ -301,6 +502,7 @@ _lastMergeSort)
                 opts.SinceSeconds = 60 * 60;
                 break;
             case LogRange.All:
+                opts.TailLines = _requestedTailLines;
                 break;
             case LogRange.PreviousContainer:
                 opts.PreviousContainer = true;
@@ -316,8 +518,259 @@ _lastMergeSort)
 
     private void ClearLogs()
     {
-        Lines.Clear(); _podColorIndex.Clear(); _nextColorIdx = 0; _filterDirty = true;
+        ClearLineBuffer();
+        _filterDirty = true;
+        _pageIndexFromNewest = 0;
+        _pendingNewLineCount = 0;
+        ReleaseVisibleWindowAnchor();
         StateHasChanged();
+    }
+
+    private void ShowOlder()
+    {
+        CaptureVisibleWindowAnchor();
+        var maxPageIndex = GetMaxPageIndex(FilteredLines.Count);
+        if (_pageIndexFromNewest >= maxPageIndex)
+            return;
+
+        _pageIndexFromNewest++;
+        StateHasChanged();
+    }
+
+    private void ShowNewer()
+    {
+        if (_pageIndexFromNewest == 0)
+            return;
+
+        _pageIndexFromNewest--;
+        if (_pageIndexFromNewest == 0 && !_paused)
+        {
+            _pendingNewLineCount = 0;
+            ReleaseVisibleWindowAnchor();
+        }
+
+        StateHasChanged();
+    }
+
+    private void JumpToLatest()
+    {
+        _pageIndexFromNewest = 0;
+        _pendingNewLineCount = 0;
+        if (_paused)
+            CaptureVisibleWindowAnchor();
+        else
+            ReleaseVisibleWindowAnchor();
+        StateHasChanged();
+    }
+
+    private async Task CopyVisibleLogsAsync()
+    {
+        if (VisibleLines.Count == 0)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", FormatVisibleLinesForClipboard());
+            Notify.ShowSuccess("Copied visible merged log window", $"{VisibleLines.Count:N0} lines");
+        }
+        catch (Exception ex)
+        {
+            Notify.ShowError("Copy failed", ex.Message);
+        }
+    }
+
+    private async Task ExportAllLogsAsync()
+    {
+        if (Client is null || Namespace is null || DeploymentName is null || _exportingAllLogs)
+            return;
+
+        var ns = Namespace;
+        var deploymentName = DeploymentName;
+        _exportingAllLogs = true;
+        await InvokeAsync(StateHasChanged);
+
+        var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var deploymentSlug = deploymentName.Replace('/', '-');
+        var fileName = $"{deploymentSlug}-merged-{ts}.log";
+
+        try
+        {
+            var lineCount = 0;
+            var content = new System.Text.StringBuilder(capacity: 64 * 1024);
+            await foreach (var line in Client.StreamDeploymentLogsAsync(ns, deploymentName, BuildExportOptions()))
+            {
+                if (HasFocusedPod && !string.Equals(line.PodName, _focusedPodName, StringComparison.Ordinal))
+                    continue;
+
+                content.Append('[')
+                    .Append(TruncatePodSuffix(line.PodName))
+                    .Append("] ")
+                    .AppendLine(line.Line);
+                lineCount++;
+            }
+
+            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content.ToString());
+            Notify.ShowSuccess("Exported merged logs", $"{lineCount:N0} lines → {fileName}");
+        }
+        catch (OperationCanceledException)
+        {
+            Notify.ShowWarning("Export cancelled");
+        }
+        catch (Exception ex)
+        {
+            Notify.ShowError("Export failed", ex.Message);
+        }
+        finally
+        {
+            _exportingAllLogs = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ToggleFocusedPod(string podName)
+    {
+        _focusedPodName = string.Equals(_focusedPodName, podName, StringComparison.Ordinal)
+            ? null
+            : podName;
+        _filterDirty = true;
+        RequestFrozenAnchorRefresh();
+        StateHasChanged();
+    }
+
+    private void ClearFocusedPod()
+    {
+        _focusedPodName = null;
+        _filterDirty = true;
+        RequestFrozenAnchorRefresh();
+        StateHasChanged();
+    }
+
+    private bool IsPodFocused(string podName)
+        => string.Equals(_focusedPodName, podName, StringComparison.Ordinal);
+
+    private void AppendLine(AggregatedLogLine line)
+    {
+        lock (_linesLock)
+        {
+            if (!_podColorIndex.ContainsKey(line.PodName))
+                _podColorIndex[line.PodName] = (_nextColorIdx++) % 8;
+
+            line.Timestamp ??= TryExtractTimestamp(line.Line);
+            Lines.Add(line);
+
+            while (Lines.Count > EffectiveBufferSize)
+            {
+                var removed = Lines[0];
+                Lines.RemoveAt(0);
+                if (!Lines.Any(existing => existing.PodName == removed.PodName))
+                    _podColorIndex.Remove(removed.PodName);
+            }
+        }
+
+        if (IsWindowFrozen)
+            Interlocked.Increment(ref _pendingNewLineCount);
+    }
+
+    private void ClearLineBuffer()
+    {
+        lock (_linesLock)
+        {
+            Lines.Clear();
+            _podColorIndex.Clear();
+            _nextColorIdx = 0;
+        }
+    }
+
+    private string BuildStreamSignature()
+        => $"{Namespace}|{DeploymentName}|{_selectedRange}|{IsLive}|{_requestedTailLines}";
+
+    private LogStreamOptions BuildExportOptions()
+    {
+        if (IsPreviousContainerSelected)
+        {
+            return new LogStreamOptions
+            {
+                Follow = false,
+                PreviousContainer = true
+            };
+        }
+
+        return new LogStreamOptions
+        {
+            Follow = false
+        };
+    }
+
+    private string FormatVisibleLinesForClipboard()
+        => string.Join('\n', VisibleLines.Select(entry => $"[{entry.PodTag}] {entry.Line}"));
+
+    private static int GetMaxPageIndex(int totalLineCount)
+        => totalLineCount == 0 ? 0 : (totalLineCount - 1) / Limits.LogVisibleWindowLines;
+
+    private void ClampPageIndex(int totalLineCount)
+    {
+        var maxPageIndex = GetMaxPageIndex(GetReferenceLineCount(totalLineCount));
+        if (_pageIndexFromNewest > maxPageIndex)
+            _pageIndexFromNewest = maxPageIndex;
+    }
+
+    private (int Start, int EndExclusive) GetVisibleBounds(int totalLineCount)
+    {
+        ClampPageIndex(totalLineCount);
+
+        var referenceCount = GetReferenceLineCount(totalLineCount);
+        var endExclusive = Math.Max(0, referenceCount - (_pageIndexFromNewest * Limits.LogVisibleWindowLines));
+        var start = Math.Max(0, endExclusive - Limits.LogVisibleWindowLines);
+        return (start, endExclusive);
+    }
+
+    private int GetReferenceLineCount(int totalLineCount)
+    {
+        if (!IsWindowFrozen)
+            return totalLineCount;
+
+        if (_frozenAnchorNeedsRefresh || _frozenFilteredLineCount is null)
+        {
+            _frozenFilteredLineCount = totalLineCount;
+            _frozenAnchorNeedsRefresh = false;
+        }
+
+        return Math.Min(_frozenFilteredLineCount.Value, totalLineCount);
+    }
+
+    private void CaptureVisibleWindowAnchor()
+    {
+        _frozenFilteredLineCount = FilteredLines.Count;
+        _frozenAnchorNeedsRefresh = false;
+    }
+
+    private void ReleaseVisibleWindowAnchor()
+    {
+        _frozenFilteredLineCount = null;
+        _frozenAnchorNeedsRefresh = false;
+    }
+
+    private void RequestFrozenAnchorRefresh()
+    {
+        if (IsWindowFrozen)
+            _frozenAnchorNeedsRefresh = true;
+    }
+
+    private int GetBufferedLineCount()
+    {
+        lock (_linesLock)
+        {
+            return Lines.Count;
+        }
+    }
+
+    private static DateTimeOffset? TryExtractTimestamp(string line)
+    {
+        var match = TimestampRegex.Match(line);
+        if (match.Success && DateTimeOffset.TryParse(match.Groups[1].Value, out var parsed))
+            return parsed;
+
+        return null;
     }
 
     // Extract the last two hash segments from a standard pod name, e.g. order-api-7d9f-xk2jp → 7d9f-xk2jp
@@ -335,6 +788,7 @@ _lastMergeSort)
         var cts = Interlocked.Exchange(ref _cts, null);
         cts?.Cancel();
         cts?.Dispose();
+        _activeStreamSignature = null;
 
         StopRenderTimer();
 

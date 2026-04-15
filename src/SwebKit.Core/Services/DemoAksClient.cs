@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
@@ -13,6 +14,9 @@ namespace SwebKit.Core.Services;
 public class DemoAksClient : IAksClient
 {
     private static readonly Random Rng = new(42);
+    private static readonly Regex LogTimestampPrefixRegex = new(
+        @"^(?<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly Lock _jobLock = new();
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
     private int _jobSequence;
@@ -1122,6 +1126,15 @@ public class DemoAksClient : IAksClient
         return 0;
     }
 
+    private static DateTimeOffset? TryExtractLogTimestamp(string line)
+    {
+        var match = LogTimestampPrefixRegex.Match(line);
+        if (match.Success && DateTimeOffset.TryParse(match.Groups["timestamp"].Value, out var parsed))
+            return parsed;
+
+        return null;
+    }
+
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string ns, string podName, string container, LogStreamOptions opts,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -1315,7 +1328,14 @@ public class DemoAksClient : IAksClient
                     payload = $"[PREVIOUS] {payload}";
                 var line = $"{ts}  {payload}";
                 if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
-                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+                {
+                    await channel.Writer.WriteAsync(new AggregatedLogLine
+                    {
+                        PodName = pod.Name,
+                        Line = line,
+                        Timestamp = TryExtractLogTimestamp(line)
+                    }, linkedCts.Token);
+                }
             }
 
             if (!opts.Follow || opts.PreviousContainer) return;
@@ -1327,7 +1347,14 @@ public class DemoAksClient : IAksClient
                 var line = $"{ts}  {LogLines[lineIdx % LogLines.Length]}";
                 lineIdx++;
                 if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
-                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+                {
+                    await channel.Writer.WriteAsync(new AggregatedLogLine
+                    {
+                        PodName = pod.Name,
+                        Line = line,
+                        Timestamp = TryExtractLogTimestamp(line)
+                    }, linkedCts.Token);
+                }
             }
         }, linkedCts.Token)).ToList();
 

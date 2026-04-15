@@ -1,3 +1,155 @@
+/* ── Log viewer shell ── */
+.log-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── Toolbar ── */
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    padding: 6px 10px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.log-live-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.log-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.log-live-dot.active {
+    background: var(--color-success);
+    box-shadow: 0 0 4px var(--color-success);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.log-filter-input {
+    flex: 1;
+    min-width: 80px;
+    padding: 3px var(--spacing-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: var(--font-size-sm);
+    outline: none;
+}
+
+.log-filter-input:focus {
+    border-color: var(--color-accent);
+}
+
+.log-range-select {
+    min-width: 118px;
+    padding: 3px var(--spacing-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: var(--font-size-sm);
+}
+
+.log-line-count {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.log-status-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 4px 10px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+}
+
+.log-jump-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+}
+
+.log-jump-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+/* ── Log output ── */
+.log-output {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    padding: 6px 10px;
+    background: var(--color-bg);
+}
+
+.log-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.log-line {
+    padding: 0 var(--spacing-xs);
+    border-radius: 2px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.log-line:hover {
+    background: var(--color-surface-2);
+}
+
+.log-tailing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-muted);
+    padding: 6px var(--spacing-xs);
+    font-size: var(--font-size-sm);
+}
+
 /* ── Pod color classes (0-7) ── */
 .mplog-pod-0 { color: var(--color-text); }
 .mplog-pod-1 { color: #58a6ff; }
@@ -25,6 +177,26 @@
     gap: 5px;
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+    padding: 2px 8px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.mplog-legend-item:hover {
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.mplog-legend-item.focused {
+    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text);
+}
+
+.mplog-legend-name {
+    font-variant-numeric: tabular-nums;
 }
 
 .mplog-dot {

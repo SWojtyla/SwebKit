@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-status: "Planned"
+status: "In Progress"
 
 ---
 
@@ -28,11 +28,13 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 - `src/SwebKit.App/Components/Aks/HelmGrid.razor`
 - `src/SwebKit.App/Components/Aks/AksHelmPanel.razor`
 - `src/SwebKit.App/Components/Aks/HpaPanel.razor`
-- Planned new diagnostics panels:
+- Wave 2 diagnostics panels now implemented:
+- `src/SwebKit.App/Components/Aks/IngressAnalysisPanel.razor`
+- `src/SwebKit.App/Components/Aks/NetworkPolicyAnalysisPanel.razor`
+- Planned later diagnostics panels:
 - `src/SwebKit.App/Components/Aks/NamespaceQuotaPanel.razor`
 - `src/SwebKit.App/Components/Aks/PodDisruptionBudgetPanel.razor`
 - `src/SwebKit.App/Components/Aks/ProbeFailurePanel.razor`
-- `src/SwebKit.App/Components/Aks/NetworkPolicyAnalysisPanel.razor`
 - `src/SwebKit.App/Components/Aks/PlacementConstraintsPanel.razor`
 - `src/SwebKit.App/Components/Aks/HelmDiffPreviewPanel.razor`
 
@@ -41,6 +43,7 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 - Panel model.
 - Reuse the existing `AksDetailPanels` column rather than create a new route or modal-first experience.
 - New diagnostics should open from the currently selected resource row, namespace context, or Helm selection.
+- Wave 2 panels should self-load when opened and stay out of the page's main browse-data refresh loop.
 - Navigation density.
 - Keep the main AKS tab row workload-focused. Group Services, Ingresses, and Gateway API resources behind one expandable `Network` menu instead of flattening every network resource into the top row.
 - Evidence phrasing.
@@ -61,6 +64,7 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 
 - UI will rely on additive `IAksClient` models for quota, disruption-budget, probe, network, placement, and Helm preview data.
 - Avoid pushing analysis logic down into Razor components. Panels should render pre-normalized summaries and raw supporting data from the backend.
+- Ingress and network-policy panels now call additive `IAksClient` analysis methods on parameter change and expose refresh explicitly from inside the panel.
 - Keep the current resource grids intact; add panel entry points and badges rather than duplicate the existing rows in new views.
 
 ## Tasks
@@ -76,9 +80,9 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 - [x] Group network resource browse tabs under an expandable `Network` menu.
 - [x] Add first-class Services browse support with namespace-aware YAML viewing.
 - [x] Keep HTTPRoute list rendering stable when route rows wrap.
-- [ ] Add ingress and network-policy analysis panels.
-- [ ] Add links from ingress and workload rows into those panels.
-- [ ] Keep wording explicit about what was inspected.
+- [x] Add ingress and network-policy analysis panels.
+- [x] Add links from ingress and workload rows into those panels.
+- [x] Keep wording explicit about what was inspected.
 
 ### Wave 3 - Helm preview [blazor-expert]
 
@@ -88,8 +92,9 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 
 ## Validation
 
-- Component tests: Not started. Extend `AksDetailPanelsTests`, `AksHelmPanelTests`, and add focused tests for each new diagnostics panel.
+- Component tests: Focused Wave 2 coverage added in `AksDetailPanelsTests` and `AksPageBatchTests` for panel rendering plus row, context-menu, and keyboard entry points.
 - Add or extend focused AKS page tests for the `Network` menu, Services tab, and multi-route HTTPRoute rendering.
+- Focused validation passed on 2026-04-15 for `AksPageBatchTests` and `AksDetailPanelsTests`.
 - Manual UX checks:
 - Verify a constrained namespace is diagnosable without leaving the page.
 - Verify probe and placement panels distinguish observed evidence from interpretation.
