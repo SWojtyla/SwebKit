@@ -5,18 +5,20 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    background: var(--color-bg);
 }
 
 /* ── Toolbar ── */
 .log-toolbar {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
-    padding: 6px 10px;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 5px 10px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+    overflow-x: auto;
 }
 
 .log-live-toggle {
@@ -27,6 +29,13 @@
     color: var(--color-text-muted);
     cursor: pointer;
     white-space: nowrap;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.log-live-toggle:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
 }
 
 .log-live-dot {
@@ -35,27 +44,29 @@
     border-radius: 50%;
     background: var(--color-text-muted);
     flex-shrink: 0;
+    transition: background 0.2s, box-shadow 0.2s;
 }
 
 .log-live-dot.active {
     background: var(--color-success);
-    box-shadow: 0 0 4px var(--color-success);
-    animation: pulse 1.5s ease-in-out infinite;
+    box-shadow: 0 0 5px var(--color-success);
+    animation: log-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes log-pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    50% { opacity: 0.35; }
 }
 
 .log-filter-input {
     flex: 1;
-    min-width: 80px;
-    padding: 3px var(--spacing-sm);
-    background: var(--color-bg);
+    min-width: 100px;
+    max-width: 200px;
+    padding: 3px 8px;
+    background: var(--color-surface-2, var(--color-bg));
     color: var(--color-text);
     border: 1px solid var(--color-border);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-size: var(--font-size-sm);
     outline: none;
 }
@@ -65,13 +76,17 @@
 }
 
 .log-range-select {
-    min-width: 118px;
-    padding: 3px var(--spacing-sm);
-    background: var(--color-bg);
+    padding: 3px 6px;
+    background: var(--color-surface-2, var(--color-bg));
     color: var(--color-text);
     border: 1px solid var(--color-border);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
+    color-scheme: var(--control-color-scheme);
     font-size: var(--font-size-sm);
+    outline: none;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .log-line-count {
@@ -79,29 +94,32 @@
     color: var(--color-text-muted);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    padding: 0 4px;
+    flex-shrink: 0;
 }
 
 .log-status-bar {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 12px;
-    padding: 4px 10px;
+    gap: 4px 10px;
+    padding: 3px 10px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    font-size: 11px;
     flex-shrink: 0;
 }
 
 .log-jump-btn {
-    padding: 2px 8px;
+    padding: 1px 8px;
     border: 1px solid var(--color-border);
     border-radius: 999px;
     background: var(--color-bg);
     color: var(--color-text);
     cursor: pointer;
-    font-size: var(--font-size-xs);
+    font-size: 11px;
+    transition: border-color 0.15s, color 0.15s;
 }
 
 .log-jump-btn:hover {
@@ -115,9 +133,9 @@
     min-height: 0;
     overflow-y: auto;
     font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
-    font-size: var(--font-size-sm);
-    line-height: 1.6;
-    padding: 6px 10px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding: 4px 10px 8px;
     background: var(--color-bg);
 }
 
@@ -130,15 +148,18 @@
 }
 
 .log-line {
-    padding: 0 var(--spacing-xs);
+    display: flex;
+    align-items: baseline;
+    padding: 0 2px;
     border-radius: 2px;
     white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: anywhere;
+    min-height: 1.55em;
 }
 
 .log-line:hover {
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--color-surface) 55%, transparent);
 }
 
 .log-tailing {
@@ -146,26 +167,28 @@
     align-items: center;
     gap: 6px;
     color: var(--color-text-muted);
-    padding: 6px var(--spacing-xs);
-    font-size: var(--font-size-sm);
+    padding: 6px 2px;
+    font-size: 11px;
+    font-family: inherit;
 }
 
 /* ── Pod color classes (0-7) ── */
 .mplog-pod-0 { color: var(--color-text); }
 .mplog-pod-1 { color: #58a6ff; }
-.mplog-pod-2 { color: #56d364; }
-.mplog-pod-3 { color: #e3b341; }
-.mplog-pod-4 { color: #f78166; }
-.mplog-pod-5 { color: #bc8cff; }
-.mplog-pod-6 { color: #39c5cf; }
+.mplog-pod-2 { color: #4cc96e; }
+.mplog-pod-3 { color: #d4a03a; }
+.mplog-pod-4 { color: #f07070; }
+.mplog-pod-5 { color: #b07fff; }
+.mplog-pod-6 { color: #2ec0c8; }
 .mplog-pod-7 { color: #ff9966; }
 
 /* ── Legend bar ── */
 .mplog-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 12px;
-    padding: var(--spacing-xs) 10px;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 4px 10px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
@@ -175,28 +198,31 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: var(--font-size-xs);
+    font-size: 11px;
     color: var(--color-text-muted);
-    padding: 2px 8px;
+    padding: 2px 8px 2px 6px;
     border: 1px solid transparent;
     border-radius: 999px;
     background: transparent;
     cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .mplog-legend-item:hover {
     border-color: var(--color-border);
     color: var(--color-text);
+    background: var(--color-surface-2);
 }
 
 .mplog-legend-item.focused {
     border-color: currentColor;
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, currentColor 10%, transparent);
     color: var(--color-text);
 }
 
 .mplog-legend-name {
     font-variant-numeric: tabular-nums;
+    font-size: inherit;
 }
 
 .mplog-dot {
@@ -210,11 +236,13 @@
 /* ── Per-line pod tag ── */
 .mplog-pod-tag {
     display: inline-block;
-    font-size: 9px;
+    font-size: 9.5px;
     font-weight: 600;
-    letter-spacing: 0.03em;
-    margin-right: 6px;
-    opacity: 0.7;
+    letter-spacing: 0.04em;
+    margin-right: 8px;
+    opacity: 0.55;
     font-variant-numeric: tabular-nums;
-    min-width: 80px;
+    min-width: 68px;
+    flex-shrink: 0;
+    user-select: none;
 }
