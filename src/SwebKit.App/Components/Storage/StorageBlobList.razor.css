@@ -269,6 +269,12 @@
 .storage-blob-list__th--sortable {
     cursor: pointer;
     user-select: none;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.storage-blob-list__th--sortable:hover {
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--color-table-header-bg, var(--color-surface-2)));
+    color: var(--color-text);
 }
 
 .storage-blob-list__th--numeric {

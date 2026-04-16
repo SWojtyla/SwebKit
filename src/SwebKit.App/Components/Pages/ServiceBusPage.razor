@@ -17,149 +17,135 @@
     <div class="page-shell-header">
         <RoutePageHeader Area="service-bus"
                          Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
-            <Meta>
-                <span class="shell-pill shell-pill--muted">@_namespaceStates.Count namespace@(_namespaceStates.Count == 1 ?
-                                                                                  "" : "s")</span>
-                    <span class="shell-pill shell-pill--accent">@_openTabs.Count workspace@(_openTabs.Count == 1 ? "" : "s")
-                        open</span>
-                        @if (_namespaceStates.Any(state => state.Client is not null))
-                        {
-                            <span class="shell-pill shell-pill--muted">@_namespaceStates.Count(state => state.Client is not null)
-                                connected</span>
-                            }
-                            @if (AppState.UseDemoData)
+            
+        </RoutePageHeader>
+    </div>
+
+    <div class="service-bus-page-shell">
+        <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
+                                  LinkedEntities="CurrentLinkedEntities"
+                                  OnEntityTabOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
+                                  OnScheduledTabOpen="ns => OpenScheduledTab(ns)" OnCollapsedChanged="SetNamespacePaneCollapsedAsync"
+                                  OnRemoveNamespace="RemoveNamespaceAsync" OnAddNamespace="HandleAddNamespaceAsync"
+                                  OnEntityLinkToggled="ToggleEntityLinkAsync" />
+
+        <!-- Right: tabbed content -->
+        <div class="service-bus-right-pane">
+            @if (!_openTabs.Any())
+            {
+                @if (_namespaceStates.Count == 0)
+                {
+                    <EmptyState Icon="⇄" Title="No namespaces connected"
+                                Subtitle="Add a namespace from Settings to start peeking, replaying, and scheduling messages.">
+                        <Actions>
+                            <a href="/settings?section=servicebus">Open Service Bus settings</a>
+                        </Actions>
+                    </EmptyState>
+                }
+                else
+                {
+                    <EmptyState Icon="⇄" Title="Select a queue or topic"
+                                Subtitle="Choose an entity from the namespace pane to open its message workspace and tools." />
+                }
+            }
+            else
+            {
+                <!-- Tab bar -->
+                <div class="tab-bar sb-tab-bar">
+                    @foreach (var tab in _openTabs)
+                    {
+                        <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                            @if (tab.IsDlq)
                             {
-                                <span class="shell-pill shell-pill--warning">Demo mode</span>
+                                <span class="sb-status-error">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+                                </span>
                             }
-                        </Meta>
-                    </RoutePageHeader>
+                            <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
+                                <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias /
+                                </span>@tab.Title
+                            </span>
+                            <span class="close-btn" @onclick:stopPropagation="true"
+                                  @onclick="() => CloseTab(tab)">&#x2715;</span>
+                        </div>
+                    }
                 </div>
-
-                <div class="service-bus-page-shell">
-                    <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
-                                              LinkedEntities="CurrentLinkedEntities"
-                                              OnEntityTabOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
-                                              OnScheduledTabOpen="ns => OpenScheduledTab(ns)" OnCollapsedChanged="SetNamespacePaneCollapsedAsync"
-                                              OnRemoveNamespace="RemoveNamespaceAsync" OnAddNamespace="HandleAddNamespaceAsync"
-                                              OnEntityLinkToggled="ToggleEntityLinkAsync" />
-
-                    <!-- Right: tabbed content -->
-                    <div class="service-bus-right-pane">
-                        @if (!_openTabs.Any())
-                        {
-                            @if (_namespaceStates.Count == 0)
-                            {
-                                <EmptyState Icon="⇄" Title="No namespaces connected"
-                                            Subtitle="Add a namespace from Settings to start peeking, replaying, and scheduling messages.">
-                                    <Actions>
-                                        <a href="/settings?section=servicebus">Open Service Bus settings</a>
-                                    </Actions>
-                                </EmptyState>
-                            }
-                            else
-                            {
-                                <EmptyState Icon="⇄" Title="Select a queue or topic"
-                                            Subtitle="Choose an entity from the namespace pane to open its message workspace and tools." />
-                            }
-                        }
-                        else
-                        {
-                            <!-- Tab bar -->
-                            <div class="tab-bar sb-tab-bar">
-                                @foreach (var tab in _openTabs)
-                                {
-                                    <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
-                                        @if (tab.IsDlq)
-                                        {
-                                            <span class="sb-status-error">
-                                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
-                                            </span>
-                                        }
-                                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
-                                            <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias /
-                                            </span>@tab.Title
-                                        </span>
-                                        <span class="close-btn" @onclick:stopPropagation="true"
-                                              @onclick="() => CloseTab(tab)">&#x2715;</span>
-                                    </div>
-                                }
+                <!-- Active tab content -->
+                @if (_activeTab is not null)
+                {
+                    @if (_activeTab.IsScheduled)
+                    {
+                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
+                                           EntityPath="@_activeTab.EntityPath" />
+                    }
+                    else if (_activeTab.IsDlq)
+                    {
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
+                    }
+                    else
+                    {
+                        <div @key="_activeTab.Id" class="sb-active-workspace">
+                            <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
+                                <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                                 NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
+                                                 SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
+                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
                             </div>
-                            <!-- Active tab content -->
-                            @if (_activeTab is not null)
+                            @if (IsDetailPaneOpen)
                             {
-                                @if (_activeTab.IsScheduled)
+                                if (_isDetailDrawerOverlay)
                                 {
-                                    <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
-                                                       EntityPath="@_activeTab.EntityPath" />
-                                }
-                                else if (_activeTab.IsDlq)
-                                {
-                                    <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
+                                    <div class="sb-detail-drawer overlay">
+                                        <div class="sb-detail-drawer-header">
+                                            <span>Message details</span>
+                                            <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                    @onclick="CloseDetailPane">×</button>
+                                        </div>
+                                        <div style="flex:1; overflow:hidden;">
+                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                        </div>
+                                    </div>
                                 }
                                 else
                                 {
-                                    <div @key="_activeTab.Id" class="sb-active-workspace">
-                                        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
-                                            <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
-                                                             NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
-                                                             SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
-                                                             OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
+                                    <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
+                                        <div class="sb-detail-drawer">
+                                            <div class="sb-detail-drawer-header">
+                                                <span>Message details</span>
+                                                <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                        @onclick="CloseDetailPane">×</button>
+                                            </div>
+                                            <div style="flex:1; overflow:hidden;">
+                                                <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                                   OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                                   OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                            </div>
                                         </div>
-                                        @if (IsDetailPaneOpen)
-                                        {
-                                            if (_isDetailDrawerOverlay)
-                                            {
-                                                <div class="sb-detail-drawer overlay">
-                                                    <div class="sb-detail-drawer-header">
-                                                        <span>Message details</span>
-                                                        <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                                @onclick="CloseDetailPane">×</button>
-                                                    </div>
-                                                    <div style="flex:1; overflow:hidden;">
-                                                        <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                                           OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                                           OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                                           OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
-                                                    </div>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
-                                                    <div class="sb-detail-drawer">
-                                                        <div class="sb-detail-drawer-header">
-                                                            <span>Message details</span>
-                                                            <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                                    @onclick="CloseDetailPane">×</button>
-                                                        </div>
-                                                        <div style="flex:1; overflow:hidden;">
-                                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                                               OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                                               OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
-                                                        </div>
-                                                    </div>
-                                                </ResizablePanel>
-                                            }
-                                        }
-                                    </div>
+                                    </ResizablePanel>
                                 }
                             }
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Modal composer (Edit / Replay / Schedule) -->
-            <Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
-                @if (_composerMessage is not null && _activeTab is not null)
-                {
-                    <MessageComposer Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" IsProduction="false"
-                                     Mode="_composerMode" PrefillMessage="_composerMessage" AvailableNamespaces="@AvailableNamespaceOptions"
-                                     OwnerNamespaceId="_activeTab.NamespaceId" ScheduledRepo="ScheduledRepo" OnSent="OnComposerSent"
-                                     OnClose="CloseComposer" />
+                        </div>
+                    }
                 }
-            </Modal>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal composer (Edit / Replay / Schedule) -->
+<Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
+    @if (_composerMessage is not null && _activeTab is not null)
+    {
+        <MessageComposer Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" IsProduction="false"
+                         Mode="_composerMode" PrefillMessage="_composerMessage" AvailableNamespaces="@AvailableNamespaceOptions"
+                         OwnerNamespaceId="_activeTab.NamespaceId" ScheduledRepo="ScheduledRepo" OnSent="OnComposerSent"
+                         OnClose="CloseComposer" />
+    }
+</Modal>
 
 @code {
     private List<NsState> _namespaceStates = [];

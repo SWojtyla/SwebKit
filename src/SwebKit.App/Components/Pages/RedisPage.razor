@@ -11,23 +11,7 @@
 
 <div class="redis-page">
     <RoutePageHeader Area="redis" Subtitle="Explore keyspaces, health, and value operations for the active cache.">
-        <Meta>
-            @if (!string.IsNullOrWhiteSpace(ActiveCacheEntry?.DisplayName))
-            {
-                <span class="shell-pill shell-pill--muted">@ActiveCacheEntry.DisplayName</span>
-            }
-            @if (IsProduction)
-            {
-                <span class="shell-pill shell-pill--danger">Production environment</span>
-            }
-            @if (AppState.UseDemoData)
-            {
-                <span class="shell-pill shell-pill--warning">Demo mode</span>
-            }
-        </Meta>
-        <Actions>
-            <a class="page-header-action-btn" href="/settings?section=redis">Settings</a>
-        </Actions>
+        <Meta></Meta>
     </RoutePageHeader>
 
     <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"

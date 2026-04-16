@@ -2,46 +2,122 @@
 
 <div class="appearance-section">
     <div class="appearance-pilot-group">
-        <div class="appearance-pilot-group__eyebrow">Chosen Direction</div>
+        <div class="appearance-pilot-group__eyebrow">Dark Themes</div>
         <p class="appearance-pilot-group__body">
-            Studio Ledger is now the global dark design direction. Future dark palettes should keep this same
-            structure, spacing, and chrome language while varying only the color tokens.
+            Studio Ledger is the global dark foundation. Iron Noir is a deeper, higher-contrast variant
+            with a warm copper accent — same structure, darker palette.
         </p>
 
         <div class="appearance-pilot-gallery">
-            <div class="appearance-pilot-card appearance-pilot-card--studio-ledger appearance-pilot-card--active">
-                <span class="appearance-pilot-card__eyebrow">Global Dark Foundation</span>
-                <span class="appearance-pilot-card__title">Studio Ledger</span>
-                <span class="appearance-pilot-card__body">Premium slate-metal surfaces, rounded framing, and a calmer
-                    hierarchy for dense workflows.</span>
-                    <span class="appearance-pilot-card__coverage">Palette roadmap: keep the structure, branch the
-                        colorways.</span>
-                        <span class="appearance-pilot-card__swatches" aria-hidden="true">
-                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--chrome"></span>
-                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--surface"></span>
-                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--accent"></span>
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-field">
-                <label class="form-label">Theme</label>
-                <span class="form-static-value">Dark — Studio Ledger</span>
-            </div>
-
-            <div class="theme-preview-swatch">
-                <span class="theme-preview-swatch__dot"></span>
-                <span>Preview: @ThemeLabel(CurrentTheme)</span>
-            </div>
+            @foreach (var t in _darkThemes)
+            {
+                <button
+                    class="appearance-pilot-card appearance-pilot-card--@t.CardClass @(CurrentTheme == t.Key ? "appearance-pilot-card--active" : "")"
+                    @onclick="() => SelectTheme(t.Key)" aria-pressed="@(CurrentTheme == t.Key ? "true" : "false")">
+                    <span class="appearance-pilot-card__eyebrow">@t.Eyebrow</span>
+                    <span class="appearance-pilot-card__title">@t.Title</span>
+                    <span class="appearance-pilot-card__body">@t.Body</span>
+                    <span class="appearance-pilot-card__swatches" aria-hidden="true">
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--chrome"></span>
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--surface"></span>
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--accent"></span>
+                    </span>
+                </button>
+            }
         </div>
+    </div>
+
+    <div class="appearance-pilot-group">
+        <div class="appearance-pilot-group__eyebrow">Light Themes</div>
+        <p class="appearance-pilot-group__body">
+            Clean, high-contrast light surfaces for bright environments or personal preference.
+            Portima uses brand green and gold for familiar corporate context.
+        </p>
+
+        <div class="appearance-pilot-gallery">
+            @foreach (var t in _lightThemes)
+            {
+                <button
+                    class="appearance-pilot-card appearance-pilot-card--@t.CardClass @(CurrentTheme == t.Key ? "appearance-pilot-card--active" : "")"
+                    @onclick="() => SelectTheme(t.Key)" aria-pressed="@(CurrentTheme == t.Key ? "true" : "false")">
+                    <span class="appearance-pilot-card__eyebrow">@t.Eyebrow</span>
+                    <span class="appearance-pilot-card__title">@t.Title</span>
+                    <span class="appearance-pilot-card__body">@t.Body</span>
+                    <span class="appearance-pilot-card__swatches" aria-hidden="true">
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--chrome"></span>
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--surface"></span>
+                        <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--accent"></span>
+                    </span>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="theme-preview-swatch">
+        <span class="theme-preview-swatch__dot"></span>
+        <span>Active: @ThemeLabel(CurrentTheme)</span>
+    </div>
+</div>
 
 @code {
-    private const string StudioLedgerTheme = "dark-studio-ledger";
-    private const string LegacyTechnicalEditorialTheme = "dark-technical-editorial";
-
-    [Parameter] public string CurrentTheme { get; set; } = "dark";
+    [Parameter] public string CurrentTheme { get; set; } = "dark-studio-ledger";
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
-    private static string ThemeLabel(string _) => "Dark — Studio Ledger";
+    private record ThemeEntry(string Key, string CardClass, string Eyebrow, string Title, string Body);
+
+    private static readonly ThemeEntry[] _darkThemes =
+    [
+        new("dark-studio-ledger", "studio-ledger",
+            "Dark · Default",
+            "Studio Ledger",
+            "Slate-metal surfaces, rounded framing, and a calmer hierarchy for dense workflows."),
+        new("dark-iron-noir", "iron-noir",
+            "Dark · Variant",
+            "Iron Noir",
+            "Near-black depth with warm copper accents. Higher contrast, same structural language."),
+        new("dark-command-deck", "command-deck",
+            "Dark · Prototype",
+            "Command Deck",
+            "Deep navy with bright blue accents and a technical, high-density feel.")
+    ];
+
+    private static readonly ThemeEntry[] _lightThemes =
+    [
+        new("light-cloud-paper", "cloud-paper",
+            "Light · Default",
+            "Cloud Paper",
+            "Clean white surfaces with crisp blue accents. Neutral and professional."),
+        new("light-sand-dune", "sand-dune",
+            "Light · Warm",
+            "Sand Dune",
+            "Warm parchment backgrounds with earthy terracotta accents. Easy on the eyes."),
+        new("light-portima", "portima",
+            "Light · Brand",
+            "Portima",
+            "Forest green chrome and amber-gold highlights on crisp white — Portima brand identity."),
+    ];
+
+    private static readonly Dictionary<string, string> _labels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dark-studio-ledger"] = "Dark — Studio Ledger",
+        ["dark-iron-noir"] = "Dark — Iron Noir",
+        ["dark-command-deck"] = "Dark — Command Deck",
+        ["light-cloud-paper"] = "Light — Cloud Paper",
+        ["light-sand-dune"] = "Light — Sand Dune",
+        ["light-portima"] = "Light — Portima",
+        ["light"] = "Light — Azure Bloom",
+        ["light-azure-bloom"] = "Light — Azure Bloom",
+        ["light-coral-studio"] = "Light — Coral Studio",
+        ["light-forest-dev"] = "Light — Forest Dev",
+        ["light-violet-cloud"] = "Light — Violet Cloud",
+    };
+
+    private string ThemeLabel(string theme) =>
+        _labels.TryGetValue(theme, out var label) ? label : theme;
+
+    private async Task SelectTheme(string key)
+    {
+        CurrentTheme = key;
+        await OnThemeChanged.InvokeAsync(key);
+    }
 }

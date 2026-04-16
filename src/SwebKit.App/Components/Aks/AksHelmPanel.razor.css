@@ -55,6 +55,12 @@
 .sortable-th {
     cursor: pointer;
     user-select: none;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.sortable-th:hover {
+    background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+    color: var(--color-text);
 }
 
 .aks-history-table {

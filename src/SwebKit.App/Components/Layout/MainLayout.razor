@@ -84,13 +84,24 @@
     private const string CommandDeckTheme = "dark-command-deck";
     private const string LegacyPrecisionControlRoomTheme = "dark-control-room";
     private const string LegacyTechnicalEditorialTheme = "dark-technical-editorial";
-    private const string DefaultLightTheme = "light";
+    private const string DefaultLightTheme = "light-cloud-paper";
     private const string LegacyThemeStorageKey = "swebkit-ui-theme";
     private const string LegacyFluentThemeStorageKey = "swebkit-theme";
 
     private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
     {
-        StudioLedgerTheme,
+        "dark-studio-ledger",
+        "dark-iron-noir",
+        "dark-command-deck",
+        "light-cloud-paper",
+        "light-sand-dune",
+        "light-portima",
+        // legacy light themes kept for backward compat
+        "light",
+        "light-azure-bloom",
+        "light-coral-studio",
+        "light-forest-dev",
+        "light-violet-cloud",
     };
 
     private string CurrentArea => _currentRoute.Area;
@@ -388,9 +399,17 @@ AppState.Config.IsProduction, AppState.UseDemoData);
             return DefaultDarkTheme;
 
         var candidate = theme.Trim();
-        return SupportedThemes.Contains(candidate)
-            ? StudioLedgerTheme
-            : DefaultDarkTheme;
+
+        // Migrate legacy aliases
+        if (candidate.Equals(LegacyPrecisionControlRoomTheme, StringComparison.OrdinalIgnoreCase))
+            return CommandDeckTheme;
+        if (candidate.Equals(LegacyTechnicalEditorialTheme, StringComparison.OrdinalIgnoreCase))
+            return StudioLedgerTheme;
+        if (candidate.Equals("light", StringComparison.OrdinalIgnoreCase) ||
+            candidate.Equals("light-azure-bloom", StringComparison.OrdinalIgnoreCase))
+            return DefaultLightTheme;
+
+        return SupportedThemes.Contains(candidate) ? candidate : DefaultDarkTheme;
     }
 
     private static bool IsDarkTheme(string theme) => theme.StartsWith("dark", StringComparison.OrdinalIgnoreCase);
