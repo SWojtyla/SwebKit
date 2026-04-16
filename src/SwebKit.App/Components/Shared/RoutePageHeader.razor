@@ -1,7 +1,24 @@
 @using SwebKit.App.Components.Layout
 
-<PageHeader Eyebrow="@ResolvedEyebrow" Title="@ResolvedTitle" Subtitle="@ResolvedSubtitle" Meta="@ResolvedMeta"
-            Actions="@Actions" VisuallyHideCopy="true" />
+@if (ShowSupportingContent)
+{
+    <PageHeader Eyebrow="@ResolvedEyebrow" Title="@ResolvedTitle" Subtitle="@ResolvedSubtitle" Meta="@ResolvedMeta"
+                Actions="@Actions" />
+}
+else if (Meta is not null || Actions is not null)
+{
+    <div class="page-support-strip">
+        @if (Meta is not null)
+        {
+            <div class="page-support-strip__meta">@Meta</div>
+        }
+
+        @if (Actions is not null)
+        {
+            <div class="page-support-strip__actions">@Actions</div>
+        }
+    </div>
+}
 
 @code {
     [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
@@ -15,6 +32,6 @@
     private ShellNavEntry Entry => ShellNavigation.ForArea(Area);
     private string ResolvedEyebrow => string.IsNullOrWhiteSpace(Eyebrow) ? Entry.Group : Eyebrow;
     private string ResolvedTitle => string.IsNullOrWhiteSpace(Title) ? Entry.Label : Title;
-    private string? ResolvedSubtitle => ShowSupportingContent ? Subtitle : null;
-    private RenderFragment? ResolvedMeta => ShowSupportingContent ? Meta : null;
+    private string? ResolvedSubtitle => Subtitle;
+    private RenderFragment? ResolvedMeta => Meta;
 }

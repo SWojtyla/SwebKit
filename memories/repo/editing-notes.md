@@ -1,0 +1,1 @@
+- app.css is patch-fragile once theme work is in flight; prefer small targeted apply_patch edits over large multi-hunk patches, and re-read the exact selector block before patching when line drift is likely.

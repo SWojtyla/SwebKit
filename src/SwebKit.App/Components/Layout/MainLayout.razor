@@ -76,17 +76,21 @@
     private bool IsCommandPaletteOpen;
     private bool _isShortcutsPanelOpen;
     private DotNetObjectReference<MainLayout>? _jsRef;
-    private string _currentTheme = "dark";
+    private string _currentTheme = "dark-studio-ledger";
     private ShellNavEntry _currentRoute = ShellNavigation.Dashboard;
 
-    private const string DefaultDarkTheme = "dark";
+    private const string StudioLedgerTheme = "dark-studio-ledger";
+    private const string DefaultDarkTheme = StudioLedgerTheme;
+    private const string CommandDeckTheme = "dark-command-deck";
+    private const string LegacyPrecisionControlRoomTheme = "dark-control-room";
+    private const string LegacyTechnicalEditorialTheme = "dark-technical-editorial";
     private const string DefaultLightTheme = "light";
     private const string LegacyThemeStorageKey = "swebkit-ui-theme";
     private const string LegacyFluentThemeStorageKey = "swebkit-theme";
 
     private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
     {
-        DefaultDarkTheme,
+        StudioLedgerTheme,
         DefaultLightTheme,
         "light-azure-bloom",
         "light-coral-studio",
@@ -98,8 +102,7 @@
     private ShellNavEntry CurrentRoute => _currentRoute;
     private ShellRouteContext CurrentShellContext => ShellNavigation.CreateContext(_currentRoute,
 AppState.Config.IsProduction, AppState.UseDemoData);
-    private DesignThemeModes CurrentDesignMode => string.Equals(_currentTheme, DefaultDarkTheme,
-StringComparison.OrdinalIgnoreCase)
+    private DesignThemeModes CurrentDesignMode => IsDarkTheme(_currentTheme)
         ? DesignThemeModes.Dark
         : DesignThemeModes.Light;
 
@@ -392,6 +395,14 @@ StringComparison.OrdinalIgnoreCase)
         }
 
         var candidate = theme.Trim();
+        if (string.Equals(candidate, "dark", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate, CommandDeckTheme, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate, LegacyPrecisionControlRoomTheme, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate, LegacyTechnicalEditorialTheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return StudioLedgerTheme;
+        }
+
         if (string.Equals(candidate, "light", StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate, "light-azure-bloom", StringComparison.OrdinalIgnoreCase))
         {
@@ -402,6 +413,8 @@ StringComparison.OrdinalIgnoreCase)
             ? candidate.ToLowerInvariant()
             : DefaultDarkTheme;
     }
+
+    private static bool IsDarkTheme(string theme) => theme.StartsWith("dark", StringComparison.OrdinalIgnoreCase);
 
     private async Task LoadThemeAsync()
     {

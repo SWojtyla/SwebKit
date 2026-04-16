@@ -19,9 +19,9 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
-    padding: 4px var(--spacing-md);
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
+    padding: 6px var(--spacing-md);
+    border-bottom: 1px solid var(--aks-monitor-border);
+    background: var(--aks-monitor-surface);
     flex-shrink: 0;
 }
 
@@ -31,10 +31,10 @@
     align-items: center;
     gap: 5px;
     padding: 3px 10px;
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-chip-radius);
     font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
@@ -44,14 +44,14 @@
 
 .aks-monitor-btn:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
-    border-color: var(--color-border);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 72%, var(--aks-tab-inactive-surface));
+    border-color: color-mix(in srgb, var(--color-accent) 24%, var(--aks-monitor-border));
 }
 
 .aks-monitor-btn.active {
     color: var(--color-warning);
     border-color: var(--color-warning);
-    background: rgba(255, 165, 0, 0.08);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--aks-tab-inactive-surface));
 }
 
 /* ── Alert badge on the monitor button ── */
@@ -67,7 +67,7 @@
     color: #fff;
     font-size: 10px;
     font-weight: 700;
-    border-radius: 8px;
+    border-radius: var(--aks-chip-radius);
     vertical-align: middle;
     line-height: 1;
 }
@@ -76,8 +76,8 @@
 .aks-monitor-panel {
     display: flex;
     flex-direction: row;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
+    border-bottom: 1px solid var(--aks-monitor-border);
+    background: var(--aks-section-surface);
     flex-shrink: 0;
     max-height: 300px;
     overflow: hidden;
@@ -91,7 +91,7 @@
 
 /* Split the two sub-panels with a divider */
 .aks-monitor-panel > *:first-child {
-    border-right: 1px solid var(--color-border);
+    border-right: 1px solid var(--aks-monitor-border);
 }
 
 /* ── Main content area ── */
@@ -176,15 +176,17 @@
     align-items: center;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--aks-section-border);
+    background: var(--aks-section-surface);
     flex-shrink: 0;
 }
 
 .aks-section-title {
     font-size: var(--font-size-sm);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-family: var(--aks-section-title-family);
+    text-transform: var(--aks-section-title-transform);
+    letter-spacing: var(--aks-section-title-spacing);
     color: var(--color-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -194,10 +196,11 @@
 .aks-section-count {
     font-size: var(--font-size-xs);
     font-weight: 600;
-    background: var(--color-surface-2);
+    background: var(--aks-cell-accent-surface);
     color: var(--color-text-muted);
     padding: 1px 6px;
-    border-radius: 8px;
+    border: 1px solid var(--aks-cell-accent-border);
+    border-radius: var(--aks-chip-radius);
     min-width: 18px;
     text-align: center;
 }
@@ -230,7 +233,7 @@
     display: inline-flex;
     align-items: center;
     padding: 1px var(--spacing-sm);
-    border-radius: 10px;
+    border-radius: var(--aks-chip-radius);
     font-size: var(--font-size-sm);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -289,7 +292,7 @@
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
     padding: 0px 5px;
-    border-radius: 4px;
+    border-radius: var(--aks-chip-radius);
     vertical-align: middle;
     margin-left: var(--spacing-xs);
 }
@@ -391,7 +394,7 @@
     color: var(--color-warning);
     background: rgba(251, 140, 0, 0.12);
     padding: 1px 6px;
-    border-radius: 8px;
+    border-radius: var(--aks-chip-radius);
 }
 
 .aks-events-list {
@@ -455,7 +458,7 @@
     color: var(--color-text-muted);
     background: var(--color-surface-2);
     padding: 0 5px;
-    border-radius: 6px;
+    border-radius: var(--aks-chip-radius);
 }
 
 .aks-event-time {
@@ -479,7 +482,8 @@
 
 /* ── Selected row ── */
 ::deep .selected-row {
-    background: rgba(0, 120, 212, 0.08);
+    background: var(--aks-grid-selected-bg);
+    box-shadow: inset 3px 0 0 var(--aks-grid-selected-outline);
 }
 
 /* ── Keyboard hint bar ── */
@@ -488,8 +492,8 @@
     flex-wrap: wrap;
     gap: 2px 10px;
     padding: 4px var(--spacing-sm);
-    border-top: 1px solid var(--color-border, #333);
-    background: var(--color-surface-1, #1a1a1a);
+    border-top: 1px solid var(--aks-kbd-border);
+    background: var(--aks-kbd-surface);
     flex-shrink: 0;
 }
 
@@ -505,10 +509,10 @@
 .aks-kbd-hints kbd {
     display: inline-block;
     padding: 1px 4px;
-    background: var(--color-surface-3, #2d2d2d);
-    border: 1px solid var(--color-border, #444);
-    border-radius: 3px;
-    font-family: monospace;
+    background: var(--color-shell-control-bg, var(--color-surface-3));
+    border: 1px solid var(--aks-kbd-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-mono);
     font-size: 10px;
     color: var(--color-text, #e0e0e0);
     line-height: 1.4;
@@ -530,12 +534,13 @@
 .aks-history-table th {
     text-align: left;
     padding: 6px 10px;
-    font-weight: 600;
+    font-family: var(--table-header-font-family);
+    font-weight: var(--table-header-weight);
     color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
     font-size: var(--font-size-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+    text-transform: var(--table-header-transform);
+    letter-spacing: var(--table-header-letter-spacing);
 }
 
 .aks-history-table td {

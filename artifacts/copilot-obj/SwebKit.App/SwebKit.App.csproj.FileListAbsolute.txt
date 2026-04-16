@@ -1,0 +1,2 @@
+C:\Projects\Personal\SwebKit\artifacts\copilot-obj\SwebKit.App\EmbeddedAttribute.cs
+C:\Projects\Personal\SwebKit\artifacts\copilot-obj\SwebKit.App\ValidatableTypeAttribute.cs

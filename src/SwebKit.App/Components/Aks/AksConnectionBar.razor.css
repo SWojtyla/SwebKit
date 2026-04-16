@@ -6,8 +6,11 @@
 .aks-toolbar {
     display: flex;
     flex-direction: column;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    background: var(--aks-toolbar-surface);
+    border-bottom: 1px solid var(--aks-toolbar-border);
+    border-radius: var(--aks-toolbar-radius);
+    box-shadow: var(--aks-toolbar-shadow);
+    overflow: hidden;
     flex-shrink: 0;
 }
 
@@ -16,7 +19,7 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    padding: 6px var(--spacing-md);
+    padding: 8px var(--spacing-md);
 }
 
 /* Row 2: resource type tabs */
@@ -33,8 +36,8 @@
     align-items: center;
     gap: var(--spacing-xs);
     padding: 0 var(--spacing-sm) 6px;
-    border-top: 1px solid var(--color-border);
-    background: var(--color-surface-2);
+    border-top: 1px solid var(--aks-toolbar-border);
+    background: var(--aks-monitor-surface);
     overflow-x: auto;
 }
 
@@ -43,8 +46,8 @@
     color: var(--color-text-muted);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
     white-space: nowrap;
 }
 
@@ -56,7 +59,7 @@
 .aks-toolbar-divider {
     width: 1px;
     height: 20px;
-    background: var(--color-border);
+    background: var(--aks-toolbar-border);
     flex-shrink: 0;
 }
 
@@ -74,10 +77,10 @@
 /* ── Namespace dropdown select (existing context + namespace style) ── */
 .aks-ns-select {
     padding: 3px var(--spacing-sm);
-    background: var(--color-bg);
+    background: var(--aks-filter-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border: 1px solid var(--aks-filter-border);
+    border-radius: var(--aks-chip-radius);
     font-size: var(--font-size-sm);
     outline: none;
     min-width: 120px;
@@ -115,10 +118,10 @@
     min-width: 200px;
     max-height: 260px;
     overflow-y: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    background: var(--aks-dropdown-surface);
+    border: 1px solid var(--aks-toolbar-border);
+    border-radius: var(--aks-toolbar-radius);
+    box-shadow: var(--aks-dropdown-shadow);
     z-index: var(--z-dropdown);
     padding: var(--spacing-xs) 0;
 }
@@ -134,7 +137,7 @@
 }
 
 .aks-ns-option:hover {
-    background: var(--color-surface-2);
+    background: var(--aks-tab-inactive-surface);
 }
 
 .aks-ns-option.current {
@@ -145,11 +148,13 @@
 /* ── Resource type tabs ── */
 .aks-resource-tab {
     padding: var(--spacing-xs) var(--spacing-md);
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-tab-radius);
     font-size: var(--font-size-sm);
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.1s;
@@ -157,13 +162,13 @@
 
 .aks-resource-tab:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 78%, var(--aks-tab-inactive-surface));
 }
 
 .aks-resource-tab.active {
     color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: rgba(0, 120, 212, 0.08);
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--aks-toolbar-border));
+    background: var(--aks-tab-active-surface);
 }
 
 .aks-resource-tab--toggle {
@@ -183,11 +188,13 @@
 
 .aks-resource-subtab {
     padding: var(--spacing-xs) var(--spacing-md);
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-tab-radius);
     font-size: var(--font-size-sm);
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.1s;
@@ -195,22 +202,22 @@
 
 .aks-resource-subtab:hover {
     color: var(--color-text);
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 72%, var(--aks-tab-inactive-surface));
 }
 
 .aks-resource-subtab.active {
     color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: rgba(0, 120, 212, 0.08);
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--aks-toolbar-border));
+    background: var(--aks-tab-active-surface);
 }
 
 /* ── Events toggle button (in toolbar row) ── */
 .aks-events-toggle {
     padding: 3px 10px;
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-chip-radius);
     font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
@@ -220,11 +227,11 @@
 
 .aks-events-toggle:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 72%, var(--aks-tab-inactive-surface));
 }
 
 .aks-events-toggle.active {
     color: var(--color-warning);
     border-color: var(--color-warning);
-    background: rgba(255, 165, 0, 0.08);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--aks-tab-inactive-surface));
 }
