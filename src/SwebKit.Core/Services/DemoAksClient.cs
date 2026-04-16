@@ -577,6 +577,7 @@ public class DemoAksClient : IAksClient
             SelectorLabels = selectorLabels,
             Services = services,
             ExposedByIngresses = ingresses,
+            ExposedByHttpRoutes = [],
             IngressIsolated = ingressIsolated,
             EgressIsolated = egressIsolated,
             Findings = findings,

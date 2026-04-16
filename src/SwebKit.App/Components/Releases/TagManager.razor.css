@@ -1,0 +1,95 @@
+.tag-manager__state {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    padding: 20px 0;
+}
+
+.tag-manager__dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-backdrop);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.tag-manager__dialog {
+    background: var(--color-panel-raised, var(--color-surface-2));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    padding: 24px;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+}
+
+.tag-manager__warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--color-prod, #C8002A);
+    color: var(--color-solid-foreground);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tag-manager__dialog-title {
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+
+.tag-manager__dialog-copy {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.tag-manager__confirm {
+    margin-bottom: 12px;
+}
+
+.tag-manager__confirm-copy {
+    font-size: 12px;
+    margin: 0 0 6px;
+}
+
+.tag-manager__confirm-input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 4px;
+}
+
+.tag-manager__dialog-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.tag-manager__dialog-btn {
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.tag-manager__dialog-btn--secondary {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.tag-manager__dialog-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border: none;
+}
+
+.tag-manager__dialog-btn--primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

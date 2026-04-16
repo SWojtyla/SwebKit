@@ -3,13 +3,13 @@
 <div>
     @if (Release is null)
     {
-        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+        <div class="tag-manager__state">
             Select a release to manage tags.
         </div>
     }
     else if (ScopedComponents.Count == 0)
     {
-        <div style="color:var(--color-text-muted); font-size:13px; padding:20px 0;">
+        <div class="tag-manager__state">
             No components in scope for this release.
         </div>
     }
@@ -23,16 +23,21 @@
                 var latestTag = tags.FirstOrDefault();
                 var isTagging = TaggingComponent == comp.ComponentName;
 
-                <div style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
+                <div
+                    style="padding:12px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                         <div>
-                            <div style="font-size:14px; font-weight:600; font-family:Consolas,monospace;">@comp.ComponentName</div>
+                            <div style="font-size:14px; font-weight:600; font-family:Consolas,monospace;">@comp.ComponentName
+                            </div>
                             <div style="font-size:11px; color:var(--color-text-muted);">@comp.ProjectName</div>
                         </div>
                         <div style="text-align:right;">
                             @if (comp.TagConfirmed)
                             {
-                                <span style="font-size:12px; color:var(--color-success); font-weight:600; display:inline-flex; align-items:center; gap:4px;">@comp.TargetTag <FluentIcon Value="@(new Icons.Regular.Size16.Checkmark())" Width="14px" /></span>
+                                <span
+                                    style="font-size:12px; color:var(--color-success); font-weight:600; display:inline-flex; align-items:center; gap:4px;">@comp.TargetTag
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Checkmark())" Width="14px" />
+                                </span>
                             }
                             else if (latestTag is not null)
                             {
@@ -57,68 +62,71 @@
                                         style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;">
                                     @foreach (var commit in commits)
                                     {
-                                        <option value="@commit.CommitId">@commit.ShortId — @Truncate(commit.Comment, 50) (@commit.AuthorName)</option>
-                                    }
-                                </select>
+                                        <option value="@commit.CommitId">@commit.ShortId — @Truncate(commit.Comment, 50)
+                                            (@commit.AuthorName)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div style="display:grid; gap:2px; min-width:160px;">
+                                    <label style="font-size:11px; color:var(--color-text-muted);">Tag Message</label>
+                                    <input type="text" value="@GetTagMessage(comp.ComponentName)"
+                                           @onchange="@(e => SetTagMessage(comp.ComponentName, e.Value?.ToString() ?? ""))"
+                                           placeholder="Release message"
+                                           style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
+                                </div>
+                                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => ConfirmCreateTag(comp))"
+                                              Disabled="@isTagging">
+                                    @(isTagging ? "Creating..." : "Create Tag")
+                                </FluentButton>
                             </div>
-                            <div style="display:grid; gap:2px; min-width:160px;">
-                                <label style="font-size:11px; color:var(--color-text-muted);">Tag Message</label>
-                                <input type="text" value="@GetTagMessage(comp.ComponentName)"
-                                       @onchange="@(e => SetTagMessage(comp.ComponentName, e.Value?.ToString() ?? ""))"
-                                       placeholder="Release message"
-                                       style="padding:4px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                            </div>
-                            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => ConfirmCreateTag(comp))"
-                                          Disabled="@isTagging">
-                                @(isTagging ? "Creating..." : "Create Tag")
-                            </FluentButton>
-                        </div>
 
-                        @* Existing tags *@
-                        @if (tags.Count > 0)
-                        {
-                            <div style="margin-top:8px; font-size:11px; color:var(--color-text-muted);">
-                                Recent tags: @string.Join(", ", tags.Take(5).Select(t => t.Name))
-                            </div>
+                            @* Existing tags *@
+                            @if (tags.Count > 0)
+                            {
+                                <div style="margin-top:8px; font-size:11px; color:var(--color-text-muted);">
+                                    Recent tags: @string.Join(", ", tags.Take(5).Select(t => t.Name))
+                                </div>
+                            }
                         }
-                    }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Two-step confirmation modal ── *@
+    @if (TagConfirmTarget is not null)
+    {
+        <div class="tag-manager__dialog-backdrop">
+            <div class="tag-manager__dialog">
+                <div class="tag-manager__warning">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px"
+                                style="flex-shrink:0; vertical-align:middle;" /> This action cannot be undone
                 </div>
-            }
+                <h3 class="tag-manager__dialog-title">Create Tag</h3>
+                <p class="tag-manager__dialog-copy">
+                    You are about to create tag <strong>@TagConfirmTagName</strong>
+                    on commit <strong>@TagConfirmCommitShort</strong>
+                    for component <strong>@TagConfirmTarget.ComponentName</strong>.
+                </p>
+
+                <div class="tag-manager__confirm">
+                    <p class="tag-manager__confirm-copy">Type <strong>CONFIRM</strong> to proceed:</p>
+                    <input type="text" @bind="TagTypingConfirm" @bind:event="oninput"
+                           class="tag-manager__confirm-input app-native-control" />
+                </div>
+
+                <div class="tag-manager__dialog-actions">
+                    <button @onclick="CancelTagConfirm"
+                            class="tag-manager__dialog-btn tag-manager__dialog-btn--secondary">Cancel</button>
+                    <button @onclick="ExecuteCreateTag" disabled="@(TagTypingConfirm != "CONFIRM")"
+                            class="tag-manager__dialog-btn tag-manager__dialog-btn--primary">
+                        Create Tag
+                    </button>
+                </div>
+            </div>
         </div>
     }
-</div>
-
-@* ── Two-step confirmation modal ── *@
-@if (TagConfirmTarget is not null)
-{
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:480px; width:90%;">
-            <div style="background:var(--color-prod, #C8002A); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0; vertical-align:middle;" /> This action cannot be undone
-            </div>
-            <h3 style="margin:0 0 8px; font-size:15px;">Create Tag</h3>
-            <p style="margin:0 0 16px; font-size:13px; color:var(--color-text-muted);">
-                You are about to create tag <strong>@TagConfirmTagName</strong>
-                on commit <strong>@TagConfirmCommitShort</strong>
-                for component <strong>@TagConfirmTarget.ComponentName</strong>.
-            </p>
-
-            <div style="margin-bottom:12px;">
-                <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
-                <input type="text" @bind="TagTypingConfirm" @bind:event="oninput"
-                       style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
-            </div>
-
-            <div style="display:flex; gap:8px; justify-content:flex-end;">
-                <button @onclick="CancelTagConfirm" style="padding:6px 16px; cursor:pointer;">Cancel</button>
-                <button @onclick="ExecuteCreateTag" disabled="@(TagTypingConfirm != "CONFIRM")"
-                        style="padding:6px 16px; background:var(--color-accent); color:white; border:none; border-radius:4px; cursor:pointer; @(TagTypingConfirm != "CONFIRM" ? "opacity:0.5;" : "")">
-                    Create Tag
-                </button>
-            </div>
-        </div>
-    </div>
-}
 
 @code {
     [Parameter] public ReleaseRecord? Release { get; set; }

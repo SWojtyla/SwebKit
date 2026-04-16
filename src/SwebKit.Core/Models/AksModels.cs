@@ -394,6 +394,7 @@ public class NetworkPolicyAnalysis
     public Dictionary<string, string> SelectorLabels { get; set; } = [];
     public List<string> Services { get; set; } = [];
     public List<string> ExposedByIngresses { get; set; } = [];
+    public List<string> ExposedByHttpRoutes { get; set; } = [];
     public bool IngressIsolated { get; set; }
     public bool EgressIsolated { get; set; }
     public List<string> Findings { get; set; } = [];

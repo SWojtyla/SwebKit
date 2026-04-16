@@ -81,7 +81,7 @@
 
 .aks-scale-step-btn:hover {
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border-color: var(--color-accent);
 }
 

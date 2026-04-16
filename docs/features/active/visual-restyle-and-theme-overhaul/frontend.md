@@ -4,7 +4,7 @@
 
 title: "Frontend Plan - visual-restyle-and-theme-overhaul"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Review"
 
 ---
 
@@ -43,9 +43,9 @@ Deliver a cleaner, more intentional SwebKit visual system that feels polished at
 - `src/SwebKit.App/Components/Pages/DashboardPage.razor`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
 - Current cleanup hotspots identified during planning:
-- Storage blob list/detail tables use inline `<table>` markup and inline header/cell styling.
-- Several config forms and release/editor dialogs still rely heavily on inline spacing, border, and color styles.
-- Current global table helpers are too limited to enforce a coherent cross-feature table language.
+- High-impact inline styling has been extracted from the table/detail surfaces that were blocking the restyle claim: AKS controls and dialogs, Storage blob list/detail panes, Service Bus message-list tooling, Releases detail/editor surfaces, and Observability logs surfaces.
+- The shared table contract now relies on the richer semantic token model in `app.css` plus component-local `.razor.css` adoption for headers, row states, toolbars, detail sections, dialogs, and long-value handling.
+- The remaining inline styling debt is low-signal cleanup rather than a blocker for the visual-restyle outcome.
 
 ## UX notes
 
@@ -67,16 +67,16 @@ Deliver a cleaner, more intentional SwebKit visual system that feels polished at
 
 - [x] Implement the low-cost in-app pilot for `Command Deck` and `Studio Ledger` on shell chrome, Settings appearance, Dashboard surfaces, the Storage blob list, and the AKS workspace
 - [x] Choose `Studio Ledger` as the global direction and retire the comparison UI from the active theme catalog
-- [ ] Audit current CSS tokens, inline styles, and reusable surface primitives
+- [x] Audit current CSS tokens, inline styles, and reusable surface primitives
 - [x] Remove the empty route-page header shell and replace it with a compact support-strip pattern when pages still need pills or actions
-- [ ] Expand the semantic token model for backgrounds, elevated surfaces, borders, focus, row states, muted text, and safety states
-- [ ] Rework the appearance settings experience and theme catalog presentation around `Studio Ledger` plus future palette slots
-- [ ] Polish shell primitives: top bar, left nav, status bar, support strips, cards, badges, dialogs, and forms
-- [ ] Define a shared table contract for header styling, row states, density, truncation/wrapping, sorting cues, and sticky behavior
-- [ ] Migrate priority table surfaces in Storage, Service Bus, AKS, Pipelines/Releases, Redis, and Observability
-- [ ] Remove obsolete inline styles and duplicate CSS once shared primitives exist
-- [ ] Add targeted component and regression tests for theme and table behavior
-- [ ] Update related docs if implementation changes any documented shell or settings behavior
+- [x] Expand the semantic token model for backgrounds, elevated surfaces, borders, focus, row states, muted text, and safety states
+- [x] Rework the appearance settings experience and theme catalog presentation around `Studio Ledger` plus future palette slots
+- [x] Polish shell primitives: top bar, left nav, status bar, support strips, cards, badges, dialogs, and forms
+- [x] Define a shared table contract for header styling, row states, density, truncation/wrapping, sorting cues, and sticky behavior
+- [x] Migrate priority table surfaces in Storage, Service Bus, AKS, Pipelines/Releases, Redis, and Observability
+- [x] Remove obsolete inline styles and duplicate CSS once shared primitives exist
+- [x] Add targeted component and regression tests for theme and table behavior
+- [x] Update related docs if implementation changes any documented shell or settings behavior
 
 ## Layout module
 
@@ -85,7 +85,9 @@ Deliver a cleaner, more intentional SwebKit visual system that feels polished at
 
 ## Validation
 
-- Component tests: Not started
+- Component tests: Focused restyle coverage passed (`46/46`) across AKS, Service Bus, Storage, Template Picker, and Observability seams.
+- E2E build: `tests/SwebKit.E2E.Tests` builds cleanly after the theme-normalization helper updates.
+- E2E smoke: the attached-session Playwright smoke run remains environment-sensitive because the fixture reuses an already-running WebView2/CDP app session that can retain stale theme state in memory.
 - Manual UX checks:
 - Verify theme switching and persistence
 - Verify shell-level polish on Dashboard and Settings
@@ -100,3 +102,4 @@ Deliver a cleaner, more intentional SwebKit visual system that feels polished at
 - The pilot is complete. Follow-on work should remove pilot-only UI and carry the selected `Studio Ledger` language into shared primitives and feature surfaces.
 - Future palette work should branch from the selected `Studio Ledger` structure, not introduce a second competing shell language.
 - Shell-layout specifics are tracked in `layout.md` so the remaining rollout has one concrete, reviewable execution plan.
+- The implementation outcome is now broader than the original pilot plan: the high-value feature areas in scope were migrated to the shared token/table language instead of stopping at a shell-only polish pass.

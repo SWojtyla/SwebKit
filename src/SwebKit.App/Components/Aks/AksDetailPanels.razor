@@ -30,7 +30,7 @@
                         <div class="aks-scale-stepper">
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Max(0, _scaleReplicas - 1)">−</button>
-                            <input type="number" class="aks-scale-input" min="0" max="100" @bind="_scaleReplicas"
+                            <input type="number" class="aks-scale-input app-native-control" min="0" max="100" @bind="_scaleReplicas"
                                    @bind:event="oninput" />
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>

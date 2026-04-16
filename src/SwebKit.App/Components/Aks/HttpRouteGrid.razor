@@ -23,7 +23,11 @@
                  @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))" @oncontextmenu:preventDefault>
                 @foreach (var host in context.Hostnames)
                 {
-                    <span class="aks-httproute-chip" @key="host">@host</span>
+                    var url = BuildHostUrl(host);
+                    <button class="aks-ingress-url-btn" @key="host" @onclick="() => OnOpenUrl.InvokeAsync(url)"
+                            @onclick:stopPropagation title="Open @url">
+                        @host
+                    </button>
                 }
             </div>
         </TemplateColumn>
@@ -65,7 +69,18 @@ Enumerable.Empty<HttpRouteInfo>().AsQueryable();
     [Parameter] public HttpRouteInfo? SelectedHttpRoute { get; set; }
     [Parameter] public EventCallback<HttpRouteInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, HttpRouteInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnOpenUrl { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string BuildHostUrl(string host)
+    {
+        if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return host;
+        if (System.Net.IPAddress.TryParse(host, out _))
+            return $"http://{host}";
+        return $"https://{host}";
+    }
 
     private static bool HasSameIdentity(HttpRouteInfo candidate, HttpRouteInfo? selected) =>
         selected is not null

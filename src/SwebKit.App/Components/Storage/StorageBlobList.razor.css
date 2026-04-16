@@ -123,8 +123,8 @@
 
 .storage-blob-list__select-toggle.is-active {
     background: var(--color-accent);
-    border-color: color-mix(in srgb, var(--color-accent) 72%, white);
-    color: white;
+    border-color: color-mix(in srgb, var(--color-accent) 72%, var(--color-solid-foreground));
+    color: var(--color-solid-foreground);
 }
 
 .storage-blob-list__download-card {
@@ -177,11 +177,11 @@
 .storage-blob-list__dialog-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: var(--z-modal);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.34);
+    background: var(--overlay-backdrop);
 }
 
 .storage-blob-list__dialog {

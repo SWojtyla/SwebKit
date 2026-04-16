@@ -16,10 +16,24 @@
     --sb-detail-drawer-width: 380px;
 
     /* z-index scale */
-    --z-dropdown: 200;
-    --z-modal:    500;
-    --z-toast:    900;
-    --z-overlay: 1000;
+    --z-dropdown: 3000;
+    --z-overlay: 4000;
+    --z-modal:    5000;
+    --z-modal-secondary: 5100;
+    --z-toast:    9000;
+
+    /* shared native control and overlay tokens */
+    --control-color-scheme: light;
+    --control-surface: var(--color-table-input-bg, var(--color-surface));
+    --control-border: var(--color-border);
+    --control-border-strong: color-mix(in srgb, var(--color-accent) 72%, var(--color-border));
+    --control-text: var(--color-text);
+    --control-placeholder: var(--color-text-muted);
+    --control-focus-ring: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    --control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    --overlay-backdrop: rgba(15, 31, 52, 0.26);
+    --overlay-backdrop-strong: rgba(15, 31, 52, 0.36);
+    --color-solid-foreground: #fff;
 
     /* spacing scale */
     --spacing-xs:  4px;
@@ -108,6 +122,9 @@
 /* ── Dark theme (default) ── */
 [data-theme='dark'],
 .app-shell:not([data-theme]) {
+    --control-color-scheme: dark;
+    --overlay-backdrop: rgba(5, 9, 15, 0.56);
+    --overlay-backdrop-strong: rgba(5, 9, 15, 0.7);
     --env-color: #1e1e2e;
     --env-text: #e0e0f0;
     --color-bg: #13131f;
@@ -148,6 +165,10 @@
 /* ── Dark prototype: Command Deck ── */
 [data-theme='dark-command-deck'],
 [data-theme='dark-control-room'] {
+    --control-color-scheme: dark;
+    --overlay-backdrop: rgba(5, 9, 15, 0.56);
+    --overlay-backdrop-strong: rgba(5, 9, 15, 0.72);
+    --color-solid-foreground: #07121d;
     --env-color: #0b1320;
     --env-text: #edf5ff;
     --color-bg: #070d15;
@@ -272,6 +293,10 @@
 [data-theme='dark-studio-ledger'],
 [data-theme='dark-studio-ledger-slate'],
 [data-theme='dark-technical-editorial'] {
+    --control-color-scheme: dark;
+    --overlay-backdrop: rgba(5, 9, 15, 0.56);
+    --overlay-backdrop-strong: rgba(5, 9, 15, 0.72);
+    --color-solid-foreground: #0b1218;
     --env-color: #0f161d;
     --env-text: #eff4f7;
     --color-bg: #090f15;
@@ -395,6 +420,9 @@
 /* ── Light theme: Azure Bloom ── */
 [data-theme='light'],
 [data-theme='light-azure-bloom'] {
+    --control-color-scheme: light;
+    --overlay-backdrop: rgba(15, 31, 52, 0.24);
+    --overlay-backdrop-strong: rgba(15, 31, 52, 0.32);
     --env-color: #c8ddf0;
     --env-text: #1a2b40;
     --color-bg: #d8e8f5;
@@ -603,7 +631,7 @@ html, body {
     border-bottom: 1px solid var(--color-shell-chrome-border, var(--color-border));
     box-shadow: var(--shadow-chrome, none);
     transition: background 0.2s ease;
-    z-index: 100;
+    z-index: var(--z-overlay);
 }
 
 .app-shell--production .top-bar {
@@ -778,8 +806,8 @@ html, body {
 
 .workspace-hub__action-btn--primary {
     background: var(--color-accent);
-    border-color: color-mix(in srgb, var(--color-accent) 70%, white);
-    color: white;
+    border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-solid-foreground));
+    color: var(--color-solid-foreground);
 }
 
 .workspace-hub__list-item {
@@ -843,7 +871,7 @@ html, body {
     top: -4px;
     right: -4px;
     background: var(--color-error);
-    color: #fff;
+    color: var(--color-solid-foreground);
     font-size: 9px;
     font-weight: 700;
     border-radius: 999px;
@@ -930,7 +958,7 @@ kbd {
     background: #d97706;
     border: none;
     border-radius: var(--radius-sm);
-    color: white;
+    color: var(--color-solid-foreground);
     font-size: var(--font-size-xs);
     font-weight: 600;
     padding: 4px 10px;
@@ -1048,7 +1076,7 @@ kbd {
     font-size: 8px;
     font-weight: 700;
     line-height: 1;
-    color: #fff;
+    color: var(--color-solid-foreground);
     flex-shrink: 0;
 }
 
@@ -1117,7 +1145,7 @@ kbd {
 /* Prod safety */
 .prod-banner {
     background: var(--color-prod);
-    color: white;
+    color: var(--color-solid-foreground);
     text-align: center;
     padding: 4px 8px;
     font-size: var(--font-size-sm);
@@ -1325,7 +1353,7 @@ kbd {
     padding: 1px 6px;
     border-radius: 8px;
     background: var(--color-accent);
-    color: white;
+    color: var(--color-solid-foreground);
     font-size: var(--font-size-xs);
     font-weight: 700;
 }
@@ -1571,14 +1599,14 @@ kbd {
 }
 
 .entity-pin-btn.pinned {
-    color: white;
+    color: var(--color-solid-foreground);
     border-color: color-mix(in srgb, var(--color-accent) 68%, var(--color-border));
     background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 88%, white 12%), var(--color-accent));
     box-shadow: 0 8px 18px -14px color-mix(in srgb, var(--color-accent) 85%, transparent);
 }
 
 .entity-pin-btn.pinned:hover {
-    color: white;
+    color: var(--color-solid-foreground);
 }
 
 .entity-pin-glyph {
@@ -1593,7 +1621,7 @@ kbd {
 .command-palette-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-backdrop);
     z-index: var(--z-overlay);
     display: flex;
     align-items: flex-start;
@@ -1682,13 +1710,13 @@ kbd {
 .command-item:hover,
 .command-item.focused {
     background: var(--color-accent);
-    color: white;
+    color: var(--color-solid-foreground);
 }
 .command-item.focused .cp-cmd-shortcut kbd,
 .command-item:hover .cp-cmd-shortcut kbd {
-    background: rgba(255,255,255,0.2);
-    border-color: rgba(255,255,255,0.35);
-    color: white;
+    background: color-mix(in srgb, var(--color-solid-foreground) 18%, transparent);
+    border-color: color-mix(in srgb, var(--color-solid-foreground) 30%, transparent);
+    color: var(--color-solid-foreground);
 }
 
 .cp-cmd-icon {
@@ -1718,7 +1746,7 @@ kbd {
 
 .command-item.focused .cp-cmd-summary,
 .command-item:hover .cp-cmd-summary {
-    color: rgba(255, 255, 255, 0.78);
+    color: color-mix(in srgb, var(--color-solid-foreground) 78%, transparent);
 }
 
 .cp-cmd-shortcut {
@@ -1774,7 +1802,7 @@ kbd {
 .shortcuts-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-backdrop);
     z-index: var(--z-overlay);
     display: flex;
     align-items: flex-start;
@@ -1905,7 +1933,7 @@ kbd {
     top: -100px;
     left: var(--spacing-md);
     background: var(--color-accent);
-    color: white;
+    color: var(--color-solid-foreground);
     padding: var(--spacing-xs) var(--spacing-md);
     border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     font-size: var(--font-size-sm);
@@ -2002,7 +2030,7 @@ kbd {
 .level-warning  { background: #4a2e00; color: #FFB86C; }
 .level-info     { background: #0d2d4a; color: #8BE9FD; }
 .level-debug, .level-trace { background: #1a1a2e; color: var(--color-text-muted); }
-.level-critical { background: var(--color-error); color: white; }
+.level-critical { background: var(--color-error); color: var(--color-solid-foreground); }
 
 /* ═══════════════════════════════════════════════════════════
    Splitter
@@ -2276,6 +2304,24 @@ kbd {
 .pod-status-badge--containercreating    { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
 .pod-status-badge--podinitiializing     { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
 .pod-status-badge--podinitializing      { background: rgba(33, 150, 243, 0.15); color: var(--color-info); }
+
+/* ═══════════════════════════════════════════════════════════
+   AKS FluentDataGrid column header styling
+   ═══════════════════════════════════════════════════════════ */
+
+.aks-page fluent-data-grid-cell[role="columnheader"] {
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--aks-toolbar-border);
+}
+
+.aks-page fluent-data-grid-cell[role="gridcell"] {
+    color: var(--color-text);
+}
 
 /* ═══════════════════════════════════════════════════════════
    Redis key type badges
@@ -2972,11 +3018,42 @@ kbd {
     font-size: 8px;
     font-weight: 700;
     line-height: 1;
-    color: #fff;
+    color: var(--color-solid-foreground);
 }
 .dot-ok      { background: var(--color-success); }
 .dot-error   { background: var(--color-error); }
 .dot-unknown { background: var(--color-text-muted); }
+
+.app-native-control {
+    box-sizing: border-box;
+    color-scheme: var(--control-color-scheme);
+    background: var(--control-surface);
+    color: var(--control-text);
+    border: 1px solid var(--control-border);
+    box-shadow: var(--control-shadow);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.app-native-control::placeholder {
+    color: var(--control-placeholder);
+    opacity: 1;
+}
+
+.app-native-control:focus,
+.app-native-control:focus-visible {
+    outline: none;
+    border-color: var(--control-border-strong);
+    box-shadow: 0 0 0 3px var(--control-focus-ring), var(--control-shadow);
+}
+
+.app-native-control:disabled {
+    opacity: 0.68;
+    cursor: not-allowed;
+}
+
+.app-native-select {
+    color-scheme: var(--control-color-scheme);
+}
 
 #blazor-error-ui { display: none; }
 
@@ -2991,10 +3068,12 @@ kbd {
     position: fixed;
     z-index: var(--z-overlay);
     min-width: 180px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    color-scheme: var(--control-color-scheme);
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(14px);
     padding: 4px 0;
     font-size: var(--font-size-sm);
 }
@@ -3015,7 +3094,8 @@ kbd {
     transition: background 0.1s ease;
 }
 
-.ctx-item:hover { background: var(--color-surface-2); }
+.ctx-item:hover,
+.ctx-item:focus-visible { background: color-mix(in srgb, var(--color-accent-subtle) 72%, transparent); }
 
 .ctx-item.destructive { color: var(--color-error); }
 .ctx-item.destructive:hover { background: rgba(244, 67, 54, 0.08); }
@@ -4397,7 +4477,7 @@ fluent-data-grid-row.obs-perf-med  { border-left: 3px solid rgba(224,128,0,0.4);
 
 .error-boundary-retry {
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border: none;
     border-radius: var(--radius-sm);
     padding: 8px 20px;
@@ -4431,38 +4511,6 @@ fluent-data-grid-row.obs-perf-med  { border-left: 3px solid rgba(224,128,0,0.4);
 :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-}
-
-/* ── Notification toast detail expansion (UI-11) ── */
-.notification-detail {
-    color: rgba(255,255,255,0.6);
-    font-size: 11px;
-    margin-top: 4px;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.4;
-    max-height: 2.8em;
-    transition: max-height 0.2s ease;
-}
-.notification-detail.expanded {
-    -webkit-line-clamp: unset;
-    line-clamp: unset;
-    max-height: none;
-}
-.notification-toggle {
-    background: transparent;
-    border: none;
-    color: rgba(255,255,255,0.45);
-    font-size: 10px;
-    cursor: pointer;
-    padding: 2px 0 0;
-    text-decoration: underline;
-}
-.notification-toggle:hover {
-    color: rgba(255,255,255,0.7);
 }
 
 /* ── UI-16: Form validation ── */

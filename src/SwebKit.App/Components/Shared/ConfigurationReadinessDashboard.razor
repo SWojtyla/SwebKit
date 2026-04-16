@@ -20,24 +20,6 @@
             </span>
         </div>
 
-        @if (Report.ActionItems.Count > 0)
-        {
-            <div class="dashboard-readiness-checklist" data-testid="dashboard-readiness-checklist">
-                @foreach (var actionItem in Report.ActionItems)
-                {
-                    <article class="dashboard-readiness-item">
-                        <div class="dashboard-readiness-item__copy">
-                            <h3>@actionItem.Title</h3>
-                            <p>@actionItem.Summary</p>
-                        </div>
-                        <a class="dashboard-readiness-item__action" href="@SettingsHrefBuilder(actionItem.SettingsSection)">
-                            @actionItem.ActionLabel
-                        </a>
-                    </article>
-                }
-            </div>
-        }
-
         <div class="dashboard-readiness-areas">
             @foreach (var area in readinessAreas)
             {

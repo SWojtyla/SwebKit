@@ -4,7 +4,7 @@
 
 title: "Test Plan - visual-restyle-and-theme-overhaul"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Review"
 created: "2026-04-15"
 updated: "2026-04-16"
 
@@ -31,9 +31,9 @@ Validate that the visual overhaul improves polish and consistency without regres
 
 ## Automated coverage
 
-- Unit tests: `tests/SwebKit.App.Tests` - add coverage for any extracted theme helpers, appearance settings behavior, and shared table primitives introduced by the implementation.
+- Unit tests: `tests/SwebKit.App.Tests` - focused restyle coverage now exercises AKS toolbar/select seams, Service Bus namespace and message-list flows, Storage download/detail behavior, Template Picker behavior, and Observability guided logs behavior.
 - Integration tests: n/a for planning; use focused component-level validation where UI state or theme persistence crosses component boundaries.
-- End-to-end tests: `tests/SwebKit.E2E.Tests` - add or update smoke coverage for theme switching, one representative table-heavy flow, and one production-cue flow if the current harness supports these journeys.
+- End-to-end tests: `tests/SwebKit.E2E.Tests` builds cleanly after the theme-normalization helper updates. The attached-session Playwright smoke run is still environment-sensitive because the fixture reuses an already-running app session and can inherit stale in-memory theme state.
 
 ## Test data and setup
 
@@ -70,8 +70,8 @@ Validate that the visual overhaul improves polish and consistency without regres
 
 ## Validation status
 
-- Automated: Not started
-- Manual: Not started
+- Automated: `get_errors` reported no diagnostics, the focused App.Tests restyle suite passed (`46/46`), and `tests/SwebKit.E2E.Tests` builds cleanly. The attached-session Playwright smoke run is not treated as authoritative sign-off because it did not relaunch the app into a fresh session.
+- Manual: Not run in this session. A human visual pass in `Studio Ledger` plus one light theme is still recommended before archive/close-out.
 
 ## Sign-off
 

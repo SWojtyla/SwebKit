@@ -466,7 +466,8 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 var servicesTask = _client.CoreV1.ListNamespacedServiceAsync(ns, cancellationToken: ct);
                 var ingressesTask = _client.NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct);
                 var policiesTask = _client.NetworkingV1.ListNamespacedNetworkPolicyAsync(ns, cancellationToken: ct);
-                await Task.WhenAll(servicesTask, ingressesTask, policiesTask);
+                var httpRoutesTask = GetHttpRoutesAsync(ns, ct);
+                await Task.WhenAll(servicesTask, ingressesTask, policiesTask, httpRoutesTask);
 
                 var services = servicesTask.Result.Items
                     .Where(service => ServiceTargetsAnyPod(service, selectedPods))
@@ -481,6 +482,10 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToList();
 
+                var exposedByHttpRoutes = FindHttpRoutesReferencingServices(httpRoutesTask.Result, services)
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToList();
+
                 var policies = policiesTask.Result.Items
                     .Where(policy => NetworkPolicyTargetsAnyPod(policy, selectedPods))
                     .Select(BuildNetworkPolicyMatch)
@@ -489,7 +494,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
                 var ingressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Ingress", StringComparer.OrdinalIgnoreCase));
                 var egressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Egress", StringComparer.OrdinalIgnoreCase));
-                var findings = BuildNetworkPolicyFindings(selectedPods.Count, services, exposedByIngresses, policies);
+                var findings = BuildNetworkPolicyFindings(selectedPods.Count, services, exposedByIngresses, exposedByHttpRoutes, policies);
 
                 return new NetworkPolicyAnalysis
                 {
@@ -507,6 +512,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                     SelectorLabels = selectorLabels,
                     Services = services,
                     ExposedByIngresses = exposedByIngresses,
+                    ExposedByHttpRoutes = exposedByHttpRoutes,
                     IngressIsolated = ingressIsolated,
                     EgressIsolated = egressIsolated,
                     Findings = findings.ToList(),
@@ -723,6 +729,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         int matchingPodCount,
         IReadOnlyList<string> services,
         IReadOnlyList<string> exposedByIngresses,
+        IReadOnlyList<string> exposedByHttpRoutes,
         IReadOnlyList<NetworkPolicyMatch> policies)
     {
         var findings = new List<string>();
@@ -745,6 +752,11 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         if (exposedByIngresses.Count > 0)
         {
             findings.Add($"Referenced by ingress resources: {string.Join(", ", exposedByIngresses)}.");
+        }
+
+        if (exposedByHttpRoutes.Count > 0)
+        {
+            findings.Add($"Referenced by HTTPRoute resources: {string.Join(", ", exposedByHttpRoutes)}.");
         }
 
         if (findings.Count == 0)
@@ -921,6 +933,40 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
 
         return pods.Any(pod => MatchesLabels(service.Spec?.Selector, pod.Metadata?.Labels));
+    }
+
+    private static IReadOnlyList<string> FindHttpRoutesReferencingServices(
+        IReadOnlyList<HttpRouteInfo> routes,
+        IReadOnlyList<string> services)
+    {
+        if (services.Count == 0)
+        {
+            return [];
+        }
+
+        var serviceSet = services.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var results = new List<string>();
+
+        foreach (var route in routes)
+        {
+            var referencesService = route.BackendRefs.Any(backendRef =>
+            {
+                var serviceName = backendRef.Contains(':', StringComparison.Ordinal)
+                    ? backendRef[..backendRef.IndexOf(':', StringComparison.Ordinal)]
+                    : backendRef;
+                return serviceSet.Contains(serviceName);
+            });
+
+            if (referencesService && !string.IsNullOrWhiteSpace(route.Name))
+            {
+                var label = route.Hostnames.Count > 0
+                    ? $"{route.Name} ({string.Join(", ", route.Hostnames)})"
+                    : route.Name;
+                results.Add(label);
+            }
+        }
+
+        return results.Distinct(StringComparer.Ordinal).ToList();
     }
 
     private static IReadOnlyList<string> FindIngressesReferencingServices(

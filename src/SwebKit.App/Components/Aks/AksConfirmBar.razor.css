@@ -51,7 +51,7 @@
 
 .confirm-yes {
     background: var(--color-error);
-    color: white;
+    color: var(--color-solid-foreground);
 }
 
 .confirm-yes:hover:not(.disabled) {

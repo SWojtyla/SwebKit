@@ -36,6 +36,20 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
+    public void AksConnectionBar_ContextAndNamespaceControls_UseSharedNativeControlClasses()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Contexts, [new KubeContextInfo { Name = "ctx-prod", IsCurrent = true }])
+            .Add(p => p.Namespaces, ["default", "payments"])
+            .Add(p => p.ActiveContext, "ctx-prod")
+            .Add(p => p.CurrentNamespace, "default"));
+
+        Assert.Contains("app-native-control", cut.Find("select.aks-ns-select").ClassName, StringComparison.Ordinal);
+        Assert.Contains("app-native-select", cut.Find("select.aks-ns-select").ClassName, StringComparison.Ordinal);
+        Assert.Contains("app-native-control", cut.Find("input.aks-ns-search").ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AksConnectionBar_NotConnected_ShowsDotUnknownClass()
     {
         var cut = RenderComponent<AksConnectionBar>(ps => ps

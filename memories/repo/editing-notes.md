@@ -1,1 +1,2 @@
 - app.css is patch-fragile once theme work is in flight; prefer small targeted apply_patch edits over large multi-hunk patches, and re-read the exact selector block before patching when line drift is likely.
+- tests/SwebKit.E2E.Tests/AppFixture can attach to an already-running WebView2/CDP app session; do not trust theme-reset assertions unless the app was relaunched into a fresh session.

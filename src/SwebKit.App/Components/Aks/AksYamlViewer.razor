@@ -36,7 +36,7 @@
             @if (_showSearch)
             {
                 <div class="aks-yaml-search-bar">
-                    <input type="text" class="aks-yaml-search-input" placeholder="Search in YAML…" value="@_search"
+                          <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Search in YAML…" value="@_search"
                            @oninput="OnSearchInput" autofocus />
                     @if (!string.IsNullOrEmpty(_search))
                     {
@@ -48,7 +48,7 @@
                         }
                         @if (_editMode && !string.IsNullOrEmpty(_search))
                         {
-                            <input type="text" class="aks-yaml-search-input" placeholder="Replace with…" @bind="_replace"
+                            <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Replace with…" @bind="_replace"
                                    @bind:event="oninput" />
                             <button class="aks-yaml-replace-btn" @onclick="OnReplaceAll" title="Replace all">Replace
                                 all</button>

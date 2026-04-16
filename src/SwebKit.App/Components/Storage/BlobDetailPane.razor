@@ -3,49 +3,51 @@
 @using System.Text.Json
 @using SwebKit.Azure.Storage
 
-<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+<div class="blob-detail-pane">
 
     @if (_loadingProperties && _properties is null)
     {
-        <div style="display:flex; justify-content:center; padding:20px;">
+        <div class="blob-detail-pane__loading">
             <FluentProgressRing />
         </div>
     }
     else if (_propertiesError is not null)
     {
-        <div style="padding:12px; font-size:12px; color:var(--color-error);">@_propertiesError</div>
+        <div class="blob-detail-pane__message blob-detail-pane__message--error">@_propertiesError</div>
     }
     else if (_properties is not null)
     {
-        @* ── Tab bar ── *@
-        <div style="display:flex; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+        <div class="blob-detail-pane__tab-bar">
             <button
-            style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "properties" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "properties" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "properties" ? "2px solid var(--color-accent)" : "2px solid transparent");"
-            @onclick='() => _activeTab = "properties"'>Properties</button>
+                type="button"
+                class="blob-detail-pane__tab @(_activeTab == "properties" ? "is-active" : null)"
+                @onclick='() => _activeTab = "properties"'>
+                Properties
+            </button>
             <button
-            style="padding:8px 16px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:@(_activeTab == "versions" ? "var(--color-surface)" : "transparent"); color:@(_activeTab == "versions" ? "var(--color-accent)" : "var(--color-text-muted)"); border-bottom:@(_activeTab == "versions" ? "2px solid var(--color-accent)" : "2px solid transparent");"
-            @onclick="SelectVersionsTabAsync">Versions</button>
+                type="button"
+                class="blob-detail-pane__tab @(_activeTab == "versions" ? "is-active" : null)"
+                @onclick="SelectVersionsTabAsync">
+                Versions
+            </button>
         </div>
 
         @if (_downloadState is not null)
         {
-            <div style="padding:10px 16px; border-bottom:1px solid var(--color-border); background:rgba(0,120,212,0.06);">
-                <div
-                    style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; margin-bottom:6px;">
-                    <span
-                    style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@_downloadState.Label</span>
-                    <span
-                    style="color:var(--color-text-muted); white-space:nowrap;">@FormatDownloadProgress(_downloadState)</span>
+            <div class="blob-detail-pane__download-card">
+                <div class="blob-detail-pane__download-header">
+                    <span class="blob-detail-pane__download-title">@_downloadState.Label</span>
+                    <span class="blob-detail-pane__download-meta">@FormatDownloadProgress(_downloadState)</span>
                 </div>
                 @if (TryGetDownloadPercent(_downloadState, out var downloadPercent))
                 {
-                    <div style="height:6px; border-radius:999px; overflow:hidden; background:rgba(127,127,127,0.16);">
-                        <div style="height:100%; width:@($"{downloadPercent:F1}%"); background:var(--color-accent);"></div>
+                    <div class="blob-detail-pane__progress-track">
+                        <div class="blob-detail-pane__progress-fill" style="width:@($"{downloadPercent:F1}%");"></div>
                     </div>
                 }
                 else
                 {
-                    <div style="display:flex; align-items:center; gap:8px; color:var(--color-text-muted); font-size:11px;">
+                    <div class="blob-detail-pane__progress-pending">
                         <FluentProgressRing Width="14px" Height="14px" />
                         <span>Waiting for total size…</span>
                     </div>
@@ -55,217 +57,196 @@
 
         @if (_actionMessage is not null)
         {
-            <div
-                style="padding:8px 16px; border-bottom:1px solid var(--color-border); font-size:12px; color:@(_actionOk ? "var(--color-success)" : "var(--color-error)");">
+            <div class="blob-detail-pane__action-message @(_actionOk ? "blob-detail-pane__action-message--success" : "blob-detail-pane__action-message--error")">
                 @_actionMessage
             </div>
         }
 
         @if (_activeTab == "properties")
         {
-            <div style="overflow-y:auto; flex:1; padding:16px;">
-
-                @* ── Action bar ── *@
-                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+            <div class="blob-detail-pane__content">
+                <div class="blob-detail-pane__toolbar">
                     <FluentButton Appearance="Appearance.Accent" Disabled="@(_downloadState is not null)"
                                   @onclick="DownloadAsync">@(_downloadState is null ? "Download" : "Downloading...")</FluentButton>
                     <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
                     <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
                 </div>
 
-                @* ── Properties table ── *@
-                <div
-                    style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
-                    Properties</div>
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
-                        @foreach (var row in GetPropertyRows(_properties))
+                <div class="blob-detail-pane__section-title">Properties</div>
+                <table class="blob-detail-pane__property-table">
+                    @foreach (var row in GetPropertyRows(_properties))
+                    {
+                        <tr class="blob-detail-pane__property-row">
+                            <td class="blob-detail-pane__property-key">@row.Key</td>
+                            <td class="blob-detail-pane__property-value">@row.Value</td>
+                        </tr>
+                    }
+                </table>
+
+                <div class="blob-detail-pane__section">
+                    <button
+                        type="button"
+                        class="blob-detail-pane__toggle"
+                        aria-expanded="@_showMetadata"
+                        @onclick="() => _showMetadata = !_showMetadata">
+                        <span class="blob-detail-pane__toggle-glyph">@(_showMetadata ? "▼" : "▶")</span>
+                        <span>Metadata</span>
+                    </button>
+                    @if (_showMetadata)
+                    {
+                        <div class="blob-detail-pane__section-body">
+                            @if (_properties.Metadata.Count == 0)
+                            {
+                                <div class="blob-detail-pane__empty">No metadata.</div>
+                            }
+                            else
+                            {
+                                <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                    @foreach (var kv in _properties.Metadata)
+                                    {
+                                        <tr class="blob-detail-pane__property-row">
+                                            <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                            <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                        </tr>
+                                    }
+                                </table>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="blob-detail-pane__section blob-detail-pane__section--spaced">
+                    <button
+                        type="button"
+                        class="blob-detail-pane__toggle"
+                        aria-expanded="@_showTags"
+                        @onclick="() => _showTags = !_showTags">
+                        <span class="blob-detail-pane__toggle-glyph">@(_showTags ? "▼" : "▶")</span>
+                        <span>Tags</span>
+                    </button>
+                    @if (_showTags)
+                    {
+                        <div class="blob-detail-pane__section-body">
+                            @if (_properties.Tags.Count == 0)
+                            {
+                                <div class="blob-detail-pane__empty">No tags.</div>
+                            }
+                            else
+                            {
+                                <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                    @foreach (var kv in _properties.Tags)
+                                    {
+                                        <tr class="blob-detail-pane__property-row">
+                                            <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                            <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                        </tr>
+                                    }
+                                </table>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="blob-detail-pane__section-title blob-detail-pane__section-title--preview">Content Preview</div>
+
+                @if (_loadingContent)
+                {
+                    <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
+                        <FluentProgressRing />
+                    </div>
+                }
+                else if (_content is null)
+                {
+                    <div class="blob-detail-pane__message">Loading content...</div>
+                }
+                else if (_content.IsBinary || _binaryOverride)
+                {
+                    <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--neutral"
+                         title="@_binaryDetectionMethod">
+                        <span>Binary content - use Download to inspect this blob.</span>
+                        @if (_binaryDetectionMethod is not null)
                         {
-                            <tr style="border-bottom:1px solid var(--color-border);">
-                                <td
-                                    style="padding:5px 8px; color:var(--color-text-muted); width:160px; white-space:nowrap; font-size:12px; vertical-align:top;">
-                                    @row.Key</td>
-                                    <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@row.Value</td>
+                            <span class="blob-detail-pane__preview-note">(@_binaryDetectionMethod)</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
+                    {
+                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
+                            Preview limited to 512 KB. Download for full content.
+                        </div>
+                    }
+                    else if (_content.WasTruncated)
+                    {
+                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--warning blob-detail-pane__preview-callout--actionable">
+                            <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
+                            <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
+                                          @onclick="LoadFullPreviewAsync">Load</FluentButton>
+                        </div>
+                    }
+
+                    <div class="blob-detail-pane__preview-actions">
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                    </div>
+                    <pre class="blob-detail-pane__preview">@_displayContent</pre>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="blob-detail-pane__content">
+                @if (_loadingVersions)
+                {
+                    <div class="blob-detail-pane__loading">
+                        <FluentProgressRing />
+                    </div>
+                }
+                else if (_versionsError is not null)
+                {
+                    <div class="blob-detail-pane__message">@_versionsError</div>
+                }
+                else if (_versions is not null && _versions.Count > 0)
+                {
+                    <table class="blob-detail-pane__versions-table">
+                        <thead>
+                            <tr class="blob-detail-pane__versions-head">
+                                <th class="blob-detail-pane__versions-header">Version ID</th>
+                                <th class="blob-detail-pane__versions-header">Created</th>
+                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--right">Size</th>
+                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--center">Current</th>
+                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in _versions)
+                            {
+                                <tr class="blob-detail-pane__versions-row">
+                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--mono" title="@v.VersionId">@v.VersionId</td>
+                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--nowrap">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--right blob-detail-pane__versions-cell--nowrap">@FormatSize(v.ContentLength ?? 0)</td>
+                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--center">@(v.IsCurrentVersion ? "✔" : "")</td>
+                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--actions">
+                                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
+                                                      @onclick="() => DownloadVersionAsync(v)">@((IsDownloadingVersion(v) ? "Downloading..." : "⬇"))</FluentButton>
+                                    </td>
                                 </tr>
                             }
-                        </table>
-
-                        @* ── Metadata ── *@
-                        <div style="margin-bottom:12px;">
-                            <button
-                                style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                                @onclick="() => _showMetadata = !_showMetadata">
-                                <span>@(_showMetadata ? "▼" : "▶")</span> Metadata
-                            </button>
-                            @if (_showMetadata)
-                            {
-                                <div style="margin-top:6px; padding-left:12px;">
-                                    @if (_properties.Metadata.Count == 0)
-                                    {
-                                        <div style="font-size:12px; color:var(--color-text-muted);">No metadata.</div>
-                                    }
-                                    else
-                                    {
-                                        <table style="width:100%; border-collapse:collapse;">
-                                            @foreach (var kv in _properties.Metadata)
-                                            {
-                                                <tr style="border-bottom:1px solid var(--color-border);">
-                                                    <td
-                                                        style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
-                                                        @kv.Key</td>
-                                                        <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
-                                                    </tr>
-                                                }
-                                            </table>
-                                        }
-                                    </div>
-                                }
-                            </div>
-
-                            @* ── Tags ── *@
-                            <div style="margin-bottom:16px;">
-                                <button
-                                    style="background:none; border:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:4px 0; display:flex; align-items:center; gap:6px;"
-                                    @onclick="() => _showTags = !_showTags">
-                                    <span>@(_showTags ? "▼" : "▶")</span> Tags
-                                </button>
-                                @if (_showTags)
-                                {
-                                    <div style="margin-top:6px; padding-left:12px;">
-                                        @if (_properties.Tags.Count == 0)
-                                        {
-                                            <div style="font-size:12px; color:var(--color-text-muted);">No tags.</div>
-                                        }
-                                        else
-                                        {
-                                            <table style="width:100%; border-collapse:collapse;">
-                                                @foreach (var kv in _properties.Tags)
-                                                {
-                                                    <tr style="border-bottom:1px solid var(--color-border);">
-                                                        <td
-                                                            style="padding:5px 8px; color:var(--color-text-muted); width:160px; font-size:12px; white-space:nowrap; vertical-align:top;">
-                                                            @kv.Key</td>
-                                                            <td style="padding:5px 8px; font-size:12px; word-break:break-all;">@kv.Value</td>
-                                                        </tr>
-                                                    }
-                                                </table>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-
-                                @* ── Content preview ── *@
-                                <div
-                                    style="font-size:11px; font-weight:600; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
-                                    Content Preview</div>
-
-                                    @if (_loadingContent)
-                                    {
-                                        <div style="display:flex; justify-content:center; padding:12px;">
-                                            <FluentProgressRing />
-                                        </div>
-                                    }
-                                    else if (_content is null)
-                                    {
-                                        <div style="font-size:12px; color:var(--color-text-muted);">Loading content...</div>
-                                    }
-                                    else if (_content.IsBinary || _binaryOverride)
-                                    {
-                                        <div style="padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted);"
-                                             title="@_binaryDetectionMethod">
-                                            Binary content — use Download to inspect this blob. @if (_binaryDetectionMethod is not null) {
-                                            <span
-                                            style="font-size:10px; color:var(--color-text-muted);">(@_binaryDetectionMethod)</span>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
-                                    {
-                                        <div
-                                            style="padding:8px 10px; background:rgba(0,120,212,0.1); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px;">
-                                            Preview limited to 512 KB. Download for full content.
-                                        </div>
-                                    }
-                                    else if (_content.WasTruncated)
-                                    {
-                                        <div
-                                            style="padding:8px 10px; background:rgba(255,193,7,0.15); border:1px solid var(--color-border); border-radius:4px; font-size:12px; color:var(--color-text-muted); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                                            <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
-                                            <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
-                                                          @onclick="LoadFullPreviewAsync">Load</FluentButton>
-                                        </div>
-                                    }
-                                    <div style="display:flex; justify-content:flex-end; margin-bottom:4px;">
-                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
-                                    </div>
-                                    <pre
-                                    style="overflow:auto; max-height:400px; font-size:11px; font-family:Consolas,monospace; white-space:pre-wrap; word-break:break-all; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; padding:10px; margin:0;">@_displayContent</pre>
-                                }
-
-                            </div>
-                        }
-        else
-                        @* versions tab *@
-                        {
-                            <div style="overflow-y:auto; flex:1; padding:16px;">
-                                @if (_loadingVersions)
-                                {
-                                    <div style="display:flex; justify-content:center; padding:20px;">
-                                        <FluentProgressRing />
-                                    </div>
-                                }
-                                else if (_versionsError is not null)
-                                {
-                                    <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">@_versionsError</div>
-                                }
-                                else if (_versions is not null && _versions.Count > 0)
-                                {
-                                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                                        <thead>
-                                            <tr style="border-bottom:1px solid var(--color-border);">
-                                                <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">
-                                                    Version ID</th>
-                                                    <th style="padding:6px 8px; text-align:left; font-weight:600; color:var(--color-text-muted);">
-                                                        Created</th>
-                                                        <th style="padding:6px 8px; text-align:right; font-weight:600; color:var(--color-text-muted);">Size
-                                                        </th>
-                                                        <th style="padding:6px 8px; text-align:center; font-weight:600; color:var(--color-text-muted);">
-                                                            Current</th>
-                                                            <th style="padding:6px 8px; width:80px;"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        @foreach (var v in _versions)
-                                                        {
-                                                            <tr style="border-bottom:1px solid var(--color-border);">
-                                                                <td style="padding:5px 8px; font-size:11px; font-family:Consolas,monospace; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
-                                                                    title="@v.VersionId">@v.VersionId</td>
-                                                                <td style="padding:5px 8px; white-space:nowrap;">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")
-                                                                </td>
-                                                                <td style="padding:5px 8px; text-align:right; white-space:nowrap;">@FormatSize(v.ContentLength ?? 0)
-                                                                </td>
-                                                                <td style="padding:5px 8px; text-align:center;">@(v.IsCurrentVersion ? "✔" : "")</td>
-                                                                <td style="padding:5px 8px;">
-                                                                    <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
-                                                                                  @onclick="() => DownloadVersionAsync(v)">@(IsDownloadingVersion(v) ? "Downloading..." : "⬇")
-                                                                    </FluentButton>
-                                                                </td>
-                                                            </tr>
-                                                        }
-                                                    </tbody>
-                                                </table>
-                                            }
+                        </tbody>
+                    </table>
+                }
                 else
-                                            {
-                                                <div style="padding:12px; font-size:12px; color:var(--color-text-muted);">Versioning is not enabled on this
-                                                    container.</div>
-                                                }
-                                            </div>
-                                        }
-                                    }
+                {
+                    <div class="blob-detail-pane__message">Versioning is not enabled on this container.</div>
+                }
+            </div>
+        }
+    }
 
-                                </div>
+
+</div>
+
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;

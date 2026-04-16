@@ -1,5 +1,6 @@
 using Microsoft.Playwright;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace SwebKit.E2E.Tests;
 
@@ -49,7 +50,7 @@ public sealed class AppFixture : IAsyncLifetime
             await WaitForShellAsync();
         }
 
-        await SetThemeAsync("dark");
+        await SetThemeAsync("dark-studio-ledger");
 
         await HardNavigateAsync("/");
         await Page.ReloadAsync();
@@ -60,44 +61,25 @@ public sealed class AppFixture : IAsyncLifetime
         await Assertions.Expect(Page.Locator(".demo-toggle-btn"))
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
         await Assertions.Expect(Page.Locator(".app-shell"))
-            .ToHaveAttributeAsync("data-theme", "dark");
+            .ToHaveAttributeAsync("data-theme", NormalizeTheme("dark-studio-ledger"));
     }
 
     public async Task SetThemeAsync(string theme)
     {
-        await HardNavigateAsync("/settings");
+        var normalizedTheme = NormalizeTheme(theme);
+        var settingsPath = ResolveUserSettingsPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
 
-        await Page.WaitForFunctionAsync(
-            """
-            () => !!document.querySelector('.appearance-section fluent-select')
-            """,
-            null,
-            new PageWaitForFunctionOptions { Timeout = ShellTimeoutMs });
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(new { Theme = normalizedTheme }));
 
-        var applied = await Page.EvaluateAsync<bool>(
-            """
-            value => {
-                const select = document.querySelector('.appearance-section fluent-select');
-                if (!select) {
-                    return false;
-                }
-
-                select.value = value;
-                select.setAttribute('value', value);
-                select.dispatchEvent(new Event('input', { bubbles: true }));
-                select.dispatchEvent(new Event('change', { bubbles: true }));
-                return true;
-            }
-            """,
-            theme);
-
-        if (!applied)
-        {
-            throw new InvalidOperationException("Could not locate the theme selector in Settings.");
-        }
+        await HardNavigateAsync("/");
+        await Page.ReloadAsync();
+        await WaitForShellAsync();
 
         await Assertions.Expect(Page.Locator(".app-shell"))
-            .ToHaveAttributeAsync("data-theme", NormalizeTheme(theme));
+            .ToHaveAttributeAsync("data-theme", normalizedTheme);
     }
 
     public async Task HardNavigateAsync(string relativePath)
@@ -264,6 +246,16 @@ public sealed class AppFixture : IAsyncLifetime
         return exePath;
     }
 
+    private static string ResolveUserSettingsPath()
+    {
+        var overrideRoot = Environment.GetEnvironmentVariable("SWEBKIT_APPDATA_ROOT");
+        var root = !string.IsNullOrWhiteSpace(overrideRoot)
+            ? overrideRoot
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SwebKit");
+
+        return Path.Combine(root, "user-settings.json");
+    }
+
     private static async Task WaitForCdpAsync()
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
@@ -312,7 +304,21 @@ public sealed class AppFixture : IAsyncLifetime
             && string.Equals(currentUri.Fragment, targetUri.Fragment, StringComparison.Ordinal);
     }
 
-    private static string NormalizeTheme(string theme) => string.Equals(theme, "light-azure-bloom", StringComparison.OrdinalIgnoreCase)
-        ? "light"
-        : theme;
+    private static string NormalizeTheme(string theme)
+    {
+        if (string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(theme, "dark-command-deck", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(theme, "dark-control-room", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(theme, "dark-technical-editorial", StringComparison.OrdinalIgnoreCase))
+        {
+            return "dark-studio-ledger";
+        }
+
+        if (string.Equals(theme, "light-azure-bloom", StringComparison.OrdinalIgnoreCase))
+        {
+            return "light";
+        }
+
+        return theme;
+    }
 }

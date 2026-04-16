@@ -4,7 +4,7 @@
 
 @if (Message is null)
 {
-    <div style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:13px;">
+    <div class="mdp-empty-state">
         Select a message to view details
     </div>
 }
@@ -12,69 +12,65 @@ else
 {
     <div class="mdp-host">
         <div class="mdp-header">
-            <span style="font-weight:600;">@(Message.MessageId.Length > 16 ? Message.MessageId[..16] + "…" :
-                                            Message.MessageId)</span>
-                <div style="margin-left:auto; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
-                    @if (OnEdit.HasDelegate)
-                    {
-                        <button @onclick="() => OnEdit.InvokeAsync(Message)" class="mdp-btn"
-                                title="Edit message body/properties and re-send (Ctrl+E)">
-                            Edit &amp; Resubmit
-                        </button>
-                    }
-                    @if (OnReplay.HasDelegate)
-                    {
-                        <button @onclick="() => OnReplay.InvokeAsync(Message)" class="mdp-btn"
-                                title="Replay this message to another namespace/entity">
-                            Replay
-                        </button>
-                    }
-                    @if (OnSchedule.HasDelegate)
-                    {
-                        <button @onclick="() => OnSchedule.InvokeAsync(Message)" class="mdp-btn"
-                                title="Schedule this message for future delivery (Ctrl+Shift+S)">
-                            Schedule
-                        </button>
-                    }
-                    <button @onclick="CopyBody" class="mdp-btn" title="Copy message body to clipboard">
-                        @(_copyFeedback == "body" ? "Copied!" : "Copy Body")
+            <span class="mdp-message-id">@(Message.MessageId.Length > 16 ? Message.MessageId[..16] + "…" : Message.MessageId)</span>
+            <div class="mdp-actions">
+                @if (OnEdit.HasDelegate)
+                {
+                    <button @onclick="() => OnEdit.InvokeAsync(Message)" class="mdp-btn"
+                            title="Edit message body/properties and re-send (Ctrl+E)">
+                        Edit &amp; Resubmit
                     </button>
-                    <button @onclick="CopyFullMessage" class="mdp-btn"
-                            title="Copy full message (all properties + body) as JSON">
-                        @(_copyFeedback == "full" ? "Copied!" : "Copy Full Message")
+                }
+                @if (OnReplay.HasDelegate)
+                {
+                    <button @onclick="() => OnReplay.InvokeAsync(Message)" class="mdp-btn"
+                            title="Replay this message to another namespace/entity">
+                        Replay
                     </button>
-                    <button @onclick="OpenSaveAsTemplate" class="mdp-btn" title="Save this message as a reusable template">
-                        Save as Template
+                }
+                @if (OnSchedule.HasDelegate)
+                {
+                    <button @onclick="() => OnSchedule.InvokeAsync(Message)" class="mdp-btn"
+                            title="Schedule this message for future delivery (Ctrl+Shift+S)">
+                        Schedule
                     </button>
-                </div>
+                }
+                <button @onclick="CopyBody" class="mdp-btn" title="Copy message body to clipboard">
+                    @(_copyFeedback == "body" ? "Copied!" : "Copy Body")
+                </button>
+                <button @onclick="CopyFullMessage" class="mdp-btn"
+                        title="Copy full message (all properties + body) as JSON">
+                    @(_copyFeedback == "full" ? "Copied!" : "Copy Full Message")
+                </button>
+                <button @onclick="OpenSaveAsTemplate" class="mdp-btn" title="Save this message as a reusable template">
+                    Save as Template
+                </button>
             </div>
+        </div>
 
-            <FluentTabs style="flex:1; overflow:hidden;">
+        <FluentTabs class="mdp-tabs">
                 <FluentTab Label="Body">
-                    <div
-                        style="padding:10px; font-family:monospace; font-size:12px; white-space:pre-wrap; overflow:auto; height:100%; color:var(--color-text);">
+                    <div class="mdp-tab-pane mdp-tab-pane--body">
                         @FormatBody(Message.Body, Message.ContentType)
                     </div>
                 </FluentTab>
                 <FluentTab Label="Properties">
-                    <div style="padding:10px; overflow:auto; height:100%; box-sizing:border-box;">
+                    <div class="mdp-tab-pane">
                         @foreach (var (key, value) in Message.ApplicationProperties)
                         {
-                            <div
-                                style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid var(--color-border); font-size:12px;">
-                                <span
-                                style="color:var(--color-text-muted); min-width:140px; flex-shrink:0; word-break:break-all;">@key</span>
-                                <span style="word-break:break-all;">@value</span>
+                            <div class="mdp-prop-row">
+                                <span class="mdp-prop-key">@key</span>
+                                <span class="mdp-prop-value">@value</span>
                             </div>
                         }
                         @if (!Message.ApplicationProperties.Any())
                         {
-                            <span style="color:var(--color-text-muted); font-size:12px;">No application properties</span>
+                            <span class="mdp-empty">No application properties</span>
                         }
                     </div>
                 </FluentTab>
                 <FluentTab Label="System">
-                    <div style="padding:10px; font-size:12px; overflow:auto; height:100%; box-sizing:border-box;">
+                    <div class="mdp-tab-pane">
                         <PropRow Label="MessageId" Value="@Message.MessageId" />
                         <PropRow Label="CorrelationId" Value="@(Message.CorrelationId ?? "-")" />
                         <PropRow Label="Subject" Value="@(Message.Subject ?? "-")" />
@@ -88,14 +84,13 @@ else
                 @if (Message.DeadLetterReason is not null)
                 {
                     <FluentTab Label="DLQ Info">
-                        <div style="padding:10px;">
-                            <div
-                                style="background:rgba(229,57,53,0.15); border:1px solid var(--color-error); border-radius:4px; padding:10px; margin-bottom:10px;">
-                                <div style="font-size:12px; font-weight:600; color:#FF6B6B; margin-bottom:4px;">Reason:
+                        <div class="mdp-tab-pane">
+                            <div class="mdp-dlq-callout">
+                                <div class="mdp-dlq-reason">Reason:
                                     @Message.DeadLetterReason</div>
                                     @if (!string.IsNullOrEmpty(Message.DeadLetterErrorDescription))
                                     {
-                                        <div style="font-size:12px; color:var(--color-text-muted);">@Message.DeadLetterErrorDescription
+                                        <div class="mdp-dlq-desc">@Message.DeadLetterErrorDescription
                                         </div>
                                     }
                                 </div>
@@ -108,21 +103,19 @@ else
 
         @if (_showSaveTemplate)
         {
-            <div
-                style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:600; display:flex; align-items:center; justify-content:center;">
-                <div
-                    style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:360px; width:90%;">
-                    <h3 style="margin:0 0 12px; font-size:14px;">Save Message as Template</h3>
+                    <div class="mdp-save-overlay">
+                        <div class="mdp-save-dialog">
+                            <h3 class="mdp-save-title">Save Message as Template</h3>
                     <input type="text" @bind="_templateName" placeholder="Template name…"
-                           style="width:100%; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; box-sizing:border-box;" />
-                    <div style="font-size:11px; color:var(--color-text-muted); margin-top:8px;">
+                                   class="mdp-save-input app-native-control" />
+                            <div class="mdp-save-copy">
                         Body, subject, content-type, correlation ID, and application properties will be saved.
                     </div>
-                    <div style="display:flex; gap:6px; margin-top:12px; justify-content:flex-end;">
+                            <div class="mdp-save-actions">
                         <button @onclick="() => _showSaveTemplate = false"
-                                style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
+                                        class="mdp-modal-btn mdp-modal-btn--secondary">Cancel</button>
                         <button @onclick="SaveAsTemplate" disabled="@string.IsNullOrWhiteSpace(_templateName)"
-                                style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save</button>
+                                        class="mdp-modal-btn mdp-modal-btn--primary">Save</button>
                     </div>
                 </div>
             </div>

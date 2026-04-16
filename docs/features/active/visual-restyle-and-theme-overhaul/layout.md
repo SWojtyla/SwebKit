@@ -4,7 +4,7 @@
 
 title: "Layout Plan - visual-restyle-and-theme-overhaul"
 owner: "GitHub Copilot"
-status: "In Progress"
+status: "Done"
 
 ---
 
@@ -45,8 +45,8 @@ Finish the shell-layout plan for the chosen `Studio Ledger` direction without ch
 
 - `Studio Ledger` is now the chosen global dark direction and the default dark theme.
 - The previous blank route-page header shell has been removed.
-- Routed pages still need a compact, consistent way to surface page-specific pills and actions now that route identity moved to the top bar.
-- Top bar, left nav, status bar, pills, and page support rows still need one explicit rollout plan so the remaining layout work does not sprawl across pages.
+- Routed pages now use the compact support-strip pattern where page-local pills or actions still matter.
+- Top bar, left nav, status bar, pills, and page support rows now share the chosen `Studio Ledger` shell language without changing the shell geometry.
 
 ## Chosen shell model
 
@@ -132,13 +132,14 @@ Finish the shell-layout plan for the chosen `Studio Ledger` direction without ch
 
 ## Validation
 
+- Component/build check: focused shell-foundation coverage remains green and the app/test projects compile after the shell-layout rollout.
 - Manual check: open Dashboard, AKS, Storage, Service Bus, Pipelines, Observability, Redis, Incident Timeline, and Settings and verify the top-of-page layout reads intentionally with no blank shell surface.
 - Manual check: verify page-specific pills and actions remain reachable after header cleanup.
 - Manual check: resize to narrow desktop widths and ensure top bar context, left nav, support strips, and status bar still read clearly.
 - Manual check: verify keyboard focus order across nav toggle, top-bar controls, page support-strip actions, and status-bar actions.
-- Build check: focused Windows MAUI build stays green after shell-layout changes.
 
 ## Notes
 
 - This module owns shell-level layout decisions. Table-system planning remains in `frontend.md` until a dedicated table module is needed.
 - If a page truly needs an in-body title again, record the reason in `decisions.md` instead of silently drifting back to per-page title bars.
+- This module is complete; remaining validation is feature-level sign-off rather than additional shell-layout implementation.

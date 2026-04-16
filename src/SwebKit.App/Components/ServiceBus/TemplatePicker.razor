@@ -1,192 +1,166 @@
 @inject AppStateService AppState
 
-<div
-    style="position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:550; display:flex; align-items:center; justify-content:center;">
-    <div
-        style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:580px; width:90%; max-height:75vh; display:flex; flex-direction:column;">
-        <div style="display:flex; align-items:center; margin-bottom:14px;">
-            <h3 style="margin:0; font-size:14px; font-weight:600;">Message Templates</h3>
-            <span
-                style="margin-left:8px; font-size:11px; color:var(--color-text-muted);">@AppState.MessageTemplates.Count
-                template(s)</span>
-                <button @onclick="() => OnClose.InvokeAsync()" title="Close"
-                        style="margin-left:auto; background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); font-size:16px; padding:2px 6px;">&#x2715;</button>
+<div class="template-picker__overlay">
+    <div class="template-picker__dialog">
+        <div class="template-picker__header">
+            <h3 class="template-picker__title">Message Templates</h3>
+            <span class="template-picker__count">@AppState.MessageTemplates.Count template(s)</span>
+            <button @onclick="() => OnClose.InvokeAsync()" title="Close" class="template-picker__close">&#x2715;</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_validationMessage))
+        {
+            <div data-testid="template-validation-message" class="template-picker__validation">
+                @_validationMessage
+            </div>
+        }
+
+        @if (!AppState.MessageTemplates.Any())
+        {
+            <div class="template-picker__empty">
+                No templates saved yet.<br />
+                <span class="template-picker__empty-copy">Use <strong>Save as Template</strong> in the composer or detail pane to create one.</span>
+            </div>
+        }
+        else
+        {
+            var visibleTemplates = FilteredTemplates;
+
+            <div class="template-picker__search">
+                <input data-testid="template-search-input" type="text" @bind="_searchQuery" @bind:event="oninput"
+                       placeholder="Search templates by name, subject, or content-type" aria-label="Search templates"
+                       class="template-picker__search-input app-native-control" />
+                <span class="template-picker__search-count">@visibleTemplates.Count match(es)</span>
             </div>
 
-            @if (!string.IsNullOrWhiteSpace(_validationMessage))
+            @if (!visibleTemplates.Any())
             {
-                <div data-testid="template-validation-message"
-                     style="margin-bottom:10px; padding:8px 10px; border:1px solid var(--color-error); border-radius:4px; color:var(--color-error); font-size:12px;">
-                    @_validationMessage
+                <div class="template-picker__no-results">
+                    No templates match "@_searchQuery".
                 </div>
             }
-
-            @if (!AppState.MessageTemplates.Any())
+            else
             {
-                <div style="padding:24px; text-align:center; color:var(--color-text-muted); font-size:13px;">
-                    No templates saved yet.<br />
-                    <span style="font-size:12px;">Use <strong>Save as Template</strong> in the composer or detail pane to create
-                        one.</span>
-                    </div>
-                }
-        else
-                {
-                    var visibleTemplates = FilteredTemplates;
-
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                        <input data-testid="template-search-input" type="text" @bind="_searchQuery" @bind:event="oninput"
-                               placeholder="Search templates by name, subject, or content-type" aria-label="Search templates"
-                               style="flex:1; padding:6px 8px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
-                        <span style="font-size:11px; color:var(--color-text-muted);">
-                            @visibleTemplates.Count match(es)
-                        </span>
-                    </div>
-
-                    @if (!visibleTemplates.Any())
+                <div class="template-picker__list">
+                    @foreach (var template in visibleTemplates)
                     {
-                        <div
-                            style="padding:20px; text-align:center; color:var(--color-text-muted); font-size:12px; border:1px solid var(--color-border); border-radius:6px;">
-                            No templates match "@_searchQuery".
-                        </div>
-                    }
-                    else
-                    {
-                        <div style="overflow-y:auto; flex:1;">
-                            @foreach (var template in visibleTemplates)
-                            {
-                                var isSelected = _selectedTemplateId == template.Id;
-                                <div data-testid="template-row" @onclick="() => SelectTemplate(template.Id)"
-                                     style="display:flex; align-items:center; padding:10px 8px; border-bottom:1px solid var(--color-border); gap:8px; background:@(isSelected ? "rgba(100,149,237,0.10)" : "transparent");">
-                                    <div style="flex:1; min-width:0;">
-                                        @if (_renamingId == template.Id)
-                                        {
-                                            <div style="display:flex; gap:4px; align-items:center;">
-                                                <input data-testid="rename-template-input" type="text" @bind="_renameValue"
-                                                       style="flex:1; padding:3px 6px; font-size:12px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-accent); border-radius:3px;" />
-                                                <button data-testid="confirm-rename-button" @onclick="() => ConfirmRename(template)"
-                                                        @onclick:stopPropagation="true"
-                                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:3px;">OK</button>
-                                                <button @onclick="CancelRename" @onclick:stopPropagation="true"
-                                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">Cancel</button>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div
-                                                style="font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                                                @template.Name</div>
-                                            }
-                                            <div style="font-size:11px; color:var(--color-text-muted); margin-top:2px;">
-                                                @(template.ContentType ?? "no content-type")
-                                                @if (!string.IsNullOrWhiteSpace(template.Subject))
-                                                {
-                                                    <span> · @template.Subject</span>
-                                                }
-                                                @if (template.Properties.Count > 0)
-                                                {
-                                                    <span> · @template.Properties.Count props</span>
-                                                }
-                                                <span> · @template.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
-                                            </div>
-                                        </div>
-                                        <div style="display:flex; gap:4px; flex-shrink:0;">
-                                            <FluentButton Appearance="Appearance.Accent" style="font-size:11px;"
-                                                          data-testid="apply-template-button" @onclick="() => ApplyTemplateAsync(template)">
-                                                Apply
-                                            </FluentButton>
-                                            <button data-testid="rename-template-button" @onclick="() => StartRename(template)"
-                                                    @onclick:stopPropagation="true" title="Rename"
-                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Rename</button>
-                                            <button @onclick="() => DuplicateAsync(template)" @onclick:stopPropagation="true"
-                                                    title="Duplicate template"
-                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Duplicate</button>
-                                            <button data-testid="edit-template-button" @onclick="() => StartEdit(template)"
-                                                    @onclick:stopPropagation="true" title="Edit template body and properties"
-                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">Edit</button>
-                                            <button data-testid="delete-template-button" @onclick="() => DeleteTemplateAsync(template.Id)"
-                                                    @onclick:stopPropagation="true" title="Delete template"
-                                                    style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-error);">&#x2715;</button>
-                                        </div>
+                        var isSelected = _selectedTemplateId == template.Id;
+                        <div data-testid="template-row" @onclick="() => SelectTemplate(template.Id)"
+                             class="template-picker__row @(isSelected ? "template-picker__row--selected" : null)">
+                            <div class="template-picker__main">
+                                @if (_renamingId == template.Id)
+                                {
+                                    <div class="template-picker__rename">
+                                        <input data-testid="rename-template-input" type="text" @bind="_renameValue"
+                                               class="template-picker__inline-input app-native-control" />
+                                        <button data-testid="confirm-rename-button" @onclick="() => ConfirmRename(template)"
+                                                @onclick:stopPropagation="true"
+                                                class="template-picker__small-btn template-picker__small-btn--primary">OK</button>
+                                        <button @onclick="CancelRename" @onclick:stopPropagation="true"
+                                                class="template-picker__small-btn template-picker__small-btn--secondary">Cancel</button>
                                     </div>
                                 }
+                                else
+                                {
+                                    <div class="template-picker__name">@template.Name</div>
+                                }
+                                <div class="template-picker__meta">
+                                    @(template.ContentType ?? "no content-type")
+                                    @if (!string.IsNullOrWhiteSpace(template.Subject))
+                                    {
+                                        <span> · @template.Subject</span>
+                                    }
+                                    @if (template.Properties.Count > 0)
+                                    {
+                                        <span> · @template.Properties.Count props</span>
+                                    }
+                                    <span> · @template.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                                </div>
                             </div>
-                        }
+                            <div class="template-picker__actions">
+                                <FluentButton Appearance="Appearance.Accent" style="font-size:11px;"
+                                              data-testid="apply-template-button" @onclick="() => ApplyTemplateAsync(template)">
+                                    Apply
+                                </FluentButton>
+                                <button data-testid="rename-template-button" @onclick="() => StartRename(template)"
+                                        @onclick:stopPropagation="true" title="Rename"
+                                        class="template-picker__ghost-btn">Rename</button>
+                                <button @onclick="() => DuplicateAsync(template)" @onclick:stopPropagation="true"
+                                        title="Duplicate template"
+                                        class="template-picker__ghost-btn">Duplicate</button>
+                                <button data-testid="edit-template-button" @onclick="() => StartEdit(template)"
+                                        @onclick:stopPropagation="true" title="Edit template body and properties"
+                                        class="template-picker__ghost-btn">Edit</button>
+                                <button data-testid="delete-template-button" @onclick="() => DeleteTemplateAsync(template.Id)"
+                                        @onclick:stopPropagation="true" title="Delete template"
+                                        class="template-picker__ghost-btn template-picker__ghost-btn--danger">&#x2715;</button>
+                            </div>
+                        </div>
                     }
                 </div>
+            }
+        }
+    </div>
+</div>
+
+@if (_editingTemplate is not null)
+{
+    <div class="template-picker__edit-overlay">
+        <div class="template-picker__edit-dialog">
+            <h3 class="template-picker__edit-title">Edit Template: @_editingTemplate.Name</h3>
+
+            <div class="template-picker__edit-body">
+                <div class="template-picker__grid">
+                    <div class="template-picker__field">
+                        <label class="template-picker__label">Subject</label>
+                        <input type="text" @bind="_editSubject" class="template-picker__field-input app-native-control" />
+                    </div>
+                    <div class="template-picker__field">
+                        <label class="template-picker__label">Content-Type</label>
+                        <input type="text" @bind="_editContentType" class="template-picker__field-input app-native-control" />
+                    </div>
+                </div>
+                <div class="template-picker__field">
+                    <label class="template-picker__label">Correlation ID</label>
+                    <input type="text" @bind="_editCorrelationId" class="template-picker__field-input app-native-control" />
+                </div>
+
+                <div>
+                    <div class="template-picker__prop-header">
+                        Application Properties
+                        <button @onclick="EditAddProperty" class="template-picker__small-btn template-picker__small-btn--secondary">+ Add</button>
+                    </div>
+                    @for (var i = 0; i < _editProperties.Count; i++)
+                    {
+                        var idx = i;
+                        <div class="template-picker__prop-row">
+                            <input type="text" value="@_editProperties[idx].Key" placeholder="Key"
+                                   @onchange="e => EditSetPropKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                   class="template-picker__prop-key app-native-control" />
+                            <input type="text" value="@_editProperties[idx].Value" placeholder="Value"
+                                   @onchange="e => EditSetPropValue(idx, e.Value?.ToString() ?? string.Empty)"
+                                   class="template-picker__prop-value app-native-control" />
+                            <button @onclick="() => _editProperties.RemoveAt(idx)" title="Remove"
+                                    class="template-picker__ghost-btn">&#x2715;</button>
+                        </div>
+                    }
+                </div>
+
+                <div class="template-picker__field">
+                    <label class="template-picker__label">Body</label>
+                    <textarea data-testid="edit-template-body" @bind="_editBody" rows="8"
+                              class="template-picker__textarea app-native-control"></textarea>
+                </div>
+
+                <div class="template-picker__footer">
+                    <button @onclick="CancelEdit" class="template-picker__footer-btn template-picker__footer-btn--secondary">Cancel</button>
+                    <button data-testid="save-edit-template-button" @onclick="SaveEdit"
+                            class="template-picker__footer-btn template-picker__footer-btn--primary">Save Changes</button>
+                </div>
             </div>
-
-            @* Edit modal *@
-            @if (_editingTemplate is not null)
-            {
-                <div
-                    style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:600; display:flex; align-items:center; justify-content:center;">
-                    <div
-                        style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:20px; max-width:600px; width:90%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden;">
-                        <h3 style="margin:0 0 12px; font-size:14px;">Edit Template: @_editingTemplate.Name</h3>
-
-                        <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                                <div style="display:flex; flex-direction:column; gap:3px;">
-                                    <label
-                                    style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Subject</label>
-                                    <input type="text" @bind="_editSubject"
-                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                </div>
-                                <div style="display:flex; flex-direction:column; gap:3px;">
-                                    <label
-                                    style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Content-Type</label>
-                                    <input type="text" @bind="_editContentType"
-                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                </div>
-                            </div>
-                            <div style="display:flex; flex-direction:column; gap:3px;">
-                                <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Correlation
-                                    ID</label>
-                                    <input type="text" @bind="_editCorrelationId"
-                                           style="padding:4px 8px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                </div>
-
-                                <div>
-                                    <div
-                                        style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-                                        Application Properties
-                                        <button @onclick="EditAddProperty"
-                                                style="padding:1px 8px; font-size:11px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:3px; color:var(--color-text);">+
-                                            Add</button>
-                                        </div>
-                                        @for (var i = 0; i < _editProperties.Count; i++)
-                                        {
-                                            var idx = i;
-                                            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                                                <input type="text" value="@_editProperties[idx].Key" placeholder="Key"
-                                                       @onchange="e => EditSetPropKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                                       style="flex:1; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                                <input type="text" value="@_editProperties[idx].Value" placeholder="Value"
-                                                       @onchange="e => EditSetPropValue(idx, e.Value?.ToString() ?? string.Empty)"
-                                                       style="flex:2; padding:3px 6px; font-size:11px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px;" />
-                                                <button @onclick="() => _editProperties.RemoveAt(idx)" title="Remove"
-                                                        style="padding:3px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted);">&#x2715;</button>
-                                            </div>
-                                        }
-                                    </div>
-
-                                    <div style="display:flex; flex-direction:column; gap:3px;">
-                                        <label style="font-size:10px; color:var(--color-text-muted); text-transform:uppercase;">Body</label>
-                                        <textarea data-testid="edit-template-body" @bind="_editBody" rows="8"
-                                                  style="padding:6px 8px; font-size:12px; font-family:monospace; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:3px; resize:vertical; min-height:100px;" />
-                                    </div>
-                                </div>
-
-                                <div style="display:flex; gap:6px; margin-top:14px; justify-content:flex-end;">
-                                    <button @onclick="CancelEdit"
-                                            style="padding:5px 14px; cursor:pointer; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; color:var(--color-text);">Cancel</button>
-                                    <button data-testid="save-edit-template-button" @onclick="SaveEdit"
-                                            style="padding:5px 14px; cursor:pointer; background:var(--color-accent); color:white; border:none; border-radius:4px;">Save
-                                        Changes</button>
-                                    </div>
-                                </div>
-                            </div>
-                        }
+        </div>
+    </div>
+}
 
 @code {
     [Parameter] public EventCallback<SbMessageTemplate> OnTemplateSelected { get; set; }

@@ -155,14 +155,14 @@
 .sb-add-form-btn-primary {
     margin-right: auto;
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border-color: transparent;
     font-weight: 600;
 }
 
 .sb-add-form-btn-primary:hover {
     background: var(--color-accent-hover);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border-color: transparent;
 }
 

@@ -2,45 +2,42 @@
 
 @if (Visible)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:500px; width:90%;">
-            <h3 style="margin:0 0 16px; font-size:15px;">@(IsEdit ? "Edit Release" : "New Release")</h3>
+    <div class="release-editor__dialog-backdrop">
+        <div class="release-editor__dialog" role="dialog" aria-modal="true" aria-labelledby="release-editor-title">
+            <h3 id="release-editor-title" class="release-editor__title">@(IsEdit ? "Edit Release" : "New Release")</h3>
 
-            <div style="display:grid; gap:12px;">
-                <div style="display:grid; gap:4px;">
-                    <label style="font-size:12px; color:var(--color-text-muted);">Release Name</label>
-                    <input type="text" @bind="Name" @bind:event="oninput"
-                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-                           placeholder="e.g. Sprint 42 Release" />
+            <div class="release-editor__form">
+                <div class="release-editor__field">
+                    <label class="form-label" for="release-editor-name">Release Name</label>
+                    <input id="release-editor-name" class="form-input release-editor__input" type="text" @bind="Name"
+                           @bind:event="oninput" placeholder="e.g. Sprint 42 Release" />
                 </div>
 
-                <div style="display:flex; gap:12px;">
-                    <div style="display:grid; gap:4px; flex:1;">
-                        <label style="font-size:12px; color:var(--color-text-muted);">Sprint Number (optional)</label>
-                        <input type="number" @bind="SprintNumber"
-                               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+                <div class="release-editor__row">
+                    <div class="release-editor__field release-editor__field--grow">
+                        <label class="form-label" for="release-editor-sprint">Sprint Number (optional)</label>
+                        <input id="release-editor-sprint" class="form-input release-editor__input" type="number"
+                               @bind="SprintNumber" />
                     </div>
-                    <div style="display:grid; gap:4px; flex:1;">
-                        <label style="font-size:12px; color:var(--color-text-muted);">Label (optional)</label>
-                        <input type="text" @bind="Label" @bind:event="oninput"
-                               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-                               placeholder="e.g. Hotfix 3.2.1" />
+                    <div class="release-editor__field release-editor__field--grow">
+                        <label class="form-label" for="release-editor-label">Label (optional)</label>
+                        <input id="release-editor-label" class="form-input release-editor__input" type="text" @bind="Label"
+                               @bind:event="oninput" placeholder="e.g. Hotfix 3.2.1" />
                     </div>
                 </div>
 
-                <div style="display:grid; gap:4px;">
-                    <label style="font-size:12px; color:var(--color-text-muted);">Notes</label>
-                    <textarea @bind="Notes" @bind:event="oninput" rows="3"
-                              style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; resize:vertical;"
+                <div class="release-editor__field">
+                    <label class="form-label" for="release-editor-notes">Notes</label>
+                    <textarea id="release-editor-notes" class="form-input release-editor__input release-editor__textarea"
+                              @bind="Notes" @bind:event="oninput" rows="3"
                               placeholder="Release notes or description..."></textarea>
                 </div>
 
                 @if (IsEdit)
                 {
-                    <div style="display:grid; gap:4px;">
-                        <label style="font-size:12px; color:var(--color-text-muted);">Status</label>
-                        <select @bind="SelectedStatus"
-                                style="padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;">
+                    <div class="release-editor__field">
+                        <label class="form-label" for="release-editor-status">Status</label>
+                        <select id="release-editor-status" class="form-input release-editor__input" @bind="SelectedStatus">
                             <option value="Draft">Draft</option>
                             <option value="InProgress">In Progress</option>
                             <option value="Completed">Completed</option>
@@ -49,9 +46,10 @@
                 }
             </div>
 
-            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
-                <button @onclick="Cancel" style="padding:6px 16px; cursor:pointer;">Cancel</button>
-                <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync" Disabled="@(string.IsNullOrWhiteSpace(Name))">
+            <div class="release-editor__actions">
+                <button type="button" class="release-editor__cancel" @onclick="Cancel">Cancel</button>
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(Name))">
                     @(IsEdit ? "Save" : "Create")
                 </FluentButton>
             </div>

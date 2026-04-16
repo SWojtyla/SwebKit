@@ -64,7 +64,7 @@
     padding: 0 4px;
     margin-left: 4px;
     background: var(--color-error, #e53935);
-    color: #fff;
+    color: var(--color-solid-foreground);
     font-size: 10px;
     font-weight: 700;
     border-radius: var(--aks-chip-radius);
@@ -636,7 +636,7 @@
     padding: 3px 10px;
     font-size: var(--font-size-sm);
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -739,7 +739,7 @@
     background: transparent;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    caret-color: rgba(255, 255, 255, 0.75);
+    caret-color: var(--color-text);
     border: none;
     outline: none;
     resize: none;
@@ -1138,7 +1138,7 @@
 
 .aks-scale-step-btn:hover {
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border-color: var(--color-accent);
 }
 

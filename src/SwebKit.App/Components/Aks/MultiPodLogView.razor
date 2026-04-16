@@ -10,15 +10,15 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
-        <select class="log-range-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
             <option value="@LogRange.Last5m">Last 5m</option>
             <option value="@LogRange.Last10m">Last 10m</option>
             <option value="@LogRange.Last1h">Last 1h</option>
             <option value="@LogRange.All">All</option>
             <option value="@LogRange.PreviousContainer">Previous container</option>
         </select>
-        <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
-               class="log-filter-input" />
+         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
+             class="log-filter-input app-native-control" />
         <span class="log-line-count">@WindowSummaryText</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
                       Title="Show older buffered lines">Older</FluentButton>

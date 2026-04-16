@@ -4,7 +4,7 @@
 
 title: "Status - visual-restyle-and-theme-overhaul"
 owner: "GitHub Copilot"
-state: "In Progress"
+state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-04-15"
@@ -14,11 +14,11 @@ last_updated: "2026-04-16"
 
 ## Quick summary
 
-`Studio Ledger` is now the chosen global dark direction. The active theme catalog and default theme handling were updated to treat it as the dark foundation, the blank route-page header shell was removed, and the shared theme selector now anticipates future `Studio Ledger` palette variants without reopening the structural design decision.
+`Studio Ledger` is now the chosen global dark direction, and the restyle rollout is implemented across the shared shell, AKS, Storage, Service Bus, Releases, Redis, and Observability surfaces that were called out in scope.
 
 **Jira:** not linked
 
-**Current focus:** Carry the chosen `Studio Ledger` language through shared shell primitives, keep the theme catalog palette-ready, and continue the shared table/system rollout without reintroducing pilot-only UI.
+**Current focus:** Fresh-session smoke validation and human visual sign-off before close-out.
 
 ## Progress checklist
 
@@ -33,12 +33,12 @@ last_updated: "2026-04-16"
 ### Delivery phases
 
 - [x] Phase 1 - In-app art direction pilot (`Command Deck` vs `Studio Ledger`)
-- [ ] Phase 2 - Choose direction and complete token audit
-- [ ] Phase 3 - Theme overhaul
-- [ ] Phase 4 - Shared shell and surface primitives
-- [ ] Phase 5 - Shared table system
-- [ ] Phase 6 - Feature-area adoption and cleanup
-- [ ] Phase 7 - Validation and docs alignment
+- [x] Phase 2 - Choose direction and complete token audit
+- [x] Phase 3 - Theme overhaul
+- [x] Phase 4 - Shared shell and surface primitives
+- [x] Phase 5 - Shared table system
+- [x] Phase 6 - Feature-area adoption and cleanup
+- [x] Phase 7 - Validation and docs alignment
 
 ## Completed
 
@@ -60,13 +60,17 @@ last_updated: "2026-04-16"
 - Added a future-ready `Studio Ledger` palette alias in the theme selector block so additional colorways can branch from the same design language later.
 - Finished the dedicated layout rollout module in `layout.md` so shell work now has a concrete plan instead of living only as broad frontend bullets.
 - Validated the current state with a focused Windows MAUI build after the theme-host and header-shell updates.
+- Implemented a bounded AKS/shared primitive fix for theme-safe native controls and overlay stacking, including a non-clipping AKS namespace picker, token-driven confirm/port-forward dialogs, and shared control classes applied across AKS toolbar and side-panel inputs/selects.
+- Completed the Releases/Observability adoption slice by moving the remaining high-impact inline styling in `ReleaseDetail` and `ReleaseEditor` into isolated CSS, and by adding local `ObservabilityLogs` surface/dialog styling hooks that keep the logs workspace aligned with the current shared token language without touching `app.css`.
+- Finished the final Storage/Service Bus visual adoption slice by extracting Blob detail-pane and Service Bus message-list toolbar/filter/menu/rule-builder/save-dialog styling into component-local CSS that consumes the shared `Studio Ledger` table and control tokens instead of inline styles.
+- Replaced the remaining explicit theme-unsafe accent/prod foregrounds and ad hoc overlay stack values that were still visible in AKS, Pipelines, and Storage after the broader adoption slices.
+- Updated the E2E helper normalization path so legacy dark aliases map cleanly to `Studio Ledger`, and verified the E2E project still builds after the harness changes.
+- Completed focused compile/test validation for the restyle seams: workspace diagnostics reported no source errors, the focused app-component regression suite passed (`46/46`), and the E2E test project build passed.
 
 ## Remaining
 
-- Complete the token audit and decide which additional `Studio Ledger` palettes should actually be exposed in the user-facing catalog.
-- Execute the shared shell-primitives pass before touching many feature pages.
-- Roll the new table system through the highest-value surfaces first.
-- Validate contrast, keyboard focus, resize behavior, and production-state cues after broader adoption.
+- Rerun the Playwright smoke suite against a freshly launched app session instead of an already-running WebView2/CDP session so theme assertions are not contaminated by stale in-memory shell state.
+- Perform a human visual spot-check in `Studio Ledger` plus one light theme before archive/close-out.
 
 ## Blockers
 
@@ -75,7 +79,7 @@ last_updated: "2026-04-16"
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Focused Windows build succeeded after promoting `Studio Ledger` as the default dark direction and removing the blank route-header shell. One unrelated existing obsolete API warning remains in `src/SwebKit.App/Components/Observability/ObservabilityLogs.razor`.
+- Validation status: `get_errors` reported no source or test-project diagnostics. The focused App.Tests restyle suite passed (`46/46`) across AKS toolbar/select seams, Service Bus namespace and message-list behavior, Storage download/detail behavior, Template Picker behavior, and Observability guided logs behavior. `dotnet build tests/SwebKit.E2E.Tests/SwebKit.E2E.Tests.csproj -nologo` passed. The attached-session Playwright smoke run still reused an already-running app session that retained stale theme state in memory, so that result is treated as a harness/environment caveat rather than a fresh-code regression.
 
 ## Notes
 
@@ -84,3 +88,4 @@ last_updated: "2026-04-16"
 - The current plan is intentionally foundation-first so later page adoption does not reintroduce one-off styling.
 - The chosen direction is no longer treated as a pilot in the active UI; future palette work should branch from `Studio Ledger`, not resurrect a second competing shell language.
 - Shell-layout sequencing now lives in `layout.md`; use that module as the source of truth for top-bar, left-nav, status-bar, and page-entry rollout steps.
+- The feature is implementation-complete and ready for review; the remaining close-out work is a fresh-launch smoke pass plus human visual sign-off.

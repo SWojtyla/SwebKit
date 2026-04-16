@@ -10,8 +10,11 @@
     border-bottom: 1px solid var(--aks-toolbar-border);
     border-radius: var(--aks-toolbar-radius);
     box-shadow: var(--aks-toolbar-shadow);
-    overflow: hidden;
+    overflow: visible;
     flex-shrink: 0;
+    position: relative;
+    isolation: isolate;
+    z-index: var(--z-dropdown);
 }
 
 /* Row 1: connection status, context, namespace, actions */
@@ -81,6 +84,8 @@
     color: var(--color-text);
     border: 1px solid var(--aks-filter-border);
     border-radius: var(--aks-chip-radius);
+    color-scheme: var(--control-color-scheme);
+    box-shadow: var(--control-shadow);
     font-size: var(--font-size-sm);
     outline: none;
     min-width: 120px;
@@ -94,6 +99,7 @@
 /* ── Namespace picker (searchable custom dropdown) ── */
 .aks-ns-picker {
     position: relative;
+    z-index: 1;
 }
 
 .aks-ns-search {
@@ -118,12 +124,14 @@
     min-width: 200px;
     max-height: 260px;
     overflow-y: auto;
-    background: var(--aks-dropdown-surface);
-    border: 1px solid var(--aks-toolbar-border);
+    color-scheme: var(--control-color-scheme);
+    background: var(--color-panel-card, var(--aks-dropdown-surface));
+    border: 1px solid var(--color-card-border-strong, var(--aks-toolbar-border));
     border-radius: var(--aks-toolbar-radius);
     box-shadow: var(--aks-dropdown-shadow);
     z-index: var(--z-dropdown);
     padding: var(--spacing-xs) 0;
+    backdrop-filter: blur(14px);
 }
 
 .aks-ns-option {
@@ -137,12 +145,13 @@
 }
 
 .aks-ns-option:hover {
-    background: var(--aks-tab-inactive-surface);
+    background: color-mix(in srgb, var(--color-accent-subtle) 72%, transparent);
 }
 
 .aks-ns-option.current {
     color: var(--color-accent);
     font-weight: 600;
+    background: color-mix(in srgb, var(--color-accent-subtle) 70%, transparent);
 }
 
 /* ── Resource type tabs ── */

@@ -1,40 +1,40 @@
 @if (Visible)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:400px; width:90%;">
-            <h3 style="margin:0 0 16px; font-size:15px; display:flex; align-items:center; gap:8px;">
+    <div class="port-forward-start__backdrop">
+        <div class="port-forward-start__dialog" role="dialog" aria-modal="true">
+            <h3 class="port-forward-start__title">
                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="16px" />
                 Start Port-Forward
             </h3>
 
-            <div style="display:grid; grid-template-columns:auto 1fr; gap:8px 12px; align-items:center; margin-bottom:20px; font-size:13px;">
-                <span style="color:var(--color-text-muted);">Pod</span>
-                <span style="font-weight:500;">@PodName</span>
+            <div class="port-forward-start__grid">
+                <span class="port-forward-start__label">Pod</span>
+                <span class="port-forward-start__value port-forward-start__value--strong">@PodName</span>
 
-                <span style="color:var(--color-text-muted);">Namespace</span>
-                <span>@Namespace</span>
+                <span class="port-forward-start__label">Namespace</span>
+                <span class="port-forward-start__value">@Namespace</span>
 
-                <span style="color:var(--color-text-muted);">Remote port</span>
-                <span>@RemotePort</span>
+                <span class="port-forward-start__label">Remote port</span>
+                <span class="port-forward-start__value">@RemotePort</span>
 
-                <span style="color:var(--color-text-muted);">Local port</span>
+                <span class="port-forward-start__label">Local port</span>
                 <input type="number" min="1024" max="65535" @bind="LocalPort" @bind:event="oninput"
-                       style="padding:5px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; width:120px;" />
+                       class="port-forward-start__input app-native-control" />
             </div>
 
             @if (_error is not null)
             {
-                <p style="color:var(--color-error, #f44); font-size:12px; margin:0 0 12px;">@_error</p>
+                <p class="port-forward-start__message port-forward-start__message--error">@_error</p>
             }
             @if (_portWarning is not null)
             {
-                <p style="color:var(--color-warning, #ff9800); font-size:12px; margin:0 0 12px;">⚠ @_portWarning</p>
+                <p class="port-forward-start__message port-forward-start__message--warning">⚠ @_portWarning</p>
             }
 
-            <div style="display:flex; gap:8px; justify-content:flex-end;">
-                <button @onclick="Cancel" style="padding:6px 16px; cursor:pointer;">Cancel</button>
+            <div class="port-forward-start__actions">
+                <button @onclick="Cancel" class="port-forward-start__btn port-forward-start__btn--secondary">Cancel</button>
                 <button @onclick="Start" disabled="@(!IsValid)"
-                        style="padding:6px 16px; background:var(--color-accent); color:white; border:none; border-radius:4px; cursor:pointer; @(!IsValid ? "opacity:0.5;" : "")">
+                        class="port-forward-start__btn port-forward-start__btn--primary @(!IsValid ? "port-forward-start__btn--disabled" : string.Empty)">
                     Start
                 </button>
             </div>

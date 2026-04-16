@@ -85,6 +85,23 @@
                     </ul>
                 }
             </div>
+
+            <div class="netpol-analysis-card">
+                <div class="netpol-analysis-card-title">HTTPRoute exposure</div>
+                @if (_analysis.ExposedByHttpRoutes.Count == 0)
+                {
+                    <div class="netpol-analysis-muted">No HTTPRoute objects reference the selected Services.</div>
+                }
+                else
+                {
+                    <ul class="netpol-analysis-list">
+                        @foreach (var route in _analysis.ExposedByHttpRoutes)
+                        {
+                            <li>@route</li>
+                        }
+                    </ul>
+                }
+            </div>
         </div>
 
         <div class="netpol-analysis-section">

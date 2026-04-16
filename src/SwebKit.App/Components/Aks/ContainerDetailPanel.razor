@@ -21,7 +21,7 @@
         @if (_containers.Count > 1)
         {
             <div class="cdp-selector">
-                <select class="cdp-select" @bind="_selectedIdx">
+                <select class="cdp-select app-native-control app-native-select" @bind="_selectedIdx">
                     @for (var i = 0; i < _containers.Count; i++)
                     {
                         var idx = i;

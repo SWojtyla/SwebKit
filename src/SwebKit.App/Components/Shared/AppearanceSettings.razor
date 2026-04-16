@@ -14,32 +14,27 @@
                 <span class="appearance-pilot-card__title">Studio Ledger</span>
                 <span class="appearance-pilot-card__body">Premium slate-metal surfaces, rounded framing, and a calmer
                     hierarchy for dense workflows.</span>
-                <span class="appearance-pilot-card__coverage">Palette roadmap: keep the structure, branch the colorways.</span>
-                <span class="appearance-pilot-card__swatches" aria-hidden="true">
-                    <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--chrome"></span>
-                    <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--surface"></span>
-                    <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--accent"></span>
-                </span>
+                    <span class="appearance-pilot-card__coverage">Palette roadmap: keep the structure, branch the
+                        colorways.</span>
+                        <span class="appearance-pilot-card__swatches" aria-hidden="true">
+                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--chrome"></span>
+                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--surface"></span>
+                            <span class="appearance-pilot-card__swatch appearance-pilot-card__swatch--accent"></span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Theme</label>
+                <span class="form-static-value">Dark — Studio Ledger</span>
+            </div>
+
+            <div class="theme-preview-swatch">
+                <span class="theme-preview-swatch__dot"></span>
+                <span>Preview: @ThemeLabel(CurrentTheme)</span>
             </div>
         </div>
-    </div>
-
-    <div class="form-field">
-        <label class="form-label">Theme</label>
-        <FluentSelect TOption="string" Value="@CurrentTheme" ValueChanged="OnThemeChanged" style="max-width:300px;">
-            <FluentOption Value="dark-studio-ledger">Dark — Studio Ledger</FluentOption>
-            <FluentOption Value="light">Light — Azure Bloom</FluentOption>
-            <FluentOption Value="light-coral-studio">Light — Coral Studio</FluentOption>
-            <FluentOption Value="light-forest-dev">Light — Forest Dev</FluentOption>
-            <FluentOption Value="light-violet-cloud">Light — Violet Cloud</FluentOption>
-        </FluentSelect>
-    </div>
-
-    <div class="theme-preview-swatch">
-        <span class="theme-preview-swatch__dot"></span>
-        <span>Preview: @ThemeLabel(CurrentTheme)</span>
-    </div>
-</div>
 
 @code {
     private const string StudioLedgerTheme = "dark-studio-ledger";
@@ -48,18 +43,5 @@
     [Parameter] public string CurrentTheme { get; set; } = "dark";
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
-    private static string ThemeLabel(string theme) => theme switch
-    {
-        "dark" => "Dark — Studio Ledger",
-        StudioLedgerTheme => "Dark — Studio Ledger",
-        LegacyTechnicalEditorialTheme => "Dark — Studio Ledger",
-        "dark-command-deck" => "Dark — Studio Ledger",
-        "dark-control-room" => "Dark — Studio Ledger",
-        "light" => "Light — Azure Bloom",
-        "light-azure-bloom" => "Light — Azure Bloom",
-        "light-coral-studio" => "Light — Coral Studio",
-        "light-forest-dev" => "Light — Forest Dev",
-        "light-violet-cloud" => "Light — Violet Cloud",
-        _ => theme
-    };
+    private static string ThemeLabel(string _) => "Dark — Studio Ledger";
 }

@@ -11,7 +11,7 @@
     </button>
     @if (IsActive)
     {
-        <select class="auto-refresh-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
+        <select class="auto-refresh-select app-native-control app-native-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
             <option value="10">10s</option>
             <option value="30">30s</option>
             <option value="60">60s</option>

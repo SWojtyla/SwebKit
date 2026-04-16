@@ -91,11 +91,6 @@
     private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
     {
         StudioLedgerTheme,
-        DefaultLightTheme,
-        "light-azure-bloom",
-        "light-coral-studio",
-        "light-forest-dev",
-        "light-violet-cloud",
     };
 
     private string CurrentArea => _currentRoute.Area;
@@ -390,27 +385,11 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     private static string NormalizeTheme(string? theme)
     {
         if (string.IsNullOrWhiteSpace(theme))
-        {
             return DefaultDarkTheme;
-        }
 
         var candidate = theme.Trim();
-        if (string.Equals(candidate, "dark", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate, CommandDeckTheme, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate, LegacyPrecisionControlRoomTheme, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate, LegacyTechnicalEditorialTheme, StringComparison.OrdinalIgnoreCase))
-        {
-            return StudioLedgerTheme;
-        }
-
-        if (string.Equals(candidate, "light", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate, "light-azure-bloom", StringComparison.OrdinalIgnoreCase))
-        {
-            return DefaultLightTheme;
-        }
-
         return SupportedThemes.Contains(candidate)
-            ? candidate.ToLowerInvariant()
+            ? StudioLedgerTheme
             : DefaultDarkTheme;
     }
 

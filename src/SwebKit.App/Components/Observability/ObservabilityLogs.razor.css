@@ -1,0 +1,42 @@
+.obs-logs {
+    min-height: 0;
+}
+
+.obs-logs-layout {
+    min-height: 0;
+    align-items: stretch;
+}
+
+.obs-logs__sidebar-panel {
+    padding: var(--spacing-md);
+    background: var(--color-panel-card, var(--color-surface));
+    border-radius: var(--radius-lg);
+    scrollbar-gutter: stable;
+}
+
+.obs-logs__saved-heading {
+    margin-top: var(--spacing-md);
+}
+
+.obs-logs__results-grid {
+    overflow: hidden;
+    background: var(--color-panel-card, var(--color-surface));
+    border-radius: var(--radius-md);
+}
+
+.obs-logs__results-grid ::deep fluent-data-grid {
+    background: transparent;
+}
+
+.obs-logs__save-dialog-shell ::deep fluent-dialog {
+    width: min(460px, calc(100vw - 32px));
+    color-scheme: var(--control-color-scheme);
+}
+
+.obs-logs__save-field ::deep fluent-text-field {
+    width: 100%;
+}
+
+.obs-logs__save-dialog-shell ::deep fluent-button {
+    min-width: 88px;
+}
