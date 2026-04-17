@@ -107,6 +107,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<IIncidentTimelineSignalSource, ServiceBusEvidenceSignalSource>();
         builder.Services.AddSingleton<IIncidentTimelineSignalSource, DevOpsReleaseTimelineSignalSource>();
         builder.Services.AddSingleton<IIncidentTimelineService, IncidentTimelineService>();
+        builder.Services.AddSingleton<IIncidentInvestigationSeedResolver, IncidentInvestigationSeedResolver>();
+        builder.Services.AddSingleton<IIncidentSnapshotExporter, IncidentSnapshotExporter>();
+        builder.Services.AddSingleton<IIncidentMappingProposalGenerator, IncidentMappingProposalGenerator>();
+        builder.Services.AddScoped<IncidentInvestigationLauncher>();
 
         return builder.Build();
     }

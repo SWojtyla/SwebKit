@@ -76,7 +76,9 @@ Validate that SwebKit can launch an evidence-backed investigation from existing 
 
 ## Validation status
 
-- Automated: Not started
+- Automated (unit): 49 unit tests passing — `IncidentInvestigationSeedResolverTests` (16), `IncidentSnapshotExporterTests` (22), `IncidentMappingProposalGeneratorTests` (11)
+- Automated (component): Not started — deferred. No component test changes in SwebKit.App.Tests for the new launch actions or dialog states. Deferral accepted for Wave 1+2 ship; must be addressed before Wave 3.
+- Automated (E2E): Not started — deferred. No E2E flows for drill-through paths. Accepted for Wave 1+2 ship.
 - Manual: Not started
 
 ## Sign-off

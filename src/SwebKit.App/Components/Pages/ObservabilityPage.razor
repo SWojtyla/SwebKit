@@ -106,8 +106,8 @@
         <div class="obs-empty-state-wrap">
             <EmptyState Icon="📊" Title="No resource selected"
                         Subtitle="@(AppState.UseDemoData
-                                                                                                            ? "Pick a demo Application Insights resource to explore the observability workspace."
-                                                                                                            : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
+                                                                                                                                                    ? "Pick a demo Application Insights resource to explore the observability workspace."
+                                                                                                                                                    : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
                 <Actions>
                     <button type="button" @onclick="ToggleResourceSelector">Select resource</button>
                     @if (!AppState.UseDemoData)
@@ -143,7 +143,8 @@
                     break;
                 case Tab.Failures:
                     <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
-                                           TzOffsetMinutes="_tzOffsetMinutes" OnDrillToLogs="DrillToLogsAsync" />
+                                           ResourceId="@_selectedResource?.ResourceId" TzOffsetMinutes="_tzOffsetMinutes"
+                                           OnDrillToLogs="DrillToLogsAsync" />
                     break;
                 case Tab.Performance:
                     <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />

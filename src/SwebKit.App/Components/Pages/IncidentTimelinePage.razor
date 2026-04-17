@@ -8,6 +8,9 @@
 @inject CommandRegistry Commands
 @inject NavigationManager Nav
 @inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject IIncidentInvestigationSeedResolver SeedResolver
+@inject IIncidentMappingProposalGenerator ProposalGenerator
 @implements IDisposable
 
 <div class="incident-timeline-page">
@@ -25,129 +28,147 @@
         </Meta>
         <Actions>
             <a class="page-header-action-btn" href="/settings?section=incident-timeline">Settings</a>
-        </Actions>
-    </RoutePageHeader>
+            <button class="page-header-action-btn" disabled="@(_page is null)" @onclick="HandleExportClicked">Export
+                Snapshot</button>
+            </Actions>
+        </RoutePageHeader>
 
-    <IncidentScopeToolbar Contexts="_contexts" NamespaceOptions="NamespaceOptions" ActiveContext="@_activeContext"
-                          CurrentNamespace="@_currentNamespace" WorkloadKind="@_workloadKind" WorkloadName="@_workloadName"
-                          Window="@_window" SuggestedWorkloads="SuggestedWorkloads" SelectedSources="_selectedSources"
-                          IsLoading="@_isLoading" CanRefresh="@CanRefresh" OnContextChanged="HandleContextChangedAsync"
-                          OnNamespaceChanged="HandleNamespaceChangedAsync" OnWorkloadKindChanged="HandleWorkloadKindChangedAsync"
-                          OnWorkloadNameChanged="HandleWorkloadNameChangedAsync" OnWindowChanged="HandleWindowChangedAsync"
-                          OnSourceToggled="HandleSourceToggledAsync" OnRefresh="RefreshAsync" />
+        <IncidentScopeToolbar Contexts="_contexts" NamespaceOptions="NamespaceOptions" ActiveContext="@_activeContext"
+                              CurrentNamespace="@_currentNamespace" WorkloadKind="@_workloadKind" WorkloadName="@_workloadName"
+                              Window="@_window" SuggestedWorkloads="SuggestedWorkloads" SelectedSources="_selectedSources"
+                              IsLoading="@_isLoading" CanRefresh="@CanRefresh" OnContextChanged="HandleContextChangedAsync"
+                              OnNamespaceChanged="HandleNamespaceChangedAsync" OnWorkloadKindChanged="HandleWorkloadKindChangedAsync"
+                              OnWorkloadNameChanged="HandleWorkloadNameChangedAsync" OnWindowChanged="HandleWindowChangedAsync"
+                              OnSourceToggled="HandleSourceToggledAsync" OnRefresh="RefreshAsync" />
 
-    <section class="incident-scope-summary" data-testid="incident-scope-summary" aria-live="polite">
-        <div class="incident-scope-summary__facts">
-            <span class="incident-scope-summary__fact">Context: @ScopeValueOrFallback(_activeContext)</span>
-            <span class="incident-scope-summary__fact">Namespace: @ScopeValueOrFallback(_currentNamespace)</span>
-            <span class="incident-scope-summary__fact">Workload: @ScopeWorkloadLabel</span>
-            <span class="incident-scope-summary__fact">Window:
-                @IncidentTimelineDisplay.FormatWindowLabel(_window)</span>
-            </div>
-
-            <div class="incident-scope-summary__status">
-                @if (_lastRefreshedAt is not null)
-                {
-                    <span>Last refresh: @_lastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
-                }
-
-                @if (_page is not null)
-                {
-                    <span>@(_page.Items.Count == 1 ? "1 evidence item loaded" : $"{_page.Items.Count} evidence items loaded")</span>
-                }
-
-                @if (HasPendingScopeChanges)
-                {
-                    <span class="incident-scope-summary__status--pending">Pending scope changes. Refresh to update
-                        evidence.</span>
-                    }
-            else if (_isLoading && _page is not null)
-                    {
-                        <span class="incident-scope-summary__status--loading">Refreshing evidence...</span>
-                    }
+        <section class="incident-scope-summary" data-testid="incident-scope-summary" aria-live="polite">
+            <div class="incident-scope-summary__facts">
+                <span class="incident-scope-summary__fact">Context: @ScopeValueOrFallback(_activeContext)</span>
+                <span class="incident-scope-summary__fact">Namespace: @ScopeValueOrFallback(_currentNamespace)</span>
+                <span class="incident-scope-summary__fact">Workload: @ScopeWorkloadLabel</span>
+                <span class="incident-scope-summary__fact">Window:
+                    @IncidentTimelineDisplay.FormatWindowLabel(_window)</span>
                 </div>
-            </section>
 
-            @if (_requiresConfiguration)
-            {
-                <IncidentTimelineEmptyState Title="No cluster context is configured"
-                                            Message="Configure AKS settings before loading workload-scoped incident evidence."
-                                            Hint="Incident timeline uses the current cluster context and namespace as the anchor for evidence collection." />
-            }
-            else if (!string.IsNullOrWhiteSpace(_bootstrapError))
-            {
-                <ErrorCallout Title="Incident scope bootstrap failed" Message="@_bootstrapError" OnRetry="RetryBootstrapAsync" />
-            }
-            else
-            {
-                <IncidentCoverageStrip Statuses="@(_page?.SourceStatuses ?? [])" WasTruncated="@(_page?.WasTruncated ?? false)"
-                                       HasPendingChanges="@HasPendingScopeChanges" IsRefreshing="@(_isLoading && _page is not null)" />
+                <div class="incident-scope-summary__status">
+                    @if (_lastRefreshedAt is not null)
+                    {
+                        <span>Last refresh: @_lastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    }
 
-                @if (HasMappingGuidance)
-                {
-                    <div class="incident-mapping-note" data-testid="incident-mapping-note" role="status">
-                        <div class="incident-mapping-note__copy">
-                            <div class="incident-mapping-note__eyebrow">Mapping guidance</div>
-                            <strong>Some selected sources still need mapping or setup.</strong>
-                            <p>@BuildMappingGuidanceMessage()</p>
-                        </div>
+                    @if (_page is not null)
+                    {
+                        <span>@(_page.Items.Count == 1 ? "1 evidence item loaded" : $"{_page.Items.Count} evidence items loaded")</span>
+                    }
 
-                        <FluentButton Appearance="Appearance.Accent" data-testid="incident-mapping-settings-button"
-                                      @onclick="OpenIncidentTimelineSettingsAsync">
-                            Open Incident Timeline settings
-                        </FluentButton>
+                    @if (HasPendingScopeChanges)
+                    {
+                        <span class="incident-scope-summary__status--pending">Pending scope changes. Refresh to update
+                            evidence.</span>
+                        }
+            else if (_isLoading && _page is not null)
+                        {
+                            <span class="incident-scope-summary__status--loading">Refreshing evidence...</span>
+                        }
                     </div>
-                }
+                </section>
 
-                @if (!string.IsNullOrWhiteSpace(_loadError))
+                @if (_requiresConfiguration)
                 {
-                    <ErrorCallout Title="Incident evidence could not be loaded" Message="@_loadError" OnRetry="RefreshAsync" />
+                    <IncidentTimelineEmptyState Title="No cluster context is configured"
+                                                Message="Configure AKS settings before loading workload-scoped incident evidence."
+                                                Hint="Incident timeline uses the current cluster context and namespace as the anchor for evidence collection." />
                 }
-                else if (_isBootstrapping || (_isLoading && _page is null))
+                else if (!string.IsNullOrWhiteSpace(_bootstrapError))
                 {
-                    <LoadingSpinner Message="Loading incident evidence..." />
-                }
-                else if (string.IsNullOrWhiteSpace(_workloadName))
-                {
-                    <IncidentTimelineEmptyState Title="Choose a workload"
-                                                Message="Select a workload name and refresh to load incident evidence for this scope."
-                                                Hint="Use a mapped workload suggestion or enter a deployment, stateful set, or pod name directly." />
-                }
-                else if (_page is null)
-                {
-                    <IncidentTimelineEmptyState Title="Refresh to load evidence"
-                                                Message="Incident evidence appears after the first refresh for the selected scope."
-                                                Hint="Changing scope values does not trigger auto-refresh in v1. Use Refresh when the scope is ready." />
-                }
-                else if (HasGlobalFailure(_page))
-                {
-                    <ErrorCallout Title="All selected evidence sources failed" Message="@BuildGlobalFailureMessage(_page)"
-                                  OnRetry="RefreshAsync" />
-                }
-                else if (_page.Items.Count == 0)
-                {
-                    <IncidentTimelineEmptyState Title="No evidence found in this window"
-                                                Message="The selected scope returned no evidence for the current investigation window."
-                                                Hint="Expand the time window, adjust the workload scope, or review coverage for unmapped or unavailable sources." />
+                    <ErrorCallout Title="Incident scope bootstrap failed" Message="@_bootstrapError" OnRetry="RetryBootstrapAsync" />
                 }
                 else
                 {
-                    @if (_page.IsPartial)
+                    @if (_investigationDraft is not null)
                     {
-                        <div class="incident-page-notice" role="status">
-                            Evidence is partial. Review source coverage before deciding what changed in this incident window.
+                        <InvestigationSeedBanner Draft="_investigationDraft" OnConfirmAndRefresh="HandleSeedConfirmAndRefreshAsync"
+                                                 OnDismiss="HandleSeedDismiss" />
+                    }
+
+                    @if (_mappingProposals.Count > 0)
+                    {
+                        <MappingProposalPanel Proposals="_mappingProposals" OnDismiss="HandleProposalsDismiss" />
+                    }
+
+                    <IncidentCoverageStrip Statuses="@(_page?.SourceStatuses ?? [])" WasTruncated="@(_page?.WasTruncated ?? false)"
+                                           HasPendingChanges="@HasPendingScopeChanges" IsRefreshing="@(_isLoading && _page is not null)" />
+
+                    @if (HasMappingGuidance)
+                    {
+                        <div class="incident-mapping-note" data-testid="incident-mapping-note" role="status">
+                            <div class="incident-mapping-note__copy">
+                                <div class="incident-mapping-note__eyebrow">Mapping guidance</div>
+                                <strong>Some selected sources still need mapping or setup.</strong>
+                                <p>@BuildMappingGuidanceMessage()</p>
+                            </div>
+
+                            <FluentButton Appearance="Appearance.Accent" data-testid="incident-mapping-settings-button"
+                                          @onclick="OpenIncidentTimelineSettingsAsync">
+                                Open Incident Timeline settings
+                            </FluentButton>
                         </div>
                     }
 
-                    <div class="incident-timeline-workbench">
-                        <IncidentTimelineList Items="_page.Items" SelectedItemId="@_selectedItem?.ItemId"
-                                              OnSelectItem="HandleItemSelectedAsync" />
+                    @if (!string.IsNullOrWhiteSpace(_loadError))
+                    {
+                        <ErrorCallout Title="Incident evidence could not be loaded" Message="@_loadError" OnRetry="RefreshAsync" />
+                    }
+                    else if (_isBootstrapping || (_isLoading && _page is null))
+                    {
+                        <LoadingSpinner Message="Loading incident evidence..." />
+                    }
+                    else if (string.IsNullOrWhiteSpace(_workloadName))
+                    {
+                        <IncidentTimelineEmptyState Title="Choose a workload"
+                                                    Message="Select a workload name and refresh to load incident evidence for this scope."
+                                                    Hint="Use a mapped workload suggestion or enter a deployment, stateful set, or pod name directly." />
+                    }
+                    else if (_page is null)
+                    {
+                        <IncidentTimelineEmptyState Title="Refresh to load evidence"
+                                                    Message="Incident evidence appears after the first refresh for the selected scope."
+                                                    Hint="Changing scope values does not trigger auto-refresh in v1. Use Refresh when the scope is ready." />
+                    }
+                    else if (HasGlobalFailure(_page))
+                    {
+                        <ErrorCallout Title="All selected evidence sources failed" Message="@BuildGlobalFailureMessage(_page)"
+                                      OnRetry="RefreshAsync" />
+                    }
+                    else if (_page.Items.Count == 0)
+                    {
+                        <IncidentTimelineEmptyState Title="No evidence found in this window"
+                                                    Message="The selected scope returned no evidence for the current investigation window."
+                                                    Hint="Expand the time window, adjust the workload scope, or review coverage for unmapped or unavailable sources." />
+                    }
+                    else
+                    {
+                        @if (_page.IsPartial)
+                        {
+                            <div class="incident-page-notice" role="status">
+                                Evidence is partial. Review source coverage before deciding what changed in this incident window.
+                            </div>
+                        }
 
-                        <IncidentTimelineDetailPanel Item="_selectedItem" OnClose="ClearSelectedItemAsync" />
-                    </div>
+                        <div class="incident-timeline-workbench">
+                            <IncidentTimelineList Items="_page.Items" SelectedItemId="@_selectedItem?.ItemId"
+                                                  OnSelectItem="HandleItemSelectedAsync" />
+
+                            <IncidentTimelineDetailPanel Item="_selectedItem" OnClose="ClearSelectedItemAsync" />
+                        </div>
+                    }
                 }
+            </div>
+
+            @if (_showExportDialog && _page is not null)
+            {
+                <IncidentSnapshotExportDialog Page="_page" Seed="_investigationDraft?.Seed" OnClose="HandleExportDialogClosed" />
             }
-        </div>
 
 @code {
     private readonly CancellationTokenSource _disposeCts = new();
@@ -177,6 +198,9 @@
     private DateTimeOffset? _lastRefreshedAt;
     private string? _lastLoadedRequestKey;
     private int _requestVersion;
+    private IncidentInvestigationDraft? _investigationDraft;
+    private bool _showExportDialog;
+    private IReadOnlyList<IncidentMappingProposal> _mappingProposals = [];
 
     private IReadOnlyList<string> NamespaceOptions => _namespaces
         .Concat(GetMappedNamespaces())
@@ -303,6 +327,11 @@ IncidentTimelineSourceCoverageState.NotConfigured)
             _isBootstrapping = false;
             await InvokeAsync(StateHasChanged);
         }
+
+        // Consume any pending investigation seed before auto-loading.
+        // ApplyPendingSeed may prefill scope fields; do this after bootstrap so
+        // namespace/context lists are available for the banner to display correctly.
+        ApplyPendingSeedIfPresent();
 
         if (autoLoad && CanRefresh)
         {
@@ -442,6 +471,59 @@ string.IsNullOrWhiteSpace(_currentNamespace))
         await InvokeAsync(StateHasChanged);
     }
 
+    private void ApplyPendingSeedIfPresent()
+    {
+        var seed = InvestigationLauncher.TakePendingSeed();
+        if (seed is null)
+        {
+            return;
+        }
+
+        var draft = SeedResolver.Resolve(seed, AppState.Config.IncidentTimeline);
+        _investigationDraft = draft;
+
+        // Prefill scope from draft if available and not already set by workspace restore.
+        if (draft.ResolvedScope is { } scope)
+        {
+            if (string.IsNullOrWhiteSpace(_currentNamespace))
+                _currentNamespace = scope.Namespace;
+            if (string.IsNullOrWhiteSpace(_workloadName))
+            {
+                _workloadKind = scope.WorkloadKind;
+                _workloadName = scope.WorkloadName;
+            }
+        }
+
+        // Pre-apply source selection from draft.
+        if (draft.PreselectedSources.Count > 0)
+        {
+            _selectedSources = draft.PreselectedSources
+                .Distinct()
+                .OrderBy(GetSourceOrder)
+                .ToList();
+        }
+
+        // Prefill time window from seed.
+        _window = seed.SelectedRange;
+    }
+
+    private async Task HandleSeedConfirmAndRefreshAsync()
+    {
+        _investigationDraft = null;
+        await RefreshAsync();
+    }
+
+    private void HandleSeedDismiss()
+    {
+        _investigationDraft = null;
+    }
+
+    private void HandleExportClicked() => _showExportDialog = true;
+
+    private void HandleExportDialogClosed() => _showExportDialog = false;
+
+    private void HandleProposalsDismiss() => _mappingProposals = [];
+
     private async Task RetryBootstrapAsync() => await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
 
     private Task OpenIncidentTimelineSettingsAsync()
@@ -480,6 +562,7 @@ string.IsNullOrWhiteSpace(_currentNamespace))
             _page = page;
             _lastRefreshedAt = page.GeneratedAtUtc;
             _lastLoadedRequestKey = BuildRequestKey(page.Query);
+            _mappingProposals = ProposalGenerator.Generate(page, AppState.Config.IncidentTimeline);
 
             _selectedItem = _page.Items.Count == 0
                 ? null

@@ -1,0 +1,148 @@
+.mapping-panel {
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground2);
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.mapping-panel-header {
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.mapping-panel-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.mapping-panel-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.mapping-panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--colorNeutralForeground1);
+    flex: 1;
+}
+
+.mapping-panel-dismiss-btn {
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--colorNeutralForeground3);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.mapping-panel-dismiss-btn:hover {
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground1);
+}
+
+.mapping-panel-advisory {
+    font-size: 11px;
+    color: var(--colorNeutralForeground3);
+    margin: 0;
+    font-style: italic;
+}
+
+.mapping-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.mapping-panel-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.mapping-panel-item:last-child {
+    border-bottom: none;
+}
+
+.mapping-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.mapping-item-source-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.mapping-item-source-badge--observability {
+    background: var(--colorPaletteBlueBorderActive, #0078d4);
+    color: #fff;
+}
+
+.mapping-item-source-badge--servicebus {
+    background: var(--colorPalettePurpleBorder2, #7f4ec4);
+    color: #fff;
+}
+
+.mapping-item-source-badge--pipelines {
+    background: var(--colorPaletteGreenBorder2, #107c10);
+    color: #fff;
+}
+
+.mapping-item-scope {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--colorNeutralForeground1);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mapping-item-evidence-count {
+    font-size: 11px;
+    color: var(--colorNeutralForeground3);
+    flex-shrink: 0;
+}
+
+.mapping-item-rationale {
+    font-size: 12px;
+    color: var(--colorNeutralForeground2);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.mapping-panel-footer {
+    padding: 8px 16px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mapping-panel-settings-btn {
+    background: none;
+    border: 1px solid var(--colorBrandStroke1);
+    color: var(--colorBrandForeground1);
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.mapping-panel-settings-btn:hover {
+    background: var(--colorBrandBackground2);
+}

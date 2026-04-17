@@ -1,0 +1,86 @@
+.investigation-seed-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    margin-bottom: 8px;
+}
+
+.investigation-seed-banner__header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.investigation-seed-banner__eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.investigation-seed-banner__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.investigation-seed-banner__provenance {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+}
+
+.investigation-seed-banner__assumptions {
+    margin: 0;
+    padding-left: 16px;
+    list-style: disc;
+}
+
+.investigation-seed-banner__assumption {
+    font-size: 12px;
+    color: var(--color-warning);
+    line-height: 1.5;
+}
+
+.investigation-seed-banner__actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.investigation-seed-banner__confirm-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-accent);
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    cursor: pointer;
+}
+
+.investigation-seed-banner__confirm-btn:hover {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+}
+
+.investigation-seed-banner__dismiss-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.investigation-seed-banner__dismiss-btn:hover {
+    background: var(--color-surface-3);
+}

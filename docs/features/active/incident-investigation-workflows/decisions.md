@@ -58,6 +58,31 @@ Introduce an explicit `IncidentInvestigationSeed` contract resolved through an a
 ### Alternatives considered
 
 - Alternative A - Use query-string-only navigation. Rejected because the payload is too rich and too likely to grow.
+
+---
+
+## Decision 003 - Register IncidentInvestigationLauncher as AddScoped, not AddSingleton
+
+**Status:** Accepted
+
+**Date:** 2026-04-13
+
+### Context
+
+`IncidentInvestigationLauncher` injects `NavigationManager` to handle the `Nav.NavigateTo` call when a seed is launched. In Blazor MAUI, `NavigationManager` is a scoped service. Registering the launcher as a singleton would cause a dependency lifetime mismatch and a runtime DI exception.
+
+### Decision
+
+Register `IncidentInvestigationLauncher` as `AddScoped` in `MauiProgram.cs`, not `AddSingleton`, despite being otherwise stateless.
+
+### Consequences
+
+- Avoids a captured-scoped-service DI error at runtime.
+- The launcher is re-created per Blazor session, which is acceptable since it holds no cross-session state.
+
+### Alternatives considered
+
+- Alternative A - Refactor the launcher to accept `NavigationManager` as a method parameter rather than via DI injection. Viable but adds friction at call sites for no meaningful gain.
 - Alternative B - Let each source page mutate `IncidentTimelinePage` state directly. Rejected because it would tightly couple unrelated pages.
 
 ---

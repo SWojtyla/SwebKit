@@ -122,6 +122,9 @@
                                 title="Open focused query in Logs tab">
                             View in Logs
                         </button>
+                        <button class="obs-drill-link" @onclick="Investigate" title="Open in Incident Timeline">
+                            Investigate
+                        </button>
                         @if (_selected.SampleStackTrace is not null)
                         {
                             <button class="obs-copy-btn" @onclick="CopyStackAsync" title="Copy stack trace">Copy stack
@@ -216,12 +219,14 @@
 
 @inject IJSRuntime JS
 @inject INotificationService Notifications
+@inject IncidentInvestigationLauncher InvestigationLauncher
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
     [Parameter] public TimeRange Range { get; set; } = TimeRange.Last24Hours;
     [Parameter] public EventCallback<string> OnDrillToLogs { get; set; }
     [Parameter] public int TzOffsetMinutes { get; set; }
+    [Parameter] public string? ResourceId { get; set; }
 
     private readonly List<ExceptionGroup> _exceptions = [];
     private ExceptionGroup? _selected;
@@ -392,6 +397,22 @@
         if (_selected is null) return;
         var kql = $"exceptions\n| where type == '{_selected.ExceptionType}'\n| order by timestamp desc\n| take 50";
         await OnDrillToLogs.InvokeAsync(kql);
+    }
+
+    private void Investigate()
+    {
+        if (_selected is null) return;
+        InvestigationLauncher.Launch(new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Observability,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = Range,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                ResourceId = ResourceId,
+                ExceptionType = _selected.ExceptionType
+            }
+        });
     }
 
     private async Task DrillToTrace(string operationId)

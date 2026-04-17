@@ -1,4 +1,5 @@
 @inject INotificationService Notifications
+@inject IncidentInvestigationLauncher InvestigationLauncher
 
 <div class="pipeline-detail">
 
@@ -15,6 +16,9 @@
             }
             <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTrigger">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="12px" /> Trigger Run
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="Investigate">
+                Investigate
             </FluentButton>
         </div>
     </div>
@@ -107,7 +111,7 @@
                     <TemplateColumn Title="When" Width="110px"
                                     SortBy="@(GridSort<PipelineEnvironmentStatus>.ByDescending(e => e.FinishedAt ?? DateTimeOffset.MinValue))">
                         <span class="text-muted text-sm">@(context.FinishedAt.HasValue ? RelativeTime(context.FinishedAt.Value)
-                                            : "—")</span>
+                                                                    : "—")</span>
                         </TemplateColumn>
                         <TemplateColumn Title="Triggered by" Width="140px">
                             <span class="text-muted text-sm">@(context.TriggeredBy ?? "—")</span>
@@ -189,6 +193,28 @@
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _isLoading = false; }
+    }
+
+    private void Investigate()
+    {
+        var mostRecent = _recentRuns.Count > 0 ? _recentRuns[0] : null;
+        var range = mostRecent is not null
+            ? new TimeRange(mostRecent.CreatedDate, mostRecent.FinishedDate ?? DateTimeOffset.UtcNow)
+            : TimeRange.Last24Hours;
+
+        InvestigationLauncher.Launch(new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Pipelines,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = range,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                PipelineId = Pipeline.Id,
+                RunId = mostRecent?.Id,
+                ProjectName = Project.Name,
+                RunDisplayName = mostRecent?.Name
+            }
+        });
     }
 
     private void ToggleTrigger()

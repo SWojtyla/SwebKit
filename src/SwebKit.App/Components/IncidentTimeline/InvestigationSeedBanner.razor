@@ -1,0 +1,56 @@
+@using SwebKit.Core.Models
+
+<div class="investigation-seed-banner" data-testid="investigation-seed-banner" role="status" aria-live="polite">
+    <div class="investigation-seed-banner__header">
+        <div class="investigation-seed-banner__eyebrow">Investigation context</div>
+        <div class="investigation-seed-banner__title">
+            Started from @Draft.Seed.SourceAreaLabel
+        </div>
+    </div>
+
+    <div class="investigation-seed-banner__provenance">
+        @Draft.ProvenanceSummary
+    </div>
+
+    @if (Draft.PendingAssumptions.Count > 0)
+    {
+        <ul class="investigation-seed-banner__assumptions" aria-label="Pending assumptions requiring confirmation">
+            @foreach (var assumption in Draft.PendingAssumptions)
+            {
+                <li class="investigation-seed-banner__assumption">@assumption</li>
+            }
+        </ul>
+    }
+
+    <div class="investigation-seed-banner__actions">
+        @if (Draft.PendingAssumptions.Count == 0 && OnConfirmAndRefresh.HasDelegate)
+        {
+            <button class="investigation-seed-banner__confirm-btn" @onclick="HandleConfirmAndRefresh"
+                    data-testid="seed-banner-confirm-btn">
+                Confirm scope and refresh
+            </button>
+        }
+        <button class="investigation-seed-banner__dismiss-btn" @onclick="HandleDismiss"
+                data-testid="seed-banner-dismiss-btn" aria-label="Dismiss investigation seed banner">
+            Dismiss
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IncidentInvestigationDraft Draft { get; set; } = default!;
+    [Parameter] public EventCallback OnConfirmAndRefresh { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private async Task HandleConfirmAndRefresh()
+    {
+        if (OnConfirmAndRefresh.HasDelegate)
+            await OnConfirmAndRefresh.InvokeAsync();
+    }
+
+    private async Task HandleDismiss()
+    {
+        if (OnDismiss.HasDelegate)
+            await OnDismiss.InvokeAsync();
+    }
+}
