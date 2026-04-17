@@ -1060,6 +1060,71 @@ public sealed class MessageListViewTests : TestContext
         cut.WaitForAssertion(() => Assert.Equal("keyboard-001", selected?.MessageId));
     }
 
+    [Fact]
+    public void PinnedSessionId_ShowsBadge_WhenSet()
+    {
+        var client = new FakeServiceBusClient(
+            messages: [],
+            stats: new SbEntityStats { ActiveMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.PinnedSessionId, "sess-pinned-123"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("[data-testid='pinned-session-badge']"));
+            Assert.Contains("sess-pinned-123", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void PinnedSessionId_NotShown_WhenNull()
+    {
+        var client = new FakeServiceBusClient(
+            messages: [],
+            stats: new SbEntityStats { ActiveMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.PinnedSessionId, null));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid='pinned-session-badge']"));
+        });
+    }
+
+    [Fact]
+    public void PinnedSessionId_FiltersMessages_ToMatchingSession()
+    {
+        var messages = new List<SbMessage>
+        {
+            new() { MessageId = "m1", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SessionId = "sess-A" },
+            new() { MessageId = "m2", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SessionId = "sess-B" },
+            new() { MessageId = "m3", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow, SessionId = "sess-A" },
+        };
+
+        var client = new FakeServiceBusClient(
+            statsResolver: _ => new SbEntityStats { ActiveMessageCount = messages.Count },
+            peekResolver: _ => messages,
+            dlqResolver: _ => []);
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.PinnedSessionId, "sess-A"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("m1", cut.Markup);
+            Assert.Contains("m3", cut.Markup);
+            Assert.DoesNotContain("m2", cut.Markup);
+        });
+    }
+
     private sealed class FakeServiceBusClient : IServiceBusClient
     {
         private readonly Func<string, int, IReadOnlyList<SbMessage>> _peekResolver;
@@ -1166,7 +1231,7 @@ public sealed class MessageListViewTests : TestContext
         public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
             Task.CompletedTask;
 
-        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) =>
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)

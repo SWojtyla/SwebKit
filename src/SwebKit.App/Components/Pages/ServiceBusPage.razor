@@ -18,7 +18,16 @@
     <div class="page-shell-header">
         <RoutePageHeader Area="service-bus"
                          Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
-            
+            <Actions>
+                @if (_activeTab is not null && !_activeTab.IsDlq && !_activeTab.IsScheduled)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="OpenBatchSendPanel"
+                                  data-testid="batch-send-open-btn" title="Send a batch of messages from JSON">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUpload())" Width="14px" />
+                        Batch Send
+                    </FluentButton>
+                }
+            </Actions>
         </RoutePageHeader>
     </div>
 
@@ -81,7 +90,8 @@
                     }
                     else if (_activeTab.IsDlq)
                     {
-                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                 AvailableNamespaces="@AvailableNamespaceOptions" />
                     }
                     else
                     {
@@ -90,7 +100,8 @@
                                 <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                                  NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
                                                  SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
-                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
+                                                 PinnedSessionId="@_activeTab.PinnedSessionId" OnMessageSelected="OnMessageSelectedAsync"
+                                                 OnCloseDetails="CloseDetailPane" />
                             </div>
                             @if (IsDetailPaneOpen)
                             {
@@ -106,7 +117,8 @@
                                             <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                                OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
+                                                               OnFilterBySession="PinSessionFilter" />
                                         </div>
                                     </div>
                                 }
@@ -123,7 +135,8 @@
                                                 <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                                    OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                    OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
+                                                                   OnFilterBySession="PinSessionFilter" />
                                             </div>
                                         </div>
                                     </ResizablePanel>
@@ -148,6 +161,15 @@
     }
 </Modal>
 
+<!-- Batch Send modal -->
+<Modal IsOpen="@(_showBatchSendPanel && _activeTab is not null)" OnClose="CloseBatchSendPanel">
+    @if (_activeTab is not null)
+    {
+        <BatchSendPanel Client="_activeTab.Client" DefaultEntityPath="@_activeTab.EntityPath"
+                        OnCancel="CloseBatchSendPanel" OnCompleted="OnBatchSendCompleted" />
+    }
+</Modal>
+
 @code {
     private List<NsState> _namespaceStates = [];
     private List<SbTab> _openTabs = [];
@@ -165,6 +187,9 @@
     private SbMessage? _composerMessage;
     private MessageComposer.ComposerMode _composerMode;
 
+    // Batch send modal state
+    private bool _showBatchSendPanel;
+
     private IReadOnlyList<MessageComposer.NamespaceOption> AvailableNamespaceOptions =>
     _namespaceStates
     .Where(s => s.Client is not null)
@@ -181,6 +206,24 @@
     private void CloseComposer()
     {
         _composerMessage = null;
+        StateHasChanged();
+    }
+
+    private void OpenBatchSendPanel()
+    {
+        _showBatchSendPanel = true;
+        StateHasChanged();
+    }
+
+    private void CloseBatchSendPanel()
+    {
+        _showBatchSendPanel = false;
+        StateHasChanged();
+    }
+
+    private void OnBatchSendCompleted(BatchOperationResult result)
+    {
+        _showBatchSendPanel = false;
         StateHasChanged();
     }
 
@@ -202,6 +245,13 @@
         if (_activeTab is null) return;
         _activeTab.SelectedMessage = null;
         Selection.SetSelection("service-bus", null);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PinSessionFilter(string sessionId)
+    {
+        if (_activeTab is null) return;
+        _activeTab.PinnedSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -795,6 +845,7 @@ entityPath;
         public bool IsDlq { get; set; }
         public bool IsScheduled { get; set; }
         public SbMessage? SelectedMessage { get; set; }
+        public string? PinnedSessionId { get; set; }
     }
 
     private sealed record ServiceBusWorkspaceTabState(

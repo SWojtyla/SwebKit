@@ -22,7 +22,11 @@ public interface IServiceBusClient
     Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default);
     /// <summary>Cancels a previously scheduled message by its broker sequence number.</summary>
     Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default);
-    Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default);
+    /// <summary>
+    /// Resubmits dead-lettered messages by sequence number. Optional <paramref name="remapRules"/> transform each
+    /// message before forwarding. Optional <paramref name="targetEntityPath"/> overrides the destination entity.
+    /// </summary>
+    Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default);
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

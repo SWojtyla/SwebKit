@@ -1,0 +1,354 @@
+@inject AppStateService AppState
+
+<div class="batch-replay-panel" data-testid="batch-replay-panel">
+
+    @if (_result is not null)
+    {
+        <!-- Execution summary -->
+        <div class="batch-replay-panel__summary @(_result.IsFullSuccess ? "batch-replay-panel__summary--success" : _result.IsFullFailure ? "batch-replay-panel__summary--failure" : "batch-replay-panel__summary--partial")"
+             data-testid="batch-replay-summary">
+            <div class="batch-replay-panel__summary-line">@_result.SummaryLine</div>
+            @if (_result.Errors.Count > 0)
+            {
+                <ul class="batch-replay-panel__error-list">
+                    @foreach (var err in _result.Errors)
+                    {
+                        <li><span class="batch-replay-panel__error-id">@err.MessageId</span> — @err.Reason</li>
+                    }
+                </ul>
+            }
+            <button class="batch-replay-panel__btn batch-replay-panel__btn--secondary" @onclick="Reset"
+                    data-testid="batch-replay-reset-btn">
+                Replay another batch
+            </button>
+        </div>
+    }
+    else if (_confirming)
+    {
+        <!-- Confirmation step -->
+        <div class="batch-replay-panel__confirm" data-testid="batch-replay-confirm">
+            <div class="batch-replay-panel__confirm-title">Confirm Batch Replay</div>
+            <div class="batch-replay-panel__confirm-row">
+                <span>Messages:</span><strong>@Messages.Count</strong>
+            </div>
+            <div class="batch-replay-panel__confirm-row">
+                <span>Source:</span><strong>@SourceEntityPath</strong>
+            </div>
+            <div class="batch-replay-panel__confirm-row">
+                <span>Target:</span><strong>@EffectiveTargetEntity</strong>
+            </div>
+            @if (!RemapSummaryLines.Any())
+            {
+                <div class="batch-replay-panel__confirm-row">
+                    <span>Remap:</span><em>none</em>
+                </div>
+            }
+            else
+            {
+                <div class="batch-replay-panel__confirm-row batch-replay-panel__confirm-row--col">
+                    <span>Remap:</span>
+                    <ul class="batch-replay-panel__remap-summary">
+                        @foreach (var line in RemapSummaryLines)
+                        {
+                            <li>@line</li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (AppState.Config.IsProduction)
+            {
+                <div class="batch-replay-panel__production-warning" data-testid="production-warning">
+                    ⚠ This is a <strong>production</strong> namespace. Replaying messages is irreversible.
+                </div>
+            }
+            <div class="batch-replay-panel__actions">
+                <button class="batch-replay-panel__btn batch-replay-panel__btn--secondary"
+                        @onclick="() => _confirming = false" disabled="@_running">
+                    Back
+                </button>
+                <button class="batch-replay-panel__btn batch-replay-panel__btn--danger" @onclick="ExecuteAsync"
+                        disabled="@_running" data-testid="batch-replay-execute-btn">
+                    @if (_running)
+                    {
+                        <span>Replaying @_progressDone of @Messages.Count…</span>
+                    }
+                    else
+                    {
+                        <span>Replay @Messages.Count message(s)</span>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Configuration step -->
+        <div class="batch-replay-panel__config" data-testid="batch-replay-config">
+            <div class="batch-replay-panel__section-title">Target</div>
+
+            @if (AvailableNamespaces is { Count: > 0 })
+            {
+                <div class="batch-replay-panel__two-col">
+                    <div class="batch-replay-panel__field">
+                        <label class="batch-replay-panel__label">Namespace</label>
+                        <select @bind="_targetNamespaceId"
+                                class="batch-replay-panel__input app-native-control app-native-select"
+                                data-testid="target-namespace-select">
+                            <option value="">— same namespace —</option>
+                            @foreach (var ns in AvailableNamespaces)
+                            {
+                                <option value="@ns.Id">@ns.Alias</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="batch-replay-panel__field">
+                        <label class="batch-replay-panel__label">Entity path</label>
+                        <input type="text" @bind="_targetEntityPath" placeholder="@(SourceEntityPath ?? "entity path…")"
+                               class="batch-replay-panel__input batch-replay-panel__input--mono app-native-control"
+                               data-testid="target-entity-input" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="batch-replay-panel__field">
+                    <label class="batch-replay-panel__label">Entity path</label>
+                    <input type="text" @bind="_targetEntityPath" placeholder="@(SourceEntityPath ?? "entity path…")"
+                           class="batch-replay-panel__input batch-replay-panel__input--mono app-native-control"
+                           data-testid="target-entity-input" />
+                </div>
+            }
+
+            <details class="batch-replay-panel__details">
+                <summary class="batch-replay-panel__details-summary" data-testid="remap-details-summary">
+                    Remap rules <span class="batch-replay-panel__remap-count">@(RemapSummaryLines.Any() ?
+                                        $"({RemapSummaryLines.Count()} active)" : "(none)")</span>
+                </summary>
+                <div class="batch-replay-panel__details-body">
+                    <div class="batch-replay-panel__two-col">
+                        <div class="batch-replay-panel__field">
+                            <label class="batch-replay-panel__label">Override Subject</label>
+                            <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
+                                   class="batch-replay-panel__input app-native-control" />
+                        </div>
+                        <div class="batch-replay-panel__field">
+                            <label class="batch-replay-panel__label">Override CorrelationId</label>
+                            <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
+                                   class="batch-replay-panel__input app-native-control" />
+                        </div>
+                    </div>
+                    <div>
+                        <div class="batch-replay-panel__section-title">
+                            Property Renames
+                            <button @onclick="AddPropertyRename" class="batch-replay-panel__secondary-btn" type="button">+
+                                Add</button>
+                            </div>
+                            @for (var i = 0; i < _propertyRenames.Count; i++)
+                            {
+                                var idx = i;
+                                <div class="batch-replay-panel__prop-row">
+                                    <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
+                                           @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                           class="batch-replay-panel__prop-input app-native-control" />
+                                    <span class="batch-replay-panel__arrow">→</span>
+                                    <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
+                                           @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                           class="batch-replay-panel__prop-input app-native-control" />
+                                    <button @onclick="() => RemovePropertyRename(idx)" type="button"
+                                            class="batch-replay-panel__secondary-btn">✕</button>
+                                </div>
+                            }
+                        </div>
+                        <div>
+                            <div class="batch-replay-panel__section-title">
+                                Property Removes
+                                <button @onclick="AddPropertyRemove" class="batch-replay-panel__secondary-btn" type="button">+
+                                    Add</button>
+                                </div>
+                                @for (var i = 0; i < _propertyRemoves.Count; i++)
+                                {
+                                    var idx = i;
+                                    <div class="batch-replay-panel__prop-row">
+                                        <input type="text" value="@_propertyRemoves[idx]" placeholder="Key to remove"
+                                               @onchange="e => SetRemoveKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                               class="batch-replay-panel__prop-input app-native-control" />
+                                        <button @onclick="() => RemovePropertyRemoveAt(idx)" type="button"
+                                                class="batch-replay-panel__secondary-btn">✕</button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="batch-replay-panel__preview-bar" data-testid="batch-replay-preview-bar">
+                        <span>@Messages.Count message(s) selected from <strong>@SourceEntityPath</strong> →
+                            <strong>@EffectiveTargetEntity</strong></span>
+                        </div>
+
+                        <div class="batch-replay-panel__actions">
+                            <button class="batch-replay-panel__btn batch-replay-panel__btn--secondary" @onclick="Cancel">
+                                Cancel
+                            </button>
+                            <button class="batch-replay-panel__btn batch-replay-panel__btn--primary" @onclick="Confirm"
+                                    disabled="@(Messages.Count == 0)" data-testid="batch-replay-review-btn">
+                                Review &amp; Confirm
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+@code {
+    private sealed record PropertyRenameRow(string OldKey, string NewKey)
+    {
+        public string OldKey { get; set; } = OldKey;
+        public string NewKey { get; set; } = NewKey;
+    }
+
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public string? SourceEntityPath { get; set; }
+    [Parameter] public IReadOnlyList<SbMessage> Messages { get; set; } = [];
+    [Parameter] public IReadOnlyList<MessageComposer.NamespaceOption>? AvailableNamespaces { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback<BatchOperationResult> OnCompleted { get; set; }
+
+    private string _targetEntityPath = "";
+    private string _targetNamespaceId = "";
+    private string _remapOverrideSubject = "";
+    private string _remapOverrideCorrelationId = "";
+    private readonly List<PropertyRenameRow> _propertyRenames = [];
+    private readonly List<string> _propertyRemoves = [];
+    private bool _confirming;
+    private bool _running;
+    private int _progressDone;
+    private BatchOperationResult? _result;
+
+    private string EffectiveTargetEntity =>
+        string.IsNullOrWhiteSpace(_targetEntityPath) ? (SourceEntityPath ?? "") : _targetEntityPath.Trim();
+
+    private IServiceBusClient? EffectiveClient
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_targetNamespaceId) || AvailableNamespaces is null)
+                return Client;
+            if (Guid.TryParse(_targetNamespaceId, out var id))
+                return AvailableNamespaces.FirstOrDefault(n => n.Id == id)?.Client ?? Client;
+            return Client;
+        }
+    }
+
+    private RemapRules BuildRemapRules()
+    {
+        var rules = new RemapRules
+        {
+            OverrideSubject = string.IsNullOrWhiteSpace(_remapOverrideSubject) ? null : _remapOverrideSubject.Trim(),
+            OverrideCorrelationId = string.IsNullOrWhiteSpace(_remapOverrideCorrelationId) ? null :
+_remapOverrideCorrelationId.Trim()
+        };
+        foreach (var row in _propertyRenames.Where(r => !string.IsNullOrWhiteSpace(r.OldKey) &&
+!string.IsNullOrWhiteSpace(r.NewKey)))
+            rules.PropertyRenames[row.OldKey.Trim()] = row.NewKey.Trim();
+        foreach (var key in _propertyRemoves.Where(k => !string.IsNullOrWhiteSpace(k)))
+            rules.PropertyRemoves.Add(key.Trim());
+        return rules;
+    }
+
+    private IEnumerable<string> RemapSummaryLines
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_remapOverrideSubject))
+                yield return $"Subject \u2192 '{_remapOverrideSubject.Trim()}'";
+            if (!string.IsNullOrWhiteSpace(_remapOverrideCorrelationId))
+                yield return $"CorrelationId \u2192 '{_remapOverrideCorrelationId.Trim()}'";
+            foreach (var r in _propertyRenames.Where(r => !string.IsNullOrWhiteSpace(r.OldKey)))
+                yield return $"Rename '{r.OldKey}' → '{r.NewKey}'";
+            foreach (var k in _propertyRemoves.Where(k => !string.IsNullOrWhiteSpace(k)))
+                yield return $"Remove '{k}'";
+        }
+    }
+
+    private void Confirm() => _confirming = true;
+
+    private async Task Cancel()
+    {
+        Reset();
+        await OnCancel.InvokeAsync();
+    }
+
+    private void Reset()
+    {
+        _confirming = false;
+        _running = false;
+        _progressDone = 0;
+        _result = null;
+    }
+
+    private async Task ExecuteAsync()
+    {
+        if (Client is null || SourceEntityPath is null || Messages.Count == 0) return;
+
+        _running = true;
+        _progressDone = 0;
+        var result = new BatchOperationResult();
+        var remapRules = BuildRemapRules();
+        var effectiveRemap = remapRules.IsEmpty ? null : remapRules;
+        var targetClient = EffectiveClient ?? Client;
+        var targetEntity = EffectiveTargetEntity;
+
+        // Process in chunks of 10 for progress reporting
+        var seqNumbers = Messages
+            .Where(m => m.SequenceNumber.HasValue)
+            .Select(m => m.SequenceNumber!.Value.ToString())
+            .ToList();
+
+        var skipped = Messages.Count - seqNumbers.Count;
+        result.Skipped = skipped;
+
+        var chunks = seqNumbers.Chunk(10).ToList();
+        foreach (var chunk in chunks)
+        {
+            try
+            {
+                await targetClient.ResubmitDeadLetterAsync(SourceEntityPath, chunk, targetEntity == SourceEntityPath ? null :
+targetEntity, effectiveRemap);
+                result.Succeeded += chunk.Length;
+            }
+            catch (Exception ex)
+            {
+                result.Failed += chunk.Length;
+                result.Errors.Add(new BatchOperationItemError
+                {
+                    MessageId = $"chunk of {chunk.Length}",
+                    Reason = ex.Message.Length > 120 ? ex.Message[..120] + "…" : ex.Message
+                });
+            }
+            _progressDone += chunk.Length;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        _running = false;
+        _confirming = false;
+        _result = result;
+        await InvokeAsync(StateHasChanged);
+        await OnCompleted.InvokeAsync(result);
+    }
+
+    private void AddPropertyRename() => _propertyRenames.Add(new PropertyRenameRow("", ""));
+    private void RemovePropertyRename(int idx) { if (idx < _propertyRenames.Count) _propertyRenames.RemoveAt(idx); }
+    private void SetRenameOldKey(int idx, string key)
+    {
+        if (idx < _propertyRenames.Count) _propertyRenames[idx].OldKey =
+key;
+    }
+    private void SetRenameNewKey(int idx, string key)
+    {
+        if (idx < _propertyRenames.Count) _propertyRenames[idx].NewKey =
+key;
+    }
+
+    private void AddPropertyRemove() => _propertyRemoves.Add("");
+    private void RemovePropertyRemoveAt(int idx) { if (idx < _propertyRemoves.Count) _propertyRemoves.RemoveAt(idx); }
+    private void SetRemoveKey(int idx, string key) { if (idx < _propertyRemoves.Count) _propertyRemoves[idx] = key; }
+}

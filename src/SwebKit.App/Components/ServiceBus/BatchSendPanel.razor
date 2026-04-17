@@ -1,0 +1,332 @@
+@using System.Text.Json
+@inject AppStateService AppState
+
+<div class="batch-send-panel" data-testid="batch-send-panel">
+
+    @if (_result is not null)
+    {
+        <div class="batch-send-panel__summary @(_result.IsFullSuccess ? "batch-send-panel__summary--success" : _result.IsFullFailure ? "batch-send-panel__summary--failure" : "batch-send-panel__summary--partial")"
+             data-testid="batch-send-summary">
+            <div class="batch-send-panel__summary-line">@_result.SummaryLine</div>
+            @if (_result.Errors.Count > 0)
+            {
+                <ul class="batch-send-panel__error-list">
+                    @foreach (var err in _result.Errors)
+                    {
+                        <li><span class="batch-send-panel__error-id">@err.MessageId</span> — @err.Reason</li>
+                    }
+                </ul>
+            }
+            <button class="batch-send-panel__btn batch-send-panel__btn--secondary" @onclick="Reset"
+                    data-testid="batch-send-reset-btn">
+                Send another batch
+            </button>
+        </div>
+    }
+    else if (_validatedEntries is not null)
+    {
+        <!-- Preview / confirm step -->
+        <div class="batch-send-panel__preview" data-testid="batch-send-preview">
+            <div class="batch-send-panel__preview-header">
+                <strong data-testid="batch-send-valid-count">@ValidCount valid</strong>
+                @if (InvalidCount > 0)
+                {
+                    <span class="batch-send-panel__invalid-badge" data-testid="batch-send-invalid-count">
+                        @InvalidCount invalid (will be skipped)
+                    </span>
+                }
+                <span>→ <strong>@EffectiveTargetEntity</strong></span>
+            </div>
+
+            <div class="batch-send-panel__preview-table-wrap">
+                <table class="batch-send-panel__preview-table" data-testid="batch-send-preview-table">
+                    <thead>
+                        <tr>
+                            <th>MessageId</th>
+                            <th>Subject</th>
+                            <th>CorrelationId</th>
+                            <th>Body (preview)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _validatedEntries.Take(50))
+                        {
+                            <tr class="@(entry.IsValid ? "" : "batch-send-panel__row--invalid")">
+                                <td class="batch-send-panel__cell--mono">@Truncate(entry.MessageId, 16)</td>
+                                <td>@(entry.Subject ?? "-")</td>
+                                <td class="batch-send-panel__cell--mono">@Truncate(entry.CorrelationId ?? "-", 16)</td>
+                                <td class="batch-send-panel__cell--mono">@Truncate(entry.Body, 32)</td>
+                                <td>
+                                    @if (entry.IsValid)
+                                    {
+                                        <span class="batch-send-panel__status--ok">✓</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="batch-send-panel__status--error" title="@entry.ValidationError">✗
+                                            @entry.ValidationError</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (_validatedEntries.Count > 50)
+                    {
+                        <div class="batch-send-panel__overflow-note">Showing first 50 of @_validatedEntries.Count entries.</div>
+                    }
+                </div>
+
+                @if (AppState.Config.IsProduction)
+                {
+                    <div class="batch-send-panel__production-warning" data-testid="batch-send-production-warning">
+                        ⚠ This is a <strong>production</strong> namespace. Sending messages is irreversible.
+                    </div>
+                }
+
+                <div class="batch-send-panel__actions">
+                    <button class="batch-send-panel__btn batch-send-panel__btn--secondary"
+                            @onclick="() => _validatedEntries = null" disabled="@_sending">
+                        Back
+                    </button>
+                    <button class="batch-send-panel__btn batch-send-panel__btn--primary" @onclick="SendAsync"
+                            disabled="@(_sending || ValidCount == 0)" data-testid="batch-send-execute-btn">
+                        @if (_sending)
+                        {
+                            <span>Sending @_progressDone of @ValidCount…</span>
+                        }
+                        else
+                        {
+                            <span>Send @ValidCount message(s)</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        }
+    else
+        {
+            <!-- Import step -->
+            <div class="batch-send-panel__import" data-testid="batch-send-import">
+                <div class="batch-send-panel__section-title">Target entity</div>
+                <input type="text" @bind="_targetEntityPath" placeholder="@(DefaultEntityPath ?? "entity path…")"
+                       class="batch-send-panel__input batch-send-panel__input--mono app-native-control"
+                       data-testid="batch-send-target-input" />
+
+                <div class="batch-send-panel__section-title">
+                    JSON payload
+                    <span class="batch-send-panel__hint">Array of message objects with <code>body</code> required;
+                        <code>messageId</code>, <code>correlationId</code>, <code>subject</code>, <code>contentType</code>,
+                        <code>applicationProperties</code> optional.</span>
+                    </div>
+                    <textarea @bind="_jsonInput" class="batch-send-panel__textarea app-native-control" rows="10"
+                              placeholder='[{ "body": "hello", "subject": "test" }, { "body": "{\"key\":1}", "contentType": "application/json" }]'
+                              data-testid="batch-send-json-input"></textarea>
+
+                    @if (_parseError is not null)
+                    {
+                        <div class="batch-send-panel__parse-error" data-testid="batch-send-parse-error">@_parseError</div>
+                    }
+
+                    <div class="batch-send-panel__actions">
+                        <button class="batch-send-panel__btn batch-send-panel__btn--secondary" @onclick="Cancel">
+                            Cancel
+                        </button>
+                        <button class="batch-send-panel__btn batch-send-panel__btn--primary" @onclick="ParseAndValidate"
+                                disabled="@string.IsNullOrWhiteSpace(_jsonInput)" data-testid="batch-send-validate-btn">
+                            Validate &amp; Preview
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+@code {
+    [Parameter] public IServiceBusClient? Client { get; set; }
+    [Parameter] public string? DefaultEntityPath { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback<BatchOperationResult> OnCompleted { get; set; }
+
+    private string _jsonInput = "";
+    private string _targetEntityPath = "";
+    private string? _parseError;
+    private List<BatchSendEntry>? _validatedEntries;
+    private bool _sending;
+    private int _progressDone;
+    private BatchOperationResult? _result;
+
+    private string EffectiveTargetEntity =>
+        string.IsNullOrWhiteSpace(_targetEntityPath) ? (DefaultEntityPath ?? "") : _targetEntityPath.Trim();
+
+    private int ValidCount => _validatedEntries?.Count(e => e.IsValid) ?? 0;
+    private int InvalidCount => _validatedEntries?.Count(e => !e.IsValid) ?? 0;
+
+    private void ParseAndValidate()
+    {
+        _parseError = null;
+        _validatedEntries = null;
+
+        if (string.IsNullOrWhiteSpace(_jsonInput))
+        {
+            _parseError = "Payload is empty.";
+            return;
+        }
+
+        try
+        {
+            var entries = ParseEntries(_jsonInput.Trim());
+            _validatedEntries = entries;
+        }
+        catch (JsonException ex)
+        {
+            _parseError = $"Invalid JSON: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _parseError = ex.Message;
+        }
+    }
+
+    private static List<BatchSendEntry> ParseEntries(string json)
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            AllowTrailingCommas = true
+        };
+
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Expected a JSON array at the root.");
+
+        var entries = new List<BatchSendEntry>();
+        var index = 0;
+        foreach (var element in doc.RootElement.EnumerateArray())
+        {
+            index++;
+            var entry = new BatchSendEntry();
+
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                entry.ValidationError = $"Entry {index}: expected an object, got {element.ValueKind}.";
+                entries.Add(entry);
+                continue;
+            }
+
+            if (element.TryGetProperty("messageId", out var msgId) && msgId.ValueKind == JsonValueKind.String)
+                entry.MessageId = msgId.GetString() ?? entry.MessageId;
+
+            if (element.TryGetProperty("correlationId", out var corrId) && corrId.ValueKind == JsonValueKind.String)
+                entry.CorrelationId = corrId.GetString();
+
+            if (element.TryGetProperty("subject", out var subject) && subject.ValueKind == JsonValueKind.String)
+                entry.Subject = subject.GetString();
+
+            if (element.TryGetProperty("contentType", out var ct) && ct.ValueKind == JsonValueKind.String)
+                entry.ContentType = ct.GetString();
+
+            if (element.TryGetProperty("body", out var body))
+            {
+                entry.Body = body.ValueKind == JsonValueKind.String
+                    ? body.GetString() ?? string.Empty
+                    : body.GetRawText();
+            }
+            else
+            {
+                entry.ValidationError = $"Entry {index}: 'body' is required.";
+                entries.Add(entry);
+                continue;
+            }
+
+            if (element.TryGetProperty("applicationProperties", out var props) && props.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in props.EnumerateObject())
+                {
+                    entry.ApplicationProperties[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
+                        ? prop.Value.GetString() ?? ""
+                        : prop.Value.GetRawText();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.MessageId))
+                entry.MessageId = Guid.NewGuid().ToString();
+
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+
+    private async Task SendAsync()
+    {
+        if (Client is null || _validatedEntries is null) return;
+
+        _sending = true;
+        _progressDone = 0;
+        var result = new BatchOperationResult();
+        var validEntries = _validatedEntries.Where(e => e.IsValid).ToList();
+        result.Skipped = _validatedEntries.Count - validEntries.Count;
+
+        var chunks = validEntries.Chunk(10).ToList();
+        foreach (var chunk in chunks)
+        {
+            try
+            {
+                var messages = chunk.Select(e => new SbMessage
+                {
+                    MessageId = e.MessageId,
+                    CorrelationId = e.CorrelationId,
+                    Subject = e.Subject,
+                    ContentType = e.ContentType,
+                    Body = e.Body,
+                    ApplicationProperties = e.ApplicationProperties.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => (object)kvp.Value)
+                }).ToList();
+
+                await Client.SendBatchAsync(EffectiveTargetEntity, messages);
+                result.Succeeded += chunk.Length;
+            }
+            catch (Exception ex)
+            {
+                result.Failed += chunk.Length;
+                result.Errors.Add(new BatchOperationItemError
+                {
+                    MessageId = $"chunk of {chunk.Length}",
+                    Reason = ex.Message.Length > 120 ? ex.Message[..120] + "…" : ex.Message
+                });
+            }
+            _progressDone += chunk.Length;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        _sending = false;
+        _result = result;
+        _validatedEntries = null;
+        await InvokeAsync(StateHasChanged);
+        await OnCompleted.InvokeAsync(result);
+    }
+
+    private async Task Cancel()
+    {
+        Reset();
+        await OnCancel.InvokeAsync();
+    }
+
+    private void Reset()
+    {
+        _jsonInput = "";
+        _targetEntityPath = "";
+        _parseError = null;
+        _validatedEntries = null;
+        _sending = false;
+        _progressDone = 0;
+        _result = null;
+    }
+
+    private static string Truncate(string? s, int maxLen)
+    {
+        if (s is null) return "-";
+        return s.Length > maxLen ? s[..maxLen] + "…" : s;
+    }
+}

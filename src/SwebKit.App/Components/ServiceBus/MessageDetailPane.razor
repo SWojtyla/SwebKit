@@ -84,6 +84,22 @@ else
                         <PropRow Label="EnqueuedAt" Value="@Message.EnqueuedAt.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")" />
                         <PropRow Label="SequenceNumber" Value="@(Message.SequenceNumber?.ToString() ?? "-")" />
                         <PropRow Label="SessionId" Value="@(Message.SessionId ?? "-")" />
+                        @if (!string.IsNullOrWhiteSpace(Message.SessionId) && OnFilterBySession.HasDelegate)
+                        {
+                            <div class="mdp-session-filter-cta">
+                                <button class="mdp-btn" data-testid="filter-by-session-btn"
+                                        @onclick="() => OnFilterBySession.InvokeAsync(Message.SessionId)"
+                                        title="Filter the message list to only messages with this session ID">
+                                    Filter list to this session
+                                </button>
+                            </div>
+                        }
+                        <PropRow Label="PartitionKey" Value="@(Message.SystemProperties.PartitionKey ?? "-")" />
+                        <PropRow Label="ExpiresAt" Value="@ExpiryDisplay(Message)" />
+                        @if (Message.SystemProperties.LockedUntil.HasValue)
+                        {
+                            <PropRow Label="LockedUntil" Value="@Message.SystemProperties.LockedUntil.Value.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")" />
+                        }
                     </div>
                 </FluentTab>
                 @if (Message.DeadLetterReason is not null)
@@ -91,17 +107,46 @@ else
                     <FluentTab Label="DLQ Info">
                         <div class="mdp-tab-pane">
                             <div class="mdp-dlq-callout">
-                                <div class="mdp-dlq-reason">Reason:
-                                    @Message.DeadLetterReason</div>
-                                    @if (!string.IsNullOrEmpty(Message.DeadLetterErrorDescription))
+                                <div class="mdp-dlq-reason">Reason: @Message.DeadLetterReason</div>
+                                @if (!string.IsNullOrEmpty(Message.DeadLetterErrorDescription))
+                                {
+                                    <div class="mdp-dlq-desc">@Message.DeadLetterErrorDescription</div>
+                                }
+                                <div class="mdp-dlq-meta">
+                                    <span>Delivery count: @Message.DeliveryCount</span>
+                                    @if (Message.SystemProperties.ExpiresAt.HasValue)
                                     {
-                                        <div class="mdp-dlq-desc">@Message.DeadLetterErrorDescription
-                                        </div>
+                                        <span>· Expires: @Message.SystemProperties.ExpiresAt.Value.ToString("yyyy-MM-dd HH:mm:ss zzz")</span>
                                     }
                                 </div>
                             </div>
-                        </FluentTab>
-                    }
+                        </div>
+                    </FluentTab>
+                }
+                <FluentTab Label="Trace Pivot" data-testid="trace-pivot-tab">
+                    <div class="mdp-tab-pane mdp-tab-pane--trace">
+                        <div class="mdp-trace-intro">
+                            Trace pivots use explicit identifiers only. Each pivot shows which identifier was used and why it is a reasonable signal, not a guaranteed causal link.
+                        </div>
+                        @foreach (var pivot in BuildTracePivots(Message))
+                        {
+                            <div class="mdp-trace-pivot" data-testid="trace-pivot-row">
+                                <span class="mdp-trace-pivot-key">@pivot.Label</span>
+                                <span class="mdp-trace-pivot-value">@pivot.Value</span>
+                                <span class="mdp-trace-pivot-reason">@pivot.Reason</span>
+                                <button class="mdp-btn"
+                                        @onclick="() => InvestigateWithPivot(pivot)"
+                                        title="Open this pivot in Incident Timeline">
+                                    Investigate
+                                </button>
+                            </div>
+                        }
+                        @if (!BuildTracePivots(Message).Any())
+                        {
+                            <span class="mdp-empty">No explicit trace identifiers found on this message.</span>
+                        }
+                    </div>
+                </FluentTab>
                 </FluentTabs>
             </div>
         }
@@ -132,8 +177,64 @@ else
     [Parameter] public EventCallback<SbMessage> OnEdit { get; set; }
     [Parameter] public EventCallback<SbMessage> OnReplay { get; set; }
     [Parameter] public EventCallback<SbMessage> OnSchedule { get; set; }
+    [Parameter] public EventCallback<string> OnFilterBySession { get; set; }
 
     private string? _copyFeedback;
+
+    private sealed record TracePivot(string Label, string Value, string Reason, string? OperationId, string? CorrelationId);
+
+    private static readonly IReadOnlyList<string> KnownTraceAppPropertyKeys =
+    [
+        "operation_Id", "operationId", "traceparent", "traceId", "trace_id",
+        "x-correlation-id", "correlationId", "correlation_id"
+    ];
+
+    private static IReadOnlyList<TracePivot> BuildTracePivots(SbMessage message)
+    {
+        var pivots = new List<TracePivot>();
+
+        if (!string.IsNullOrWhiteSpace(message.CorrelationId))
+        {
+            pivots.Add(new TracePivot(
+                "CorrelationId",
+                message.CorrelationId,
+                "Standard Service Bus correlation identifier. Useful for grouping related messages across a workflow.",
+                null,
+                message.CorrelationId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(message.SessionId))
+        {
+            pivots.Add(new TracePivot(
+                "SessionId",
+                message.SessionId,
+                "Session identifier. Groups all messages in this session for ordered or stateful processing.",
+                null,
+                null));
+        }
+
+        foreach (var key in KnownTraceAppPropertyKeys)
+        {
+            if (message.ApplicationProperties.TryGetValue(key, out var rawValue))
+            {
+                var value = rawValue?.ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    var isOperationId = key.Contains("operation", StringComparison.OrdinalIgnoreCase)
+                                     || key.Equals("traceparent", StringComparison.OrdinalIgnoreCase)
+                                     || key.Contains("trace", StringComparison.OrdinalIgnoreCase);
+                    pivots.Add(new TracePivot(
+                        key,
+                        value,
+                        $"Application property '{key}' is a known distributed tracing identifier.",
+                        isOperationId ? value : null,
+                        null));
+                }
+            }
+        }
+
+        return pivots;
+    }
 
     private void Investigate()
     {
@@ -150,6 +251,38 @@ else
                 CorrelationId = Message.CorrelationId
             }
         });
+    }
+
+    private void InvestigateWithPivot(TracePivot pivot)
+    {
+        if (Message is null) return;
+        InvestigationLauncher.Launch(new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.ServiceBus,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = TimeRange.Last24Hours,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                EntityPath = EntityPath,
+                MessageId = Message.MessageId,
+                CorrelationId = pivot.CorrelationId ?? pivot.Value,
+                OperationId = pivot.OperationId
+            }
+        });
+    }
+
+    private static string ExpiryDisplay(SbMessage message)
+    {
+        var expiresAt = message.SystemProperties.ExpiresAt;
+        if (!expiresAt.HasValue) return "-";
+        var remaining = expiresAt.Value - DateTimeOffset.UtcNow;
+        var formatted = expiresAt.Value.ToString("yyyy-MM-dd HH:mm:ss zzz");
+        if (remaining <= TimeSpan.Zero) return $"{formatted} (expired)";
+        if (remaining.TotalHours >= 1)
+            return $"{formatted} ({(int)remaining.TotalHours}h {remaining.Minutes}m remaining)";
+        if (remaining.TotalMinutes >= 1)
+            return $"{formatted} ({(int)remaining.TotalMinutes}m {remaining.Seconds}s remaining)";
+        return $"{formatted} ({(int)remaining.TotalSeconds}s remaining)";
     }
     private CancellationTokenSource? _feedbackCts;
     private bool _showSaveTemplate;
