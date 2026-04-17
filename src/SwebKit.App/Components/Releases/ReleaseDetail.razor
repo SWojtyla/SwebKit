@@ -2,6 +2,7 @@
 @inject IAksClientBootstrapper AksBootstrapper
 @inject AppStateService AppState
 @inject RuntimeDriftService DriftService
+@inject DeploymentValidationService ValidationService
 
 <div class="release-detail">
     @if (Release is null)
@@ -89,6 +90,7 @@
                                     <th class="release-matrix__header release-matrix__header--component">Component</th>
                                     <th class="release-matrix__header release-matrix__header--tag">Tag</th>
                                     <th class="release-matrix__header release-matrix__header--drift">Runtime</th>
+                                    <th class="release-matrix__header release-matrix__header--validation">Validation</th>
                                     @foreach (var env in _discoveredEnvironments)
                                     {
                                         <th class="release-matrix__header release-matrix__header--environment">@env</th>
@@ -150,6 +152,43 @@
                                                       title="Set a runtime binding in Manage Scope to enable drift detection.">Not set</span>
                                             }
                                         </td>
+                                        <td>
+                                            @{
+                                                var isValidating = _validating.GetValueOrDefault(comp.ComponentName);
+                                                var latestValidation = _latestValidation.GetValueOrDefault(comp.ComponentName);
+                                            }
+                                            @if (isValidating)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">…</span>
+                                            }
+                                            else if (latestValidation is not null)
+                                            {
+                                                <span class="release-validation-badge @ValidationCssClass(latestValidation.State)"
+                                                      title="@ValidationTooltip(latestValidation)">
+                                                    @ValidationLabel(latestValidation.State)
+                                                </span>
+                                                @if (!IsDemoOnly)
+                                                {
+                                                    <button class="release-validation-revalidate" title="Re-validate"
+                                                            @onclick="@(() => ValidateComponentAsync(comp))">↺</button>
+                                                }
+                                                <button class="release-validation-history-toggle" title="Show validation history"
+                                                        @onclick="@(() => ToggleValidationHistory(comp.ComponentName))">
+                                                    @(_validationHistoryComponent == comp.ComponentName ? "▲" : "▼")
+                                                </button>
+                                            }
+                                            else if (!IsDemoOnly && comp.RuntimeBinding is not null
+                                                && !string.IsNullOrWhiteSpace(comp.RuntimeBinding.Namespace)
+                                                && !string.IsNullOrWhiteSpace(comp.RuntimeBinding.WorkloadName))
+                                            {
+                                                <button class="release-validation-run-btn"
+                                                        @onclick="@(() => ValidateComponentAsync(comp))">Validate</button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">—</span>
+                                            }
+                                        </td>
                                         @foreach (var env in _discoveredEnvironments)
                                         {
                                             var cell = compData?.GetValueOrDefault(env);
@@ -175,6 +214,43 @@
                                                 <FluentIcon Value="@icon" Width="14px" />
                                             </span>
                                         </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @* ── Validation history panel ── *@
+                @if (_validationHistoryComponent is not null && _validationHistory.Count > 0)
+                {
+                    <div class="pipeline-section release-detail__validation-history">
+                        <h4 class="pipeline-section-title">
+                            Validation history — @_validationHistoryComponent
+                        </h4>
+                        <table class="release-validation-history-table">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Result</th>
+                                    <th>Target</th>
+                                    <th>Observed</th>
+                                    <th>Source</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in _validationHistory)
+                                {
+                                    <tr>
+                                        <td class="text-muted text-sm">@v.ValidatedAt.ToLocalTime().ToString("MMM d HH:mm")</td>
+                                        <td><span
+                                            class="release-validation-badge @ValidationCssClass(v.State)">@ValidationLabel(v.State)</span>
+                                        </td>
+                                        <td class="text-sm">@(v.TargetTag ?? "—")</td>
+                                        <td class="text-sm">@(v.ObservedTag ?? "—")</td>
+                                        <td class="text-muted text-sm">@(v.ObservedSource ?? "—")</td>
+                                        <td class="text-muted text-sm">@(v.Note ?? "—")</td>
                                     </tr>
                                 }
                             </tbody>
@@ -215,6 +291,12 @@
     private Dictionary<string, string> _runNames = new();
     private Dictionary<string, RuntimeDriftResult> _driftResults = new();
 
+    // Wave 3 — validation state
+    private Dictionary<string, bool> _validating = new();
+    private Dictionary<string, DeploymentValidationSnapshot?> _latestValidation = new();
+    private string? _validationHistoryComponent;
+    private List<DeploymentValidationSnapshot> _validationHistory = [];
+
     public record CellData(string State, string Result, string DisplayText, string CssClass, string? WebUrl);
 
     private ReleaseRecord? _loadedRelease;
@@ -235,6 +317,9 @@
         _boardData.Clear();
         _runNames.Clear();
         _driftResults.Clear();
+        _latestValidation.Clear();
+        _validationHistoryComponent = null;
+        _validationHistory = [];
         _discoveredEnvironments = [];
 
         try
@@ -306,8 +391,22 @@
         catch (Exception ex) { _errorMessage = ex.Message; }
         finally { _isLoading = false; }
 
+        // Load persisted validation snapshots so history is visible immediately.
+        LoadPersistedValidationSnapshots();
+
         // Load drift lazily so the board shows quickly even if AKS is slow.
         await LoadDriftAsync();
+    }
+
+    private void LoadPersistedValidationSnapshots()
+    {
+        if (Release is null) return;
+        foreach (var comp in _scopedComponents)
+        {
+            var latest = ReleaseRepo.GetValidationSnapshots(Release.Id, comp.ComponentName)
+                .FirstOrDefault(); // already ordered newest-first
+            _latestValidation[comp.ComponentName] = latest;
+        }
     }
 
     private async Task LoadDriftAsync()
@@ -421,6 +520,107 @@
         RuntimeDriftState.Unknown =>
             drift.Note ?? "Drift state could not be determined.",
         _ => drift.Note ?? "No runtime binding configured."
+    };
+
+    // ── Validation helpers ────────────────────────────────────────────────────
+
+    private async Task ValidateComponentAsync(ComponentScope comp)
+    {
+        if (Release is null) return;
+        _validating[comp.ComponentName] = true;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        DeploymentValidationSnapshot snapshot;
+        try
+        {
+            var bootstrapResult = await AksBootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+                ClientOverride: null,
+                UseDemoData: AppState.UseDemoData,
+                Config: AppState.Config.AksConfig,
+                RequestedContext: null,
+                RequestedNamespace: null));
+
+            if (bootstrapResult.Client is not null)
+            {
+                snapshot = await ValidationService.ValidateAsync(comp, bootstrapResult.Client);
+            }
+            else
+            {
+                snapshot = new DeploymentValidationSnapshot
+                {
+                    ComponentName = comp.ComponentName,
+                    State = DeploymentValidationState.Partial,
+                    TargetTag = comp.TargetTag,
+                    AksQueried = false,
+                    Note = "AKS not configured."
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            snapshot = new DeploymentValidationSnapshot
+            {
+                ComponentName = comp.ComponentName,
+                State = DeploymentValidationState.Failed,
+                TargetTag = comp.TargetTag,
+                AksQueried = true,
+                Note = $"Validation failed: {ex.Message}"
+            };
+        }
+
+        snapshot.ReleaseId = Release.Id;
+        await ReleaseRepo.AddValidationSnapshotAsync(snapshot);
+        _latestValidation[comp.ComponentName] = snapshot;
+        _validating[comp.ComponentName] = false;
+
+        // Refresh history panel if it is open for this component.
+        if (_validationHistoryComponent == comp.ComponentName)
+            _validationHistory = [.. ReleaseRepo.GetValidationSnapshots(Release.Id, comp.ComponentName)];
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void ToggleValidationHistory(string componentName)
+    {
+        if (_validationHistoryComponent == componentName)
+        {
+            _validationHistoryComponent = null;
+            _validationHistory = [];
+        }
+        else
+        {
+            _validationHistoryComponent = componentName;
+            _validationHistory = Release is null ? [] :
+                [.. ReleaseRepo.GetValidationSnapshots(Release.Id, componentName)];
+        }
+        StateHasChanged();
+    }
+
+    private static string ValidationCssClass(DeploymentValidationState state) => state switch
+    {
+        DeploymentValidationState.Passed => "release-validation-badge--passed",
+        DeploymentValidationState.Drifted => "release-validation-badge--drifted",
+        DeploymentValidationState.Partial => "release-validation-badge--partial",
+        _ => "release-validation-badge--failed"
+    };
+
+    private static string ValidationLabel(DeploymentValidationState state) => state switch
+    {
+        DeploymentValidationState.Passed => "Passed",
+        DeploymentValidationState.Drifted => "Drifted",
+        DeploymentValidationState.Partial => "Partial",
+        _ => "Failed"
+    };
+
+    private static string ValidationTooltip(DeploymentValidationSnapshot v) => v.State switch
+    {
+        DeploymentValidationState.Passed =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — target {v.TargetTag} matches runtime {v.ObservedTag}",
+        DeploymentValidationState.Drifted =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — target {v.TargetTag} ≠ runtime {v.ObservedTag}",
+        DeploymentValidationState.Partial =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — partial: {v.Note}",
+        _ => $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — failed: {v.Note}"
     };
 
     private (Icon Icon, string Tooltip) ComponentReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)

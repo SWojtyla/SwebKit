@@ -10,9 +10,11 @@ public class ReleaseRepository
 
     private List<ReleaseRecord> _releases = [];
     private List<DeploymentSnapshot> _snapshots = [];
+    private List<DeploymentValidationSnapshot> _validationSnapshots = [];
 
     public IReadOnlyList<ReleaseRecord> AllReleases => _releases;
     public IReadOnlyList<DeploymentSnapshot> AllSnapshots => _snapshots;
+    public IReadOnlyList<DeploymentValidationSnapshot> AllValidationSnapshots => _validationSnapshots;
 
     public async Task LoadAsync()
     {
@@ -25,6 +27,7 @@ public class ReleaseRepository
             var data = loadResult.Value;
             _releases = data?.Releases ?? [];
             _snapshots = data?.Snapshots ?? [];
+            _validationSnapshots = data?.ValidationSnapshots ?? [];
         }
         catch
         {
@@ -36,7 +39,7 @@ public class ReleaseRepository
     public async Task SaveAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        var data = new ReleaseStoreData { Releases = _releases, Snapshots = _snapshots };
+        var data = new ReleaseStoreData { Releases = _releases, Snapshots = _snapshots, ValidationSnapshots = _validationSnapshots };
         var json = JsonSerializer.Serialize(data, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.ReleasesJson, json);
     }
@@ -58,6 +61,7 @@ public class ReleaseRepository
     {
         _releases.RemoveAll(r => r.Id == id);
         _snapshots.RemoveAll(s => s.ReleaseId == id);
+        _validationSnapshots.RemoveAll(v => v.ReleaseId == id);
         await SaveAsync();
     }
 
@@ -73,10 +77,29 @@ public class ReleaseRepository
     public IReadOnlyList<DeploymentSnapshot> GetSnapshots(Guid releaseId) =>
         _snapshots.Where(s => s.ReleaseId == releaseId).ToList();
 
+    public async Task AddValidationSnapshotAsync(DeploymentValidationSnapshot snapshot)
+    {
+        _validationSnapshots.Add(snapshot);
+        await SaveAsync();
+    }
+
+    /// <summary>
+    /// Returns persisted validation snapshots for a release, optionally filtered to one component,
+    /// ordered newest-first.
+    /// </summary>
+    public IReadOnlyList<DeploymentValidationSnapshot> GetValidationSnapshots(
+        Guid releaseId, string? componentName = null) =>
+        _validationSnapshots
+            .Where(v => v.ReleaseId == releaseId
+                && (componentName is null || v.ComponentName == componentName))
+            .OrderByDescending(v => v.ValidatedAt)
+            .ToList();
+
     private class ReleaseStoreData
     {
         public List<ReleaseRecord> Releases { get; set; } = [];
         public List<DeploymentSnapshot> Snapshots { get; set; } = [];
+        public List<DeploymentValidationSnapshot> ValidationSnapshots { get; set; } = [];
     }
 
     private static ReleaseStoreData? DeserializeStoreData(string json) =>

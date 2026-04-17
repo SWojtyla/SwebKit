@@ -116,6 +116,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ApprovalAgingPolicy>();
         builder.Services.AddSingleton<PipelineFailureClassifier>();
         builder.Services.AddSingleton<RuntimeDriftService>();
+        builder.Services.AddSingleton<DeploymentValidationService>();
 
         // Connection warmup
         builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();

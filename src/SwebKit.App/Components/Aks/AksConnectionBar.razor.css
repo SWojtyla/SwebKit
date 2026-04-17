@@ -99,7 +99,7 @@
 /* ── Namespace picker (searchable custom dropdown) ── */
 .aks-ns-picker {
     position: relative;
-    z-index: 1;
+    z-index: var(--z-dropdown); /* must exceed backdrop (--z-dropdown - 1) to receive clicks */
 }
 
 .aks-ns-search {

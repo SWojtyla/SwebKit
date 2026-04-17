@@ -74,3 +74,21 @@ public enum ReleaseStatus
     InProgress,
     Completed
 }
+
+/// <summary>
+/// A persisted record of a manual validation run against AKS for one release component.
+/// Additive — existing release data loads fine when this field is absent.
+/// </summary>
+public class DeploymentValidationSnapshot
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ReleaseId { get; set; }
+    public required string ComponentName { get; set; }
+    public DateTimeOffset ValidatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DeploymentValidationState State { get; set; }
+    public string? TargetTag { get; set; }
+    public string? ObservedTag { get; set; }
+    public string? ObservedSource { get; set; }
+    public bool AksQueried { get; set; }
+    public string? Note { get; set; }
+}

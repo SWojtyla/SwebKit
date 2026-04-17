@@ -208,8 +208,8 @@
                         <span class="aks-kbd-hint"><kbd>n</kbd> network</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
-                                                                                "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
+                                                                                                    "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -854,6 +854,7 @@ OnCtxRestartDeployment();
 
         _lastBootstrapSignature = signature;
         SyncFromEnvironment();
+        IsLoading = true; // show loading shell on the initial render, before async bootstrap runs
         // Fire-and-forget so the UI renders immediately with loading state
         _ = BootstrapAndLoadAsync(ActiveContext, CurrentNamespace);
     }

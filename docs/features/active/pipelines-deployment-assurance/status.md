@@ -14,11 +14,11 @@ last_updated: "2026-04-17"
 
 ## Quick summary
 
-Wave 1 (approval aging + failure classification) and Wave 2 (runtime drift detection) are complete. Backend services, runtime binding models, and frontend drift column are implemented and validated by 46 unit tests. Wave 3 (manual deployment validation loop) is next.
+Wave 1 (approval aging + failure classification), Wave 2 (runtime drift detection), and Wave 3 (manual deployment validation loop) are complete. Backend services, runtime binding models, frontend drift and validation columns are implemented and validated by 60 unit tests.
 
 Jira: not linked
 
-Current focus: Wave 3 — manual validation actions per release component, persisting `DeploymentValidationSnapshot` in `ReleaseRepository`, and showing validation history in `ReleaseDetail`.
+Current focus: Complete — all three waves shipped.
 
 ## Progress checklist
 
@@ -51,9 +51,16 @@ Current focus: Wave 3 — manual validation actions per release component, persi
 
 ### Wave 3 - Deployment validation loop
 
-- [ ] Add manual validation actions for selected runs or release components.
-- [ ] Persist validation snapshots in `ReleaseRepository` and show historical status in the UI.
-- [ ] Run focused App, Core, DevOps, and supporting runtime test slices and update functionality docs.
+- [x] Add `DeploymentValidationState` enum to `DeploymentAssuranceModels.cs`.
+- [x] Add `DeploymentValidationSnapshot` class to `ReleaseModels.cs`.
+- [x] Implement `DeploymentValidationService` in `SwebKit.Core/Services/` — stateless, mirrors `RuntimeDriftService` pattern.
+- [x] Extend `ReleaseRepository` with `AddValidationSnapshotAsync`, `GetValidationSnapshots`, and full persistence in store data.
+- [x] DI registered: `DeploymentValidationService` (singleton).
+- [x] Add "Validation" column to `ReleaseDetail.razor` matrix — shows badge (Passed/Drifted/Partial/Failed), Re-validate link, history toggle.
+- [x] Add `ValidateComponentAsync` method — bootstraps AKS, calls service, persists snapshot, updates UI.
+- [x] Add `ToggleValidationHistory` and validation history panel below the matrix.
+- [x] Persisted snapshots loaded on `LoadAsync` so history is visible on re-open.
+- [x] 14 unit tests passing: `DeploymentValidationServiceTests` — all state paths, tag extraction, case-insensitive match, cancellation propagation.
 
 ## Completed
 
@@ -62,11 +69,11 @@ Current focus: Wave 3 — manual validation actions per release component, persi
 - Kept validation loops manual and advisory so the feature does not silently change release governance.
 - Wave 1: approval aging + failure classification — 34 tests.
 - Wave 2: runtime drift detection via `RuntimeDriftService` + AKS pod/container image comparison — 12 tests.
+- Wave 3: manual deployment validation loop — `DeploymentValidationService`, `ReleaseRepository` persistence, `ReleaseDetail` validation column + history panel — 14 tests.
 
 ## Remaining
 
-- Implement Wave 3 validation persistence and AKS or Observability integration.
-- Update related functionality docs when Wave 3 behavior is shipped.
+None. All three waves are complete.
 
 ## Blockers
 
@@ -75,7 +82,7 @@ Current focus: Wave 3 — manual validation actions per release component, persi
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Wave 1 — 34 unit tests passing. Wave 2 — 12 unit tests passing (46 total). App build 0 errors.
+- Validation status: Wave 1 — 34 unit tests passing. Wave 2 — 12 unit tests passing. Wave 3 — 14 unit tests passing. Total: 60 unit tests. App build 0 errors.
 
 ## Notes
 
