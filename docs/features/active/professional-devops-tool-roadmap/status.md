@@ -14,11 +14,14 @@ last_updated: "2026-04-17"
 
 ## Quick summary
 
-Waves 1, 2, and 3 are archived. Wave 4 `incident-investigation-workflows` is now the active implementation target, building on the already-reviewed `incident-timeline-workbench` base.
+Waves 1, 2, and 3 are archived. Wave 4 `incident-investigation-workflows` is now in active
+implementation. Contracts, launcher, and landing banner were already in place. Source-page
+drill-through (ObservabilityPage, ServiceBusPage, PipelinesPage) has been implemented and
+tested. Remaining work is manual validation on a real environment.
 
 Jira: not linked
 
-Current focus: Wave 4 — lock the `IncidentInvestigationSeed` contract, investigation launch mechanism, and landing-banner behavior before source-page drill-through work begins.
+Current focus: Wave 4 — manual environment validation of the drill-through seed flow from each source page.
 
 ## Progress checklist
 
@@ -34,6 +37,9 @@ Current focus: Wave 4 — lock the `IncidentInvestigationSeed` contract, investi
 - [x] Close out Wave 2 and point downstream docs at the archive artifact
 - [x] Advance Wave 3 from planning into implementation and targeted validation
 - [x] Close out Wave 3 and point downstream docs at the archive artifact
+- [x] Create and populate Wave 4 `incident-investigation-workflows` feature folder
+- [x] Implement Wave 4 source-page drill-through (ObservabilityPage, ServiceBusPage, PipelinesPage)
+- [ ] Close out Wave 4 after manual environment validation
 - [ ] Review wave boundaries with maintainers
 - [ ] Confirm the default wave-5A/5B/5C ordering with maintainers
 - [x] Keep downstream status references current as implementation begins
@@ -49,6 +55,7 @@ Current focus: Wave 4 — lock the `IncidentInvestigationSeed` contract, investi
 - Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
 - Advanced Wave 3 from planning into implementation by landing the first readiness-report contract plus dashboard/settings adoption slice.
 - Archived Wave 3 after implementation, focused automated validation (Core 6/6, App 7/7), and user-confirmed manual UI validation (2026-04-17).
+- Implemented Wave 4 source-page drill-through: added "Investigate" action to ObservabilityPage, ServiceBusPage, and PipelinesPage with targeted tests (6/6 passing).
 
 ## Remaining
 

@@ -7,6 +7,7 @@
 @inject ReleaseRepository ReleaseRepo
 @inject IConnectionStateService ConnectionState
 @inject CommandRegistry Commands
+@inject IncidentInvestigationLauncher InvestigationLauncher
 @implements IDisposable
 
 <CascadingValue Value="ActiveClient" Name="DevOpsClient">
@@ -35,6 +36,11 @@
                             <button class="pipelines-scope-change-btn" @onclick="@(() => _showProjectPicker = true)">
                                 Change scope
                             </button>
+                        }
+                        @if (_selectedPipeline is not null && _selectedProject is not null)
+                        {
+                            <button class="page-header-action-btn" data-testid="pipelines-investigate-btn"
+                                    @onclick="LaunchInvestigationFromPipelines">Investigate</button>
                         }
                         <a class="page-header-action-btn" href="/settings?section=devops">Settings</a>
                     </Actions>
@@ -415,5 +421,26 @@
         Events.Unsubscribe<RefreshRequestedEvent>(OnRefresh);
         foreach (var id in new[] { "releases-refresh", "releases-new", "releases-edit", "releases-approvals" })
             Commands.Unregister(id);
+    }
+
+    private void LaunchInvestigationFromPipelines()
+    {
+        if (_selectedPipeline is null || _selectedProject is null) return;
+
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Pipelines,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = TimeRange.LastHour,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                PipelineId = _selectedPipeline.Id,
+                ProjectName = _selectedProject.Name,
+                RunDisplayName = _selectedPipeline.Name,
+            },
+            SuggestedSources = [IncidentTimelineSource.Releases],
+        };
+
+        InvestigationLauncher.Launch(seed);
     }
 }

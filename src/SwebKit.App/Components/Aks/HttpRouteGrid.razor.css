@@ -33,3 +33,21 @@
 .aks-httproute-chip--backend {
     background: rgba(26, 115, 232, 0.1);
 }
+
+/* ── Host URL buttons — match IngressGrid pill style ── */
+.aks-ingress-url-btn {
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+    border-radius: 999px;
+    color: var(--color-accent);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    padding: 2px 8px;
+    text-align: left;
+    line-height: 1.4;
+    max-width: 100%;
+}
+
+.aks-ingress-url-btn:hover {
+    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+}

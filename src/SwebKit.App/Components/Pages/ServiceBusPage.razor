@@ -13,6 +13,7 @@
 @inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
 @inject IServiceBusWarmupCache ServiceBusWarmupCache
 @inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
 
 <div class="service-bus-page">
     <div class="page-shell-header">
@@ -26,6 +27,11 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUpload())" Width="14px" />
                         Batch Send
                     </FluentButton>
+                }
+                @if (_activeTab is not null && !_activeTab.IsScheduled)
+                {
+                    <button class="page-header-action-btn" data-testid="sb-investigate-btn"
+                            @onclick="LaunchInvestigationFromServiceBus">Investigate</button>
                 }
             </Actions>
         </RoutePageHeader>
@@ -832,6 +838,28 @@ entityPath;
         Selection.SetSelection("service-bus", null);
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
+    }
+
+    private void LaunchInvestigationFromServiceBus()
+    {
+        if (_activeTab is null || _activeTab.IsScheduled) return;
+
+        var selectedMsg = _activeTab.SelectedMessage;
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.ServiceBus,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = TimeRange.LastHour,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                EntityPath = _activeTab.EntityPath,
+                MessageId = selectedMsg?.MessageId,
+                CorrelationId = selectedMsg?.CorrelationId,
+            },
+            SuggestedSources = [IncidentTimelineSource.ServiceBus],
+        };
+
+        InvestigationLauncher.Launch(seed);
     }
 
     private class SbTab

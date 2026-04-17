@@ -15,6 +15,7 @@
 @inject IJSRuntime JS
 @inject IAppEventBus Events
 @inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
 @implements IDisposable
 
 <div class="obs-page">
@@ -39,6 +40,10 @@
                     <span class="shell-pill shell-pill--warning">Demo mode</span>
                 }
             </Meta>
+            <Actions>
+                <button class="page-header-action-btn" disabled="@(_provider is null)"
+                        @onclick="LaunchInvestigationFromObservability">Investigate</button>
+            </Actions>
         </RoutePageHeader>
     </div>
 
@@ -578,5 +583,24 @@ string.Empty, string.Empty),
         Workspaces.UnregisterRestoreHandler("observability");
         _cts.Cancel();
         _cts.Dispose();
+    }
+
+    private void LaunchInvestigationFromObservability()
+    {
+        if (_selectedResource is null) return;
+
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Observability,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = _range,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                ResourceId = _selectedResource.ResourceId,
+            },
+            SuggestedSources = [IncidentTimelineSource.Observability],
+        };
+
+        InvestigationLauncher.Launch(seed);
     }
 }
