@@ -92,6 +92,11 @@
                                 <div class="pipeline-split__right">
                                     @if (_selectedPipeline is not null && _selectedProject is not null)
                                     {
+                                        <div class="pipeline-detail-back-bar">
+                                            <button class="pipeline-detail-back-btn" @onclick="ClearPipelineSelection">
+                                                ← Overview
+                                            </button>
+                                        </div>
                                         <PipelineDetail Project="_selectedProject" Pipeline="_selectedPipeline" />
                                     }
                                     else
@@ -340,6 +345,12 @@
     {
         _selectedProject = sel.Project;
         _selectedPipeline = sel.Pipeline;
+    }
+
+    private void ClearPipelineSelection()
+    {
+        _selectedPipeline = null;
+        _selectedProject = null;
     }
 
     private void OnReleaseSelected(ReleaseRecord release) => _selectedRelease = release;

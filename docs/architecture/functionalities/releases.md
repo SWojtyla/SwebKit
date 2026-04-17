@@ -16,7 +16,8 @@
   former Release Board). Edit, delete, manage scope, and tag manager are accessible from here.
 - **Global Approvals (Approvals tab)** — all pending pipeline approvals across all ADO projects in
   a single view. Badge count shown on the tab. Inline approve/reject with optional comment; PROD
-  gate requires typing "CONFIRM".
+  gate requires typing "CONFIRM". Approval age and SLA state shown per card: warning at 15 min (prod) or 60 min (non-prod), breached at 45 min (prod) or 4 h (non-prod).
+- **Failure classification** — `PipelineDetail` surfaces a failure-category badge on completed/failed runs to indicate whether a run failed in build/test, an approval gate, deployment, post-deploy health, infra/auth, or agent acquisition.
 - **Pipeline trigger** — inline panel in Pipeline detail. Branch selection, optional template
   parameters, confirmation dialog.
 - **Tag Manager** — accessible from Release detail action bar. Creates annotated git tags per
@@ -131,6 +132,9 @@ Used by `PipelineDetail.razor` to drive the environments table.
 | `SwebKit.Core/Abstractions/IDevOpsClient.cs`                           | Interface                                                     |
 | `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`                    | Immutable live-client creation seam                           |
 | `SwebKit.Core/Models/DevOpsModels.cs`                                  | ADO domain models + `PipelineEnvironmentStatus`               |
+| `SwebKit.Core/Models/DeploymentAssuranceModels.cs`                     | Assurance enums and result records (aging, failure category)  |
+| `SwebKit.Core/Services/ApprovalAgingPolicy.cs`                         | SLA-based aging state for pending approvals                   |
+| `SwebKit.Core/Services/PipelineFailureClassifier.cs`                   | Stage-name heuristic failure category for failed runs         |
 | `SwebKit.Core/Models/ReleaseModels.cs`                                 | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot`       |
 | `SwebKit.Core/Configuration/ReleaseRepository.cs`                      | Local persistence (JSON)                                      |
 | `SwebKit.Core/Services/DemoDevOpsClient.cs`                            | Demo data                                                     |

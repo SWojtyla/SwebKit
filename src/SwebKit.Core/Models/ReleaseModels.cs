@@ -28,6 +28,34 @@ public class ComponentScope
     /// If null, falls back to "last stage" heuristic.
     /// </summary>
     public string? ProductionStageName { get; set; }
+
+    /// <summary>
+    /// Optional: explicit runtime binding used for drift detection.
+    /// When null the drift state is NotConfigured.
+    /// </summary>
+    public RuntimeBinding? RuntimeBinding { get; set; }
+}
+
+/// <summary>
+/// Explicit runtime binding that tells the drift service where to find
+/// the live workload for a given release component.
+/// </summary>
+public class RuntimeBinding
+{
+    /// <summary>Kubernetes namespace that contains the workload.</summary>
+    public string? Namespace { get; set; }
+
+    /// <summary>Deployment or StatefulSet name (pod names are expected to start with this).</summary>
+    public string? WorkloadName { get; set; }
+
+    /// <summary>Workload kind; defaults to Deployment.</summary>
+    public string WorkloadKind { get; set; } = "Deployment";
+
+    /// <summary>
+    /// Optional container name for image-tag comparison.
+    /// When null the first container in the pod is used.
+    /// </summary>
+    public string? ContainerName { get; set; }
 }
 
 public class DeploymentSnapshot

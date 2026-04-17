@@ -112,6 +112,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IIncidentMappingProposalGenerator, IncidentMappingProposalGenerator>();
         builder.Services.AddScoped<IncidentInvestigationLauncher>();
 
+        // Deployment assurance
+        builder.Services.AddSingleton<ApprovalAgingPolicy>();
+        builder.Services.AddSingleton<PipelineFailureClassifier>();
+        builder.Services.AddSingleton<RuntimeDriftService>();
+
         return builder.Build();
     }
 }

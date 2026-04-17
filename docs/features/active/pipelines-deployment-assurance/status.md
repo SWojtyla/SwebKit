@@ -4,21 +4,21 @@
 
 title: "Status - pipelines-deployment-assurance"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
-branch: ""
+branch: "sw/dev/timeline"
 started: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-04-17"
 
 ---
 
 ## Quick summary
 
-Planning is complete for a three-wave deployment assurance expansion of the existing Pipelines/Releases hub. The next useful implementation step is Wave 1: approval aging plus failure classification, because both are additive and unlock better operator triage before runtime drift work starts.
+Wave 1 (approval aging + failure classification) and Wave 2 (runtime drift detection) are complete. Backend services, runtime binding models, and frontend drift column are implemented and validated by 46 unit tests. Wave 3 (manual deployment validation loop) is next.
 
 Jira: not linked
 
-Current focus: establish assurance models that can join ADO run data, local release records, and later runtime validation snapshots without replacing the existing Pipelines/Releases flow.
+Current focus: Wave 3 — manual validation actions per release component, persisting `DeploymentValidationSnapshot` in `ReleaseRepository`, and showing validation history in `ReleaseDetail`.
 
 ## Progress checklist
 
@@ -30,15 +30,24 @@ Current focus: establish assurance models that can join ADO run data, local rele
 
 ### Wave 1 - Approval aging and failure classification
 
-- [ ] Add approval age and SLA-state models.
-- [ ] Add failure classification logic for recent runs and activity entries.
-- [ ] Surface aging and classification in approvals, overview, and pipeline detail views.
+- [x] Add approval age and SLA-state models (`DeploymentAssuranceModels.cs`).
+- [x] Implement `ApprovalAgingPolicy` (prod/non-prod SLA thresholds, `ApprovalAgeResult`).
+- [x] Implement `PipelineFailureClassifier` (stage-name heuristics, `PipelineFailureResult`).
+- [x] Surface aging badges in `ApprovalCenter.razor` (`approval-age-badge--ontime/warning/breached`).
+- [x] Surface failure-category badges in `PipelineDetail.razor` (`failure-category-badge`).
+- [x] DI registered: `ApprovalAgingPolicy` (singleton), `PipelineFailureClassifier` (singleton).
+- [x] 34 unit tests passing: `ApprovalAgingPolicyTests` (12 tests) + `PipelineFailureClassifierTests` (13 tests) + 9 additional sub-cases from boundary and edge coverage.
 
 ### Wave 2 - Drift detection and runtime bindings
 
-- [ ] Extend release component scope with explicit runtime binding metadata.
-- [ ] Add drift-comparison service logic against AKS and supporting Observability evidence.
-- [ ] Surface `Matched`, `Drifted`, `Unknown`, and `Not configured` states in release and pipeline views.
+- [x] Add `RuntimeBinding` record to `ComponentScope` in `ReleaseModels.cs` (Namespace, WorkloadName, WorkloadKind, ContainerName).
+- [x] Add `RuntimeDriftState` enum and `RuntimeDriftResult` record to `DeploymentAssuranceModels.cs`.
+- [x] Implement `RuntimeDriftService` in `SwebKit.Core/Services/` — queries AKS pods and container image tags, compares against target tag.
+- [x] Extend `ComponentScopeEditor.razor` with runtime binding sub-row (namespace / workload-name / container) per in-scope component.
+- [x] Add drift column ("Runtime") to the `ReleaseDetail.razor` matrix with `Matched`, `Drifted`, `Unknown`, `Not set` badges.
+- [x] Drift loads lazily via `IAksClientBootstrapper` after ADO board data; renders `…` spinner while loading.
+- [x] DI registered: `RuntimeDriftService` (singleton).
+- [x] 12 unit tests passing: `RuntimeDriftServiceTests` — covering NotConfigured, Unknown (no pod, no tag, AKS error), Matched (including case-insensitive), Drifted, specific container filter, image-tag extraction, and batch skip-out-of-scope.
 
 ### Wave 3 - Deployment validation loop
 
@@ -51,23 +60,22 @@ Current focus: establish assurance models that can join ADO run data, local rele
 - Reframed the feature as an assurance layer on top of the current Pipelines/Releases experience rather than a separate deployment page.
 - Chosen explicit runtime bindings over name-guessing for drift and validation.
 - Kept validation loops manual and advisory so the feature does not silently change release governance.
+- Wave 1: approval aging + failure classification — 34 tests.
+- Wave 2: runtime drift detection via `RuntimeDriftService` + AKS pod/container image comparison — 12 tests.
 
 ## Remaining
 
-- Implement Wave 1 additive assurance signals in the existing ADO views.
-- Implement Wave 2 runtime binding authoring and drift reporting.
 - Implement Wave 3 validation persistence and AKS or Observability integration.
-- Update related functionality docs when behavior is shipped.
+- Update related functionality docs when Wave 3 behavior is shipped.
 
 ## Blockers
 
 - Jira ticket is not linked (informational).
-- Runtime drift and validation depend on explicit release-component bindings that do not exist today; implementation must add those authoring fields before assurance can move beyond `Unknown`.
 
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: Wave 1 — 34 unit tests passing. Wave 2 — 12 unit tests passing (46 total). App build 0 errors.
 
 ## Notes
 

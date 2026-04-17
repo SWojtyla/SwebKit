@@ -10,7 +10,7 @@ status: "Not started"
 
 ## Goal
 
-Extend the current Redis page so operators can inspect TTL posture, slowlog or hot-key evidence, and Pub/Sub activity in the same workspace they already use for key browsing and health analysis.
+Extend the current Redis page so operators can inspect slowlog or hot-key evidence and Pub/Sub activity in the same workspace they already use for key browsing and health analysis.
 
 ## Impacted areas
 
@@ -22,7 +22,6 @@ Extend the current Redis page so operators can inspect TTL posture, slowlog or h
 - `src/SwebKit.App/Components/Redis/RedisServerInfo.razor`
 - Likely new page-local components:
 - `src/SwebKit.App/Components/Redis/RedisOpsInsightsPanel.razor`
-- `src/SwebKit.App/Components/Redis/RedisTtlForecastPanel.razor`
 - `src/SwebKit.App/Components/Redis/RedisSlowLogPanel.razor`
 - `src/SwebKit.App/Components/Redis/RedisPubSubPanel.razor`
 - Likely impacted tests:
@@ -33,15 +32,12 @@ Extend the current Redis page so operators can inspect TTL posture, slowlog or h
 ## UX notes
 
 - The Redis page should remain one route and one cache-scoped workspace.
-- The new diagnostics should not push key detail off-screen by default. Prefer a consolidated lower-right diagnostics surface with tabs such as `Health`, `TTL`, `Slowlog`, `Pub/Sub`, and `Prefix Memory`.
+- The new diagnostics should not push key detail off-screen by default. Prefer a consolidated lower-right diagnostics surface with tabs such as `Health`, `Slowlog`, `Pub/Sub`, and `Prefix Memory`.
 - Each diagnostics tab should inherit the active cache entry, database, and current scan context automatically.
 - Each diagnostics tab should remain manual-refresh or manual-analyze only.
 
 ### User flows
 
-- TTL posture:
-- Operator scans keys, opens the `TTL` tab, runs analysis, and sees bucket counts plus near-term expiry forecast.
-- Selecting a TTL bucket should filter or drill back into relevant keys without replacing the current key-browse mental model.
 - Slowlog or hot-key:
 - Operator opens the `Slowlog` tab, refreshes the snapshot, and sees the most recent slow commands with grouped signals and likely related keys or prefixes.
 - Clicking a related key should reuse the existing key detail pane rather than opening a second inspector.
@@ -60,32 +56,25 @@ Extend the current Redis page so operators can inspect TTL posture, slowlog or h
 ### Accessibility
 
 - The tab strip must be keyboard reachable and expose readable labels.
-- TTL bucket summaries and severity cards must include text, not color only.
+- Severity cards must include text, not color only.
 - Hot-key findings need plain-language signal explanations that are understandable without hovering a tooltip.
 
 ## API / contract changes
 
 - `RedisPage.razor` should remain an orchestration shell; new projection components should accept already-shaped DTOs from Core models.
-- New UI components should not re-implement TTL bucketing or hot-key scoring logic.
+- New UI components should not re-implement hot-key scoring logic.
 - Existing selection and drill-through behavior (`SelectKeyAsync`, `OpenFindingKeyAsync`) should stay the canonical navigation path into key detail.
 
 ## Tasks
 
-### Wave 1 - TTL posture surface [blazor-expert]
-
-- [ ] Add a consolidated ops-insights panel or tab strip in the existing Redis page layout.
-- [ ] Build the TTL bucket and forecast view on top of the loaded scan context.
-- [ ] Reuse existing health coverage language and make the loaded-scan scope explicit in the tab copy.
-- [ ] Add drill-through from a bucket or forecast slice back to key selection where it improves operator flow.
-
-### Wave 2 - Slowlog and hot-key surface [blazor-expert]
+### Wave 1 - Slowlog and hot-key surface [blazor-expert]
 
 - [ ] Add a slowlog summary view that stays readable at bounded entry counts.
 - [ ] Render hot-key findings with explicit signal provenance and drill-through to key detail or prefix context.
 - [ ] Handle unsupported-command and permission-limited states without page-level error callouts.
 - [ ] Add bUnit coverage for loading, unsupported, empty, and drill-through behavior.
 
-### Wave 3 - Pub/Sub visibility and polish [blazor-expert]
+### Wave 2 - Pub/Sub visibility and polish [blazor-expert]
 
 - [ ] Add Pub/Sub channel and subscriber summaries with manual refresh.
 - [ ] Allow lightweight channel filtering based on the current key prefix or a user-entered pattern.
@@ -105,4 +94,4 @@ Extend the current Redis page so operators can inspect TTL posture, slowlog or h
 
 - Apply `docs/pitfalls/blazor-maui.md` guidance directly: set parameter guards before awaits, dispatch UI updates through `InvokeAsync`, and keep any new folder namespace imports explicit.
 - Avoid adding another always-open vertical panel; the Redis page already has a dense right column.
-- The UI should keep reminding the operator that TTL and hot-key insights describe the loaded scan, not the entire cache, unless later scope adds a deliberate full-analysis mode.
+- The UI should keep reminding the operator that hot-key insights describe the loaded scan, not the entire cache, unless later scope adds a deliberate full-analysis mode.

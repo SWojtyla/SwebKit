@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject INotificationService Notifications
+@inject ApprovalAgingPolicy AgingPolicy
 
 <div class="approval-center">
 
@@ -47,7 +48,8 @@
                             }
                         </div>
                         <div class="approval-card__actions">
-                            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => StartApprove(item))">Approve</FluentButton>
+                            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => StartApprove(item))">Approve
+                            </FluentButton>
                             <FluentButton @onclick="@(() => StartReject(item))">Reject</FluentButton>
                             @if (item.Approval.WebUrl is not null)
                             {
@@ -62,7 +64,16 @@
                             <text> — triggered by @item.Approval.TriggeredBy</text>
                         }
                     </div>
-                    <div class="approval-card__time">@item.Approval.CreatedOn.LocalDateTime.ToString("g")</div>
+                    <div class="approval-card__time">
+                        @if (_ageResults.TryGetValue(item.Approval.Id, out var ageResult))
+                        {
+                            <span class="approval-age-badge approval-age-badge--@ageResult.State.ToString().ToLowerInvariant()"
+                                  data-testid="approval-age-badge">
+                                @FormatAge(ageResult.Age) — @ageResult.State
+                            </span>
+                        }
+                        @item.Approval.CreatedOn.LocalDateTime.ToString("g")
+                    </div>
                 </div>
             }
         </div>
@@ -82,14 +93,16 @@
                     PRODUCTION — This approval will deploy to a production environment
                 </div>
             }
-            <h3 class="approval-dialog__title">@(_isApproving ? "Approve" : "Reject") — @_actionTarget.Approval.PipelineName</h3>
+            <h3 class="approval-dialog__title">@(_isApproving ? "Approve" : "Reject") — @_actionTarget.Approval.PipelineName
+            </h3>
             <p class="approval-dialog__subtitle">
                 @_actionTarget.ProjectName — @(_actionTarget.Approval.EnvironmentName ?? _actionTarget.Approval.StageName)
             </p>
 
             <div class="approval-dialog__field">
                 <label class="form-label">Comment (optional)</label>
-                <textarea class="form-input" @bind="_actionComment" @bind:event="oninput" rows="2" style="resize:vertical;"></textarea>
+                <textarea class="form-input" @bind="_actionComment" @bind:event="oninput" rows="2"
+                          style="resize:vertical;"></textarea>
             </div>
 
             @if (_actionTarget.IsProd)
@@ -107,8 +120,8 @@
 
             <div class="approval-dialog__actions">
                 <button class="approval-btn-cancel" @onclick="CancelAction">Cancel</button>
-                <button class="approval-btn-confirm @(_isApproving ? "approve" : "reject")"
-                        @onclick="ExecuteAction" disabled="@IsActionDisabled">
+                <button class="approval-btn-confirm @(_isApproving ? "approve" : "reject")" @onclick="ExecuteAction"
+                        disabled="@IsActionDisabled">
                     @(_isApproving ? "Approve" : "Reject")
                 </button>
             </div>
@@ -126,6 +139,7 @@
     private string _filterProject = string.Empty;
     private List<string> _projects = [];
     private List<ProjectApproval> _allItems = [];
+    private Dictionary<string, ApprovalAgeResult> _ageResults = [];
 
     // Action state
     private ProjectApproval? _actionTarget;
@@ -168,6 +182,10 @@
             }
 
             _allItems = items.OrderBy(i => i.Approval.CreatedOn).ToList();
+            var now = DateTimeOffset.UtcNow;
+            _ageResults = _allItems.ToDictionary(
+                i => i.Approval.Id,
+                i => AgingPolicy.Evaluate(i.Approval, now));
             await OnCountChanged.InvokeAsync(_allItems.Count);
         }
         catch (Exception ex) { _errorMessage = ex.Message; }
@@ -178,14 +196,27 @@
         }
     }
 
+    private static string FormatAge(TimeSpan age) =>
+        age.TotalHours >= 1
+            ? $"{(int)age.TotalHours}h {age.Minutes}m"
+            : $"{(int)age.TotalMinutes}m";
+
     private static bool IsProdApproval(AdoApproval a)
     {
         var name = ((a.EnvironmentName ?? string.Empty) + " " + (a.StageName ?? string.Empty)).ToLowerInvariant();
         return name.Contains("prd") || name.Contains("prod") || name.Contains("production");
     }
 
-    private void StartApprove(ProjectApproval item) { _actionTarget = item; _isApproving = true; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
-    private void StartReject(ProjectApproval item) { _actionTarget = item; _isApproving = false; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
+    private void StartApprove(ProjectApproval item)
+    {
+        _actionTarget = item; _isApproving = true; _actionComment = "";
+        _typingConfirm = ""; _actionError = null;
+    }
+    private void StartReject(ProjectApproval item)
+    {
+        _actionTarget = item; _isApproving = false; _actionComment = "";
+        _typingConfirm = ""; _actionError = null;
+    }
     private void CancelAction() { _actionTarget = null; _actionComment = ""; _typingConfirm = ""; _actionError = null; }
 
     private async Task ExecuteAction()

@@ -152,6 +152,12 @@
 
 .release-matrix__header--tag {
     min-width: 80px;
+    text-align: center;
+}
+
+.release-matrix__header--drift {
+    min-width: 90px;
+    text-align: center;
 }
 
 .release-matrix__header--environment {
@@ -213,6 +219,37 @@
     color: var(--color-success);
     font-size: var(--font-size-sm);
     font-weight: 600;
+}
+
+/* ── Runtime drift badges ── */
+.release-matrix-drift {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.release-matrix-drift--matched {
+    background: color-mix(in srgb, var(--color-success) 12%, transparent);
+    color: var(--color-success);
+}
+
+.release-matrix-drift--drifted {
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
+    color: var(--color-error);
+}
+
+.release-matrix-drift--unknown {
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    color: var(--color-warning);
+}
+
+.release-matrix-drift--notconfigured {
+    color: var(--color-text-muted);
+    font-style: italic;
 }
 
 .release-matrix__status-link {

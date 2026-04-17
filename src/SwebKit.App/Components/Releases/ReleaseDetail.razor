@@ -1,4 +1,7 @@
 @inject ReleaseRepository ReleaseRepo
+@inject IAksClientBootstrapper AksBootstrapper
+@inject AppStateService AppState
+@inject RuntimeDriftService DriftService
 
 <div class="release-detail">
     @if (Release is null)
@@ -85,6 +88,7 @@
                                 <tr>
                                     <th class="release-matrix__header release-matrix__header--component">Component</th>
                                     <th class="release-matrix__header release-matrix__header--tag">Tag</th>
+                                    <th class="release-matrix__header release-matrix__header--drift">Runtime</th>
                                     @foreach (var env in _discoveredEnvironments)
                                     {
                                         <th class="release-matrix__header release-matrix__header--environment">@env</th>
@@ -120,6 +124,30 @@
                                             else
                                             {
                                                 <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @{
+                                                var drift = _driftResults.GetValueOrDefault(comp.ComponentName);
+                                            }
+                                            @if (_driftLoading)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">…</span>
+                                            }
+                                            else if (drift is not null)
+                                            {
+                                                <span class="release-matrix-drift @DriftCssClass(drift.State)" title="@DriftTooltip(drift)">
+                                                    @DriftLabel(drift.State)
+                                                </span>
+                                            }
+                                            else if (comp.RuntimeBinding is not null)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">—</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="release-matrix-drift release-matrix-drift--notconfigured"
+                                                      title="Set a runtime binding in Manage Scope to enable drift detection.">Not set</span>
                                             }
                                         </td>
                                         @foreach (var env in _discoveredEnvironments)
@@ -179,16 +207,23 @@
     private bool _showTagManager;
     private int _selectedComponentIdx = -1;
     private bool _preventMatrixKey;
+    private bool _driftLoading;
 
     private List<string> _discoveredEnvironments = [];
     private List<ComponentScope> _scopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
     private Dictionary<string, Dictionary<string, CellData>> _boardData = new();
     private Dictionary<string, string> _runNames = new();
+    private Dictionary<string, RuntimeDriftResult> _driftResults = new();
 
     public record CellData(string State, string Result, string DisplayText, string CssClass, string? WebUrl);
 
+    private ReleaseRecord? _loadedRelease;
+
     protected override async Task OnParametersSetAsync()
     {
+        // BL-3: guard before await to prevent double-load on parent re-renders
+        if (ReferenceEquals(_loadedRelease, Release)) return;
+        _loadedRelease = Release;
         if (Release is not null && _scopedComponents.Count > 0)
             await LoadAsync();
     }
@@ -199,6 +234,7 @@
         _errorMessage = null;
         _boardData.Clear();
         _runNames.Clear();
+        _driftResults.Clear();
         _discoveredEnvironments = [];
 
         try
@@ -269,6 +305,70 @@
         }
         catch (Exception ex) { _errorMessage = ex.Message; }
         finally { _isLoading = false; }
+
+        // Load drift lazily so the board shows quickly even if AKS is slow.
+        await LoadDriftAsync();
+    }
+
+    private async Task LoadDriftAsync()
+    {
+        var componentsWithBinding = _scopedComponents
+            .Where(c => c.RuntimeBinding is { } rb
+                && !string.IsNullOrWhiteSpace(rb.Namespace)
+                && !string.IsNullOrWhiteSpace(rb.WorkloadName))
+            .ToList();
+
+        if (componentsWithBinding.Count == 0)
+        {
+            // Mark components without binding immediately so the column renders without spinning.
+            foreach (var comp in _scopedComponents)
+                _driftResults.TryAdd(comp.ComponentName,
+                    new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.NotConfigured,
+                        comp.TargetTag, null, null, "No runtime binding configured."));
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _driftLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var bootstrapResult = await AksBootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+                ClientOverride: null,
+                UseDemoData: AppState.UseDemoData,
+                Config: AppState.Config.AksConfig,
+                RequestedContext: null,
+                RequestedNamespace: null));
+
+            if (bootstrapResult.Client is not null)
+            {
+                var results = await DriftService.GetDriftAsync(_scopedComponents, bootstrapResult.Client);
+                _driftResults.Clear();
+                foreach (var r in results)
+                    _driftResults[r.ComponentName] = r;
+            }
+            else
+            {
+                // AKS not configured — mark all as NotConfigured.
+                foreach (var comp in _scopedComponents)
+                    _driftResults.TryAdd(comp.ComponentName,
+                        new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.NotConfigured,
+                            comp.TargetTag, null, null, "AKS not configured."));
+            }
+        }
+        catch
+        {
+            foreach (var comp in _scopedComponents)
+                _driftResults.TryAdd(comp.ComponentName,
+                    new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.Unknown,
+                        comp.TargetTag, null, null, "Drift query failed."));
+        }
+        finally
+        {
+            _driftLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private static string? ResolveEnvironmentName(AdoPipelineStage stage, List<string> environments)
@@ -295,6 +395,33 @@
 
         return null;
     }
+
+    private static string DriftCssClass(RuntimeDriftState state) => state switch
+    {
+        RuntimeDriftState.Matched => "release-matrix-drift--matched",
+        RuntimeDriftState.Drifted => "release-matrix-drift--drifted",
+        RuntimeDriftState.Unknown => "release-matrix-drift--unknown",
+        _ => "release-matrix-drift--notconfigured"
+    };
+
+    private static string DriftLabel(RuntimeDriftState state) => state switch
+    {
+        RuntimeDriftState.Matched => "Matched",
+        RuntimeDriftState.Drifted => "Drifted",
+        RuntimeDriftState.Unknown => "Unknown",
+        _ => "Not set"
+    };
+
+    private static string DriftTooltip(RuntimeDriftResult drift) => drift.State switch
+    {
+        RuntimeDriftState.Matched =>
+            $"Target {drift.TargetTag} matches runtime {drift.ObservedTag} ({drift.ObservedSource})",
+        RuntimeDriftState.Drifted =>
+            $"Target {drift.TargetTag} \u2260 runtime {drift.ObservedTag} ({drift.ObservedSource})",
+        RuntimeDriftState.Unknown =>
+            drift.Note ?? "Drift state could not be determined.",
+        _ => drift.Note ?? "No runtime binding configured."
+    };
 
     private (Icon Icon, string Tooltip) ComponentReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
     {

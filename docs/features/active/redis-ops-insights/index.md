@@ -7,19 +7,18 @@ owner: "GitHub Copilot"
 status: "Planned"
 jira: "not linked"
 created: "2026-04-12"
-updated: "2026-04-12"
+updated: "2026-04-17"
 
 ---
 
 ## Goal
 
-Extend the existing Redis page into an operator-grade diagnostics workspace that makes expiry posture, hot-key pressure, slow commands, and Pub/Sub channel activity visible without leaving the current Redis page or introducing invasive server monitoring.
+Extend the existing Redis page into an operator-grade diagnostics workspace that makes hot-key pressure, slow commands, and Pub/Sub channel activity visible without leaving the current Redis page or introducing invasive server monitoring.
 
 ## Value
 
-Current Redis tooling in SwebKit is strong at key inspection, targeted mutation, TTL editing, prefix memory, and keyspace health for the loaded scan set. It still leaves three common operational questions unanswered:
+Current Redis tooling in SwebKit is strong at key inspection, targeted mutation, TTL editing, prefix memory, and keyspace health for the loaded scan set. It still leaves two common operational questions unanswered:
 
-- How much of the currently loaded keyspace is about to expire, and what will the next hour or day look like?
 - Are slow commands or suspected hot keys concentrated around one command, prefix, or cache region?
 - Is Pub/Sub activity present on the cache, and which channels have actual subscribers right now?
 
@@ -28,10 +27,9 @@ Operators currently have to jump to `redis-cli`, external dashboards, or the Azu
 ## Scope
 
 - In scope:
-- TTL distribution and expiry forecasting for the currently loaded scan set, with explicit coverage and confidence labels carried forward from the existing health explorer model.
 - Slowlog and hot-key diagnostics built from additive server-side Redis commands plus existing `OBJECT FREQ`, `OBJECT IDLETIME`, and memory metadata.
 - Read-only Pub/Sub visibility for active channels, subscriber counts, and pattern-subscription counts.
-- Integration into the existing Redis page so health, prefix memory, TTL posture, slowlog, and Pub/Sub signals share the same selected cache and scan context.
+- Integration into the existing Redis page so health, prefix memory, slowlog, and Pub/Sub signals share the same selected cache and scan context.
 - Additive `IRedisClient` and demo-client support plus focused tests in App and Core test projects.
 - Out of scope:
 - Long-running `MONITOR` streaming, packet capture, or background polling.
@@ -42,9 +40,8 @@ Operators currently have to jump to `redis-cli`, external dashboards, or the Azu
 
 > Waves
 >
-> - Wave 1: TTL distribution and expiry forecast on top of the current scan and health coverage model.
-> - Wave 2: Slowlog plus hot-key evidence with bounded read-only server diagnostics.
-> - Wave 3: Pub/Sub visibility, drill-through polish, and UX hardening inside the Redis page.
+> - Wave 1: Slowlog plus hot-key evidence with bounded read-only server diagnostics.
+> - Wave 2: Pub/Sub visibility, drill-through polish, and UX hardening inside the Redis page.
 
 ## Dependencies
 
@@ -70,7 +67,6 @@ Operators currently have to jump to `redis-cli`, external dashboards, or the Azu
 ## Risks & mitigations
 
 - Risk: server commands such as `SLOWLOG` or `OBJECT FREQ` are unavailable or restricted on some managed Redis tiers. - Mitigation: surface `Unsupported` or `Permission limited` states explicitly and degrade to the signals that are available.
-- Risk: operators over-read the current scan as full-keyspace truth. - Mitigation: reuse the health explorer's coverage and confidence language on every TTL and hot-key insight surface.
 - Risk: large keysets or slow metadata fetches make the page feel heavier than the current manual scan flow. - Mitigation: keep diagnostics manual, bounded, cancellation-aware, and scoped to the loaded key set.
 - Risk: Pub/Sub or slowlog tables add too much vertical density to the current Redis page. - Mitigation: consolidate diagnostics into a tabbed "Ops Insights" surface rather than stacking more always-visible panels.
 - Risk: hot-key evidence becomes noisy if it mixes heuristic and server signals without explanation. - Mitigation: annotate each finding with its source signal (`OBJECT FREQ`, idle time, slowlog frequency, or unavailable).

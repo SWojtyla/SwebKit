@@ -1,5 +1,6 @@
 @inject INotificationService Notifications
 @inject IncidentInvestigationLauncher InvestigationLauncher
+@inject PipelineFailureClassifier FailureClassifier
 
 <div class="pipeline-detail">
 
@@ -111,7 +112,7 @@
                     <TemplateColumn Title="When" Width="110px"
                                     SortBy="@(GridSort<PipelineEnvironmentStatus>.ByDescending(e => e.FinishedAt ?? DateTimeOffset.MinValue))">
                         <span class="text-muted text-sm">@(context.FinishedAt.HasValue ? RelativeTime(context.FinishedAt.Value)
-                                                                    : "—")</span>
+                                                                                            : "—")</span>
                         </TemplateColumn>
                         <TemplateColumn Title="Triggered by" Width="140px">
                             <span class="text-muted text-sm">@(context.TriggeredBy ?? "—")</span>
@@ -136,6 +137,15 @@
                                 <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
                                 <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
                                 <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
+                                @if (_failureResults.TryGetValue(run.Id, out var failResult) && failResult.Category !=
+                                                PipelineFailureCategory.Unknown)
+                                {
+                                    <span
+                                        class="failure-category-badge failure-category-badge--@failResult.Category.ToString().ToLowerInvariant()"
+                                        title="@failResult.Explanation" data-testid="failure-category-badge">
+                                        @FailureCategoryLabel(failResult.Category)
+                                    </span>
+                                }
                                 <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
                                 @if (run.TriggeredBy is not null)
                                 {
@@ -167,6 +177,7 @@
     private string? _error;
     private List<PipelineEnvironmentStatus> _envStatus = [];
     private List<AdoPipelineRun> _recentRuns = [];
+    private Dictionary<int, PipelineFailureResult> _failureResults = [];
     // Trigger state
     private bool _showTrigger;
     private bool _showTriggerConfirm;
@@ -190,6 +201,9 @@
 
             _envStatus = await envTask;
             _recentRuns = await runsTask;
+            _failureResults = _recentRuns
+                .Where(r => r.State == "completed" && r.Result != "succeeded")
+                .ToDictionary(r => r.Id, r => FailureClassifier.Classify(r));
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _isLoading = false; }
@@ -353,4 +367,16 @@
 
     private static string FormatBranch(string? branch) =>
         branch?.Replace("refs/heads/", "") ?? "";
+
+    private static string FailureCategoryLabel(PipelineFailureCategory category) =>
+        category switch
+        {
+            PipelineFailureCategory.QueuedOrAgent => "Queue / Agent",
+            PipelineFailureCategory.BuildOrTest => "Build / Test",
+            PipelineFailureCategory.ApprovalGate => "Approval Gate",
+            PipelineFailureCategory.Deploy => "Deploy",
+            PipelineFailureCategory.PostDeployHealth => "Post-Deploy Health",
+            PipelineFailureCategory.InfraOrAuth => "Infra / Auth",
+            _ => "Unknown"
+        };
 }

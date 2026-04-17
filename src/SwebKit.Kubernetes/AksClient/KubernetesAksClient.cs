@@ -5,6 +5,7 @@ using k8s.Models;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
 using SwebKit.Core.Models;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -1962,8 +1963,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             CreateNoWindow = true
         };
 
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start helm process.");
+        Process process;
+        try
+        {
+            process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start helm process.");
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 2 /* ERROR_FILE_NOT_FOUND */)
+        {
+            throw new InvalidOperationException(
+                "helm CLI is not installed or not on PATH. " +
+                "Install helm (https://helm.sh/docs/intro/install/) and restart the app.");
+        }
         var stdout = await process.StandardOutput.ReadToEndAsync(ct);
         var stderr = await process.StandardError.ReadToEndAsync(ct);
         await process.WaitForExitAsync(ct);
@@ -2284,8 +2295,18 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             CreateNoWindow = true
         };
 
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
+        Process process;
+        try
+        {
+            process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start helm process. Ensure 'helm' is on PATH.");
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 2)
+        {
+            throw new InvalidOperationException(
+                "helm CLI is not installed or not on PATH. " +
+                "Install helm (https://helm.sh/docs/intro/install/) and restart the app.");
+        }
 
         var stderr = await process.StandardError.ReadToEndAsync(ct);
         await process.WaitForExitAsync(ct);
