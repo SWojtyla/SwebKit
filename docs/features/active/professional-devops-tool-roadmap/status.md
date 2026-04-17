@@ -8,17 +8,17 @@ state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-13"
+last_updated: "2026-04-17"
 
 ---
 
 ## Quick summary
 
-The roadmap is in active execution. Wave 1 and Wave 2 are archived, and Wave 3 `environment-and-configuration-health` now has its planned implementation and automated validation landed, pending manual UI validation and close-out.
+Waves 1, 2, and 3 are archived. Wave 4 `incident-investigation-workflows` is now the active implementation target, building on the already-reviewed `incident-timeline-workbench` base.
 
 Jira: not linked
 
-Current focus: keep downstream references current while Wave 3 moves through review/manual validation, and prevent later-wave work from bypassing the roadmap order.
+Current focus: Wave 4 — lock the `IncidentInvestigationSeed` contract, investigation launch mechanism, and landing-banner behavior before source-page drill-through work begins.
 
 ## Progress checklist
 
@@ -32,6 +32,8 @@ Current focus: keep downstream references current while Wave 3 moves through rev
 - [x] Close out Wave 1 and point downstream docs at the archive artifact
 - [x] Advance Wave 2 from planning into implementation and targeted validation
 - [x] Close out Wave 2 and point downstream docs at the archive artifact
+- [x] Advance Wave 3 from planning into implementation and targeted validation
+- [x] Close out Wave 3 and point downstream docs at the archive artifact
 - [ ] Review wave boundaries with maintainers
 - [ ] Confirm the default wave-5A/5B/5C ordering with maintainers
 - [x] Keep downstream status references current as implementation begins
@@ -46,13 +48,13 @@ Current focus: keep downstream references current while Wave 3 moves through rev
 - Recorded that Wave 2 now has landed code plus focused validation, while still keeping Wave 3 and later work sequenced behind it.
 - Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
 - Advanced Wave 3 from planning into implementation by landing the first readiness-report contract plus dashboard/settings adoption slice.
-- Completed the Wave 3 live-probe and drill-through slice with extracted readiness components and focused automated validation.
+- Archived Wave 3 after implementation, focused automated validation (Core 6/6, App 7/7), and user-confirmed manual UI validation (2026-04-17).
 
 ## Remaining
 
 - Validate that wave entry and exit criteria are realistic for the current team bandwidth.
-- Keep this roadmap current as Wave 3 moves through review/close-out and later waves move into implementation.
-- Use this roadmap to govern the order in which the already-created wave-4 and wave-5 feature folders move into implementation.
+- Keep this roadmap current as Wave 4 moves into implementation and later waves move into sequence.
+- Use this roadmap to govern the order in which the already-created wave-5 feature folders move into implementation.
 
 ## Blockers
 
