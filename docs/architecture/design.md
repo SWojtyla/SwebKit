@@ -59,6 +59,7 @@ sequenceDiagram
 - Profile, UI-state, and user-settings saves now write to a temp file, replace the primary file atomically, and refresh a sibling `.bak` file so rebuild/relaunch cycles do not depend on an in-place overwrite completing cleanly.
 - `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
 - Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
+- After tab restore, `MainLayout` fires `ConnectionWarmupService.WarmAsync(openAreas)` as a fire-and-forget background task. It fans out AKS and Redis warmup in parallel (each with a 10 s timeout). On success, warm clients are stored in `IAksWarmupCache` / `IRedisWarmupCache`. Pages check these caches at the top of their connect paths before calling their bootstrappers. Caches are invalidated on profile reload via `ConnectionWarmupService.InvalidateCaches()`. Warmup can be disabled via `UserSettings.WarmupConnectionsOnStartup = false`.
 
 ## Operator Workspace Flow
 

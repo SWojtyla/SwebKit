@@ -117,6 +117,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<PipelineFailureClassifier>();
         builder.Services.AddSingleton<RuntimeDriftService>();
 
+        // Connection warmup
+        builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
+        builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
+        builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
+
         return builder.Build();
     }
 }

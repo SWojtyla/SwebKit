@@ -8,6 +8,7 @@
 @inject IJSRuntime JS
 @inject CommandRegistry Commands
 @inject IShellErrorPresenter ShellErrors
+@inject IConnectionWarmupService ConnectionWarmup
 @implements IDisposable
 
 <FluentDesignTheme Mode="@CurrentDesignMode" />
@@ -126,6 +127,15 @@ AppState.Config.IsProduction, AppState.UseDemoData);
             await AppState.InitializeAsync();
             Tabs.RestoreTabs(UiState.State.OpenTabs);
             await InvokeAsync(StateHasChanged); // BL-2: dispatch on Blazor thread
+
+            // Fire warmup in background — non-blocking, all failures are silent
+            var openAreas = UiState.State.OpenTabs
+                .Select(t => t.Area?.ToLowerInvariant())
+                .Where(a => a is not null)
+                .Distinct()
+                .Cast<string>()
+                .ToList();
+            _ = ConnectionWarmup.WarmAsync(openAreas);
         }
         catch (OperationCanceledException)
         {
@@ -188,7 +198,12 @@ AppState.Config.IsProduction, AppState.UseDemoData);
         Nav.LocationChanged += OnLocationChanged;
     }
 
-    private void OnAppStateInitialized() => InvokeAsync(StateHasChanged);
+    private void OnAppStateInitialized()
+    {
+        // Invalidate warm clients on re-init — credentials may have changed
+        ConnectionWarmup.InvalidateCaches();
+        InvokeAsync(StateHasChanged);
+    }
 
     private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
 

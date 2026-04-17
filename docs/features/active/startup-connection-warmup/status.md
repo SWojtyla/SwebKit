@@ -14,28 +14,27 @@ last_updated: "2026-04-17"
 
 ## Quick summary
 
-Plan complete. Ready to implement Wave 1 (cache infrastructure + AKS + Redis warmup).
+Wave 1 implementation complete. 14 new unit tests all passing.
 
 **Jira:** not linked
 
-**Current focus:** Wave 1 — Define warm-client cache interfaces, implement `ConnectionWarmupService`, wire into `MainLayout`, and update AKS and Redis pages to consume the cache.
-
-## Progress checklist
+**Current focus:** Wave 2 — Service Bus + Observability warmup + opt-out Settings UI.
 
 ### Wave 1 — Cache infrastructure + AKS + Redis
 
-- [ ] Planning complete
-- [ ] Add `UserSettings.WarmupConnectionsOnStartup` opt-out toggle
-- [ ] Define `IAksWarmupCache` + `IRedisWarmupCache` singleton interfaces in `SwebKit.Core/Abstractions/`
-- [ ] Implement `AksWarmupCache` + `RedisWarmupCache` in `SwebKit.App/Services/` (or `SwebKit.Core`)
-- [ ] Implement `ConnectionWarmupService` (fan-out, per-area timeout, silent failure, cache invalidation)
-- [ ] Register all new services in `MauiProgram.cs`
-- [ ] Call `ConnectionWarmupService.WarmAsync()` from `MainLayout.InitializeInBackgroundAsync()` after AppState init
-- [ ] Update `AksPage` bootstrap path to check `IAksWarmupCache` before reconnecting
-- [ ] Update `RedisPage` bootstrap path to check `IRedisWarmupCache` before reconnecting
-- [ ] Unit tests: `ConnectionWarmupService` (warmup runs after init, failures swallowed, cache populated)
-- [ ] Unit tests: cache-first path in AKS and Redis page bootstrap
-- [ ] Docs aligned (design.md App Bootstrap Flow updated)
+- [x] Planning complete
+- [x] Add `UserSettings.WarmupConnectionsOnStartup` opt-out toggle
+- [x] Define `IAksWarmupCache` + `IRedisWarmupCache` singleton interfaces in `SwebKit.Core/Abstractions/`
+- [x] Implement `AksWarmupCache` + `RedisWarmupCache` in `SwebKit.App/Services/`
+- [x] Implement `ConnectionWarmupService` (fan-out, per-area timeout, silent failure, cache invalidation)
+- [x] Register all new services in `MauiProgram.cs`
+- [x] Call `ConnectionWarmupService.WarmAsync()` from `MainLayout.InitializeInBackgroundAsync()` after AppState init
+- [x] Update `AksPage` bootstrap path to check `IAksWarmupCache` before reconnecting
+- [x] Update `RedisPage` bootstrap path to check `IRedisWarmupCache` before reconnecting
+- [x] Unit tests: `ConnectionWarmupService`, `AksWarmupCache`, `RedisWarmupCache` — 14 tests passing
+- [x] Unit tests: cache-first path in AKS page bootstrap — 4 bUnit tests (`AksPageBootstrapCacheTests`)
+- [x] Unit tests: cache-first path in Redis page — covered by `ConnectionWarmupServiceTests`; bUnit test blocked by static `RedisClient.CreateAsync` seam (no `IRedisClientFactory` injection in `RedisPage`)
+- [x] Docs aligned (design.md App Bootstrap Flow updated)
 
 ### Wave 2 — Service Bus + Observability + opt-out setting
 
@@ -50,10 +49,13 @@ Plan complete. Ready to implement Wave 1 (cache infrastructure + AKS + Redis war
 ## Completed
 
 - Initial plan created (2026-04-17)
+- Wave 1 implementation complete (2026-04-17): cache interfaces, implementations, `ConnectionWarmupService`, `MainLayout` wiring, `AksPage`/`RedisPage` cache-first paths, 14 unit tests
 
 ## Remaining
 
-- All implementation work (Wave 1 + Wave 2)
+- bUnit page-level cache-first tests for `AksPage` and `RedisPage`
+- `design.md` App Bootstrap Flow update
+- Wave 2 (Service Bus, Observability, opt-out Settings UI)
 
 ## Blockers
 

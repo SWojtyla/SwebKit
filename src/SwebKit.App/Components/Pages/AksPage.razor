@@ -12,6 +12,7 @@
 @inject ILogger<AksPage> Logger
 @inject IPodHealthMonitorService Monitor
 @inject IAksClientBootstrapper AksBootstrapper
+@inject IAksWarmupCache AksWarmupCache
 @inject OperatorWorkspaceService Workspaces
 
 <div class="aks-page" @oncontextmenu:preventDefault>
@@ -207,8 +208,8 @@
                         <span class="aks-kbd-hint"><kbd>n</kbd> network</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
-                                                            "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
+                                                                                "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -880,6 +881,29 @@ OnCtxRestartDeployment();
         await InvokeAsync(StateHasChanged);
         try
         {
+            // Check warm-client cache first
+            if (!AppState.UseDemoData)
+            {
+                var warm = AksWarmupCache.TryGet();
+                if (warm is not null
+                    && warm.Status == AksClientBootstrapStatus.Connected
+                    && warm.Client is not null)
+                {
+                    Client = warm.Client;
+                    Contexts = warm.Contexts.ToList();
+                    Namespaces = warm.Namespaces.Count > 0 ? warm.Namespaces.ToList() : ["default"];
+                    ActiveContext = warm.ActiveContext;
+                    CurrentNamespace = warm.CurrentNamespace;
+                    AksWarmupCache.Invalidate(); // consume once
+                    await LoadAsync();
+                    ConnectionState.SetConnected("aks");
+                    await Workspaces.ApplyPendingRestoreAsync("aks");
+                    IsLoading = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+            }
+
             var result = await AksBootstrapper.BootstrapAsync(
                 new AksClientBootstrapRequest(
                     ClientOverride,

@@ -382,10 +382,10 @@ nextClient = await SwebKit.Redis.RedisClient.CreateAsync(entry);
 
 Wave 2 extends the same pattern:
 
-| Area | New cache interface | New warmup task in service | Page integration point |
-|---|---|---|---|
-| Service Bus | `IServiceBusWarmupCache` | `WarmServiceBusAsync(namespaces)` | `ServiceBusPage` before `BuildInitialStates` fan-out |
-| Observability | `IObservabilityWarmupCache` | `WarmObservabilityAsync(config)` | `ObservabilityPage` before ARM discovery call |
+| Area          | New cache interface         | New warmup task in service        | Page integration point                               |
+| ------------- | --------------------------- | --------------------------------- | ---------------------------------------------------- |
+| Service Bus   | `IServiceBusWarmupCache`    | `WarmServiceBusAsync(namespaces)` | `ServiceBusPage` before `BuildInitialStates` fan-out |
+| Observability | `IObservabilityWarmupCache` | `WarmObservabilityAsync(config)`  | `ObservabilityPage` before ARM discovery call        |
 
 Wave 2 also adds the opt-out toggle to the Settings page UI (`src/SwebKit.App/Components/Pages/SettingsPage.razor`), bound to `UserSettings.WarmupConnectionsOnStartup` via the existing settings save path in `UserSettingsRepository`.
 

@@ -50,4 +50,5 @@ public sealed class UserSettingsRepository
 public sealed class UserSettings
 {
     public string Theme { get; set; } = string.Empty;
+    public bool WarmupConnectionsOnStartup { get; set; } = true;
 }

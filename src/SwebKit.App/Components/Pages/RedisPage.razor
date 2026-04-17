@@ -4,6 +4,7 @@
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
 @inject IAppEventBus Events
+@inject IRedisWarmupCache RedisWarmupCache
 @implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
@@ -11,7 +12,8 @@
 
 <div class="redis-page">
     <RoutePageHeader Area="redis" Subtitle="Explore keyspaces, health, and value operations for the active cache.">
-        <Meta></Meta>
+        <Meta>
+        </Meta>
     </RoutePageHeader>
 
     <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
@@ -389,6 +391,18 @@
             {
                 if (IsCurrentScanSession(scanSession))
                     ConnectionState.SetNotConfigured("redis");
+                return;
+            }
+
+            // Check warm-client cache first
+            var warm = RedisWarmupCache.TryGet(entry.Id);
+            if (warm is not null)
+            {
+                if (!IsCurrentScanSession(scanSession))
+                    return;
+                RedisWarmupCache.Invalidate(); // consume once
+                Client = warm;
+                ConnectionState.SetConnected("redis");
                 return;
             }
 
