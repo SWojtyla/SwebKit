@@ -86,15 +86,13 @@ public sealed class ShellFoundationTests : TestContext
             .Add(p => p.Meta, meta)
             .Add(p => p.Actions, actions));
 
-        var copy = cut.Find(".page-header-shell__copy");
-
-        Assert.Contains("visually-hidden", copy.ClassName, StringComparison.Ordinal);
-        Assert.Equal("AKS", cut.Find("h1.page-title").TextContent.Trim());
-        Assert.DoesNotContain("Inspect workloads.", cut.Markup);
-        Assert.DoesNotContain("Namespace: ops", cut.Markup);
+        // New design: ShowSupportingContent=false with meta+actions renders a support strip (not a full header)
+        var strip = cut.Find(".page-support-strip");
+        Assert.NotNull(strip);
+        Assert.Contains("Namespace: ops", cut.Markup);
         Assert.Contains("Refresh", cut.Markup);
+        Assert.Empty(cut.FindAll("h1.page-title"));
         Assert.Empty(cut.FindAll(".page-subtitle"));
-        Assert.Empty(cut.FindAll(".page-header-meta"));
     }
 
     [Fact]
@@ -114,9 +112,10 @@ public sealed class ShellFoundationTests : TestContext
             .Add(p => p.ShowSupportingContent, true)
             .Add(p => p.Meta, meta));
 
+        // New design: ShowSupportingContent=true delegates to PageHeader — full header, not visually hidden
         var copy = cut.Find(".page-header-shell__copy");
-
-        Assert.Contains("visually-hidden", copy.ClassName, StringComparison.Ordinal);
+        Assert.NotNull(copy);
+        Assert.DoesNotContain("visually-hidden", copy.ClassName, StringComparison.Ordinal);
         Assert.Contains("Inspect workloads.", cut.Markup);
         Assert.Contains("Namespace: ops", cut.Markup);
         Assert.Single(cut.FindAll(".page-subtitle"));

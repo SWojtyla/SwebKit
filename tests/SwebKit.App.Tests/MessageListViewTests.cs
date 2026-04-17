@@ -14,6 +14,7 @@ using System.Collections.Concurrent;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class MessageListViewTests : TestContext
 {
     public MessageListViewTests()
@@ -529,6 +530,7 @@ public sealed class MessageListViewTests : TestContext
             .Input("eu");
 
         cut.Find("[data-testid='add-rule']").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='advanced-rule']").Count));
         cut.FindAll("[data-testid='advanced-rule']")[1]
             .QuerySelector("[data-testid='rule-field']")!
             .Change("delivery-count");
@@ -540,6 +542,7 @@ public sealed class MessageListViewTests : TestContext
             .Input("5");
 
         cut.Find("[data-testid='add-rule']").Click();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid='advanced-rule']").Count));
         cut.FindAll("[data-testid='advanced-rule']")[2]
             .QuerySelector("[data-testid='rule-field']")!
             .Change("enqueued-time");
@@ -632,6 +635,7 @@ public sealed class MessageListViewTests : TestContext
             .Input("eu");
 
         cut.Find("[data-testid='add-rule']").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='advanced-rule']").Count));
         cut.FindAll("[data-testid='advanced-rule']")[1]
             .QuerySelector("[data-testid='rule-field']")!
             .Change("delivery-count");

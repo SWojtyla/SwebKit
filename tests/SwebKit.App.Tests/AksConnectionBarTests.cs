@@ -44,9 +44,13 @@ public class AksConnectionBarTests : TestContext
             .Add(p => p.ActiveContext, "ctx-prod")
             .Add(p => p.CurrentNamespace, "default"));
 
-        Assert.Contains("app-native-control", cut.Find("select.aks-ns-select").ClassName, StringComparison.Ordinal);
-        Assert.Contains("app-native-select", cut.Find("select.aks-ns-select").ClassName, StringComparison.Ordinal);
-        Assert.Contains("app-native-control", cut.Find("input.aks-ns-search").ClassName, StringComparison.Ordinal);
+        // Both context and namespace pickers are now searchable input dropdowns (not <select> elements)
+        var searchInputs = cut.FindAll("input.aks-ns-search");
+        Assert.True(searchInputs.Count >= 1);
+        foreach (var input in searchInputs)
+        {
+            Assert.Contains("app-native-control", input.ClassName, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

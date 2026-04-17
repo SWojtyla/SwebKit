@@ -2,6 +2,7 @@ using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using SwebKit.App.Components.Observability;
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
@@ -25,6 +26,7 @@ public sealed class ObservabilityFailuresTabTests : TestContext
 
         Services.AddFluentUIComponents();
         Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
+        Services.AddSingleton(sp => new IncidentInvestigationLauncher(sp.GetRequiredService<NavigationManager>()));
     }
 
     [Fact]

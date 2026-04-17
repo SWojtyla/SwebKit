@@ -16,6 +16,7 @@ using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public class ComponentTests : TestContext
 {
     public ComponentTests()

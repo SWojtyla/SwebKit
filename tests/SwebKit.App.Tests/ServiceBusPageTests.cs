@@ -10,6 +10,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class ServiceBusPageTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -33,6 +34,7 @@ public sealed class ServiceBusPageTests : TestContext
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore));
+        Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
     }
 

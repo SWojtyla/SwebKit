@@ -16,6 +16,7 @@ using IncidentTimelineResultPage = SwebKit.Core.Models.IncidentTimelinePage;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class IncidentTimelinePageTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -71,6 +72,9 @@ public sealed class IncidentTimelinePageTests : TestContext
         Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IAksClientBootstrapper>(_aksBootstrapper);
         Services.AddSingleton<IIncidentTimelineService>(_timelineService);
+        Services.AddSingleton<IIncidentMappingProposalGenerator, IncidentMappingProposalGenerator>();
+        Services.AddSingleton<IIncidentInvestigationSeedResolver, IncidentInvestigationSeedResolver>();
+        Services.AddSingleton(sp => new IncidentInvestigationLauncher(sp.GetRequiredService<NavigationManager>()));
         Services.AddScoped<OperatorWorkspaceService>();
     }
 

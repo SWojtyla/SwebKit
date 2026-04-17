@@ -15,6 +15,7 @@ using SwebKit.Observability;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class ObservabilityPageTests : TestContext
 {
     private readonly FakeObservabilityProvider _provider = new();

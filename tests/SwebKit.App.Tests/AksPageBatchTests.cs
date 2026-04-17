@@ -15,6 +15,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class AksPageBatchTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -55,6 +56,7 @@ public sealed class AksPageBatchTests : TestContext
         Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IPodHealthMonitorService>(new FakePodHealthMonitorService());
         Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
+        Services.AddSingleton<IAksWarmupCache>(new AksWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
     }
 
