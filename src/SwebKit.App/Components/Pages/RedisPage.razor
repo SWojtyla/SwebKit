@@ -394,13 +394,12 @@
                 return;
             }
 
-            // Check warm-client cache first
+            // Check warm-client cache first — TryGet removes the entry so ownership transfers here
             var warm = RedisWarmupCache.TryGet(entry.Id);
             if (warm is not null)
             {
                 if (!IsCurrentScanSession(scanSession))
                     return;
-                RedisWarmupCache.Invalidate(); // consume once
                 Client = warm;
                 ConnectionState.SetConnected("redis");
                 return;

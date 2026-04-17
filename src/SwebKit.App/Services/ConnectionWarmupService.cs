@@ -16,26 +16,33 @@ public sealed class ConnectionWarmupService(
     UserSettingsRepository userSettings,
     IAksClientBootstrapper aksBootstrapper,
     IAksWarmupCache aksCache,
-    IRedisWarmupCache redisCache) : IConnectionWarmupService
+    IRedisWarmupCache redisCache,
+    IServiceBusNamespaceBootstrapper sbBootstrapper,
+    IServiceBusWarmupCache sbCache) : IConnectionWarmupService
 {
     private const int PerAreaTimeoutSeconds = 10;
 
-    public async Task WarmAsync(IReadOnlyList<string> priorityAreas, CancellationToken ct = default)
+    public Task WarmAsync(IReadOnlyList<string> priorityAreas, CancellationToken ct = default)
     {
         if (!userSettings.Settings.WarmupConnectionsOnStartup)
-            return;
+            return Task.CompletedTask;
 
-        var tasks = BuildWarmupTasks(priorityAreas, ct);
-        if (tasks.Count == 0)
-            return;
-
-        await Task.WhenAll(tasks);
+        // Push entirely to the thread pool so that:
+        // (a) the synchronous preamble of each warmup method does not run on the UI thread, and
+        // (b) async continuations (when network calls complete) also stay off the UI thread.
+        return Task.Run(async () =>
+        {
+            var tasks = BuildWarmupTasks(priorityAreas, ct);
+            if (tasks.Count > 0)
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+        }, ct);
     }
 
     public void InvalidateCaches()
     {
         aksCache.Invalidate();
         redisCache.Invalidate();
+        sbCache.Invalidate();
     }
 
     private List<Task> BuildWarmupTasks(IReadOnlyList<string> priorityAreas, CancellationToken ct)
@@ -49,6 +56,10 @@ public sealed class ConnectionWarmupService(
         var redisCaches = appState.Config.RedisConfig?.Caches;
         if (redisCaches is { Count: > 0 } && (priorityAreas.Count == 0 || priorityAreas.Contains("redis")))
             tasks.Add(WarmRedisAsync(redisCaches, ct));
+
+        var sbNamespaces = appState.ServiceBusNamespaces;
+        if (sbNamespaces.Count > 0 && (priorityAreas.Count == 0 || priorityAreas.Contains("service-bus")))
+            tasks.Add(WarmServiceBusAsync(sbNamespaces, ct));
 
         return tasks;
     }
@@ -109,6 +120,32 @@ public sealed class ConnectionWarmupService(
         catch (Exception)
         {
             // Silently discard
+        }
+    }
+
+    private async Task WarmServiceBusAsync(IReadOnlyList<ServiceBusNamespace> namespaces, CancellationToken ct)
+    {
+        var perNs = namespaces.Select(ns => WarmServiceBusNamespaceAsync(ns, ct));
+        await Task.WhenAll(perNs);
+    }
+
+    private async Task WarmServiceBusNamespaceAsync(ServiceBusNamespace ns, CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(PerAreaTimeoutSeconds));
+        try
+        {
+            var result = await sbBootstrapper.ConnectAsync(ns, timeoutCts.Token);
+            if (result.Client is not null)
+                sbCache.Store(ns.Id, result.Client);
+        }
+        catch (OperationCanceledException)
+        {
+            // Timeout or app-level cancellation — silently discard
+        }
+        catch (Exception)
+        {
+            // Network, auth, or config error — silently discard
         }
     }
 }

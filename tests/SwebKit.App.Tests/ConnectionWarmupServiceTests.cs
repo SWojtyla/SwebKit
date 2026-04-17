@@ -93,7 +93,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_WarmupDisabledInSettings_DoesNotCallBootstrapper()
     {
-        var (service, bootstrapper, _, _) = BuildService(warmupEnabled: false,
+        var (service, bootstrapper, _, _, _, _) = BuildService(warmupEnabled: false,
             aksConfig: new AksConfig { KubeconfigContext = "ctx" });
 
         await service.WarmAsync([]);
@@ -106,7 +106,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_AksConfigured_PopulatesAksCache()
     {
-        var (service, bootstrapper, aksCache, _) = BuildService(
+        var (service, bootstrapper, aksCache, _, _, _) = BuildService(
             aksConfig: new AksConfig { KubeconfigContext = "ctx", DefaultNamespace = "default" });
 
         var fakeResult = AksBootstrapSuccess();
@@ -120,7 +120,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_AksBootstrapFails_CacheRemainsEmpty()
     {
-        var (service, bootstrapper, aksCache, _) = BuildService(
+        var (service, bootstrapper, aksCache, _, _, _) = BuildService(
             aksConfig: new AksConfig { KubeconfigContext = "ctx" });
 
         bootstrapper.EnqueueException(new InvalidOperationException("Auth failure"));
@@ -133,7 +133,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_PriorityAreasExcludesAks_SkipsAksWarmup()
     {
-        var (service, bootstrapper, aksCache, _) = BuildService(
+        var (service, bootstrapper, aksCache, _, _, _) = BuildService(
             aksConfig: new AksConfig { KubeconfigContext = "ctx" });
 
         bootstrapper.EnqueueResult(AksBootstrapSuccess());
@@ -147,7 +147,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_AksNotConfigured_SkipsAksWarmup()
     {
-        var (service, bootstrapper, _, _) = BuildService(aksConfig: null);
+        var (service, bootstrapper, _, _, _, _) = BuildService(aksConfig: null);
 
         await service.WarmAsync([]);
 
@@ -157,7 +157,7 @@ public sealed class ConnectionWarmupServiceTests
     [Fact]
     public async Task WarmAsync_AksBootstrapReturnsNotConnected_CacheRemainsEmpty()
     {
-        var (service, bootstrapper, aksCache, _) = BuildService(
+        var (service, bootstrapper, aksCache, _, _, _) = BuildService(
             aksConfig: new AksConfig { KubeconfigContext = "ctx" });
 
         bootstrapper.EnqueueResult(new AksClientBootstrapResult(
@@ -172,11 +172,12 @@ public sealed class ConnectionWarmupServiceTests
     // ── ConnectionWarmupService — InvalidateCaches ────────────────────────────
 
     [Fact]
-    public void InvalidateCaches_ClearsBothCaches()
+    public void InvalidateCaches_ClearsAllCaches()
     {
-        var (service, _, aksCache, redisCache) = BuildService(aksConfig: null);
+        var (service, _, aksCache, redisCache, sbCache, _) = BuildService(aksConfig: null);
         aksCache.Store(AksBootstrapSuccess());
         redisCache.Store("x", new FakeRedisClient());
+        sbCache.Store(Guid.NewGuid(), new FakeServiceBusClient());
 
         service.InvalidateCaches();
 
@@ -184,27 +185,137 @@ public sealed class ConnectionWarmupServiceTests
         Assert.Null(redisCache.TryGet("x"));
     }
 
+    // ── ConnectionWarmupService — Service Bus warmup ──────────────────────────
+
+    [Fact]
+    public async Task WarmAsync_ServiceBusConfigured_CallsConnectAndStoresClient()
+    {
+        var nsId = Guid.NewGuid();
+        var ns = new ServiceBusNamespace { Id = nsId, Alias = "dev-sb" };
+        var (service, _, _, _, sbCache, sbBootstrapper) = BuildService(aksConfig: null, sbNamespaces: [ns]);
+        var fakeClient = new FakeServiceBusClient();
+        sbBootstrapper.EnqueueResult(new ServiceBusNamespaceConnectionResult(fakeClient, null));
+
+        await service.WarmAsync([]);
+
+        Assert.Same(fakeClient, sbCache.TryGet(nsId));
+    }
+
+    [Fact]
+    public async Task WarmAsync_ServiceBusConnectReturnsError_CacheRemainsEmpty()
+    {
+        var nsId = Guid.NewGuid();
+        var ns = new ServiceBusNamespace { Id = nsId, Alias = "dev-sb" };
+        var (service, _, _, _, sbCache, sbBootstrapper) = BuildService(aksConfig: null, sbNamespaces: [ns]);
+        sbBootstrapper.EnqueueResult(new ServiceBusNamespaceConnectionResult(null, "Auth failed"));
+
+        await service.WarmAsync([]);
+
+        Assert.Null(sbCache.TryGet(nsId));
+    }
+
+    [Fact]
+    public async Task WarmAsync_ServiceBusThrows_CacheRemainsEmptyAndDoesNotThrow()
+    {
+        var nsId = Guid.NewGuid();
+        var ns = new ServiceBusNamespace { Id = nsId, Alias = "dev-sb" };
+        var (service, _, _, _, sbCache, sbBootstrapper) = BuildService(aksConfig: null, sbNamespaces: [ns]);
+        sbBootstrapper.EnqueueException(new InvalidOperationException("Boom"));
+
+        await service.WarmAsync([]);
+
+        Assert.Null(sbCache.TryGet(nsId));
+    }
+
+    [Fact]
+    public async Task WarmAsync_ServiceBusNotInPriorityAreas_SkipsWarmup()
+    {
+        var nsId = Guid.NewGuid();
+        var ns = new ServiceBusNamespace { Id = nsId, Alias = "dev-sb" };
+        var (service, _, _, _, sbCache, sbBootstrapper) = BuildService(aksConfig: null, sbNamespaces: [ns]);
+        sbBootstrapper.EnqueueResult(new ServiceBusNamespaceConnectionResult(new FakeServiceBusClient(), null));
+
+        await service.WarmAsync(["aks"]); // service-bus not in list
+
+        Assert.Null(sbCache.TryGet(nsId));
+        Assert.Empty(sbBootstrapper.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task WarmAsync_ServiceBusInPriorityAreas_WarmsUp()
+    {
+        var nsId = Guid.NewGuid();
+        var ns = new ServiceBusNamespace { Id = nsId, Alias = "dev-sb" };
+        var (service, _, _, _, sbCache, sbBootstrapper) = BuildService(aksConfig: null, sbNamespaces: [ns]);
+        var fakeClient = new FakeServiceBusClient();
+        sbBootstrapper.EnqueueResult(new ServiceBusNamespaceConnectionResult(fakeClient, null));
+
+        await service.WarmAsync(["service-bus"]);
+
+        Assert.Same(fakeClient, sbCache.TryGet(nsId));
+    }
+
+    // ── ServiceBusWarmupCache ─────────────────────────────────────────────────
+
+    [Fact]
+    public void ServiceBusWarmupCache_StoreAndTryGet_ReturnsClientById()
+    {
+        var cache = new ServiceBusWarmupCache();
+        var id = Guid.NewGuid();
+        var client = new FakeServiceBusClient();
+
+        cache.Store(id, client);
+
+        Assert.Same(client, cache.TryGet(id));
+    }
+
+    [Fact]
+    public void ServiceBusWarmupCache_Invalidate_ClearsAll()
+    {
+        var cache = new ServiceBusWarmupCache();
+        var id = Guid.NewGuid();
+        cache.Store(id, new FakeServiceBusClient());
+        cache.Invalidate();
+
+        Assert.Null(cache.TryGet(id));
+    }
+
+    [Fact]
+    public void ServiceBusWarmupCache_TryGet_ReturnsNullForUnknownId()
+    {
+        var cache = new ServiceBusWarmupCache();
+        Assert.Null(cache.TryGet(Guid.NewGuid()));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static (IConnectionWarmupService Service, FakeBootstrapper Bootstrapper,
-        AksWarmupCache AksCache, RedisWarmupCache RedisCache)
-        BuildService(AksConfig? aksConfig, bool warmupEnabled = true)
+        AksWarmupCache AksCache, RedisWarmupCache RedisCache,
+        ServiceBusWarmupCache SbCache, FakeServiceBusBootstrapper SbBootstrapper)
+        BuildService(AksConfig? aksConfig, bool warmupEnabled = true,
+                     IReadOnlyList<ServiceBusNamespace>? sbNamespaces = null)
     {
         var userSettings = new UserSettingsRepository();
         userSettings.Settings.WarmupConnectionsOnStartup = warmupEnabled;
 
-        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(),
+        var profiles = new ProfileRepository();
+        var appState = new AppStateService(profiles, new UiStateRepository(),
             new AppEventBus(Microsoft.Extensions.Logging.Abstractions.NullLogger<AppEventBus>.Instance));
         appState.Config.AksConfig = aksConfig;
+        if (sbNamespaces is not null)
+            foreach (var ns in sbNamespaces)
+                profiles.AddServiceBusNamespace(ns);
 
         var bootstrapper = new FakeBootstrapper();
         var aksCache = new AksWarmupCache();
         var redisCache = new RedisWarmupCache();
+        var sbCache = new ServiceBusWarmupCache();
+        var sbBootstrapper = new FakeServiceBusBootstrapper();
 
         var service = new ConnectionWarmupService(
-            appState, userSettings, bootstrapper, aksCache, redisCache);
+            appState, userSettings, bootstrapper, aksCache, redisCache, sbBootstrapper, sbCache);
 
-        return (service, bootstrapper, aksCache, redisCache);
+        return (service, bootstrapper, aksCache, redisCache, sbCache, sbBootstrapper);
     }
 
     private static AksClientBootstrapResult AksBootstrapSuccess() =>
@@ -304,5 +415,54 @@ public sealed class ConnectionWarmupServiceTests
         public Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default) => Task.CompletedTask;
         public Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default) => Task.FromResult(new SetScanResult([], 0, true));
+    }
+
+    private sealed class FakeServiceBusBootstrapper : IServiceBusNamespaceBootstrapper
+    {
+        public List<ServiceBusNamespace> ConnectCalls { get; } = [];
+
+        private readonly Queue<Func<ServiceBusNamespaceConnectionResult>> _queue = new();
+
+        public void EnqueueResult(ServiceBusNamespaceConnectionResult result)
+            => _queue.Enqueue(() => result);
+
+        public void EnqueueException(Exception ex)
+            => _queue.Enqueue(() => throw ex);
+
+        public IReadOnlyList<ServiceBusNamespaceBootstrapState> BuildInitialStates(
+            IReadOnlyList<ServiceBusNamespace> configuredNamespaces,
+            IReadOnlyDictionary<Guid, ServiceBusNamespaceBootstrapSnapshot> cachedSnapshots,
+            bool useDemoData) => [];
+
+        public Task<ServiceBusNamespaceConnectionResult> ConnectAsync(ServiceBusNamespace ns, CancellationToken ct = default)
+        {
+            ConnectCalls.Add(ns);
+            if (_queue.Count > 0)
+                return Task.FromResult(_queue.Dequeue()());
+            return Task.FromResult(new ServiceBusNamespaceConnectionResult(null, "No result queued"));
+        }
+    }
+
+    private sealed class FakeServiceBusClient : IServiceBusClient
+    {
+        public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) => Task.FromResult(new SbNamespaceInfo { Name = string.Empty, Endpoint = string.Empty });
+        public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) => Task.FromResult(new SbEntityStats());
+        public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbMessage>>([]);
+        public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbMessage>>([]);
+        public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default) => Task.FromResult(0);
+        public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) => Task.FromResult(0L);
+        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) => Task.CompletedTask;
+        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
     }
 }

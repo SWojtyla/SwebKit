@@ -11,6 +11,7 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
+@inject IServiceBusWarmupCache ServiceBusWarmupCache
 @inject OperatorWorkspaceService Workspaces
 
 <div class="service-bus-page">
@@ -311,7 +312,19 @@
             {
                 try
                 {
-                    var result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, ct);
+                    // Cache-first: use warm client from startup warmup if available
+                    var cachedClient = ServiceBusWarmupCache.TryGet(state.Namespace.Id);
+                    ServiceBusNamespaceConnectionResult result;
+                    if (cachedClient is not null)
+                    {
+                        ServiceBusWarmupCache.Invalidate();
+                        result = new ServiceBusNamespaceConnectionResult(cachedClient, null);
+                    }
+                    else
+                    {
+                        result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, ct);
+                    }
+
                     if (ct.IsCancellationRequested)
                     {
                         return;

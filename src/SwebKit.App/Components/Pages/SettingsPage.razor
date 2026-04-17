@@ -1,5 +1,6 @@
 @page "/settings"
 @inject AppStateService AppState
+@inject UserSettingsRepository UserSettings
 @inject IConfigurationHealthService ConfigurationHealth
 @inject IConfigurationProbeService ConfigurationProbes
 @inject ICredentialStore CredentialStore
@@ -96,6 +97,17 @@
                     <FluentCheckbox Value="@AppState.Config.IsProduction"
                                     ValueChanged="@(async (bool v) => { AppState.Config.IsProduction = v; await SaveAsync(); })">
                         This is a production environment
+                    </FluentCheckbox>
+                </div>
+
+                <div class="settings-field-group">
+                    <p class="settings-hint">
+                        Pre-warm connections to Service Bus, AKS, and Redis in the background when the app starts.
+                        Disable this if startup warmup causes issues or you prefer on-demand connects.
+                    </p>
+                    <FluentCheckbox Value="@UserSettings.Settings.WarmupConnectionsOnStartup"
+                                    ValueChanged="@(async (bool v) => { UserSettings.Settings.WarmupConnectionsOnStartup = v; await UserSettings.SaveAsync(); })">
+                        Warm up connections on startup
                     </FluentCheckbox>
                 </div>
                 break;

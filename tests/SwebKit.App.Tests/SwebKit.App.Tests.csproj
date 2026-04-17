@@ -72,6 +72,7 @@
         <Compile Include="..\..\src\SwebKit.App\Services\PageDataCache.cs" Link="Services\PageDataCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\AksWarmupCache.cs" Link="Services\AksWarmupCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\RedisWarmupCache.cs" Link="Services\RedisWarmupCache.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\ServiceBusWarmupCache.cs" Link="Services\ServiceBusWarmupCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ConnectionWarmupService.cs" Link="Services\ConnectionWarmupService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />

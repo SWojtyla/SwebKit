@@ -36,6 +36,7 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(_bootstrapper);
+        Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
     }
 

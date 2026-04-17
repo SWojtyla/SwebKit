@@ -120,6 +120,7 @@ public static class MauiProgram
         // Connection warmup
         builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
         builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
+        builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
 
         return builder.Build();
