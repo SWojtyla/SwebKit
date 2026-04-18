@@ -30,14 +30,14 @@
                         <div class="aks-scale-stepper">
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Max(0, _scaleReplicas - 1)">−</button>
-                            <input type="number" class="aks-scale-input app-native-control" min="0" max="100" @bind="_scaleReplicas"
-                                   @bind:event="oninput" />
+                            <input type="number" class="aks-scale-input app-native-control" min="0" max="100"
+                                   @bind="_scaleReplicas" @bind:event="oninput" />
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                        ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                        : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -76,7 +76,7 @@
 
                 @* ── Container details ── *@
                 @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                                                        _logDeploymentName is null)
+                                                                                                        _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -135,7 +135,7 @@
 
                 @* ── Ingress analysis ── *@
                 @if (_ingressAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                    _logDeploymentName is null)
+                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -153,7 +153,7 @@
 
                 @* ── Network policy analysis ── *@
                 @if (_networkPolicyAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                    _logDeploymentName is null)
+                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -170,6 +170,94 @@
                     </div>
                 }
 
+                @* ── Namespace quota ── *@
+                @if (_namespaceQuotaTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Namespace Quotas: @_namespaceQuotaTarget.Namespace</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseNamespaceQuota" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <NamespaceQuotaPanel Client="Client" Namespace="@_namespaceQuotaTarget.Namespace" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Pod disruption budgets ── *@
+                @if (_pdbTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Pod Disruption Budgets: @_pdbTarget.Namespace</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="ClosePodDisruptionBudgets" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <PodDisruptionBudgetPanel Client="Client" Namespace="@_pdbTarget.Namespace" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Probe failure summary ── *@
+                @if (_probeFailureTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Probe Failures: @_probeFailureTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseProbeFailures" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <ProbeFailurePanel Client="Client" Namespace="@_probeFailureTarget.Namespace"
+                                               WorkloadKind="@_probeFailureTarget.WorkloadKind" WorkloadName="@_probeFailureTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Placement constraints ── *@
+                @if (_placementTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Placement: @_placementTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="ClosePlacementAnalysis" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <PlacementConstraintsPanel Client="Client" Namespace="@_placementTarget.Namespace"
+                                                       WorkloadKind="@_placementTarget.WorkloadKind" WorkloadName="@_placementTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Helm diff preview ── *@
+                @if (_helmDiffPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Helm Preview: @_helmDiffPreviewTarget.ReleaseName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmDiffPreview" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <HelmDiffPreviewPanel Client="Client" Namespace="@_helmDiffPreviewTarget.Namespace"
+                                                  ReleaseName="@_helmDiffPreviewTarget.ReleaseName" />
+                        </div>
+                    </div>
+                }
+
                 @* ── Events panel ── *@
                 @if (ShowEvents)
                 {
@@ -181,7 +269,7 @@
                             {
                                 <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                     <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                                                        == "Warning")
+                                                                                                                                                                                                                                            == "Warning")
                                 </span>
                             }
                             <span class="aks-toolbar-spacer"></span>
@@ -259,6 +347,11 @@
     private enum HelmPendingAction { History, Values, Rollback }
     private sealed record IngressAnalysisTarget(string Name, string Namespace);
     private sealed record NetworkPolicyAnalysisTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record NamespaceQuotaTarget(string Namespace);
+    private sealed record PodDisruptionBudgetTarget(string Namespace);
+    private sealed record ProbeFailureTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record PlacementTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record HelmDiffPreviewTarget(string ReleaseName, string Namespace);
     private (string Kind, string Name, bool EditMode, string? Namespace)? _pendingYamlOpen;
     private (string ReleaseName, HelmPendingAction Action)? _pendingHelmOpen;
 
@@ -272,6 +365,11 @@
     private HpaInfo? _hpaDetailTarget;
     private IngressAnalysisTarget? _ingressAnalysisTarget;
     private NetworkPolicyAnalysisTarget? _networkPolicyAnalysisTarget;
+    private NamespaceQuotaTarget? _namespaceQuotaTarget;
+    private PodDisruptionBudgetTarget? _pdbTarget;
+    private ProbeFailureTarget? _probeFailureTarget;
+    private PlacementTarget? _placementTarget;
+    private HelmDiffPreviewTarget? _helmDiffPreviewTarget;
     private string? _scaleTarget;
     private int _scaleReplicas;
     private bool _scaleIsStatefulSet;
@@ -295,6 +393,11 @@
         _hpaDetailTarget is not null ||
         _ingressAnalysisTarget is not null ||
         _networkPolicyAnalysisTarget is not null ||
+        _namespaceQuotaTarget is not null ||
+        _pdbTarget is not null ||
+        _probeFailureTarget is not null ||
+        _placementTarget is not null ||
+        _helmDiffPreviewTarget is not null ||
         _yamlViewer?.IsEditing == true ||
         ShowEvents;
 
@@ -417,6 +520,41 @@
         NotifyPanelStateChanged();
     }
 
+    public void ShowNamespaceQuota(string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _namespaceQuotaTarget = new(targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowPodDisruptionBudgets(string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _pdbTarget = new(targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowProbeFailures(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _probeFailureTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowPlacementAnalysis(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _placementTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowHelmDiffPreview(string releaseName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _helmDiffPreviewTarget = new(releaseName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
     // ── Lifecycle ──
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -523,6 +661,12 @@
         _networkPolicyAnalysisTarget = null;
         NotifyPanelStateChanged();
     }
+
+    private void CloseNamespaceQuota() { _namespaceQuotaTarget = null; NotifyPanelStateChanged(); }
+    private void ClosePodDisruptionBudgets() { _pdbTarget = null; NotifyPanelStateChanged(); }
+    private void CloseProbeFailures() { _probeFailureTarget = null; NotifyPanelStateChanged(); }
+    private void ClosePlacementAnalysis() { _placementTarget = null; NotifyPanelStateChanged(); }
+    private void CloseHelmDiffPreview() { _helmDiffPreviewTarget = null; NotifyPanelStateChanged(); }
 
     private async Task CloseEvents()
     {

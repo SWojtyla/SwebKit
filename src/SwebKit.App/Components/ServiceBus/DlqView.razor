@@ -15,16 +15,16 @@
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
                              RefreshToken="@_refreshToken" MultiSelect="true" SelectedMessage="SelectedMessage"
+                             TracePivotFilter="@_dlqPivotFilter"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
             @if (_showBatchReplayPanel)
             {
-                <div style="border-top:1px solid var(--color-border); padding:12px; flex-shrink:0; overflow:auto; max-height:420px;">
-                    <BatchReplayPanel Client="Client" SourceEntityPath="@EntityPath"
-                                      Messages="@_batchSelected"
-                                      AvailableNamespaces="@AvailableNamespaces"
-                                      OnCancel="CloseBatchReplayPanel"
+                <div
+                    style="border-top:1px solid var(--color-border); padding:12px; flex-shrink:0; overflow:auto; max-height:420px;">
+                    <BatchReplayPanel Client="Client" SourceEntityPath="@EntityPath" Messages="@_batchSelected"
+                                      AvailableNamespaces="@AvailableNamespaces" OnCancel="CloseBatchReplayPanel"
                                       OnCompleted="OnBatchReplayCompleted" />
                 </div>
             }
@@ -66,7 +66,7 @@
 
         <div @ref="_dlqSplitterRef" class="pane-splitter"></div>
         <div @ref="_dlqDetailRef" class="details-pane">
-            <MessageDetailPane Message="SelectedMessage" />
+            <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
         </div>
     </div>
 </div>
@@ -93,6 +93,7 @@
     private ElementReference _dlqDetailRef;
     private IJSObjectReference? _dlqSplitterHandle;
     private long _refreshToken;
+    private string? _dlqPivotFilter;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -111,6 +112,12 @@
     private void OnBatchSelectionChanged(List<SbMessage> messages)
     {
         _batchSelected = messages;
+        StateHasChanged();
+    }
+
+    private void ApplyDlqPivotFilter(string value)
+    {
+        _dlqPivotFilter = value;
         StateHasChanged();
     }
 

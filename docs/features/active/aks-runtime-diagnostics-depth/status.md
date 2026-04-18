@@ -4,29 +4,30 @@
 
 title: "Status - aks-runtime-diagnostics-depth"
 owner: "GitHub Copilot"
-state: "In Progress"
+state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-15"
+last_updated: "2026-04-17"
 
 ---
 
 ## Quick summary
 
-Wave 2 now extends the existing `/aks` surface with evidence-first ingress and network-policy diagnostics. The AKS toolbar groups network resources behind an expandable `Network` menu, Services remain browseable as a first-class AKS resource, HTTPRoute rows stay visible when route cells wrap, and workload or ingress rows can now open self-loading analysis panels from the same page.
+All three waves are now complete. Wave 1 adds namespace quota/limit-range, PDB, probe-failure, and placement-constraint diagnostics. Wave 2 adds ingress and network-policy analysis panels. Wave 3 adds a read-only Helm diff preview with capability detection.
 
 Jira: not linked
 
-Current focus: carry the same evidence-first approach into the remaining namespace, workload-constraint, and Helm-preview waves without fragmenting the existing AKS page model.
+Current focus: manual validation on a live cluster.
 
 ## Progress checklist
 
 ### Wave 1 - namespace and workload constraints
 
-- [ ] Define quota, limit-range, PDB, probe, and placement models in `AksModels.cs`
-- [ ] Extend `IAksClient` and `KubernetesAksClient` with additive read methods
-- [ ] Decide where each diagnostic appears in the existing panel stack
+- [x] Define quota, limit-range, PDB, probe, and placement models in `AksModels.cs`
+- [x] Extend `IAksClient` and `KubernetesAksClient` with additive read methods
+- [x] Add `NamespaceQuotaPanel`, `PodDisruptionBudgetPanel`, `ProbeFailurePanel`, `PlacementConstraintsPanel` Razor components
+- [x] Wire entry points from deployment/statefulset context menus
 
 ### Wave 2 - network and ingress diagnostics
 
@@ -39,8 +40,11 @@ Current focus: carry the same evidence-first approach into the remaining namespa
 
 ### Wave 3 - Helm preview
 
-- [ ] Define Helm diff capability detection and fallback behavior
-- [ ] Define preview UX and test strategy for plugin-present and plugin-missing environments
+- [x] Define Helm diff capability detection and fallback behavior
+- [x] Add `HelmDiffPreview` model and `PreviewHelmUpgradeAsync` method
+- [x] Implement in `KubernetesAksClient` (Full / Degraded / Unsupported) and `DemoAksClient`
+- [x] Add `HelmDiffPreviewPanel` Razor component with capability-aware rendering
+- [x] Add Helm context menu entry in `AksPage.razor`
 
 ## Completed
 
@@ -58,10 +62,8 @@ Current focus: carry the same evidence-first approach into the remaining namespa
 
 ## Remaining
 
-- Write the additive `IAksClient` and `AksModels.cs` design.
-- Add the remaining namespace and workload-constraint diagnostics (quota, limit-range, PDB, probe, placement).
-- Add Helm preview capability detection and read-only preview behavior.
-- Broaden Kubernetes-client coverage for ingress and network-policy edge cases beyond the current focused validation slice.
+- Manual validation on a live cluster: verify all 5 new diagnostic panels surface correct cluster evidence and degrade cleanly on permissions errors.
+- Broaden `KubernetesAksClient` direct-client tests for new Wave 1 methods (quota, limit-range, PDB, probe, placement) — currently covered by demo-mode unit tests only.
 
 ## Blockers
 
@@ -71,7 +73,9 @@ Current focus: carry the same evidence-first approach into the remaining namespa
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Focused AKS diagnostics tests passed on 2026-04-15 (`AksPageBatchTests`, `AksDetailPanelsTests`, `DemoAksClientTests`, `AksTimelineSignalSourceTests`)
+- Validation status: All 800 unit/component tests passing on 2026-04-17
+- Wave 1+2+3 covered by demo-mode tests in `DemoAksClientTests` (6 new Wave 1+3 tests, all passing)
+- `AksPageBatchTests`, `AksDetailPanelsTests`, `AksTimelineSignalSourceTests` all passing
 
 ## Notes
 

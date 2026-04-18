@@ -65,9 +65,9 @@ The backend should return typed evidence summaries instead of leaving the UI to 
 
 ### Wave 1 - namespace and workload diagnostics [dotnet-expert]
 
-- [ ] Extend `AksModels.cs` with quota, limit, PDB, probe, and placement types.
-- [ ] Extend `IAksClient` and `KubernetesAksClient` to retrieve those models.
-- [ ] Decide what should be summarized server-side versus left as supporting detail.
+- [x] Extend `AksModels.cs` with quota, limit, PDB, probe, and placement types.
+- [x] Extend `IAksClient` and `KubernetesAksClient` to retrieve those models.
+- [x] Decide what should be summarized server-side versus left as supporting detail.
 
 ### Wave 2 - network and ingress diagnostics [dotnet-expert]
 
@@ -77,9 +77,9 @@ The backend should return typed evidence summaries instead of leaving the UI to 
 
 ### Wave 3 - Helm preview [dotnet-expert]
 
-- [ ] Add preview capability detection and typed preview output.
-- [ ] Decide whether full diff requires external plugin support and how fallback preview behaves.
-- [ ] Add deterministic tests for supported and unsupported paths.
+- [x] Add preview capability detection and typed preview output.
+- [x] Decide whether full diff requires external plugin support and how fallback preview behaves.
+- [x] Add deterministic tests for supported and unsupported paths.
 
 ## Migration and runtime changes
 

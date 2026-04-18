@@ -572,4 +572,77 @@ public class DemoAksClientTests
     {
         await _client.ScaleStatefulSetAsync("default", "order-queue", 3);
     }
+
+    [Fact]
+    public async Task GetResourceQuotasAsync_ReturnsQuotasWithUsage()
+    {
+        var quotas = await _client.GetResourceQuotasAsync("default");
+
+        Assert.NotEmpty(quotas);
+        Assert.All(quotas, q =>
+        {
+            Assert.Equal("default", q.Namespace);
+            Assert.NotEmpty(q.HardLimits);
+            Assert.NotEmpty(q.Used);
+        });
+    }
+
+    [Fact]
+    public async Task GetLimitRangesAsync_ReturnsLimitsForNamespace()
+    {
+        var ranges = await _client.GetLimitRangesAsync("default");
+
+        Assert.NotEmpty(ranges);
+        Assert.All(ranges, r =>
+        {
+            Assert.Equal("default", r.Namespace);
+            Assert.NotEmpty(r.Limits);
+        });
+    }
+
+    [Fact]
+    public async Task GetPodDisruptionBudgetsAsync_ReturnsPdbsWithStatus()
+    {
+        var pdbs = await _client.GetPodDisruptionBudgetsAsync("default");
+
+        Assert.NotEmpty(pdbs);
+        Assert.All(pdbs, pdb =>
+        {
+            Assert.Equal("default", pdb.Namespace);
+            Assert.True(pdb.ExpectedPods > 0);
+        });
+    }
+
+    [Fact]
+    public async Task GetProbeFailureSummaryAsync_ReturnsRestartEvidence()
+    {
+        var summary = await _client.GetProbeFailureSummaryAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", summary.Namespace);
+        Assert.True(summary.TotalPods > 0);
+        Assert.NotEmpty(summary.Findings);
+        Assert.Contains(summary.Pods, p => p.LivenessProbeConfigured || p.ReadinessProbeConfigured);
+    }
+
+    [Fact]
+    public async Task GetPlacementAnalysisAsync_ReturnsDeclaredConstraints()
+    {
+        var analysis = await _client.GetPlacementAnalysisAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.NotEmpty(analysis.Findings);
+        Assert.True(analysis.HasNodeSelector || analysis.HasPodAntiAffinity || analysis.HasNodeAffinity);
+    }
+
+    [Fact]
+    public async Task PreviewHelmUpgradeAsync_ReturnsDegradedOrUnsupportedInDemoMode()
+    {
+        var preview = await _client.PreviewHelmUpgradeAsync("default", "order-api");
+
+        Assert.Equal("default", preview.Namespace);
+        Assert.Equal("order-api", preview.ReleaseName);
+        Assert.True(preview.Capability == HelmPreviewCapability.Unsupported
+            || preview.Capability == HelmPreviewCapability.Degraded);
+        Assert.False(string.IsNullOrWhiteSpace(preview.CapabilityNote));
+    }
 }

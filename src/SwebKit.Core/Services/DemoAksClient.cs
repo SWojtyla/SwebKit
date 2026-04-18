@@ -1991,4 +1991,244 @@ public class DemoAksClient : IAksClient
             ? $"\"{value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
     }
+
+    // ── Wave 1: namespace and workload constraint visibility ──────────────────
+
+    public async Task<IReadOnlyList<ResourceQuotaInfo>> GetResourceQuotasAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        return
+        [
+            new ResourceQuotaInfo
+            {
+                Name = "compute-quota",
+                Namespace = ns,
+                HardLimits =
+                [
+                    new ResourceQuotaUsage { Resource = "cpu", Hard = "8" },
+                    new ResourceQuotaUsage { Resource = "memory", Hard = "16Gi" },
+                    new ResourceQuotaUsage { Resource = "pods", Hard = "100" }
+                ],
+                Used =
+                [
+                    new ResourceQuotaUsage { Resource = "cpu", Used = "4" },
+                    new ResourceQuotaUsage { Resource = "memory", Used = "8Gi" },
+                    new ResourceQuotaUsage { Resource = "pods", Used = "12" }
+                ]
+            },
+            new ResourceQuotaInfo
+            {
+                Name = "storage-quota",
+                Namespace = ns,
+                HardLimits =
+                [
+                    new ResourceQuotaUsage { Resource = "persistentvolumeclaims", Hard = "10" },
+                    new ResourceQuotaUsage { Resource = "requests.storage", Hard = "50Gi" }
+                ],
+                Used =
+                [
+                    new ResourceQuotaUsage { Resource = "persistentvolumeclaims", Used = "9" },
+                    new ResourceQuotaUsage { Resource = "requests.storage", Used = "47Gi" }
+                ]
+            }
+        ];
+    }
+
+    public async Task<IReadOnlyList<LimitRangeInfo>> GetLimitRangesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return
+        [
+            new LimitRangeInfo
+            {
+                Name = "default-limits",
+                Namespace = ns,
+                Limits =
+                [
+                    new LimitRangeItem
+                    {
+                        Type = "Container",
+                        DefaultRequests = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "100m",
+                            ["memory"] = "128Mi"
+                        },
+                        DefaultLimits = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "500m",
+                            ["memory"] = "512Mi"
+                        },
+                        Min = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "50m",
+                            ["memory"] = "64Mi"
+                        },
+                        Max = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "2",
+                            ["memory"] = "2Gi"
+                        }
+                    }
+                ]
+            }
+        ];
+    }
+
+    public async Task<IReadOnlyList<PodDisruptionBudgetInfo>> GetPodDisruptionBudgetsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return
+        [
+            new PodDisruptionBudgetInfo
+            {
+                Name = "order-api-pdb",
+                Namespace = ns,
+                MinAvailable = "1",
+                DesiredHealthy = 2,
+                CurrentHealthy = 3,
+                ExpectedPods = 3,
+                DisruptionsAllowed = true,
+                AllowedDisruptions = 1,
+                SelectorLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["app"] = "order-api"
+                }
+            },
+            new PodDisruptionBudgetInfo
+            {
+                Name = "payment-gateway-pdb",
+                Namespace = ns,
+                MinAvailable = "2",
+                DesiredHealthy = 3,
+                CurrentHealthy = 3,
+                ExpectedPods = 3,
+                DisruptionsAllowed = false,
+                AllowedDisruptions = 0,
+                SelectorLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["app"] = "payment-gateway"
+                }
+            }
+        ];
+    }
+
+    public async Task<ProbeFailureSummary> GetProbeFailureSummaryAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var tick = Math.Max(Volatile.Read(ref _demoTick), 1);
+        var allPods = BuildDemoPods(ns, tick).ToList();
+
+        var selectedPods = workloadKind.Trim().ToLowerInvariant() switch
+        {
+            "deployment" or "statefulset" => allPods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList(),
+            "pod" => allPods.Where(pod =>
+                string.Equals(pod.Name, workloadName, StringComparison.Ordinal)).ToList(),
+            _ => allPods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList()
+        };
+
+        if (selectedPods.Count == 0)
+            selectedPods = allPods.Take(3).ToList();
+
+        var podStatuses = selectedPods.Select((pod, idx) => new PodProbeStatus
+        {
+            PodName = pod.Name,
+            RestartCount = idx < 2 ? idx + 1 : 0,
+            LivenessProbeConfigured = true,
+            ReadinessProbeConfigured = true,
+            Ready = pod.Ready,
+            LastTerminationReason = idx == 0 ? "OOMKilled" : null,
+            LastTerminationMessage = idx == 0 ? "Container exceeded memory limit" : null
+        }).ToList();
+
+        var podsWithRestarts = podStatuses.Count(p => p.RestartCount > 0);
+
+        var findings = new List<string>();
+        if (podsWithRestarts > 0)
+            findings.Add($"{podsWithRestarts} of {podStatuses.Count} pod(s) have restarted at least once in the current session.");
+
+        var notReady = podStatuses.Count(p => !p.Ready);
+        if (notReady > 0)
+            findings.Add($"{notReady} of {podStatuses.Count} pod(s) are not ready.");
+
+        findings.Add("Liveness and readiness probes are configured on all containers.");
+
+        return new ProbeFailureSummary
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            TotalPods = podStatuses.Count,
+            PodsWithRestarts = podsWithRestarts,
+            Pods = podStatuses,
+            RecentProbeEvents =
+            [
+                $"[Unhealthy] Readiness probe failed: HTTP probe failed with statuscode: 503 (pod: {selectedPods.FirstOrDefault()?.Name})",
+                $"[BackOff] Back-off restarting failed container (pod: {selectedPods.FirstOrDefault()?.Name})"
+            ],
+            Findings = findings
+        };
+    }
+
+    public async Task<PlacementAnalysis> GetPlacementAnalysisAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return new PlacementAnalysis
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            HasNodeSelector = true,
+            NodeSelector = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["kubernetes.io/os"] = "linux"
+            },
+            HasNodeAffinity = false,
+            HasPodAffinity = false,
+            HasPodAntiAffinity = true,
+            HasTolerations = false,
+            Tolerations = [],
+            HasTopologySpreadConstraints = false,
+            TopologySpreadKeys = [],
+            RecentSchedulingFailureEvents = [],
+            Findings =
+            [
+                "Pod anti-affinity rule declared: pods prefer to spread across failure domains.",
+                "Node selector requires linux nodes."
+            ]
+        };
+    }
+
+    public async Task<HelmDiffPreview> PreviewHelmUpgradeAsync(
+        string ns,
+        string releaseName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(50, ct);
+
+        return new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "Demo mode does not support Helm diff preview.",
+            Findings = ["Helm diff preview is not available in demo mode."]
+        };
+    }
 }

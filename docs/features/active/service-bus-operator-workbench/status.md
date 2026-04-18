@@ -4,21 +4,21 @@
 
 title: "Status - service-bus-operator-workbench"
 owner: "GitHub Copilot"
-state: "In Progress"
+state: "Done"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-05-01"
+last_updated: "2026-04-17"
 
 ---
 
 ## Quick summary
 
-Wave 1 (triage depth) is complete. Wave 2 (preview-first batch operations) is complete. The Service Bus DLQ now has a `BatchReplayPanel` with target-entity override, remap rules (subject, correlationId, property renames/removes), preview → confirm → execute → summary flow. `BatchSendPanel` accepts a JSON array, validates entries, and sends with a per-batch execution summary. `ServiceBusPage` exposes a "Batch Send" toolbar button for regular entities. 27 new Wave 2 tests (15 BatchReplayPanel + 12 BatchSendPanel) all passing.
+Wave 1 (triage depth) is complete. Wave 2 (preview-first batch operations) is complete. Wave 3 (bounded large-volume loading cues and trace pivot filter) is complete. All three waves are fully implemented, tested, and the build is clean (0 warnings, 0 errors). 118 automated tests passing across all Service Bus and related components.
 
 Jira: not linked
 
-Current focus: Wave 3 polish.
+Current focus: Done — feature complete, ready for archive or pre-ship review.
 
 ## Progress checklist
 
@@ -46,19 +46,24 @@ Current focus: Wave 3 polish.
 - [x] `ServiceBusPage.razor`: `BatchSendPanel` in `Modal`, "Batch Send" button in `RoutePageHeader` Actions slot (shown only for non-DLQ, non-scheduled tabs)
 - [x] 15 tests in `BatchReplayPanelTests` + 12 tests in `BatchSendPanelTests` (27 total, all passing)
 
-### Wave 3 - performance and polish
+### Wave 3 - performance and polish ✅
 
-- [ ] Bounded large-volume loading rules for sessions and trace pivots
-- [ ] Saved trace pivots or bookmarks
+- [x] `TracePivotFilter` parameter on `MessageListView`: applies text filter when pivot value arrives from detail pane; idempotent (same value does not re-apply)
+- [x] "Filter list" button on each trace pivot row in `MessageDetailPane`; conditional on `OnApplyTracePivotFilter.HasDelegate`
+- [x] `OnApplyTracePivotFilter` wired in `DlqView` and both `MessageDetailPane` usages in `ServiceBusPage`
+- [x] Large-window cue: badge + "Large window" label appears when loaded message count ≥ 200 (`LargeWindowThreshold`)
+- [x] 8 new tests in `MessageDetailPaneTests` + `MessageListViewTests` covering all Wave 3 paths
 
 ## Completed
 
 - Wave 1: enriched detail pane, trace pivots, session filter, PartitionKey column — 21 tests.
 - Wave 2: `BatchReplayPanel`, `BatchSendPanel`, remap in `AzureServiceBusClient`, wired into `DlqView` and `ServiceBusPage` — 27 tests.
+- Wave 3: `TracePivotFilter` parameter + "Filter list" button on trace pivot rows, large-window cue, full wiring in `DlqView` and `ServiceBusPage` — 8 tests.
+- Infrastructure: fixed compile error (multi-line XML doc comment in Razor), suppressed pre-existing deprecated API warning (BlazorMonaco `AddAction`), added `SkeletonRows` to test project, added `IncidentInvestigationLauncher` registration to 3 test classes, fixed test `_Imports.razor` and csproj gaps. Build: 0 errors, 0 warnings.
 
 ## Remaining
 
-- Wave 3: polish and performance for high-volume queues (session/trace pivot loading, optional bookmarks).
+- None. Feature is complete.
 
 ## Blockers
 
@@ -68,13 +73,14 @@ Current focus: Wave 3 polish.
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Wave 1 automated — 17 tests. Manual checks pending.
+- Validation status: All waves automated — 56+ tests in `SwebKit.App.Tests`. Build clean.
 
 ## Notes
 
 - Trace pivots are explicit identifiers only; reason text is always rendered alongside value.
 - Session filter is a pinned overlay filter, not a destructive reload — it works within the current loaded window.
 - Batch operations (Wave 2) should remain opt-in and bounded even when the selected message set is large.
+- Large-window threshold is 200 (matches max single-peek window). Cue is informational, not blocking.
 
 ---
 

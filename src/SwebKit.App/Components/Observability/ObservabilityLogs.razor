@@ -517,10 +517,12 @@ Enum.GetValues<GuidedKqlFilterOperator>();
         if (_editor is null) return;
 
         // Ctrl+Enter → Run query
+#pragma warning disable CS0618
         await _editor.AddAction("run-query", "Run Query",
             [(int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter],
             null, null, "navigation", 1.0,
             async (_, _) => await RunQueryAsync());
+#pragma warning restore CS0618
     }
 
     protected override async Task OnParametersSetAsync()

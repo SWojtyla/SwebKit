@@ -57,6 +57,7 @@ public sealed class ObservabilityPageTests : TestContext
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IGuidedKqlCompiler>(new GuidedKqlCompiler());
         Services.AddScoped<OperatorWorkspaceService>();
+        Services.AddSingleton<IncidentInvestigationLauncher>();
     }
 
     [Fact]

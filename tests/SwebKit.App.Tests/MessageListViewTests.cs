@@ -1129,6 +1129,118 @@ public sealed class MessageListViewTests : TestContext
         });
     }
 
+    // ── Wave 3: TracePivotFilter and large-window cue ─────────────────────
+
+    [Fact]
+    public void TracePivotFilter_WhenSet_AppliesTextFilter_AndFiltersMessages()
+    {
+        var messages = new List<SbMessage>
+        {
+            new SbMessage { MessageId = "corr-abc", CorrelationId = "abc-123", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+            new SbMessage { MessageId = "corr-xyz", CorrelationId = "xyz-999", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+        };
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false)
+            .Add(p => p.TracePivotFilter, "abc-123"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("corr-abc", cut.Markup);
+            Assert.DoesNotContain("corr-xyz", cut.Markup);
+            Assert.Contains("Showing 1 filtered of 2 loaded", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void TracePivotFilter_WhenChangedToSameValue_DoesNotReapply()
+    {
+        // Verifies idempotency — a second render with the same pivot filter doesn't change state.
+        var messages = new List<SbMessage>
+        {
+            new SbMessage { MessageId = "stable-001", CorrelationId = "same-value", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+            new SbMessage { MessageId = "stable-002", CorrelationId = "other-value", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow },
+        };
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = messages.Count, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false)
+            .Add(p => p.TracePivotFilter, "same-value"));
+
+        cut.WaitForAssertion(() => Assert.Contains("Showing 1 filtered of 2 loaded", cut.Markup));
+
+        // Manually change the filter input to something else
+        cut.Find("input[placeholder='Filter messages...']").Input("other-value");
+        cut.WaitForAssertion(() => Assert.Contains("Showing 1 filtered of 2 loaded", cut.Markup));
+
+        // Re-render with the same TracePivotFilter — should not revert the manual change
+        cut.SetParametersAndRender(ps => ps
+            .Add(p => p.TracePivotFilter, "same-value"));
+
+        // The manual filter should remain ("other-value" was set after the pivot applied)
+        cut.WaitForAssertion(() => Assert.Contains("other-value", cut.Find("input[placeholder='Filter messages...']").GetAttribute("value") ?? ""));
+    }
+
+    [Fact]
+    public void LargeWindowCue_ShowsWhenMessageCountExceedsThreshold()
+    {
+        var messages = Enumerable.Range(1, 200)
+            .Select(i => new SbMessage { MessageId = $"msg-{i:000}", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow })
+            .ToList();
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = 200, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        // Change PeekCount to 200 so all 200 messages are loaded in one peek
+        cut.Find("[data-testid='peek-count-select']").Change("200");
+        cut.Find("[data-testid='peek-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotEmpty(cut.FindAll("[data-testid='large-window-cue']"));
+            Assert.Contains("Large window", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void LargeWindowCue_HiddenWhenMessageCountBelowThreshold()
+    {
+        var messages = Enumerable.Range(1, 50)
+            .Select(i => new SbMessage { MessageId = $"msg-{i:000}", Body = "{}", EnqueuedAt = DateTimeOffset.UtcNow })
+            .ToList();
+
+        var client = new FakeServiceBusClient(
+            messages: messages,
+            stats: new SbEntityStats { ActiveMessageCount = 50, DeadLetterMessageCount = 0 });
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.IsDlqMode, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid='large-window-cue']"));
+        });
+    }
+
     private sealed class FakeServiceBusClient : IServiceBusClient
     {
         private readonly Func<string, int, IReadOnlyList<SbMessage>> _peekResolver;

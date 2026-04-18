@@ -71,9 +71,9 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 
 ### Wave 1 - namespace and workload diagnostics [blazor-expert]
 
-- [ ] Add quota, limit-range, PDB, probe, and placement panel entry points.
-- [ ] Render concise summaries plus supporting details for each diagnostic class.
-- [ ] Keep existing grid interactions stable.
+- [x] Add quota, limit-range, PDB, probe, and placement panel entry points.
+- [x] Render concise summaries plus supporting details for each diagnostic class.
+- [x] Keep existing grid interactions stable.
 
 ### Wave 2 - network and ingress diagnostics [blazor-expert]
 
@@ -86,9 +86,9 @@ Extend the existing `/aks` diagnostics experience with higher-signal runtime pan
 
 ### Wave 3 - Helm preview [blazor-expert]
 
-- [ ] Add preview entry points from Helm actions.
-- [ ] Render read-only diff or fallback content with search support.
-- [ ] Ensure unsupported capability states are visible and not treated as silent failure.
+- [x] Add preview entry points from Helm actions.
+- [x] Render read-only diff or fallback content with search support.
+- [x] Ensure unsupported capability states are visible and not treated as silent failure.
 
 ## Validation
 

@@ -36,6 +36,7 @@ public sealed class ServiceBusPageTests : TestContext
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore));
         Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
+        Services.AddSingleton<IncidentInvestigationLauncher>();
     }
 
     [Fact]
@@ -120,6 +121,8 @@ public sealed class ServiceBusPageTests : TestContext
         public T? GetSelection<T>(string area) where T : class =>
             _selections.TryGetValue(area, out var value) ? value as T : null;
 
+#pragma warning disable CS0067
         public event Action? SelectionChanged;
+#pragma warning restore CS0067
     }
 }

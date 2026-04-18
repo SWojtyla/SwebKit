@@ -4,7 +4,7 @@
 
 title: "Status - pipelines-deployment-assurance"
 owner: "GitHub Copilot"
-state: "In Progress"
+state: "Done"
 jira: "not linked"
 branch: "sw/dev/timeline"
 started: "2026-04-12"

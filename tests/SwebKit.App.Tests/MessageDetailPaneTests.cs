@@ -262,6 +262,74 @@ public sealed class MessageDetailPaneTests : TestContext
         Assert.Empty(cut.FindAll("[data-testid='filter-by-session-btn']"));
     }
 
+    // ── Wave 3: Trace pivot Filter list button ─────────────────────────────
+
+    [Fact]
+    public void TracePivotRow_FilterButton_NotRendered_WhenCallbackNotWired()
+    {
+        var msg = MakeMessage(correlationId: "corr-no-callback");
+
+        var cut = RenderComponent<MessageDetailPane>(ps => ps
+            .Add(p => p.Message, msg));
+
+        Assert.Empty(cut.FindAll("[data-testid='apply-pivot-filter']"));
+    }
+
+    [Fact]
+    public void TracePivotRow_FilterButton_Rendered_WhenCallbackWired()
+    {
+        var msg = MakeMessage(correlationId: "corr-abc-123");
+        var captured = new List<string>();
+
+        var cut = RenderComponent<MessageDetailPane>(ps => ps
+            .Add(p => p.Message, msg)
+            .Add(p => p.OnApplyTracePivotFilter, EventCallback.Factory.Create<string>(this, v => captured.Add(v))));
+
+        Assert.Single(cut.FindAll("[data-testid='apply-pivot-filter']"));
+    }
+
+    [Fact]
+    public void TracePivotRow_FilterButton_FiresCallbackWithPivotValue()
+    {
+        var msg = MakeMessage(correlationId: "pivot-value-xyz");
+        var captured = new List<string>();
+
+        var cut = RenderComponent<MessageDetailPane>(ps => ps
+            .Add(p => p.Message, msg)
+            .Add(p => p.OnApplyTracePivotFilter, EventCallback.Factory.Create<string>(this, v => captured.Add(v))));
+
+        cut.Find("[data-testid='apply-pivot-filter']").Click();
+
+        Assert.Single(captured);
+        Assert.Equal("pivot-value-xyz", captured[0]);
+    }
+
+    [Fact]
+    public void TracePivotRow_MultipleCallbackButtons_EachFiresOwnValue()
+    {
+        var msg = MakeMessage(correlationId: "corr-aaa");
+        msg.ApplicationProperties["operation_Id"] = "op-bbb";
+        var captured = new List<string>();
+
+        var cut = RenderComponent<MessageDetailPane>(ps => ps
+            .Add(p => p.Message, msg)
+            .Add(p => p.OnApplyTracePivotFilter, EventCallback.Factory.Create<string>(this, v => captured.Add(v))));
+
+        Assert.Equal(2, cut.FindAll("[data-testid='apply-pivot-filter']").Count);
+
+        // Re-find between clicks — Blazor re-renders after each EventCallback, invalidating cached handles
+        cut.FindAll("[data-testid='apply-pivot-filter']")[0].Click();
+        cut.WaitForAssertion(() => Assert.Single(captured));
+        cut.FindAll("[data-testid='apply-pivot-filter']")[1].Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(2, captured.Count);
+            Assert.Contains("corr-aaa", captured);
+            Assert.Contains("op-bbb", captured);
+        });
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static SbMessage MakeMessage(

@@ -65,6 +65,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\Dropdown.razor" Link="Components\Shared\Dropdown.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PageToolbar.razor" Link="Components\Shared\PageToolbar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\PasswordField.razor" Link="Components\Shared\PasswordField.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SkeletonRows.razor" Link="Components\Shared\SkeletonRows.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessDashboard.razor" Link="Components\Shared\ConfigurationReadinessDashboard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />

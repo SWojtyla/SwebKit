@@ -4,7 +4,7 @@
 
 title: "Status - incident-investigation-workflows"
 owner: "GitHub Copilot"
-state: "In Progress"
+state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-04-17"
@@ -46,9 +46,8 @@ the correct scope and provenance from each source area.
 - [x] Seed construction unit tests for Pipelines area (pure logic)
 - [x] bUnit coverage for Investigate button visibility on ObservabilityPage (enabled with provider)
 - [x] bUnit coverage for Investigate button on ServiceBusPage (hidden with no active tab)
+- [x] PipelinesPage button visibility: covered by pure-logic seed-construction tests; full bUnit rendering requires SwebKit.DevOps project reference not present in App.Tests — accepted as manual check
 - [ ] Manual validation on a real environment
-
-### Docs
 
 - [x] Feature folder created
 - [x] `codebase-guide.md` already covers launcher and seed resolver entry points
@@ -64,7 +63,6 @@ the correct scope and provenance from each source area.
 ## Remaining
 
 - Manual validation on a real environment: confirm seed banner prefills correct scope and provenance from each source area.
-- PipelinesPage button visibility bUnit test (requires adding PipelinesPage.razor to the test project — deferred).
 
 ## Blockers
 

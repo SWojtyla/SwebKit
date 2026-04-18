@@ -1,0 +1,130 @@
+@implements IDisposable
+
+<div class="helm-diff-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading Helm diff preview..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="helm-diff-panel-error">@_error</div>
+    }
+    else if (_preview is null)
+    {
+        <div class="helm-diff-panel-empty">No preview data available.</div>
+    }
+    else
+    {
+        <div class="helm-diff-panel-toolbar">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        @if (_preview.Capability == HelmPreviewCapability.Full)
+        {
+            @if (!string.IsNullOrWhiteSpace(_preview.DiffText))
+            {
+                <div class="helm-diff-panel-section">
+                    <div class="helm-diff-panel-section-title">Diff</div>
+                    <pre class="helm-diff-panel-diff">@_preview.DiffText</pre>
+                </div>
+            }
+            else
+            {
+                <div class="helm-diff-panel-empty">No diff output.</div>
+            }
+        }
+        else if (_preview.Capability == HelmPreviewCapability.Degraded)
+        {
+            <div class="helm-diff-panel-section">
+                <div class="helm-diff-panel-notice helm-diff-panel-notice-degraded">@_preview.CapabilityNote</div>
+            </div>
+        }
+        else if (_preview.Capability == HelmPreviewCapability.Unsupported)
+        {
+            <div class="helm-diff-panel-section">
+                <div class="helm-diff-panel-notice helm-diff-panel-notice-unsupported">@_preview.CapabilityNote</div>
+            </div>
+        }
+
+        @if (_preview.Findings.Count > 0)
+        {
+            <div class="helm-diff-panel-section">
+                <div class="helm-diff-panel-section-title">Findings</div>
+                <ul class="helm-diff-panel-list">
+                    @foreach (var finding in _preview.Findings)
+                    {
+                        <li>@finding</li>
+                    }
+                </ul>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public string? ReleaseName { get; set; }
+
+    private HelmDiffPreview? _preview;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Namespace}/{ReleaseName}";
+        if (_loadedKey == key) return;
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(ReleaseName))
+        {
+            _preview = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _preview = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _preview = await Client.PreviewHelmUpgradeAsync(Namespace, ReleaseName, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

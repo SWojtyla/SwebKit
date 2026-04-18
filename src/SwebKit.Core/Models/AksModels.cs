@@ -408,3 +408,109 @@ public class NetworkPolicyMatch
     public List<string> IngressRules { get; set; } = [];
     public List<string> EgressRules { get; set; } = [];
 }
+
+// ── Wave 1: namespace and workload constraint visibility ────────────────────
+
+public class ResourceQuotaInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public List<ResourceQuotaUsage> HardLimits { get; set; } = [];
+    public List<ResourceQuotaUsage> Used { get; set; } = [];
+}
+
+public class ResourceQuotaUsage
+{
+    public required string Resource { get; set; }
+    public string? Hard { get; set; }
+    public string? Used { get; set; }
+}
+
+public class LimitRangeInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public List<LimitRangeItem> Limits { get; set; } = [];
+}
+
+public class LimitRangeItem
+{
+    public string Type { get; set; } = "Container";
+    public Dictionary<string, string> DefaultRequests { get; set; } = [];
+    public Dictionary<string, string> DefaultLimits { get; set; } = [];
+    public Dictionary<string, string> Min { get; set; } = [];
+    public Dictionary<string, string> Max { get; set; } = [];
+}
+
+public class PodDisruptionBudgetInfo
+{
+    public required string Name { get; set; }
+    public required string Namespace { get; set; }
+    public string? MinAvailable { get; set; }
+    public string? MaxUnavailable { get; set; }
+    public int DesiredHealthy { get; set; }
+    public int CurrentHealthy { get; set; }
+    public int ExpectedPods { get; set; }
+    public bool DisruptionsAllowed { get; set; }
+    public int AllowedDisruptions { get; set; }
+    public Dictionary<string, string> SelectorLabels { get; set; } = [];
+}
+
+public class ProbeFailureSummary
+{
+    public required string Namespace { get; set; }
+    public required string WorkloadKind { get; set; }
+    public required string WorkloadName { get; set; }
+    public string Limitation { get; set; } =
+        "Summarises observed pod restart counts and recent probe-related events only. It does not prove the root cause of probe failures.";
+    public int TotalPods { get; set; }
+    public int PodsWithRestarts { get; set; }
+    public List<PodProbeStatus> Pods { get; set; } = [];
+    public List<string> RecentProbeEvents { get; set; } = [];
+    public List<string> Findings { get; set; } = [];
+}
+
+public class PodProbeStatus
+{
+    public required string PodName { get; set; }
+    public int RestartCount { get; set; }
+    public bool LivenessProbeConfigured { get; set; }
+    public bool ReadinessProbeConfigured { get; set; }
+    public bool Ready { get; set; }
+    public string? LastTerminationReason { get; set; }
+    public string? LastTerminationMessage { get; set; }
+}
+
+public class PlacementAnalysis
+{
+    public required string Namespace { get; set; }
+    public required string WorkloadKind { get; set; }
+    public required string WorkloadName { get; set; }
+    public string Limitation { get; set; } =
+        "Summarises declared pod-spec constraints and observed scheduling failure events. It does not simulate the scheduler or prove a constraint is the current blocking cause.";
+    public bool HasNodeSelector { get; set; }
+    public Dictionary<string, string> NodeSelector { get; set; } = [];
+    public bool HasNodeAffinity { get; set; }
+    public bool HasPodAffinity { get; set; }
+    public bool HasPodAntiAffinity { get; set; }
+    public bool HasTolerations { get; set; }
+    public List<string> Tolerations { get; set; } = [];
+    public bool HasTopologySpreadConstraints { get; set; }
+    public List<string> TopologySpreadKeys { get; set; } = [];
+    public List<string> RecentSchedulingFailureEvents { get; set; } = [];
+    public List<string> Findings { get; set; } = [];
+}
+
+// ── Wave 3: Helm preview ────────────────────────────────────────────────────
+
+public enum HelmPreviewCapability { Full, Degraded, Unsupported }
+
+public class HelmDiffPreview
+{
+    public required string Namespace { get; set; }
+    public required string ReleaseName { get; set; }
+    public HelmPreviewCapability Capability { get; set; }
+    public string CapabilityNote { get; set; } = string.Empty;
+    public string? DiffText { get; set; }
+    public List<string> Findings { get; set; } = [];
+}

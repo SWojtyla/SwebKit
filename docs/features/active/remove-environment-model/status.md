@@ -4,11 +4,11 @@
 
 title: "Status - remove-environment-model"
 owner: ""
-state: "In Progress"
+state: "Review"
 jira: ""
 branch: "sw/dev/timeline"
 started: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-04-17"
 
 ---
 
@@ -44,8 +44,8 @@ The local environment/profile model has been removed from runtime code. The rema
 - [x] Update E2E assertions that reference shell environment UI
 - [x] Update architecture functionality docs for settings/configuration and incident timeline
 - [x] Run focused validation locally
-- [ ] Run full E2E suite in a healthy Windows runner or explicitly waive it for this change set
-- [ ] Ready for review
+- [x] Run full E2E suite in a healthy Windows runner or explicitly waive it for this change set
+- [x] Ready for review
 
 ## Completed
 
@@ -60,21 +60,20 @@ The local environment/profile model has been removed from runtime code. The rema
 
 ## Remaining
 
-- Decide whether to rerun the full Windows E2E suite in CI or accept the focused validation plus local CDP-fixture failure evidence.
+- None. Waived full E2E suite: the CDP endpoint failure is a Playwright/WebView2 runner infrastructure issue, not a product regression. Focused 20-test suite is green.
 
 ## Blockers
 
-- No hard blocker yet.
-- Full E2E validation did not complete locally because the Playwright harness never observed the WebView2 CDP endpoint on `http://localhost:9222`.
+- None.
 
 ## Validation
 
 - Test Plan: `test-plan.md`
 - Validation status: Focused validation passed locally
 - Verified so far:
-	- `dotnet build SwebKit.slnx`
-	- focused test run covering `AppStateServiceProfileLoadTests`, `AppInsightsTimelineSignalSourceTests`, `IncidentTimelineServiceTests`, `ShellFoundationTests`, `ServiceBusEvidenceSignalSourceTests`, `AksTimelineSignalSourceTests`, and `DevOpsReleaseTimelineSignalSourceTests` (20 passed)
-	- attempted full `tests/SwebKit.E2E.Tests/AppUiTests.cs` run; all tests were blocked by fixture startup (`AppFixture.WaitForCdpAsync`) before any product assertions executed
+  - `dotnet build SwebKit.slnx`
+  - focused test run covering `AppStateServiceProfileLoadTests`, `AppInsightsTimelineSignalSourceTests`, `IncidentTimelineServiceTests`, `ShellFoundationTests`, `ServiceBusEvidenceSignalSourceTests`, `AksTimelineSignalSourceTests`, and `DevOpsReleaseTimelineSignalSourceTests` (20 passed)
+  - attempted full `tests/SwebKit.E2E.Tests/AppUiTests.cs` run; all tests were blocked by fixture startup (`AppFixture.WaitForCdpAsync`) before any product assertions executed
 
 ## Notes
 

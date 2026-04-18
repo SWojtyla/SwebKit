@@ -38,6 +38,7 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(_bootstrapper);
         Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
+        Services.AddSingleton<IncidentInvestigationLauncher>();
     }
 
     [Fact]

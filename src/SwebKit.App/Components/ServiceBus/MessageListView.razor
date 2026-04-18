@@ -344,7 +344,7 @@
                         <TemplateColumn Title="Correlation ID" Width="180px"
                                         SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
                             <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                           "-")</span>
+                                                                                                                                           "-")</span>
                             </TemplateColumn>
                         }
                         @if (IsBuiltInColumnVisible(ColumnSubject))
@@ -387,14 +387,14 @@
                                             SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
                                 <span class="cell-truncate"
                                       title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
-                                                     "-")</span>
+                                                                                                                                                                 "-")</span>
                                 </TemplateColumn>
                             }
                             @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
                             {
                                 <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
                                     <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                 "-")</span>
+                                                                                                                                                                         "-")</span>
                                     </TemplateColumn>
                                 }
                                 @foreach (var customColumn in _customPropertyColumns)
@@ -410,6 +410,13 @@
                         </div>
                         <div class="message-list-view__summary-bar">
                             <span data-testid="window-status">@WindowStatusSummary</span>
+                            @if (Messages.Count >= LargeWindowThreshold)
+                            {
+                                <span class="message-list-view__large-window-cue" data-testid="large-window-cue"
+                                      title="The loaded window is large. Filtering and scroll performance may be impacted.">
+                                    Large window
+                                </span>
+                            }
                             <FluentButton data-testid="load-more-button" @onclick="LoadMoreAsync" Appearance="Appearance.Stealth"
                                           Disabled="@(!CanLoadMore)" title="Load additional messages into the current window">
                                 @LoadMoreButtonLabel
@@ -471,6 +478,8 @@
     private const string ColumnSession = "session";
     private const string ColumnPartitionKey = "partition-key";
     private const string ColumnDeadLetterReason = "dead-letter-reason";
+
+    private const int LargeWindowThreshold = 200;
 
     private static readonly IReadOnlyList<BuiltInColumnOption> BuiltInColumnOptions =
     [
@@ -540,6 +549,7 @@
     [Parameter] public bool IsDetailPaneOpen { get; set; }
     [Parameter] public EventCallback OnCloseDetails { get; set; }
     [Parameter] public long RefreshToken { get; set; }
+    [Parameter] public string? TracePivotFilter { get; set; }
 
     private bool IsLoading;
     private bool IsMutating;
@@ -558,6 +568,7 @@
     private int _loadVersion;
     private int _requestedWindowSize;
     private string? _loadedPreferenceScopeKey;
+    private string? _lastAppliedTracePivotFilter;
 
     private bool _showMutationConfirm;
     private string _confirmTitle = "Confirm";
@@ -968,6 +979,14 @@ HasEnabledAdvancedRules));
 
     protected override async Task OnParametersSetAsync()
     {
+        if (TracePivotFilter is not null && !string.Equals(TracePivotFilter, _lastAppliedTracePivotFilter,
+StringComparison.Ordinal))
+        {
+            TextFilter = TracePivotFilter;
+            _filtersEnabled = true;
+            _lastAppliedTracePivotFilter = TracePivotFilter;
+        }
+
         if (Client is null || string.IsNullOrWhiteSpace(EntityPath))
         {
             Messages = [];

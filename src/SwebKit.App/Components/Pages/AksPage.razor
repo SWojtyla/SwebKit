@@ -208,8 +208,8 @@
                         <span class="aks-kbd-hint"><kbd>n</kbd> network</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
-                                                                                                    "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
+                                                                                                                        "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -266,158 +266,168 @@
                                 Container Details</button>
                                 <button class="ctx-item" @onclick="OnCtxAnalyzeDeploymentNetwork"><span class="ctx-item-icon">&#128246;</span>
                                     Analyze network</button>
-                                    <div class="ctx-separator"></div>
-                                    <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
-                                        Deployment</button>
-                                        <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
-                                            Scale...</button>
-                                        </ContextMenu>
+                                    <button class="ctx-item" @onclick="OnCtxProbeFailuresDeployment"><span class="ctx-item-icon">&#128680;</span>
+                                        Probe failures</button>
+                                        <button class="ctx-item" @onclick="OnCtxPlacementDeployment"><span class="ctx-item-icon">&#128205;</span>
+                                            Placement</button>
+                                            <div class="ctx-separator"></div>
+                                            <button class="ctx-item" @onclick="OnCtxRestartDeployment"><span class="ctx-item-icon">&#8635;</span> Restart
+                                                Deployment</button>
+                                                <button class="ctx-item" @onclick="OnCtxScaleDeployment"><span class="ctx-item-icon">&#8693;</span>
+                                                    Scale...</button>
+                                                </ContextMenu>
 
-                                        <ContextMenu @ref="PodMenu">
-                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxPod?.Name)"><span
-                                                class="ctx-item-icon">📋</span> Copy name</button>
-                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
-                                                    YAML</button>
-                                                    <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
-                                                        Logs</button>
-                                                        <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
-                                                            Container Details</button>
-                                                            <button class="ctx-item" @onclick="OnCtxAnalyzePodNetwork"><span class="ctx-item-icon">&#128246;</span>
-                                                                Analyze network</button>
-                                                                <div class="ctx-separator"></div>
-                                                                <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
-                                                                    pod</button>
-                                                                    <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span>
-                                                                        Port-forward…</button>
+                                                <ContextMenu @ref="PodMenu">
+                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxPod?.Name)"><span
+                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('P')"><span class="ctx-item-icon">{ }</span> View
+                                                            YAML</button>
+                                                            <button class="ctx-item" @onclick="OnCtxViewPodLogs"><span class="ctx-item-icon">&#9776;</span> View
+                                                                Logs</button>
+                                                                <button class="ctx-item" @onclick="OnCtxContainerDetailsPod"><span class="ctx-item-icon">&#9881;</span>
+                                                                    Container Details</button>
+                                                                    <button class="ctx-item" @onclick="OnCtxAnalyzePodNetwork"><span class="ctx-item-icon">&#128246;</span>
+                                                                        Analyze network</button>
                                                                         <div class="ctx-separator"></div>
-                                                                        <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
-                                                                            Pod</button>
-                                                                        </ContextMenu>
-
-                                                                        <ContextMenu @ref="ServiceMenu">
-                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxService?.Name)"><span
-                                                                                class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlService"><span class="ctx-item-icon">{ }</span> View
-                                                                                    YAML</button>
+                                                                        <button class="ctx-item" @onclick="OnCtxOpenPodShell"><span class="ctx-item-icon">&#62;</span> Open shell in
+                                                                            pod</button>
+                                                                            <button class="ctx-item" @onclick="OnCtxPortForward"><span class="ctx-item-icon">&#8594;</span>
+                                                                                Port-forward…</button>
+                                                                                <div class="ctx-separator"></div>
+                                                                                <button class="ctx-item destructive" @onclick="OnCtxKillPod"><span class="ctx-item-icon">&#10005;</span> Kill
+                                                                                    Pod</button>
                                                                                 </ContextMenu>
 
-                                                                                <ContextMenu @ref="IngressMenu">
-                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxIngress?.Name)"><span
+                                                                                <ContextMenu @ref="ServiceMenu">
+                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxService?.Name)"><span
                                                                                         class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
+                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlService"><span class="ctx-item-icon">{ }</span> View
                                                                                             YAML</button>
-                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
-                                                                                                YAML</button>
-                                                                                                <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
-                                                                                                    browser</button>
-                                                                                                    <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
-                                                                                                        URL</button>
-                                                                                                        <button class="ctx-item" @onclick="OnCtxAnalyzeIngress"><span class="ctx-item-icon">&#128269;</span>
-                                                                                                            Analyze ingress</button>
-                                                                                                        </ContextMenu>
+                                                                                        </ContextMenu>
 
-                                                                                                        <ContextMenu @ref="GatewayClassMenu">
-                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxGatewayClass?.Name)"><span
-                                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlGatewayClass"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                    YAML</button>
+                                                                                        <ContextMenu @ref="IngressMenu">
+                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxIngress?.Name)"><span
+                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('I')"><span class="ctx-item-icon">{ }</span> View
+                                                                                                    YAML</button>
+                                                                                                    <button class="ctx-item" @onclick="() => OnCtxEditYaml('I')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                        YAML</button>
+                                                                                                        <button class="ctx-item" @onclick="OnCtxOpenIngressUrl"><span class="ctx-item-icon">&#128279;</span> Open URL in
+                                                                                                            browser</button>
+                                                                                                            <button class="ctx-item" @onclick="OnCtxCopyHostUrl"><span class="ctx-item-icon">&#128203;</span> Copy
+                                                                                                                URL</button>
+                                                                                                                <button class="ctx-item" @onclick="OnCtxAnalyzeIngress"><span class="ctx-item-icon">&#128269;</span>
+                                                                                                                    Analyze ingress</button>
                                                                                                                 </ContextMenu>
 
-                                                                                                                <ContextMenu @ref="GatewayMenu">
-                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxGateway?.Name)"><span
+                                                                                                                <ContextMenu @ref="GatewayClassMenu">
+                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxGatewayClass?.Name)"><span
                                                                                                                         class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlGateway"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlGatewayClass"><span class="ctx-item-icon">{ }</span> View
                                                                                                                             YAML</button>
                                                                                                                         </ContextMenu>
 
-                                                                                                                        <ContextMenu @ref="HttpRouteMenu">
-                                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHttpRoute?.Name)"><span
+                                                                                                                        <ContextMenu @ref="GatewayMenu">
+                                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxGateway?.Name)"><span
                                                                                                                                 class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlHttpRoute"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewYamlGateway"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                     YAML</button>
                                                                                                                                 </ContextMenu>
 
-                                                                                                                                <ContextMenu @ref="HelmMenu">
-                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
+                                                                                                                                <ContextMenu @ref="HttpRouteMenu">
+                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHttpRoute?.Name)"><span
                                                                                                                                         class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
+                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlHttpRoute"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                             YAML</button>
-                                                                                                                                            <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
-                                                                                                                                                Values</button>
-                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
-                                                                                                                                                    History</button>
-                                                                                                                                                    <div class="ctx-separator"></div>
-                                                                                                                                                    <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
-                                                                                                                                                        Rollback...</button>
-                                                                                                                                                    </ContextMenu>
+                                                                                                                                        </ContextMenu>
 
-                                                                                                                                                    <ContextMenu @ref="StatefulSetMenu">
-                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxStatefulSet?.Name)"><span
-                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                YAML</button>
-                                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
-                                                                                                                                                                    YAML</button>
-                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
-                                                                                                                                                                        for all pods</button>
-                                                                                                                                                                        <div class="ctx-separator"></div>
-                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
-                                                                                                                                                                            Restart</button>
-                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
-                                                                                                                                                                                Scale...</button>
-                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxAnalyzeStatefulSetNetwork"><span class="ctx-item-icon">&#128246;</span>
-                                                                                                                                                                                    Analyze network</button>
-                                                                                                                                                                                </ContextMenu>
+                                                                                                                                        <ContextMenu @ref="HelmMenu">
+                                                                                                                                            <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxHelm?.Name)"><span
+                                                                                                                                                class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxViewYaml('H')"><span class="ctx-item-icon">{ }</span> View Release
+                                                                                                                                                    YAML</button>
+                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewHelmValues"><span class="ctx-item-icon">&#9998;</span> View
+                                                                                                                                                        Values</button>
+                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewHelmHistory"><span class="ctx-item-icon">&#128337;</span> View
+                                                                                                                                                            History</button>
+                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxHelmDiffPreview"><span class="ctx-item-icon">&#128269;</span>
+                                                                                                                                                                Preview upgrade</button>
+                                                                                                                                                                <div class="ctx-separator"></div>
+                                                                                                                                                                <button class="ctx-item destructive" @onclick="OnCtxRollbackHelm"><span class="ctx-item-icon">&#8634;</span>
+                                                                                                                                                                    Rollback...</button>
+                                                                                                                                                                </ContextMenu>
 
-                                                                                                                                                                                <ContextMenu @ref="ConfigMapMenu">
-                                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxConfigMap?.Name)"><span
-                                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                            YAML</button>
-                                                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
-                                                                                                                                                                                                YAML</button>
-                                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
-                                                                                                                                                                                                    Keys</button>
-                                                                                                                                                                                                </ContextMenu>
+                                                                                                                                                                <ContextMenu @ref="StatefulSetMenu">
+                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxStatefulSet?.Name)"><span
+                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('S')"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                            YAML</button>
+                                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('S')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                                YAML</button>
+                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxAllPodsLogsStatefulSet"><span class="ctx-item-icon">&#9782;</span> Logs
+                                                                                                                                                                                    for all pods</button>
+                                                                                                                                                                                    <div class="ctx-separator"></div>
+                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxRestartStatefulSet"><span class="ctx-item-icon">&#8635;</span>
+                                                                                                                                                                                        Restart</button>
+                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxScaleStatefulSet"><span class="ctx-item-icon">&#8693;</span>
+                                                                                                                                                                                            Scale...</button>
+                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxAnalyzeStatefulSetNetwork"><span class="ctx-item-icon">&#128246;</span>
+                                                                                                                                                                                                Analyze network</button>
+                                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxProbeFailuresStatefulSet"><span class="ctx-item-icon">&#128680;</span>
+                                                                                                                                                                                                    Probe failures</button>
+                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxPlacementStatefulSet"><span class="ctx-item-icon">&#128205;</span>
+                                                                                                                                                                                                        Placement</button>
+                                                                                                                                                                                                    </ContextMenu>
 
-                                                                                                                                                                                                <ContextMenu @ref="SecretMenu">
-                                                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxSecret?.Name)"><span
-                                                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                                        <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                                            YAML</button>
-                                                                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                                                    <ContextMenu @ref="ConfigMapMenu">
+                                                                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxConfigMap?.Name)"><span
+                                                                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('C')"><span class="ctx-item-icon">{ }</span> View
                                                                                                                                                                                                                 YAML</button>
-                                                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
-                                                                                                                                                                                                                    Keys</button>
-                                                                                                                                                                                                                </ContextMenu>
+                                                                                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('C')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                                                                    YAML</button>
+                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewConfigMapKeys"><span class="ctx-item-icon">&#128273;</span> View
+                                                                                                                                                                                                                        Keys</button>
+                                                                                                                                                                                                                    </ContextMenu>
 
-                                                                                                                                                                                                                <ContextMenu @ref="JobMenu">
-                                                                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxJob?.Name)"><span
-                                                                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                                                            YAML</button>
-                                                                                                                                                                                                                            <div class="ctx-separator"></div>
-                                                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
-                                                                                                                                                                                                                                job</button>
-                                                                                                                                                                                                                            </ContextMenu>
+                                                                                                                                                                                                                    <ContextMenu @ref="SecretMenu">
+                                                                                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxSecret?.Name)"><span
+                                                                                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                                                            <button class="ctx-item" @onclick="() => OnCtxViewYaml('E')"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                                                                YAML</button>
+                                                                                                                                                                                                                                <button class="ctx-item" @onclick="() => OnCtxEditYaml('E')"><span class="ctx-item-icon">✎</span> Edit
+                                                                                                                                                                                                                                    YAML</button>
+                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewSecretKeys"><span class="ctx-item-icon">&#128274;</span> View
+                                                                                                                                                                                                                                        Keys</button>
+                                                                                                                                                                                                                                    </ContextMenu>
 
-                                                                                                                                                                                                                            <ContextMenu @ref="CronJobMenu">
-                                                                                                                                                                                                                                <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
-                                                                                                                                                                                                                                    class="ctx-item-icon">📋</span> Copy name</button>
-                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
-                                                                                                                                                                                                                                        YAML</button>
-                                                                                                                                                                                                                                        <div class="ctx-separator"></div>
-                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
-                                                                                                                                                                                                                                            now</button>
-                                                                                                                                                                                                                                        </ContextMenu>
+                                                                                                                                                                                                                                    <ContextMenu @ref="JobMenu">
+                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxJob?.Name)"><span
+                                                                                                                                                                                                                                            class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxViewYamlJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                                                                                YAML</button>
+                                                                                                                                                                                                                                                <div class="ctx-separator"></div>
+                                                                                                                                                                                                                                                <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
+                                                                                                                                                                                                                                                    job</button>
+                                                                                                                                                                                                                                                </ContextMenu>
 
-                                                                                                                                                                                                                                    </div>
+                                                                                                                                                                                                                                                <ContextMenu @ref="CronJobMenu">
+                                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="() => CopyToClipboardAsync(CtxCronJob?.Name)"><span
+                                                                                                                                                                                                                                                        class="ctx-item-icon">📋</span> Copy name</button>
+                                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxViewYamlCronJob"><span class="ctx-item-icon">{ }</span> View
+                                                                                                                                                                                                                                                            YAML</button>
+                                                                                                                                                                                                                                                            <div class="ctx-separator"></div>
+                                                                                                                                                                                                                                                            <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
+                                                                                                                                                                                                                                                                now</button>
+                                                                                                                                                                                                                                                            </ContextMenu>
 
-                                                                                                                                                                                                                                    @* ── Port-forward sessions panel ── *@
-                                                                                                                                                                                                                                    @if (ShowPortForwardSessions)
-                                                                                                                                                                                                                                    {
-                                                                                                                                                                                                                                        <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
-                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                        </div>
+
+                                                                                                                                                                                                                                                        @* ── Port-forward sessions panel ── *@
+                                                                                                                                                                                                                                                        @if (ShowPortForwardSessions)
+                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                            <PortForwardSessionsPanel Expanded="true" OnStopSession="OnStopPortForwardSession" />
+                                                                                                                                                                                                                                                        }
 
 @* ── Port-forward start dialog ── *@
 <PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
@@ -1993,12 +2003,44 @@ $"{cj.Namespace}/{cj.Name}"); break;
         OpenDeploymentNetworkAnalysis(deployment);
     }
 
+    private void OnCtxProbeFailuresDeployment()
+    {
+        var deployment = CtxDeployment;
+        CloseAllMenus();
+        if (deployment is null) return;
+        _detailPanels.ShowProbeFailures("Deployment", deployment.Name, deployment.Namespace);
+    }
+
+    private void OnCtxPlacementDeployment()
+    {
+        var deployment = CtxDeployment;
+        CloseAllMenus();
+        if (deployment is null) return;
+        _detailPanels.ShowPlacementAnalysis("Deployment", deployment.Name, deployment.Namespace);
+    }
+
     private void OnCtxAnalyzeStatefulSetNetwork()
     {
         var statefulSet = CtxStatefulSet;
         CloseAllMenus();
         if (statefulSet is null) return;
         OpenStatefulSetNetworkAnalysis(statefulSet);
+    }
+
+    private void OnCtxProbeFailuresStatefulSet()
+    {
+        var statefulSet = CtxStatefulSet;
+        CloseAllMenus();
+        if (statefulSet is null) return;
+        _detailPanels.ShowProbeFailures("StatefulSet", statefulSet.Name, statefulSet.Namespace);
+    }
+
+    private void OnCtxPlacementStatefulSet()
+    {
+        var statefulSet = CtxStatefulSet;
+        CloseAllMenus();
+        if (statefulSet is null) return;
+        _detailPanels.ShowPlacementAnalysis("StatefulSet", statefulSet.Name, statefulSet.Namespace);
     }
 
     private void OnCtxAnalyzePodNetwork()
@@ -2176,6 +2218,14 @@ $"{cj.Namespace}/{cj.Name}"); break;
         if (helm is null) return;
         _detailPanels?.CloseYaml();
         await _detailPanels!.ShowHelmRollbackAsync(helm.Name);
+    }
+
+    private void OnCtxHelmDiffPreview()
+    {
+        var helm = CtxHelm;
+        CloseAllMenus();
+        if (helm is null) return;
+        _detailPanels.ShowHelmDiffPreview(helm.Name, helm.Namespace);
     }
 
     // ── New feature handlers ──

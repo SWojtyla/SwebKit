@@ -1,0 +1,172 @@
+@implements IDisposable
+
+<div class="probe-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading probe failure summary..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="probe-panel-error">@_error</div>
+    }
+    else if (_summary is null)
+    {
+        <div class="probe-panel-empty">No probe data available.</div>
+    }
+    else
+    {
+        <div class="probe-panel-toolbar">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        <div class="probe-panel-section">
+            <div class="probe-panel-section-title">Summary</div>
+            <div class="probe-panel-summary">
+                <span>Total pods: <strong>@_summary.TotalPods</strong></span>
+                <span>Pods with restarts: <strong>@_summary.PodsWithRestarts</strong></span>
+            </div>
+        </div>
+
+        @if (_summary.Pods.Count > 0)
+        {
+            <div class="probe-panel-section">
+                <div class="probe-panel-section-title">Pod Status</div>
+                <table class="probe-panel-table">
+                    <thead>
+                        <tr>
+                            <th>Pod Name</th>
+                            <th>Restarts</th>
+                            <th>Liveness</th>
+                            <th>Readiness</th>
+                            <th>Ready</th>
+                            <th>Last Termination</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pod in _summary.Pods)
+                        {
+                            <tr>
+                                <td>@pod.PodName</td>
+                                <td>@pod.RestartCount</td>
+                                <td>@(pod.LivenessProbeConfigured ? "✓" : "✗")</td>
+                                <td>@(pod.ReadinessProbeConfigured ? "✓" : "✗")</td>
+                                <td>@(pod.Ready ? "✓" : "✗")</td>
+                                <td>
+                                    @if (pod.LastTerminationReason is not null)
+                                    {
+                                        <div>@pod.LastTerminationReason</div>
+                                    }
+                                    @if (pod.LastTerminationMessage is not null)
+                                    {
+                                        <div class="probe-panel-muted">@pod.LastTerminationMessage</div>
+                                    }
+                                    @if (pod.LastTerminationReason is null && pod.LastTerminationMessage is null)
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_summary.RecentProbeEvents.Count > 0)
+        {
+            <div class="probe-panel-section">
+                <div class="probe-panel-section-title">Probe Events</div>
+                <ul class="probe-panel-list">
+                    @foreach (var ev in _summary.RecentProbeEvents)
+                    {
+                        <li>@ev</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @if (_summary.Findings.Count > 0)
+        {
+            <div class="probe-panel-section">
+                <div class="probe-panel-section-title">Findings</div>
+                <ul class="probe-panel-list">
+                    @foreach (var finding in _summary.Findings)
+                    {
+                        <li>@finding</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="probe-panel-footnote">@_summary.Limitation</div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public string WorkloadKind { get; set; } = "Deployment";
+    [Parameter] public string? WorkloadName { get; set; }
+
+    private ProbeFailureSummary? _summary;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Namespace}/{WorkloadKind}/{WorkloadName}";
+        if (_loadedKey == key) return;
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(WorkloadName))
+        {
+            _summary = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _summary = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _summary = await Client.GetProbeFailureSummaryAsync(Namespace, WorkloadKind, WorkloadName, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

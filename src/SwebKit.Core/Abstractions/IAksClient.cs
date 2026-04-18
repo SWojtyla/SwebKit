@@ -127,4 +127,43 @@ public interface IAksClient
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(r => r).ToList();
     }
+
+    // ── Wave 1: namespace and workload constraint visibility ──────────────────
+    Task<IReadOnlyList<ResourceQuotaInfo>> GetResourceQuotasAsync(string ns, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ResourceQuotaInfo>>([]);
+
+    Task<IReadOnlyList<LimitRangeInfo>> GetLimitRangesAsync(string ns, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<LimitRangeInfo>>([]);
+
+    Task<IReadOnlyList<PodDisruptionBudgetInfo>> GetPodDisruptionBudgetsAsync(string ns, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<PodDisruptionBudgetInfo>>([]);
+
+    Task<ProbeFailureSummary> GetProbeFailureSummaryAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+        => Task.FromException<ProbeFailureSummary>(
+            new NotSupportedException($"Probe failure summary is not supported by this AKS client."));
+
+    Task<PlacementAnalysis> GetPlacementAnalysisAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+        => Task.FromException<PlacementAnalysis>(
+            new NotSupportedException($"Placement analysis is not supported by this AKS client."));
+
+    // ── Wave 3: Helm preview ──────────────────────────────────────────────────
+    Task<HelmDiffPreview> PreviewHelmUpgradeAsync(
+        string ns,
+        string releaseName,
+        CancellationToken ct = default)
+        => Task.FromResult(new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "This AKS client does not support Helm diff preview."
+        });
 }

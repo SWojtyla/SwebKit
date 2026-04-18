@@ -106,8 +106,8 @@
                                 <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                                  NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
                                                  SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
-                                                 PinnedSessionId="@_activeTab.PinnedSessionId" OnMessageSelected="OnMessageSelectedAsync"
-                                                 OnCloseDetails="CloseDetailPane" />
+                                                 PinnedSessionId="@_activeTab.PinnedSessionId" TracePivotFilter="@_activeTab.PivotFilter"
+                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
                             </div>
                             @if (IsDetailPaneOpen)
                             {
@@ -124,7 +124,7 @@
                                                                OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                               OnFilterBySession="PinSessionFilter" />
+                                                               OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                         </div>
                                     </div>
                                 }
@@ -142,7 +142,7 @@
                                                                    OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                    OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                    OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                                   OnFilterBySession="PinSessionFilter" />
+                                                                   OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                             </div>
                                         </div>
                                     </ResizablePanel>
@@ -171,8 +171,8 @@
 <Modal IsOpen="@(_showBatchSendPanel && _activeTab is not null)" OnClose="CloseBatchSendPanel">
     @if (_activeTab is not null)
     {
-        <BatchSendPanel Client="_activeTab.Client" DefaultEntityPath="@_activeTab.EntityPath"
-                        OnCancel="CloseBatchSendPanel" OnCompleted="OnBatchSendCompleted" />
+        <BatchSendPanel Client="_activeTab.Client" DefaultEntityPath="@_activeTab.EntityPath" OnCancel="CloseBatchSendPanel"
+                        OnCompleted="OnBatchSendCompleted" />
     }
 </Modal>
 
@@ -258,6 +258,13 @@
     {
         if (_activeTab is null) return;
         _activeTab.PinnedSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandlePivotFilterAsync(string value)
+    {
+        if (_activeTab is null) return;
+        _activeTab.PivotFilter = value;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -874,6 +881,7 @@ entityPath;
         public bool IsScheduled { get; set; }
         public SbMessage? SelectedMessage { get; set; }
         public string? PinnedSessionId { get; set; }
+        public string? PivotFilter { get; set; }
     }
 
     private sealed record ServiceBusWorkspaceTabState(

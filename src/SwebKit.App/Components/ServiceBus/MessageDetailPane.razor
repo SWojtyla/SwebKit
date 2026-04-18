@@ -128,7 +128,10 @@ else
                         <div class="mdp-trace-intro">
                             Trace pivots use explicit identifiers only. Each pivot shows which identifier was used and why it is a reasonable signal, not a guaranteed causal link.
                         </div>
-                        @foreach (var pivot in BuildTracePivots(Message))
+                        @{
+                            var tracePivots = BuildTracePivots(Message);
+                        }
+                        @foreach (var pivot in tracePivots)
                         {
                             <div class="mdp-trace-pivot" data-testid="trace-pivot-row">
                                 <span class="mdp-trace-pivot-key">@pivot.Label</span>
@@ -139,9 +142,18 @@ else
                                         title="Open this pivot in Incident Timeline">
                                     Investigate
                                 </button>
+                                @if (OnApplyTracePivotFilter.HasDelegate)
+                                {
+                                    <button class="mdp-btn mdp-btn--secondary"
+                                            data-testid="apply-pivot-filter"
+                                            @onclick="() => OnApplyTracePivotFilter.InvokeAsync(pivot.Value)"
+                                            title="Filter the message list to messages matching this identifier value">
+                                        Filter list
+                                    </button>
+                                }
                             </div>
                         }
-                        @if (!BuildTracePivots(Message).Any())
+                        @if (!tracePivots.Any())
                         {
                             <span class="mdp-empty">No explicit trace identifiers found on this message.</span>
                         }
@@ -178,6 +190,7 @@ else
     [Parameter] public EventCallback<SbMessage> OnReplay { get; set; }
     [Parameter] public EventCallback<SbMessage> OnSchedule { get; set; }
     [Parameter] public EventCallback<string> OnFilterBySession { get; set; }
+    [Parameter] public EventCallback<string> OnApplyTracePivotFilter { get; set; }
 
     private string? _copyFeedback;
 
