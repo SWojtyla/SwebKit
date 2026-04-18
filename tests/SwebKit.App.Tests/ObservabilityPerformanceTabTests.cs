@@ -153,5 +153,11 @@ public sealed class ObservabilityPerformanceTabTests : TestContext
             Task.FromResult(Trend);
 
         public IReadOnlyList<QueryPreset> GetPresets() => [];
+
+        public Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default) =>
+            Task.FromResult(new DependencyHealthSummary([], false, maxDependencies));
+
+        public Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default) =>
+            Task.FromResult(new DimensionBreakdown(dimensionKey, [], false, topN));
     }
 }

@@ -1,0 +1,45 @@
+@using SwebKit.Core.Models
+
+<div class="obs-dim-pivot-panel">
+    <details>
+        <summary class="obs-panel-header">
+            <span>Dimension: @(Breakdown?.DimensionKey ?? "—")</span>
+        </summary>
+        <div class="obs-panel-body">
+            @if (Breakdown is null || Breakdown.TopEntries.Count == 0)
+            {
+                <p class="obs-empty-state">No data for dimension '@(Breakdown?.DimensionKey)'</p>
+            }
+            else
+            {
+                <table class="obs-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Value</th>
+                            <th scope="col">Count</th>
+                            <th scope="col">Failure %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Breakdown.TopEntries)
+                        {
+                            <tr>
+                                <td>@entry.Value</td>
+                                <td>@entry.Count.ToString("N0")</td>
+                                <td>@((entry.FailureRate * 100).ToString("F1"))%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (Breakdown.Truncated)
+                {
+                    <p class="obs-truncated-notice">Showing top @Breakdown.MaxReturned entries. Further results truncated.</p>
+                }
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter] public DimensionBreakdown? Breakdown { get; set; }
+}

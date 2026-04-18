@@ -1,0 +1,132 @@
+@using SwebKit.Core.Models
+
+<div class="obs-deployment-comparison-panel">
+    <details>
+        <summary class="obs-panel-header">
+            <span>Deployment Comparison</span>
+        </summary>
+        <div class="obs-panel-body">
+            <div class="obs-anchor-picker">
+                <label for="obs-anchor-select">Release anchor</label>
+                <select id="obs-anchor-select" @onchange="OnAnchorChangedAsync">
+                    <option value="">Select a release anchor…</option>
+                    @foreach (var anchor in AvailableAnchors)
+                    {
+                        <option value="@anchor.ReleaseId.ToString()">@anchor.ReleaseName</option>
+                    }
+                </select>
+            </div>
+
+            @if (Summary is not null)
+            {
+                <div class="obs-comparison-card">
+                    <div class="obs-comparison-header">
+                        <span class="obs-comparison-release">@Summary.Anchor.ReleaseName</span>
+                        <span class="obs-comparison-time">@Summary.Anchor.AnchorTime.ToString("yyyy-MM-dd HH:mm")</span>
+                    </div>
+                    <div class="obs-comparison-windows">
+                        <span>Before: @FormatWindow(Summary.BeforeWindow)</span>
+                        <span>After: @FormatWindow(Summary.AfterWindow)</span>
+                    </div>
+
+                    @if (Summary.HasRegression)
+                    {
+                        <div class="obs-regression-notice obs-regression-notice--warn" role="alert">
+                            ⚠ <strong>Regression detected</strong>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="obs-regression-notice obs-regression-notice--ok" role="status">
+                            ✓ <strong>No regression</strong>
+                        </div>
+                    }
+
+                    @if (Summary.Deltas.Count > 0)
+                    {
+                        <table class="obs-table" aria-label="Metric deltas">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Metric</th>
+                                    <th scope="col">Before</th>
+                                    <th scope="col">After</th>
+                                    <th scope="col">Change</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var delta in Summary.Deltas)
+                                {
+                                    <tr>
+                                        <td>@delta.MetricName</td>
+                                        <td>@FormatValue(delta.Before)</td>
+                                        <td>@FormatValue(delta.After)</td>
+                                        <td class="@GetDeltaClass(delta)">
+                                            @GetDeltaArrow(delta) @FormatDeltaPct(delta.DeltaPct)
+                                            <span class="obs-delta-label">(@GetDeltaLabel(delta))</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+            else if (_hasAnchorSelected)
+            {
+                <div class="obs-explainer-loading">
+                    <FluentProgressRing aria-label="Loading deployment comparison" />
+                    <span>Comparing telemetry…</span>
+                </div>
+            }
+            else
+            {
+                <p class="obs-empty-state">Select a release anchor above to compare telemetry before and after deployment.</p>
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter] public DeploymentComparisonSummary? Summary { get; set; }
+    [Parameter] public IReadOnlyList<DeploymentAnchor> AvailableAnchors { get; set; } = [];
+    [Parameter] public EventCallback<DeploymentAnchor> OnAnchorSelected { get; set; }
+
+    private bool _hasAnchorSelected;
+
+    private async Task OnAnchorChangedAsync(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (string.IsNullOrEmpty(value))
+        {
+            _hasAnchorSelected = false;
+            return;
+        }
+
+        if (!Guid.TryParse(value, out var releaseId)) return;
+        var anchor = AvailableAnchors.FirstOrDefault(a => a.ReleaseId == releaseId);
+        if (anchor is null) return;
+
+        _hasAnchorSelected = true;
+
+        if (OnAnchorSelected.HasDelegate)
+            await OnAnchorSelected.InvokeAsync(anchor);
+    }
+
+    private static string FormatWindow(TimeRange range) =>
+        $"{range.Start.ToLocalTime():HH:mm} – {range.End.ToLocalTime():HH:mm}";
+
+    private static string FormatValue(double value) =>
+        value < 10_000 ? $"{value:F2}" : $"{value:N0}";
+
+    private static string FormatDeltaPct(double pct) =>
+        $"{Math.Abs(pct):F1}%";
+
+    private static string GetDeltaArrow(MetricDelta delta) =>
+        delta.DeltaPct >= 0 ? "▲" : "▼";
+
+    private static string GetDeltaLabel(MetricDelta delta) =>
+        delta.DeltaPct >= 0 ? "increase" : "decrease";
+
+    private static string GetDeltaClass(MetricDelta delta) =>
+        delta.DeltaPct >= 0 ? "obs-delta--up" : "obs-delta--down";
+}

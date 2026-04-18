@@ -47,7 +47,7 @@
                 <div class="aks-metric-cell">
                     <span class="aks-metric @CpuClass(cpuMetric.Value)"
                           title="@($"{cpuMetric.Value * 1000:F0}m / ~{CpuCeiling}m")">@($"{cpuMetric.Value *
-                                                                                            1000:F0}m")</span>
+                                                                                                                    1000:F0}m")</span>
                         <div class="aks-metric-bar-track">
                             <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)" style="width:@($"{cpuPct:F0}")%"></div>
                         </div>

@@ -88,6 +88,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
         builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
         builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
+        builder.Services.AddSingleton<IObservabilityExplainerService, ObservabilityExplainerService>();
 
         // DevOps / Releases
         builder.Services.AddTransient<DevOpsAuthHandler>();

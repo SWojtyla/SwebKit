@@ -150,6 +150,10 @@ public sealed class AppInsightsTimelineSignalSourceTests
 
         public Task<IReadOnlyList<LatencyDataPoint>> GetOperationLatencyTrendAsync(string operationName, TimeRange range, CancellationToken ct = default) => throw new NotSupportedException();
 
+        public Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default) => throw new NotSupportedException();
+
         public IReadOnlyList<QueryPreset> GetPresets() => [];
     }
 }

@@ -1,0 +1,46 @@
+@* Note: the parameter type must use the fully qualified name to avoid ambiguity
+   with the component class name (both are ObservabilityExplainerSummary). *@
+
+@if (Summary is null)
+{
+    <div class="obs-explainer-loading">
+        <FluentProgressRing aria-label="Loading explainer summary" />
+        <span>Analyzing telemetry…</span>
+    </div>
+}
+else
+{
+    <div class="obs-explainer-card @(Summary.HasAnomalies ? "obs-explainer-card--warn" : "obs-explainer-card--ok")"
+         role="status">
+        <div class="obs-explainer-status">
+            @if (Summary.HasAnomalies)
+            {
+                <span class="obs-explainer-icon" aria-hidden="true">⚠</span>
+                <span class="obs-explainer-label obs-explainer-label--warn">Anomalies detected</span>
+            }
+            else
+            {
+                <span class="obs-explainer-icon" aria-hidden="true">✓</span>
+                <span class="obs-explainer-label obs-explainer-label--ok">All clear</span>
+            }
+        </div>
+        @if (Summary.TopDependencyName is not null)
+        {
+            <div class="obs-explainer-detail">Top concern: <strong>@Summary.TopDependencyName</strong></div>
+        }
+        @if (Summary.TopDimensionKey is not null)
+        {
+            <div class="obs-explainer-detail">Spike in dimension: <strong>@Summary.TopDimensionKey</strong></div>
+        }
+        @if (OnInvestigate.HasDelegate && Summary.HasAnomalies)
+        {
+            <button class="page-header-action-btn" type="button" @onclick="OnInvestigate">Investigate</button>
+        }
+    </div>
+}
+
+@code {
+    // Use fully qualified model type to avoid ambiguity with this component's own class name.
+    [Parameter] public SwebKit.Core.Models.ObservabilityExplainerSummary? Summary { get; set; }
+    [Parameter] public EventCallback OnInvestigate { get; set; }
+}

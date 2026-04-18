@@ -8,20 +8,19 @@ state: "Review"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-17"
+last_updated: "2026-04-18"
 
 ---
 
 ## Quick summary
 
-Waves 1, 2, and 3 are archived. Wave 4 `incident-investigation-workflows` is now in active
-implementation. Contracts, launcher, and landing banner were already in place. Source-page
-drill-through (ObservabilityPage, ServiceBusPage, PipelinesPage) has been implemented and
-tested. Remaining work is manual validation on a real environment.
+Waves 1–4 and Wave 5A are archived. Wave 5B is partially archived: `aks-runtime-diagnostics-depth`
+is archived. The next active implementation target is `observability-explainer-and-reliability`
+(Wave 5B). Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`) remains planned.
 
 Jira: not linked
 
-Current focus: Wave 4 — manual environment validation of the drill-through seed flow from each source page.
+Current focus: Wave 5B — implementing `observability-explainer-and-reliability`.
 
 ## Progress checklist
 
@@ -39,7 +38,14 @@ Current focus: Wave 4 — manual environment validation of the drill-through see
 - [x] Close out Wave 3 and point downstream docs at the archive artifact
 - [x] Create and populate Wave 4 `incident-investigation-workflows` feature folder
 - [x] Implement Wave 4 source-page drill-through (ObservabilityPage, ServiceBusPage, PipelinesPage)
-- [ ] Close out Wave 4 after manual environment validation
+- [x] Close out Wave 4 — archived 2026-04-18
+- [x] Implement Wave 5A (`pipelines-deployment-assurance`, `service-bus-operator-workbench`)
+- [x] Close out Wave 5A — both archived 2026-04-18
+- [x] Implement Wave 5B `aks-runtime-diagnostics-depth` (all three waves complete)
+- [x] Close out Wave 5B `aks-runtime-diagnostics-depth` — archived 2026-04-18
+- [ ] Implement Wave 5B `observability-explainer-and-reliability`
+- [ ] Close out Wave 5B `observability-explainer-and-reliability`
+- [ ] Implement Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`)
 - [ ] Review wave boundaries with maintainers
 - [ ] Confirm the default wave-5A/5B/5C ordering with maintainers
 - [x] Keep downstream status references current as implementation begins
@@ -55,13 +61,16 @@ Current focus: Wave 4 — manual environment validation of the drill-through see
 - Archived Wave 2 after implementation, focused automated validation, and user-confirmed manual validation.
 - Advanced Wave 3 from planning into implementation by landing the first readiness-report contract plus dashboard/settings adoption slice.
 - Archived Wave 3 after implementation, focused automated validation (Core 6/6, App 7/7), and user-confirmed manual UI validation (2026-04-17).
-- Implemented Wave 4 source-page drill-through: added "Investigate" action to ObservabilityPage, ServiceBusPage, and PipelinesPage with targeted tests (6/6 passing).
+- Archived Wave 4 (`incident-investigation-workflows`) after user-confirmed review (2026-04-18); drill-through slice appended to existing archive summary.
+- Archived Wave 5A: `pipelines-deployment-assurance` (60 tests, 3 waves) and `service-bus-operator-workbench` (56+ tests, 3 waves) — both archived 2026-04-18.
+- Archived Wave 5B `aks-runtime-diagnostics-depth` (800+ tests, 3 waves) after user-confirmed review (2026-04-18).
 
 ## Remaining
 
+- Implement `observability-explainer-and-reliability` (Wave 5B) — currently in Planned state.
+- Implement Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`) — both currently in Planned state.
 - Validate that wave entry and exit criteria are realistic for the current team bandwidth.
-- Keep this roadmap current as Wave 4 moves into implementation and later waves move into sequence.
-- Use this roadmap to govern the order in which the already-created wave-5 feature folders move into implementation.
+- Keep this roadmap current as Wave 5B/5C move into implementation.
 
 ## Blockers
 

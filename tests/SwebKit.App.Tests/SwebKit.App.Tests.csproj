@@ -104,6 +104,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityPerformance.razor" Link="Components\Observability\ObservabilityPerformance.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ResourceSelectorDialog.razor" Link="Components\Observability\ResourceSelectorDialog.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\TimeRangePicker.razor" Link="Components\Observability\TimeRangePicker.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\DependencyHealthPanel.razor" Link="Components\Observability\DependencyHealthPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\DimensionPivotPanel.razor" Link="Components\Observability\DimensionPivotPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\ObservabilityExplainerSummary.razor" Link="Components\Observability\ObservabilityExplainerSummary.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\DeploymentComparisonPanel.razor" Link="Components\Observability\DeploymentComparisonPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Observability\SloStatusPanel.razor" Link="Components\Observability\SloStatusPanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Notifications\NotificationHistory.razor" Link="Components\Notifications\NotificationHistory.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />

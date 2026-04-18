@@ -99,6 +99,39 @@ public enum GuidedKqlFilterOperator
     LessThanOrEqual = 8,
 }
 
+// ── Wave 1: Explanation-first models ─────────────────────────────────────────
+
+public record DependencyHealthEntry(
+    string DependencyName,
+    string DependencyType,
+    long CallCount,
+    double FailureRate,
+    double P50Ms,
+    double P95Ms);
+
+public record DependencyHealthSummary(
+    IReadOnlyList<DependencyHealthEntry> Entries,
+    bool Truncated,
+    int MaxReturned);
+
+public record DimensionBreakdownEntry(
+    string Value,
+    long Count,
+    double FailureRate);
+
+public record DimensionBreakdown(
+    string DimensionKey,
+    IReadOnlyList<DimensionBreakdownEntry> TopEntries,
+    bool Truncated,
+    int MaxReturned);
+
+public record ObservabilityExplainerSummary(
+    DependencyHealthSummary DependencyHealth,
+    IReadOnlyList<DimensionBreakdown> DimensionPivots,
+    string? TopDependencyName,
+    string? TopDimensionKey,
+    bool HasAnomalies);
+
 public sealed class GuidedKqlFilter
 {
     public string Column { get; set; } = string.Empty;
@@ -191,3 +224,51 @@ public sealed class GuidedKqlCompileResult
         Issues = issues,
     };
 }
+
+// ── Wave 2: Deployment comparison ─────────────────────────────────────────────
+
+/// <summary>Explicit deployment anchor for before/after telemetry comparison.</summary>
+public record DeploymentAnchor(
+    Guid ReleaseId,
+    string ReleaseName,
+    DateTimeOffset AnchorTime);
+
+/// <summary>Single metric delta between two time windows.</summary>
+public record MetricDelta(
+    string MetricName,
+    double Before,
+    double After,
+    double DeltaPct);
+
+/// <summary>Result of a before/after telemetry comparison around a deployment anchor.</summary>
+public record DeploymentComparisonSummary(
+    DeploymentAnchor Anchor,
+    TimeRange BeforeWindow,
+    TimeRange AfterWindow,
+    IReadOnlyList<MetricDelta> Deltas,
+    bool HasRegression);
+
+// ── Wave 3: SLO tracking ──────────────────────────────────────────────────────
+
+public enum SloMetric { FailureRate, P95ResponseTimeMs, AvailabilityPct }
+
+public record SloDefinition
+{
+    public string Name { get; init; } = string.Empty;
+    public SloMetric Metric { get; init; }
+    public double Target { get; init; }
+    /// <summary>Optional warning threshold. If null, 90% of target (for FailureRate/P95) or target plus 10% of headroom (for AvailabilityPct).</summary>
+    public double? WarnAt { get; init; }
+}
+
+public record SloStatusEntry(
+    SloDefinition Definition,
+    double CurrentValue,
+    SloState State);
+
+public enum SloState { Met, AtRisk, Breached }
+
+public record SloStatusSummary(
+    IReadOnlyList<SloStatusEntry> Entries,
+    bool AnyBreached,
+    bool AnyAtRisk);

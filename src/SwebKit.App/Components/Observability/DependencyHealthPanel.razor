@@ -1,0 +1,59 @@
+@using SwebKit.Core.Models
+
+<div class="obs-dep-health-panel">
+    <details>
+        <summary class="obs-panel-header">
+            <span>Dependency Health</span>
+            @if (Summary is not null && Summary.Entries.Count > 0)
+            {
+                <span class="obs-panel-badge">@Summary.Entries.Count</span>
+            }
+        </summary>
+        <div class="obs-panel-body">
+            @if (Summary is null || Summary.Entries.Count == 0)
+            {
+                <p class="obs-empty-state">No dependency data available</p>
+            }
+            else
+            {
+                <table class="obs-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Calls</th>
+                            <th scope="col">Failure %</th>
+                            <th scope="col">P50 (ms)</th>
+                            <th scope="col">P95 (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Summary.Entries.OrderByDescending(static e => e.FailureRate))
+                        {
+                            <tr>
+                                <td>@entry.DependencyName</td>
+                                <td>@entry.DependencyType</td>
+                                <td>@entry.CallCount.ToString("N0")</td>
+                                <td>@((entry.FailureRate * 100).ToString("F1"))%</td>
+                                <td>@FormatMs(entry.P50Ms)</td>
+                                <td>@FormatMs(entry.P95Ms)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (Summary.Truncated)
+                {
+                    <p class="obs-truncated-notice">Showing top @Summary.MaxReturned dependencies. Further results truncated.
+                    </p>
+                }
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter] public DependencyHealthSummary? Summary { get; set; }
+
+    private static string FormatMs(double ms) =>
+        ms < 1000 ? $"{ms:F0} ms" : $"{ms / 1000:F2} s";
+}

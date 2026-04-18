@@ -264,6 +264,12 @@ public sealed class ConfigurationProbeServiceTests
         public Task<IReadOnlyList<LatencyDataPoint>> GetOperationLatencyTrendAsync(string operationName, TimeRange range, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<LatencyDataPoint>>([]);
         public IReadOnlyList<QueryPreset> GetPresets() => [];
 
+        public Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default) =>
+            Task.FromResult(new DependencyHealthSummary([], false, maxDependencies));
+
+        public Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default) =>
+            Task.FromResult(new DimensionBreakdown(dimensionKey, [], false, topN));
+
         public Task<LogQueryResult> RunQueryAsync(string query, TimeRange range, int maxRows = 500, CancellationToken ct = default)
         {
             onQuery();

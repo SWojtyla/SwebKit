@@ -203,6 +203,66 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
         }
     }
 
+    // ── Dependency health ─────────────────────────────────────────────────────
+
+    public async Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default)
+    {
+        var kql = $"dependencies\n| summarize CallCount=count(), FailedCount=countif(success==false), P50=percentile(duration,50), P95=percentile(duration,95) by name, type\n| order by CallCount desc\n| take {maxDependencies + 1}";
+
+        try
+        {
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            bool truncated = rows.Count > maxDependencies;
+            var entries = rows.Take(maxDependencies).Select(row =>
+            {
+                var callCount = GetLong(row, "CallCount");
+                var failedCount = GetLong(row, "FailedCount");
+                return new DependencyHealthEntry(
+                    DependencyName: GetString(row, "name"),
+                    DependencyType: GetString(row, "type"),
+                    CallCount: callCount,
+                    FailureRate: callCount > 0 ? (double)failedCount / callCount : 0,
+                    P50Ms: GetDouble(row, "P50"),
+                    P95Ms: GetDouble(row, "P95"));
+            }).ToList();
+            return new DependencyHealthSummary(entries, truncated, maxDependencies);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            throw new InvalidOperationException($"Dependency health query failed ({ex.Status}): {ex.Message}", ex);
+        }
+    }
+
+    // ── Dimension breakdown ───────────────────────────────────────────────────
+
+    public async Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default)
+    {
+        var escapedKey = dimensionKey.Replace("'", "\\'");
+        var kql = $"requests\n| where isnotempty(customDimensions['{escapedKey}'])\n| summarize Count=count(), FailedCount=countif(success==false) by Value=tostring(customDimensions['{escapedKey}'])\n| order by Count desc\n| take {topN + 1}";
+
+        try
+        {
+            var rows = await QueryTableAsync(kql, QueryTimeRange(range), ct);
+            bool truncated = rows.Count > topN;
+            var entries = rows.Take(topN).Select(row =>
+            {
+                var count = GetLong(row, "Count");
+                var failedCount = GetLong(row, "FailedCount");
+                return new DimensionBreakdownEntry(
+                    Value: GetString(row, "Value"),
+                    Count: count,
+                    FailureRate: count > 0 ? (double)failedCount / count : 0);
+            }).ToList();
+            return new DimensionBreakdown(dimensionKey, entries, truncated, topN);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            throw new InvalidOperationException($"Dimension breakdown query failed ({ex.Status}): {ex.Message}", ex);
+        }
+    }
+
     private static string DeriveBinSize(TimeRange range)
     {
         var span = range.End - range.Start;

@@ -57,6 +57,21 @@ Turn Incident Timeline into the shared investigation target for SwebKit so opera
 - E2E flows for Observability → Incident Timeline, Service Bus → Incident Timeline, Pipelines → Incident Timeline — deferred; should be added during Wave 3 prep.
 - Wave 3 (watchlists and light automation) — explicitly deferred; requires its own active feature folder before implementation begins.
 
+---
+
+## Drill-through addition (2026-04-18)
+
+**Goal:** Surface page-level "Investigate" buttons on ObservabilityPage, ServiceBusPage, and PipelinesPage so operators can seed an investigation directly from the page context rather than from sub-component pivots.
+
+**Delivered:**
+
+- "Investigate" action on `ObservabilityPage` — seeds from selected resource ID + active time range.
+- "Investigate" action on `ServiceBusPage` — seeds from active entity path, optional message ID and correlation ID.
+- "Investigate" action on `PipelinesPage` — seeds from pipeline ID, project name, pipeline name.
+- 6 targeted tests: 2 bUnit (`ObservabilityPage` seed + no-launch guard, `ServiceBusPage` button hidden with no active tab), 4 pure-logic seed-construction tests.
+
+**Validation:** 6/6 tests passing. Build clean. Manual validation accepted by user (2026-04-18).
+
 ## Archive note
 
 > This file is present because the feature had **no Jira ticket** (Path B). Archive location: `docs/features/archive/incident-investigation-workflows/`.

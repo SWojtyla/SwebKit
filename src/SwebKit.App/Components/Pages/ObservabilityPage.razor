@@ -9,6 +9,7 @@
 @inject IConnectionStateService ConnectionState
 @inject IObservabilityResourceDiscovery RealDiscovery
 @inject IObservabilityProviderFactory ProviderFactory
+@inject IObservabilityExplainerService ExplainerService
 @inject INotificationService Notifications
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
@@ -16,6 +17,7 @@
 @inject IAppEventBus Events
 @inject OperatorWorkspaceService Workspaces
 @inject IncidentInvestigationLauncher InvestigationLauncher
+@inject ReleaseRepository ReleaseRepo
 @implements IDisposable
 
 <div class="obs-page">
@@ -111,8 +113,8 @@
         <div class="obs-empty-state-wrap">
             <EmptyState Icon="📊" Title="No resource selected"
                         Subtitle="@(AppState.UseDemoData
-                                                                                                                                                    ? "Pick a demo Application Insights resource to explore the observability workspace."
-                                                                                                                                                    : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
+                                                                                                                                                                                            ? "Pick a demo Application Insights resource to explore the observability workspace."
+                                                                                                                                                                                            : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
                 <Actions>
                     <button type="button" @onclick="ToggleResourceSelector">Select resource</button>
                     @if (!AppState.UseDemoData)
@@ -125,6 +127,27 @@
     }
     else
     {
+        <!-- Explainer summary -->
+        <ObservabilityExplainerSummary Summary="_explainerSummary" OnInvestigate="LaunchInvestigationFromObservability" />
+
+        @if (_explainerSummary is not null)
+        {
+            <DependencyHealthPanel Summary="_explainerSummary.DependencyHealth" />
+            @foreach (var pivot in _explainerSummary.DimensionPivots)
+            {
+                <DimensionPivotPanel Breakdown="pivot" />
+            }
+        }
+
+        <!-- Wave 2: Deployment comparison -->
+        <DeploymentComparisonPanel Summary="_deploymentComparison"
+                                    AvailableAnchors="_anchors"
+                                    OnAnchorSelected="OnAnchorSelectedAsync" />
+
+        <!-- Wave 3: SLO status -->
+        <SloStatusPanel Summary="_sloStatus"
+                        HasDefinitions="@(CurrentConfig?.SloDefinitions.Count > 0)" />
+
         <!-- Tab bar -->
         <div class="obs-tabs">
             <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
@@ -186,6 +209,12 @@
     private ObservabilityResourceInfo? _selectedResource;
     private bool _resourceSelectorOpen;
     private CancellationTokenSource _cts = new();
+    private CancellationTokenSource _explainerCts = new();
+    private CancellationTokenSource _comparisonCts = new();
+    private SwebKit.Core.Models.ObservabilityExplainerSummary? _explainerSummary;
+    private IReadOnlyList<DeploymentAnchor> _anchors = [];
+    private DeploymentComparisonSummary? _deploymentComparison;
+    private SloStatusSummary? _sloStatus;
 
     // Auto-refresh (OBS-7)
     private bool _autoRefreshEnabled;
@@ -316,6 +345,10 @@
         _selectedResource = resource;
         _provider = CreateProvider(resource.ResourceId);
         ConnectionState.SetConnected("observability");
+        _explainerSummary = null;
+        _anchors = ObservabilityExplainerService.GetDeploymentAnchors(ReleaseRepo);
+        _deploymentComparison = null;
+        _sloStatus = null;
 
         if (persist)
         {
@@ -327,6 +360,67 @@
 
         await InvokeAsync(StateHasChanged);
         await PublishWorkspaceSnapshotAsync(recordRecent: persist);
+        _ = LoadExplainerAsync();
+        _ = LoadSloStatusAsync();
+    }
+
+    private async Task LoadExplainerAsync()
+    {
+        if (_provider is null) return;
+
+        _explainerCts.Cancel();
+        _explainerCts.Dispose();
+        _explainerCts = new CancellationTokenSource();
+        var ct = _explainerCts.Token;
+
+        try
+        {
+            var summary = await ExplainerService.GetExplainerSummaryAsync(
+                _provider, _range, ["cloud/roleName", "operation/name"], ct);
+            _explainerSummary = summary;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _explainerSummary null; component handles null gracefully. */ }
+    }
+
+    private async Task LoadSloStatusAsync()
+    {
+        if (_provider is null) return;
+        var config = CurrentConfig;
+        if (config is null || config.SloDefinitions.Count == 0) return;
+
+        var ct = _explainerCts.Token;
+        try
+        {
+            var status = await ExplainerService.GetSloStatusAsync(_provider, config.SloDefinitions, _range, ct);
+            _sloStatus = status;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _sloStatus null; component handles null gracefully. */ }
+    }
+
+    private async Task OnAnchorSelectedAsync(DeploymentAnchor anchor)
+    {
+        if (_provider is null) return;
+
+        _comparisonCts.Cancel();
+        _comparisonCts.Dispose();
+        _comparisonCts = new CancellationTokenSource();
+        var ct = _comparisonCts.Token;
+
+        _deploymentComparison = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var result = await ExplainerService.GetDeploymentComparisonAsync(_provider, anchor, TimeSpan.FromHours(4), ct);
+            _deploymentComparison = result;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _deploymentComparison null; component handles null gracefully. */ }
     }
 
     private IObservabilityProvider CreateProvider(string resourceId) =>
@@ -341,6 +435,8 @@
     private async Task OnRangeChangedAsync(TimeRange range)
     {
         _range = range;
+        _ = LoadExplainerAsync();
+        _ = LoadSloStatusAsync();
         await RefreshAsync();
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
@@ -583,6 +679,10 @@ string.Empty, string.Empty),
         Workspaces.UnregisterRestoreHandler("observability");
         _cts.Cancel();
         _cts.Dispose();
+        _explainerCts.Cancel();
+        _explainerCts.Dispose();
+        _comparisonCts.Cancel();
+        _comparisonCts.Dispose();
     }
 
     private void LaunchInvestigationFromObservability()

@@ -33,6 +33,10 @@ public interface IObservabilityProvider
 
     /// <summary>Returns provider-specific preset queries shown in the Logs tab sidebar.</summary>
     IReadOnlyList<QueryPreset> GetPresets();
+
+    Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default);
+
+    Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default);
 }
 
 /// <summary>
