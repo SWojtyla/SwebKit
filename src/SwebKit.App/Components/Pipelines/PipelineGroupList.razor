@@ -1,0 +1,50 @@
+<div class="group-list">
+    <div class="group-list__toolbar">
+        <span class="group-list__heading">Pipeline Groups</span>
+        <button class="group-list__new-btn" @onclick="() => OnCreate.InvokeAsync()">+ New Group</button>
+    </div>
+
+    @if (Groups.Count == 0)
+    {
+        <div class="group-list__empty text-muted text-sm">
+            No groups yet. Create one to bundle pipelines and trigger them all in one click.
+        </div>
+    }
+    else
+    {
+        <div class="group-list__items">
+            @foreach (var group in Groups)
+            {
+                var isSelected = SelectedGroup?.Id == group.Id;
+                <div class="group-card @(isSelected ? "group-card--selected" : "")">
+                    <button class="group-card__body" @onclick="@(() => OnSelect.InvokeAsync(group))">
+                        <span class="group-card__name">@group.Name</span>
+                        <span class="group-card__meta text-muted text-sm">
+                            @group.Pipelines.Count pipeline@(group.Pipelines.Count == 1 ? "" : "s")
+                        </span>
+                    </button>
+                    <div class="group-card__actions">
+                        <button class="group-card__trigger-btn" @onclick="@(() => OnTrigger.InvokeAsync(group))"
+                                @onclick:stopPropagation disabled="@(group.Pipelines.Count == 0)"
+                                title="Trigger all pipelines in this group">
+                            ▶ Trigger
+                        </button>
+                        <button class="group-card__delete-btn" @onclick="@(() => OnDelete.InvokeAsync(group))"
+                                @onclick:stopPropagation title="Delete group">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="13px" />
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<PipelineGroup> Groups { get; set; } = [];
+    [Parameter] public PipelineGroup? SelectedGroup { get; set; }
+    [Parameter] public EventCallback OnCreate { get; set; }
+    [Parameter] public EventCallback<PipelineGroup> OnSelect { get; set; }
+    [Parameter] public EventCallback<PipelineGroup> OnDelete { get; set; }
+    [Parameter] public EventCallback<PipelineGroup> OnTrigger { get; set; }
+}

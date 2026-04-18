@@ -72,6 +72,8 @@
                             @onclick="@(() => SetTab("pipelines"))">Pipelines</button>
                     <button class="pill-tab @(ActiveTab == "activity" ? "active" : "")"
                             @onclick="@(() => SetTab("activity"))">Activity</button>
+                    <button class="pill-tab @(ActiveTab == "groups" ? "active" : "")"
+                            @onclick="@(() => SetTab("groups"))">Groups</button>
                     <button class="pill-tab @(ActiveTab == "releases" ? "active" : "")"
                             @onclick="@(() => SetTab("releases"))">Releases</button>
                     <button class="pill-tab @(ActiveTab == "approvals" ? "active" : "")"
@@ -108,7 +110,7 @@
                                     else
                                     {
                                         <PipelinesOverview OnPipelineSelected="OnPipelineSelected"
-                                                           PinnedProjects="EffectivePinnedProjects" />
+                                                           OnNavigateToApprovals="@(() => SetTab("approvals"))" PinnedProjects="EffectivePinnedProjects" />
                                     }
                                 </div>
                             </div>
@@ -116,6 +118,28 @@
 
                         case "activity":
                             <PipelineActivity PinnedProjects="EffectivePinnedProjects" />
+                            break;
+
+                        case "groups":
+                            <div class="pipeline-split">
+                                <div class="pipeline-split__left">
+                                    <PipelineGroupList Groups="DevOpsGroups" SelectedGroup="_selectedGroup" OnCreate="CreateGroup"
+                                                       OnSelect="OnGroupSelected" OnDelete="OnGroupDeleteRequested" OnTrigger="OnGroupTrigger" />
+                                </div>
+                                <div class="pipeline-split__right">
+                                    @if (_selectedGroup is not null)
+                                    {
+                                        <PipelineGroupEditor Group="_selectedGroup" PinnedProjects="EffectivePinnedProjects"
+                                                             OnGroupUpdated="OnGroupUpdated" />
+                                    }
+                                    else
+                                    {
+                                        <div style="padding:32px 20px; color:var(--color-text-faint); font-size:13px;">
+                                            Select a group to edit it, or create a new one.
+                                        </div>
+                                    }
+                                </div>
+                            </div>
                             break;
 
                         case "releases":
@@ -148,6 +172,16 @@
 
         <ComponentScopeEditor Visible="ShowComponentEditor" Release="_selectedRelease" OnSaved="OnComponentsSaved"
                               OnClose="@(() => ShowComponentEditor = false)" />
+
+        <PipelineGroupTriggerDialog Group="_triggeringGroup" Visible="_triggeringGroup is not null"
+                                    OnClose="@(() => _triggeringGroup = null)" />
+
+        @if (_confirmDeleteGroup is not null)
+        {
+            <ConfirmDialog Visible="true" Title="Delete Group"
+                           Message="@($"Delete '{_confirmDeleteGroup.Name}'? This cannot be undone.")" ConfirmLabel="Delete"
+                           OnConfirm="ExecuteDeleteGroup" OnCancel="@(() => _confirmDeleteGroup = null)" />
+        }
 
         @if (ShowDeleteConfirm && _selectedRelease is not null)
         {
@@ -206,6 +240,14 @@
 
     // Releases tab state
     private ReleaseRecord? _selectedRelease;
+
+    // Groups tab state
+    private PipelineGroup? _selectedGroup;
+    private PipelineGroup? _triggeringGroup;
+    private PipelineGroup? _confirmDeleteGroup;
+
+    private List<PipelineGroup> DevOpsGroups =>
+        AppState.Config.DevOpsConfig?.PipelineGroups ?? [];
 
     // Modal state
     private bool ShowReleaseEditor;
@@ -360,6 +402,48 @@
     }
 
     private void OnReleaseSelected(ReleaseRecord release) => _selectedRelease = release;
+
+    // ── Groups ──
+
+    private async Task CreateGroup()
+    {
+        var group = new PipelineGroup(Guid.NewGuid().ToString("N"), "New Group", []);
+        DevOpsGroups.Add(group);
+        _selectedGroup = group;
+        await SaveGroupsAsync();
+    }
+
+    private void OnGroupSelected(PipelineGroup group) => _selectedGroup = group;
+
+    private void OnGroupTrigger(PipelineGroup group) => _triggeringGroup = group;
+
+    private void OnGroupDeleteRequested(PipelineGroup group) => _confirmDeleteGroup = group;
+
+    private async Task ExecuteDeleteGroup()
+    {
+        if (_confirmDeleteGroup is null) return;
+        DevOpsGroups.RemoveAll(g => g.Id == _confirmDeleteGroup.Id);
+        if (_selectedGroup?.Id == _confirmDeleteGroup.Id) _selectedGroup = null;
+        _confirmDeleteGroup = null;
+        await SaveGroupsAsync();
+    }
+
+    private async Task OnGroupUpdated(PipelineGroup updated)
+    {
+        var idx = DevOpsGroups.FindIndex(g => g.Id == updated.Id);
+        if (idx >= 0) DevOpsGroups[idx] = updated;
+        _selectedGroup = updated;
+        await SaveGroupsAsync();
+    }
+
+    private async Task SaveGroupsAsync()
+    {
+        if (!AppState.UseDemoData)
+            await AppState.SaveConfigAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ─────────────────────────────────
 
     private void OnApprovalCountChanged(int count)
     {
