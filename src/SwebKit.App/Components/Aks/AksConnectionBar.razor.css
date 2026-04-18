@@ -80,6 +80,7 @@
 /* ── Namespace dropdown select (existing context + namespace style) ── */
 .aks-ns-select {
     padding: 3px var(--spacing-sm);
+    padding-right: 22px;
     background: var(--aks-filter-surface);
     color: var(--color-text);
     border: 1px solid var(--aks-filter-border);
@@ -103,12 +104,32 @@
 }
 
 .aks-ns-search {
-    cursor: default;
+    cursor: pointer;
     min-width: 150px;
 }
 
 .aks-ns-search:not([readonly]) {
     cursor: text;
+}
+
+/* Chevron indicator to signal the picker is interactive */
+.aks-ns-picker::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--color-text-muted);
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.aks-ns-picker:focus-within::after {
+    opacity: 0.5;
 }
 
 .aks-ns-backdrop {

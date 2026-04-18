@@ -18,7 +18,7 @@
                   @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
         </TemplateColumn>
     }
-    <TemplateColumn Title="Ready" Width="70px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.ReadyContainers))">
+    <TemplateColumn Title="Ready" Width="82px" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.ReadyContainers))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
             <span

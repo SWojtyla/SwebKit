@@ -2811,9 +2811,14 @@ fluent-data-grid-cell[role="columnheader"] {
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.04em;
     border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
     transition: background 0.14s ease, color 0.14s ease;
+    contain: paint; /* clips shadow DOM overflow at the element boundary */
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 fluent-data-grid-cell[role="columnheader"]:hover {
