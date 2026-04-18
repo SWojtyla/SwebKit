@@ -415,6 +415,8 @@ public sealed class ConnectionWarmupServiceTests
         public Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default) => Task.CompletedTask;
         public Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default) => Task.FromResult(new SetScanResult([], 0, true));
+        public Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default) => Task.FromResult(new RedisSlowLogSummary([], false, top, RedisInsightCapability.Loaded));
+        public Task<RedisPubSubSnapshot> GetPubSubSnapshotAsync(string? pattern = null, int maxChannels = 200, CancellationToken ct = default) => Task.FromResult(new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Loaded));
     }
 
     private sealed class FakeServiceBusBootstrapper : IServiceBusNamespaceBootstrapper

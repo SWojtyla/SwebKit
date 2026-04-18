@@ -33,6 +33,9 @@ public interface IRedisClient : IDisposable
     Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default);
     Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default);
     Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default);
+
+    Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default);
+    Task<RedisPubSubSnapshot> GetPubSubSnapshotAsync(string? pattern = null, int maxChannels = 200, CancellationToken ct = default);
 }
 
 public interface IRedisClientFactory

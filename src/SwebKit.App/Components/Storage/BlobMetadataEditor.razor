@@ -1,0 +1,170 @@
+<div class="blob-metadata-editor">
+    @if (_rows.Count > 0)
+    {
+        <table class="blob-metadata-editor__table">
+            <thead>
+                <tr>
+                    <th class="blob-metadata-editor__header">Key</th>
+                    <th class="blob-metadata-editor__header">Value</th>
+                    @if (!ReadOnly)
+                    {
+                        <th class="blob-metadata-editor__header blob-metadata-editor__header--actions"></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _rows)
+                {
+                    <tr class="blob-metadata-editor__row">
+                        <td class="blob-metadata-editor__cell">
+                            @if (ReadOnly)
+                            {
+                                <span>@row.Key</span>
+                            }
+                            else
+                            {
+                                <input class="blob-metadata-editor__input" type="text" value="@row.Key"
+                                       @onchange="e => row.Key = e.Value?.ToString() ?? string.Empty" aria-label="Metadata key" />
+                            }
+                        </td>
+                        <td class="blob-metadata-editor__cell">
+                            @if (ReadOnly)
+                            {
+                                <span>@row.Value</span>
+                            }
+                            else
+                            {
+                                <input class="blob-metadata-editor__input" type="text" value="@row.Value"
+                                       @onchange="e => row.Value = e.Value?.ToString() ?? string.Empty" aria-label="Metadata value" />
+                            }
+                        </td>
+                        @if (!ReadOnly)
+                        {
+                            <td class="blob-metadata-editor__cell blob-metadata-editor__cell--actions">
+                                <button type="button" class="blob-metadata-editor__remove-btn" aria-label="Remove key @row.Key"
+                                        @onclick="() => RemoveRow(row)">Remove</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else if (!ReadOnly)
+    {
+        <div class="blob-metadata-editor__empty">No metadata entries. Use Add key to add one.</div>
+    }
+    else
+    {
+        <div class="blob-metadata-editor__empty">No metadata.</div>
+    }
+
+    @if (!ReadOnly)
+    {
+        <div class="blob-metadata-editor__toolbar">
+            <button type="button" class="blob-metadata-editor__add-btn" @onclick="AddRow">Add key</button>
+        </div>
+
+        @if (HasChanges)
+        {
+            var diff = ComputeDiff();
+            <div class="blob-metadata-editor__diff" role="region" aria-label="Preview of changes">
+                <div class="blob-metadata-editor__diff-title">Preview of changes</div>
+                @foreach (var k in diff.AddedKeys)
+                {
+                    <div class="blob-metadata-editor__diff-row blob-metadata-editor__diff-row--added">
+                        <span class="blob-metadata-editor__diff-label">Added</span>
+                        <span class="blob-metadata-editor__diff-key">@k</span>
+                        <span class="blob-metadata-editor__diff-value">@(diff.After.TryGetValue(k, out var av) ? av : "")</span>
+                    </div>
+                }
+                @foreach (var k in diff.RemovedKeys)
+                {
+                    <div class="blob-metadata-editor__diff-row blob-metadata-editor__diff-row--removed">
+                        <span class="blob-metadata-editor__diff-label">Removed</span>
+                        <span class="blob-metadata-editor__diff-key">@k</span>
+                        <span class="blob-metadata-editor__diff-value">@(diff.Before.TryGetValue(k, out var rv) ? rv : "")</span>
+                    </div>
+                }
+                @foreach (var k in diff.ChangedKeys)
+                {
+                    <div class="blob-metadata-editor__diff-row blob-metadata-editor__diff-row--changed">
+                        <span class="blob-metadata-editor__diff-label">Changed</span>
+                        <span class="blob-metadata-editor__diff-key">@k</span>
+                        <span class="blob-metadata-editor__diff-value">@(diff.Before.TryGetValue(k, out var bv) ? bv : "") →
+                            @(diff.After.TryGetValue(k, out var cv) ? cv : "")</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="blob-metadata-editor__save-bar">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(!HasChanges)" @onclick="SaveAsync">Save</FluentButton>
+            </div>
+        }
+    </div>
+
+@code {
+    [Parameter] public IReadOnlyDictionary<string, string>? CurrentMetadata { get; set; }
+    [Parameter] public bool ReadOnly { get; set; } = true;
+    [Parameter] public EventCallback<IDictionary<string, string>> OnSave { get; set; }
+
+    private IReadOnlyDictionary<string, string>? _loadedMetadata;
+    private List<MetadataRow> _rows = [];
+
+    // BL-3: set guard before any await; this lifecycle is synchronous so no risk
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_loadedMetadata, CurrentMetadata)) return;
+        _loadedMetadata = CurrentMetadata;
+        _rows = (CurrentMetadata ?? new Dictionary<string, string>())
+            .Select(kv => new MetadataRow { Key = kv.Key, Value = kv.Value })
+            .ToList();
+    }
+
+    private bool HasChanges
+    {
+        get
+        {
+            var current = _rows
+                .Where(r => !string.IsNullOrWhiteSpace(r.Key))
+                .ToDictionary(r => r.Key, r => r.Value);
+            var original = CurrentMetadata ?? new Dictionary<string, string>();
+            if (current.Count != original.Count) return true;
+            foreach (var kv in current)
+            {
+                if (!original.TryGetValue(kv.Key, out var v) || v != kv.Value)
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    private BlobMetadataDiff ComputeDiff()
+    {
+        var original = CurrentMetadata ?? new Dictionary<string, string>();
+        var current = _rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Key))
+            .ToDictionary(r => r.Key, r => r.Value);
+        return BlobMetadataDiff.Compute(original, current);
+    }
+
+    private void AddRow() => _rows.Add(new MetadataRow());
+
+    private void RemoveRow(MetadataRow row) => _rows.Remove(row);
+
+    private async Task SaveAsync()
+    {
+        if (!HasChanges) return;
+        var metadata = _rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Key))
+            .ToDictionary(r => r.Key, r => r.Value);
+        await OnSave.InvokeAsync(metadata);
+    }
+
+    private sealed class MetadataRow
+    {
+        public string Key { get; set; } = "";
+        public string Value { get; set; } = "";
+    }
+}

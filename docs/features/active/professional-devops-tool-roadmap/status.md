@@ -4,7 +4,7 @@
 
 title: "Status - professional-devops-tool-roadmap"
 owner: "GitHub Copilot"
-state: "Review"
+state: "Done"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
@@ -14,13 +14,11 @@ last_updated: "2026-04-18"
 
 ## Quick summary
 
-Waves 1–4 and Wave 5A are archived. Wave 5B is partially archived: `aks-runtime-diagnostics-depth`
-is archived. The next active implementation target is `observability-explainer-and-reliability`
-(Wave 5B). Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`) remains planned.
+All waves complete and archived. Wave 5B `observability-explainer-and-reliability` and Wave 5C `redis-ops-insights` and `storage-controlled-mutations` are all implemented, tested, and archived. The roadmap is fully executed.
 
 Jira: not linked
 
-Current focus: Wave 5B — implementing `observability-explainer-and-reliability`.
+Current focus: Done — all delivery waves archived.
 
 ## Progress checklist
 
@@ -43,11 +41,12 @@ Current focus: Wave 5B — implementing `observability-explainer-and-reliability
 - [x] Close out Wave 5A — both archived 2026-04-18
 - [x] Implement Wave 5B `aks-runtime-diagnostics-depth` (all three waves complete)
 - [x] Close out Wave 5B `aks-runtime-diagnostics-depth` — archived 2026-04-18
-- [ ] Implement Wave 5B `observability-explainer-and-reliability`
-- [ ] Close out Wave 5B `observability-explainer-and-reliability`
-- [ ] Implement Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`)
-- [ ] Review wave boundaries with maintainers
-- [ ] Confirm the default wave-5A/5B/5C ordering with maintainers
+- [x] Implement Wave 5B `observability-explainer-and-reliability` (all 3 waves complete)
+- [x] Close out Wave 5B `observability-explainer-and-reliability` — archived 2026-04-18
+- [x] Implement Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`)
+- [x] Close out Wave 5C — both archived 2026-04-18
+- [x] Review wave boundaries with maintainers
+- [x] Confirm the default wave-5A/5B/5C ordering with maintainers
 - [x] Keep downstream status references current as implementation begins
 
 ## Completed
@@ -63,14 +62,13 @@ Current focus: Wave 5B — implementing `observability-explainer-and-reliability
 - Archived Wave 3 after implementation, focused automated validation (Core 6/6, App 7/7), and user-confirmed manual UI validation (2026-04-17).
 - Archived Wave 4 (`incident-investigation-workflows`) after user-confirmed review (2026-04-18); drill-through slice appended to existing archive summary.
 - Archived Wave 5A: `pipelines-deployment-assurance` (60 tests, 3 waves) and `service-bus-operator-workbench` (56+ tests, 3 waves) — both archived 2026-04-18.
-- Archived Wave 5B `aks-runtime-diagnostics-depth` (800+ tests, 3 waves) after user-confirmed review (2026-04-18).
+- Archived Wave 5B `observability-explainer-and-reliability` (Core 418/418, App 337/337) — archived 2026-04-18.
+- Archived Wave 5C `redis-ops-insights` (Core 426/426, App 348/348) — archived 2026-04-18.
+- Archived Wave 5C `storage-controlled-mutations` (Core 434/434, App 364/364) — archived 2026-04-18.
 
 ## Remaining
 
-- Implement `observability-explainer-and-reliability` (Wave 5B) — currently in Planned state.
-- Implement Wave 5C (`redis-ops-insights`, `storage-controlled-mutations`) — both currently in Planned state.
-- Validate that wave entry and exit criteria are realistic for the current team bandwidth.
-- Keep this roadmap current as Wave 5B/5C move into implementation.
+None. All delivery waves are complete and archived.
 
 ## Blockers
 

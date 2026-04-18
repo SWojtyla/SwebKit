@@ -1,0 +1,56 @@
+<div class="blob-recovery-panel">
+    <div class="blob-recovery-panel__section">
+        <div class="blob-recovery-panel__section-title">Version restore</div>
+        @if (Capabilities?.CanRestore == true && !string.IsNullOrEmpty(SelectedVersionId))
+        {
+            <FluentButton Appearance="Appearance.Accent" @onclick="RestoreAsync">Restore this version</FluentButton>
+            <p class="blob-recovery-panel__notice">
+                Restoring creates a new current version. Existing history is not erased.
+            </p>
+        }
+        else if (Capabilities?.CanRestore != true)
+        {
+            <div class="blob-recovery-panel__unavailable" role="note">
+                Version restore not available — versioning is not enabled or not supported for this account.
+            </div>
+        }
+        else
+        {
+            <div class="blob-recovery-panel__unavailable" role="note">
+                Select a version above to enable restore.
+            </div>
+        }
+    </div>
+
+    <div class="blob-recovery-panel__section">
+        <div class="blob-recovery-panel__section-title">Blob recovery</div>
+        @if (Capabilities?.SoftDeleteEnabled == true)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="UndeleteAsync">Recover deleted blob</FluentButton>
+        }
+        else
+        {
+            <div class="blob-recovery-panel__unavailable" role="note">
+                Soft delete is not enabled — blob recovery is not available for this account.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public StorageCapabilities? Capabilities { get; set; }
+    [Parameter] public string? SelectedVersionId { get; set; }
+    [Parameter] public EventCallback<string> OnRestoreVersion { get; set; }
+    [Parameter] public EventCallback OnUndelete { get; set; }
+
+    private async Task RestoreAsync()
+    {
+        if (string.IsNullOrEmpty(SelectedVersionId)) return;
+        await OnRestoreVersion.InvokeAsync(SelectedVersionId);
+    }
+
+    private async Task UndeleteAsync()
+    {
+        await OnUndelete.InvokeAsync();
+    }
+}

@@ -1,0 +1,90 @@
+@if (Visible)
+{
+    <div class="blob-mutation-dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-dialog-title">
+        <div class="blob-mutation-dialog">
+            <h3 id="copy-dialog-title" class="blob-mutation-dialog__title">Copy Blob</h3>
+
+            <div class="blob-mutation-dialog__field">
+                <span class="blob-mutation-dialog__label">Source</span>
+                <span class="blob-mutation-dialog__source-label">
+                    @SourceContainer/@SourceBlobName
+                    @if (!string.IsNullOrWhiteSpace(SourceVersionId))
+                    {
+                        <span class="blob-mutation-dialog__version-note"> (version: @SourceVersionId)</span>
+                    }
+                </span>
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label for="copy-dest-container" class="blob-mutation-dialog__label">Destination container</label>
+                <select id="copy-dest-container" @bind="_destinationContainer" class="blob-mutation-dialog__select">
+                    <option value="">— select container —</option>
+                    @foreach (var container in AvailableContainers)
+                    {
+                        <option value="@container">@container</option>
+                    }
+                </select>
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label for="copy-dest-blob" class="blob-mutation-dialog__label">Destination blob name</label>
+                <input id="copy-dest-blob" type="text" @bind="_destinationBlobName" class="blob-mutation-dialog__input" />
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label class="blob-mutation-dialog__checkbox-label">
+                    <input type="checkbox" @bind="_overwrite" />
+                    Overwrite if exists
+                </label>
+                @if (_overwrite)
+                {
+                    <p class="blob-mutation-dialog__warning" role="alert">
+                        Warning: an existing blob at the destination will be permanently replaced.
+                    </p>
+                }
+            </div>
+
+            <div class="blob-mutation-dialog__actions">
+                <FluentButton Appearance="Appearance.Accent"
+                              Disabled="@(string.IsNullOrWhiteSpace(_destinationContainer) || string.IsNullOrWhiteSpace(_destinationBlobName))"
+                              @onclick="ConfirmAsync">Confirm</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => OnCancel.InvokeAsync()">Cancel
+                </FluentButton>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string SourceContainer { get; set; } = "";
+    [Parameter] public string SourceBlobName { get; set; } = "";
+    [Parameter] public string? SourceVersionId { get; set; }
+    [Parameter] public IReadOnlyList<string> AvailableContainers { get; set; } = [];
+    [Parameter] public EventCallback<BlobCopyOptions> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _destinationContainer = "";
+    private string _destinationBlobName = "";
+    private bool _overwrite;
+
+    protected override void OnInitialized()
+    {
+        _destinationBlobName = SourceBlobName;
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_destinationContainer) || string.IsNullOrWhiteSpace(_destinationBlobName)) return;
+
+        var options = new BlobCopyOptions(
+            SourceContainer: SourceContainer,
+            SourceBlobName: SourceBlobName,
+            DestinationContainer: _destinationContainer,
+            DestinationBlobName: _destinationBlobName,
+            SourceVersionId: SourceVersionId,
+            Overwrite: _overwrite);
+
+        await OnConfirm.InvokeAsync(options);
+    }
+}

@@ -4,21 +4,21 @@
 
 title: "Status - storage-controlled-mutations"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-04-18"
 
 ---
 
 ## Quick summary
 
-Planning is complete for a three-wave Storage expansion that keeps read-only inspection as the default and adds guarded mutations only behind explicit per-account enablement. The next useful implementation step is Wave 1: config and client support for opt-in upload and same-account copy.
+Waves 1, 2, and 3 are complete. Three new components (`BlobMetadataEditor`, `BlobVersionDiffPane`, `BlobRecoveryPanel`) are wired into `BlobDetailPane.razor`. All 364 unit tests pass with 0 errors and 0 warnings.
 
 Jira: not linked
 
-Current focus: establish the mutation safety model first so every later upload, metadata, diff, or recovery action reuses the same explicit production controls.
+Current focus: pre-ship review and merge.
 
 ## Progress checklist
 
@@ -30,27 +30,35 @@ Current focus: establish the mutation safety model first so every later upload, 
 
 ### Wave 1 - Mutation safety plus upload and copy
 
-- [ ] Extend storage configuration with an additive mutation opt-in field.
-- [ ] Add upload and same-account copy client contracts plus demo support.
-- [ ] Add focused mutation dialogs and progress or confirmation flows in the Storage page.
+- [x] Extend storage configuration with an additive mutation opt-in field.
+- [x] Add upload and same-account copy client contracts plus demo support.
+- [x] Add focused mutation dialogs and progress or confirmation flows in the Storage page.
+- [x] `StorageMutationBanner.razor` — read-only info vs. mutation-enabled warning with account name.
+- [x] `BlobUploadDialog.razor` — file picker, editable blob name, overwrite toggle + warning text, guarded Confirm.
+- [x] `BlobCopyDialog.razor` — source label, destination container select, blob name, overwrite toggle + warning, Confirm.
+- [x] `StoragePage.razor` wired: banner, Upload/Copy buttons (mutations-gated), inline success/error, BL-2 compliant.
+- [x] 6 bUnit tests in `StorageMutationTests.cs` — all passing, 0 errors 0 warnings.
 
 ### Wave 2 - Metadata update and version diff
 
-- [ ] Add metadata patch support with before-versus-after preview.
-- [ ] Extend version-aware property and content loading for compare views.
-- [ ] Add bounded text diff and metadata-only fallback for large or binary blobs.
+- [x] `BlobMetadataEditor.razor` — editable key/value rows, Remove button, Add key, diff preview (Added/Removed/Changed with text labels), Save gated on HasChanges, ReadOnly mode hides all mutation controls.
+- [x] `BlobVersionDiffPane.razor` — empty state, metadata diff table with text labels, size comparison, text diff or "not available" notice.
+- [x] `BlobDetailPane.razor` — `AllowMutations` parameter, "Edit metadata" button and Cancel, `SaveMetadataAsync` wired to `SetBlobMetadataAsync`, Compare button per version row, `CompareVersionAsync` wired to `GetVersionComparisonAsync`.
+- [x] 7 bUnit tests covering ReadOnly no-Save, Added label, Removed label, empty state, content-compare not available, metadata diff labels.
 
 ### Wave 3 - Recovery
 
-- [ ] Add version restore and soft-delete recovery support with capability detection.
-- [ ] Surface recovery actions in the versions or detail experience with explicit result summary.
-- [ ] Run focused App, Azure, and Core test passes and update Storage functionality docs.
+- [x] `BlobRecoveryPanel.razor` — restore section (gated on `CanRestore` + version selected), undelete section (gated on `SoftDeleteEnabled`), text "not available" notices where capability absent.
+- [x] `BlobDetailPane.razor` — `BlobRecoveryPanel` wired with capabilities, `RestoreVersionAsync`, `UndeleteAsync`.
+- [x] `LoadCapabilitiesAsync` called lazily when versions tab is selected.
+- [x] 3 bUnit tests: restore not available, restore shown, soft-delete shown.
 
 ## Completed
 
-- Framed the feature around guarded single-blob mutations rather than general write access.
-- Chosen opt-in mutation enablement at the storage-account level so current behavior remains unchanged for existing environments.
-- Defined confirmation, overwrite, and recovery safety expectations before implementation starts.
+- All three waves implemented and tested (364 tests, 0 failures, 0 warnings).
+- All mutation actions gate on `AllowMutations`; read-only mode is unchanged.
+- Text labels alongside all color cues (BL-1, BL-2, BL-3 observed throughout).
+- New components registered in `SwebKit.App.Tests.csproj` `<RazorComponent>` item group.
 
 ## Remaining
 

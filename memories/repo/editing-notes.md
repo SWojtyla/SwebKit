@@ -1,2 +1,3 @@
 - app.css is patch-fragile once theme work is in flight; prefer small targeted apply_patch edits over large multi-hunk patches, and re-read the exact selector block before patching when line drift is likely.
 - tests/SwebKit.E2E.Tests/AppFixture can attach to an already-running WebView2/CDP app session; do not trust theme-reset assertions unless the app was relaunched into a fresh session.
+- SwebKit.App.Tests.csproj manually lists every <RazorComponent> item. Adding a new .razor file to src/SwebKit.App/Components/Storage/ requires a matching entry in the test project .csproj or the component class will not be found in tests (CS0246).

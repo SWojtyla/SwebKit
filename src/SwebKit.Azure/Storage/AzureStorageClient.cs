@@ -5,8 +5,11 @@ using Azure.Storage.Sas;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using AzureBlobProperties = Azure.Storage.Blobs.Models.BlobProperties;
+using AzureBlobUploadOptions = Azure.Storage.Blobs.Models.BlobUploadOptions;
 using BlobDownloadOptions = Azure.Storage.Blobs.Models.BlobDownloadOptions;
 using BlobDownloadToOptions = Azure.Storage.Blobs.Models.BlobDownloadToOptions;
+using BlobHttpHeaders = Azure.Storage.Blobs.Models.BlobHttpHeaders;
+using BlobRequestConditions = Azure.Storage.Blobs.Models.BlobRequestConditions;
 using BlobStates = Azure.Storage.Blobs.Models.BlobStates;
 using BlobTraits = Azure.Storage.Blobs.Models.BlobTraits;
 
@@ -248,6 +251,225 @@ public class AzureStorageClient : IStorageClient
             BlobContainerSasPermissions.Read | BlobContainerSasPermissions.List,
             DateTimeOffset.UtcNow.Add(expiry));
         return Task.FromResult(uri.ToString());
+    }
+
+    public async Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _blobService.GetPropertiesAsync(cancellationToken: ct);
+            var props = response.Value;
+            // The data-plane BlobServiceProperties (Azure.Storage.Blobs 12.x) does not expose
+            // versioning enablement. Soft-delete is accurately detected via DeleteRetentionPolicy.
+            // Versioning detection would require the management-plane SDK.
+            bool softDelete = props.DeleteRetentionPolicy?.Enabled == true;
+            return new StorageCapabilities(
+                VersioningEnabled: false,
+                SoftDeleteEnabled: softDelete,
+                CanUpload: true,
+                CanCopy: true,
+                CanSetMetadata: true,
+                CanRestore: softDelete);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException)
+        {
+            return new StorageCapabilities(false, false, false, false, false, false);
+        }
+    }
+
+    public async Task<BlobMutationResult> UploadBlobAsync(
+        BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var blobClient = _blobService.GetBlobContainerClient(options.ContainerName).GetBlobClient(options.BlobName);
+            var azureOptions = new AzureBlobUploadOptions { ProgressHandler = progress };
+            if (options.ContentType is not null)
+                azureOptions.HttpHeaders = new BlobHttpHeaders { ContentType = options.ContentType };
+            if (!options.Overwrite)
+                azureOptions.Conditions = new BlobRequestConditions { IfNoneMatch = new ETag("*") };
+
+            await blobClient.UploadAsync(source, azureOptions, ct);
+            return new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            return new BlobMutationResult(false, ErrorMessage: ex.Message);
+        }
+    }
+
+    public async Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default)
+    {
+        try
+        {
+            var srcBlob = _blobService.GetBlobContainerClient(options.SourceContainer).GetBlobClient(options.SourceBlobName);
+            if (!string.IsNullOrWhiteSpace(options.SourceVersionId))
+                srcBlob = srcBlob.WithVersion(options.SourceVersionId);
+
+            var destBlob = _blobService.GetBlobContainerClient(options.DestinationContainer).GetBlobClient(options.DestinationBlobName);
+            if (options.Overwrite)
+                await destBlob.DeleteIfExistsAsync(cancellationToken: ct);
+
+            var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri, cancellationToken: ct);
+            await operation.WaitForCompletionAsync(ct);
+            return new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            return new BlobMutationResult(false, ErrorMessage: ex.Message);
+        }
+    }
+
+    public async Task<BlobMutationResult> SetBlobMetadataAsync(
+        string containerName, string blobName, IDictionary<string, string> metadata,
+        string? ifMatchEtag = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+            BlobRequestConditions? conditions = ifMatchEtag is not null
+                ? new BlobRequestConditions { IfMatch = new ETag(ifMatchEtag) }
+                : null;
+            await blobClient.SetMetadataAsync(metadata, conditions, ct);
+            return new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            return new BlobMutationResult(false, ErrorMessage: ex.Message);
+        }
+    }
+
+    public async Task<BlobVersionComparison> GetVersionComparisonAsync(
+        string containerName, string blobName, string baseVersionId,
+        string? compareVersionId = null, CancellationToken ct = default)
+    {
+        var container = _blobService.GetBlobContainerClient(containerName);
+
+        var basePropsResponse = await container.GetBlobClient(blobName).WithVersion(baseVersionId).GetPropertiesAsync(cancellationToken: ct);
+        var baseProps = basePropsResponse.Value;
+
+        AzureBlobProperties compareProps;
+        if (compareVersionId is not null)
+        {
+            var r = await container.GetBlobClient(blobName).WithVersion(compareVersionId).GetPropertiesAsync(cancellationToken: ct);
+            compareProps = r.Value;
+        }
+        else
+        {
+            var r = await container.GetBlobClient(blobName).GetPropertiesAsync(cancellationToken: ct);
+            compareProps = r.Value;
+        }
+
+        var diff = BlobMetadataDiff.Compute(
+            new Dictionary<string, string>(baseProps.Metadata),
+            new Dictionary<string, string>(compareProps.Metadata));
+
+        const long maxTextBytes = 100 * 1024;
+        bool contentComparePossible = false;
+        string? textDiff = null;
+
+        bool bothSmall = baseProps.ContentLength <= maxTextBytes && compareProps.ContentLength <= maxTextBytes;
+        bool baseIsText = IsTextContentType(baseProps.ContentType);
+
+        if (bothSmall && baseIsText)
+        {
+            try
+            {
+                using var baseMs = new MemoryStream();
+                await DownloadBlobAsync(containerName, blobName, baseMs, null, baseVersionId, ct);
+                var baseText = System.Text.Encoding.UTF8.GetString(baseMs.ToArray());
+
+                using var compareMs = new MemoryStream();
+                await DownloadBlobAsync(containerName, blobName, compareMs, null, compareVersionId, ct);
+                var compareText = System.Text.Encoding.UTF8.GetString(compareMs.ToArray());
+
+                contentComparePossible = true;
+                textDiff = ProduceSimpleLineDiff(baseText, compareText);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (RequestFailedException ex)
+            {
+                contentComparePossible = false;
+                textDiff = $"Content download failed: {ex.Message}";
+            }
+        }
+        else
+        {
+            textDiff = !bothSmall ? "Content too large for text comparison (> 100 KB)" : "Non-text content type";
+        }
+
+        return new BlobVersionComparison(
+            BaseVersionId: baseVersionId,
+            CompareVersionId: compareVersionId,
+            MetadataDiff: diff,
+            ContentComparePossible: contentComparePossible,
+            BaseSizeBytes: baseProps.ContentLength,
+            CompareSizeBytes: compareProps.ContentLength,
+            TextDiff: textDiff);
+    }
+
+    public async Task<BlobRecoveryResult> RestoreBlobVersionAsync(
+        string containerName, string blobName, string versionId, CancellationToken ct = default)
+    {
+        try
+        {
+            var container = _blobService.GetBlobContainerClient(containerName);
+            var versionedBlob = container.GetBlobClient(blobName).WithVersion(versionId);
+            var currentBlob = container.GetBlobClient(blobName);
+
+            var operation = await currentBlob.StartCopyFromUriAsync(versionedBlob.Uri, cancellationToken: ct);
+            await operation.WaitForCompletionAsync(ct);
+            return new BlobRecoveryResult(BlobRecoveryState.Restored, ResultBlobPath: $"{containerName}/{blobName}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex)
+        {
+            return new BlobRecoveryResult(BlobRecoveryState.Failed, ErrorMessage: ex.Message);
+        }
+    }
+
+    public async Task<BlobRecoveryResult> UndeleteBlobAsync(
+        string containerName, string blobName, CancellationToken ct = default)
+    {
+        try
+        {
+            var blobClient = _blobService.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+            await blobClient.UndeleteAsync(ct);
+            return new BlobRecoveryResult(BlobRecoveryState.Undeleted, ResultBlobPath: $"{containerName}/{blobName}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RequestFailedException ex) when (ex.ErrorCode is "BlobNotFound" or "BlobSoftDeleteNotEnabled")
+        {
+            return new BlobRecoveryResult(BlobRecoveryState.Unsupported, ErrorMessage: ex.Message);
+        }
+        catch (RequestFailedException ex)
+        {
+            return new BlobRecoveryResult(BlobRecoveryState.Failed, ErrorMessage: ex.Message);
+        }
+    }
+
+    private static string ProduceSimpleLineDiff(string baseText, string compareText)
+    {
+        var baseLines = baseText.Split('\n');
+        var compareLines = compareText.Split('\n');
+        int maxLines = Math.Max(baseLines.Length, compareLines.Length);
+        var diffLines = new List<string>();
+
+        for (int i = 0; i < maxLines; i++)
+        {
+            var b = i < baseLines.Length ? baseLines[i] : null;
+            var c = i < compareLines.Length ? compareLines[i] : null;
+            if (b == c) continue;
+            if (b is not null && c is null) diffLines.Add($"- {b}");
+            else if (b is null && c is not null) diffLines.Add($"+ {c}");
+            else { diffLines.Add($"- {b}"); diffLines.Add($"+ {c}"); }
+        }
+
+        return diffLines.Count > 0 ? string.Join("\n", diffLines) : "(no content differences)";
     }
 
     /// <summary>

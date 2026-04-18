@@ -161,3 +161,41 @@ public class PrefixMemoryBucket
 }
 
 public record SetScanResult(IReadOnlyList<string> Members, long Cursor, bool IsComplete);
+
+public enum RedisInsightCapability { Loaded, Partial, Unsupported, PermissionLimited, Failed }
+
+public record RedisSlowLogEntryInfo(
+    long Id,
+    DateTimeOffset ExecutedAt,
+    TimeSpan Duration,
+    string Command,
+    string Arguments,
+    string? ClientName);
+
+public record RedisSlowLogSummary(
+    IReadOnlyList<RedisSlowLogEntryInfo> Entries,
+    bool Truncated,
+    int MaxReturned,
+    RedisInsightCapability Capability);
+
+public record RedisHotKeySignal(
+    string Key,
+    string SignalSource,
+    string Explanation,
+    double? FrequencyScore,
+    double? IdleSeconds,
+    long? MemoryBytes);
+
+public record RedisHotKeySummary(
+    IReadOnlyList<RedisHotKeySignal> Signals,
+    bool IsPartial,
+    string? PartialReason);
+
+public record RedisPubSubChannelInfo(string Channel, long SubscriberCount);
+
+public record RedisPubSubSnapshot(
+    IReadOnlyList<RedisPubSubChannelInfo> Channels,
+    long PatternSubscriptionCount,
+    bool Truncated,
+    int MaxChannels,
+    RedisInsightCapability Capability);

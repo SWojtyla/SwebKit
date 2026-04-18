@@ -124,6 +124,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
         builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
+        builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
 
         return builder.Build();
     }

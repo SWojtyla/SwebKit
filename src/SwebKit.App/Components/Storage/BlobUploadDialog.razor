@@ -1,0 +1,80 @@
+@using Microsoft.AspNetCore.Components.Forms
+
+@if (Visible)
+{
+    <div class="blob-mutation-dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="upload-dialog-title">
+        <div class="blob-mutation-dialog">
+            <h3 id="upload-dialog-title" class="blob-mutation-dialog__title">Upload Blob</h3>
+
+            <div class="blob-mutation-dialog__field">
+                <span class="blob-mutation-dialog__label">Container</span>
+                <span class="blob-mutation-dialog__readonly-value">@ContainerName</span>
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label for="upload-file-input" class="blob-mutation-dialog__label">File</label>
+                <InputFile id="upload-file-input" OnChange="OnFileSelected" accept="*/*" />
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label for="upload-blob-name" class="blob-mutation-dialog__label">Destination blob name</label>
+                <input id="upload-blob-name" type="text" @bind="_blobName" class="blob-mutation-dialog__input" />
+            </div>
+
+            <div class="blob-mutation-dialog__field">
+                <label class="blob-mutation-dialog__checkbox-label">
+                    <input type="checkbox" @bind="_overwrite" />
+                    Overwrite if exists
+                </label>
+                @if (_overwrite)
+                {
+                    <p class="blob-mutation-dialog__warning" role="alert">
+                        Warning: an existing blob with this name will be permanently replaced.
+                    </p>
+                }
+            </div>
+
+            <div class="blob-mutation-dialog__actions">
+                <FluentButton Appearance="Appearance.Accent"
+                              Disabled="@(_selectedFile is null || string.IsNullOrWhiteSpace(_blobName))" @onclick="ConfirmAsync">
+                    Confirm</FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => OnCancel.InvokeAsync()">Cancel
+                    </FluentButton>
+                </div>
+            </div>
+        </div>
+    }
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string ContainerName { get; set; } = "";
+    [Parameter] public EventCallback<(BlobUploadOptions Options, Stream FileStream)> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private IBrowserFile? _selectedFile;
+    private string _blobName = "";
+    private bool _overwrite;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        if (string.IsNullOrWhiteSpace(_blobName))
+        {
+            _blobName = e.File.Name;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (_selectedFile is null || string.IsNullOrWhiteSpace(_blobName)) return;
+
+        var options = new BlobUploadOptions(
+            ContainerName: ContainerName,
+            BlobName: _blobName,
+            Overwrite: _overwrite,
+            ContentType: _selectedFile.ContentType);
+
+        var stream = _selectedFile.OpenReadStream(maxAllowedSize: 512L * 1024 * 1024);
+        await OnConfirm.InvokeAsync((options, stream));
+    }
+}

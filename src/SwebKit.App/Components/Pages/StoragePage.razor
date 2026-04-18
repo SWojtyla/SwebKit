@@ -72,6 +72,9 @@
         }
         else
         {
+            <StorageMutationBanner MutationsEnabled="@(_storageClient.Config.AllowMutations)"
+                                   AccountName="@_storageClient.Config.AccountName" />
+
             <div class="storage-body">
                 <div class="storage-container-pane">
                     <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
@@ -86,6 +89,22 @@
                     }
                     else
                     {
+                        @if (_storageClient.Config.AllowMutations)
+                        {
+                            <div class="storage-mutation-actions">
+                                <FluentButton Appearance="Appearance.Accent"
+                                              @onclick="() => { _showUploadDialog = true; _mutationMessage = null; }">Upload</FluentButton>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(_mutationMessage))
+                        {
+                            <div class="@(_mutationSuccess ? "storage-mutation-result storage-mutation-result--success" : "storage-mutation-result storage-mutation-result--error")"
+                                 role="status">
+                                @_mutationMessage
+                            </div>
+                        }
+
                         <div class="storage-blob-split">
                             <div
                                 style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
@@ -95,13 +114,34 @@
                             @if (_selectedBlob is not null)
                             {
                                 <div class="storage-detail-pane">
-                                    <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
+                                    @if (_storageClient.Config.AllowMutations)
+                                    {
+                                        <div class="storage-blob-mutation-bar">
+                                            <FluentButton Appearance="Appearance.Lightweight" @onclick="OpenCopyDialogAsync">Copy
+                                            </FluentButton>
+                                        </div>
+                                    }
+                                    <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob"
+                                                    AllowMutations="@(_storageClient.Config.AllowMutations)" />
                                 </div>
                             }
                         </div>
                     }
                 </div>
             </div>
+
+            @if (_showUploadDialog && _selectedContainer is not null)
+            {
+                <BlobUploadDialog Visible="true" ContainerName="@_selectedContainer" OnConfirm="HandleUploadAsync"
+                                  OnCancel="() => { _showUploadDialog = false; _mutationMessage = null; }" />
+            }
+
+            @if (_showCopyDialog && _selectedBlob is not null && _selectedContainer is not null)
+            {
+                <BlobCopyDialog Visible="true" SourceContainer="@_selectedContainer" SourceBlobName="@_selectedBlob.Name"
+                                AvailableContainers="@_containerNames" OnConfirm="HandleCopyAsync"
+                                OnCancel="() => { _showCopyDialog = false; _mutationMessage = null; }" />
+            }
         }
     }
 </div>
@@ -113,6 +153,11 @@
     private string? _selectedContainer;
     private StorageBlobItem? _selectedBlob;
     private CancellationTokenSource _cts = new();
+    private bool _showUploadDialog;
+    private bool _showCopyDialog;
+    private string? _mutationMessage;
+    private bool _mutationSuccess;
+    private IReadOnlyList<string> _containerNames = [];
 
     private string? SelectedStorageAccountDisplayName =>
         _storageAccounts.FirstOrDefault(acc => acc.Id == _selectedAccountId)?.DisplayName;
@@ -359,5 +404,54 @@
         {
             Notifications.ShowError("Failed to copy SAS URL", ex: ex);
         }
+    }
+
+    private async Task OpenCopyDialogAsync()
+    {
+        _containerNames = [];
+        if (_storageClient is not null)
+        {
+            try
+            {
+                var containers = await _storageClient.ListContainersAsync(_cts.Token);
+                _containerNames = containers.Select(c => c.Name).ToList();
+            }
+            catch (OperationCanceledException) { return; }
+            catch { /* best-effort */ }
+        }
+        _showCopyDialog = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleUploadAsync((BlobUploadOptions Options, Stream FileStream) payload)
+    {
+        if (_storageClient is null) return;
+        _mutationMessage = null;
+        var result = await _storageClient.UploadBlobAsync(payload.Options, payload.FileStream, null, _cts.Token);
+        if (result.Success)
+        {
+            _showUploadDialog = false;
+        }
+        _mutationMessage = result.Success
+            ? $"Uploaded to {result.ResultBlobPath}"
+            : $"Upload failed: {result.ErrorMessage}";
+        _mutationSuccess = result.Success;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleCopyAsync(BlobCopyOptions options)
+    {
+        if (_storageClient is null) return;
+        _mutationMessage = null;
+        var result = await _storageClient.CopyBlobAsync(options, _cts.Token);
+        if (result.Success)
+        {
+            _showCopyDialog = false;
+        }
+        _mutationMessage = result.Success
+            ? $"Copied to {result.ResultBlobPath}"
+            : $"Copy failed: {result.ErrorMessage}";
+        _mutationSuccess = result.Success;
+        await InvokeAsync(StateHasChanged);
     }
 }

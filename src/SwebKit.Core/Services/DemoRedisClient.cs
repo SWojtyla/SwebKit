@@ -337,6 +337,60 @@ public sealed class DemoRedisClient : IRedisClient
     {
     }
 
+    public Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var now = DateTimeOffset.UtcNow;
+        var entries = new List<RedisSlowLogEntryInfo>
+        {
+            new(1, now.AddSeconds(-300), TimeSpan.FromMilliseconds(48.3), "HGETALL", "user:profile:1001", "worker-1"),
+            new(2, now.AddSeconds(-210), TimeSpan.FromMilliseconds(41.7), "KEYS", "*", null),
+            new(3, now.AddSeconds(-120), TimeSpan.FromMilliseconds(25.4), "SMEMBERS", "cache:categories", "reader-2"),
+            new(4, now.AddSeconds(-60), TimeSpan.FromMilliseconds(19.8), "HGETALL", "user:profile:1002", "worker-1"),
+            new(5, now.AddSeconds(-10), TimeSpan.FromMilliseconds(12.1), "LRANGE", "cache:products 0 -1", null),
+        };
+
+        var limited = entries.Take(top).ToList();
+        return Task.FromResult(new RedisSlowLogSummary(
+            limited,
+            limited.Count == top,
+            top,
+            RedisInsightCapability.Loaded));
+    }
+
+    public Task<RedisPubSubSnapshot> GetPubSubSnapshotAsync(
+        string? pattern = null,
+        int maxChannels = 200,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var allChannels = new List<RedisPubSubChannelInfo>
+        {
+            new("notifications:global", 14),
+            new("notifications:user:1001", 2),
+            new("events:orders", 7),
+            new("events:inventory", 3),
+            new("metrics:realtime", 5),
+            new("heartbeat", 1),
+        };
+
+        var filtered = string.IsNullOrEmpty(pattern)
+            ? allChannels
+            : allChannels
+                .Where(c => c.Channel.StartsWith(pattern.TrimEnd('*'), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        var truncated = filtered.Count > maxChannels;
+        var channels = truncated ? filtered.Take(maxChannels).ToList() : filtered;
+
+        return Task.FromResult(new RedisPubSubSnapshot(
+            channels,
+            2,
+            truncated,
+            maxChannels,
+            RedisInsightCapability.Loaded));
+    }
+
     private Dictionary<string, DemoValue> GetDb()
     {
         if (!_databases.TryGetValue(_database, out var db))

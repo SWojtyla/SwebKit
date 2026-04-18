@@ -66,6 +66,29 @@ public interface IStorageClient
 
     Task<string> GetContainerSasUrlAsync(
         string containerName, TimeSpan expiry, CancellationToken ct = default);
+
+    // --- Mutation methods ---
+
+    /// <summary>Returns a best-effort snapshot of versioning, soft-delete, and mutation capabilities for the account.</summary>
+    Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default);
+
+    /// <summary>Uploads a stream to a blob. Reports progress via IProgress if provided. Returns a mutation result — never throws.</summary>
+    Task<BlobMutationResult> UploadBlobAsync(BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default);
+
+    /// <summary>Copies a blob within the same account. Supports versioned source and overwrite semantics. Returns a mutation result — never throws.</summary>
+    Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default);
+
+    /// <summary>Sets metadata on a blob. Uses ETag conditional write when ifMatchEtag is non-null. Returns a mutation result — never throws.</summary>
+    Task<BlobMutationResult> SetBlobMetadataAsync(string containerName, string blobName, IDictionary<string, string> metadata, string? ifMatchEtag = null, CancellationToken ct = default);
+
+    /// <summary>Fetches properties for two versions and computes a metadata diff. Attempts a text content diff when both versions are under 100 KB and text-based.</summary>
+    Task<BlobVersionComparison> GetVersionComparisonAsync(string containerName, string blobName, string baseVersionId, string? compareVersionId = null, CancellationToken ct = default);
+
+    /// <summary>Restores a versioned blob by copying it forward to the current path. Returns a recovery result — never throws.</summary>
+    Task<BlobRecoveryResult> RestoreBlobVersionAsync(string containerName, string blobName, string versionId, CancellationToken ct = default);
+
+    /// <summary>Undeletes a soft-deleted blob. Returns Unsupported when soft delete is not enabled or the blob is not found. Never throws.</summary>
+    Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default);
 }
 
 public interface IStorageClientFactory

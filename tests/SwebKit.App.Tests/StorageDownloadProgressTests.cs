@@ -234,6 +234,27 @@ public class StorageDownloadProgressTests : TestContext
 
         public Task<string> GetContainerSasUrlAsync(string containerName, TimeSpan expiry, CancellationToken ct = default) =>
             Task.FromResult("https://example.invalid/container?sas=1");
+
+        public Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default) =>
+            Task.FromResult(new StorageCapabilities(false, false, false, false, false, false));
+
+        public Task<BlobMutationResult> UploadBlobAsync(BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default) =>
+            Task.FromResult(new BlobMutationResult(false));
+
+        public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default) =>
+            Task.FromResult(new BlobMutationResult(false));
+
+        public Task<BlobMutationResult> SetBlobMetadataAsync(string containerName, string blobName, IDictionary<string, string> metadata, string? ifMatchEtag = null, CancellationToken ct = default) =>
+            Task.FromResult(new BlobMutationResult(false));
+
+        public Task<BlobVersionComparison> GetVersionComparisonAsync(string containerName, string blobName, string baseVersionId, string? compareVersionId = null, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not implemented in test stub.");
+
+        public Task<BlobRecoveryResult> RestoreBlobVersionAsync(string containerName, string blobName, string versionId, CancellationToken ct = default) =>
+            Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
+
+        public Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default) =>
+            Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
     }
 
     private sealed class TestNotificationService : INotificationService

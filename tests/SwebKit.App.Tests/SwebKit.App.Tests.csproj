@@ -114,8 +114,17 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisNamespaceTreeNode.razor" Link="Components\Redis\RedisNamespaceTreeNode.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisKeyspaceHealthExplorer.razor" Link="Components\Redis\RedisKeyspaceHealthExplorer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisSlowLogPanel.razor" Link="Components\Redis\RedisSlowLogPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisPubSubPanel.razor" Link="Components\Redis\RedisPubSubPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisOpsInsightsPanel.razor" Link="Components\Redis\RedisOpsInsightsPanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageContainerTree.razor" Link="Components\Storage\StorageContainerTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageBlobList.razor" Link="Components\Storage\StorageBlobList.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobDetailPane.razor" Link="Components\Storage\BlobDetailPane.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\StorageMutationBanner.razor" Link="Components\Storage\StorageMutationBanner.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobUploadDialog.razor" Link="Components\Storage\BlobUploadDialog.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobCopyDialog.razor" Link="Components\Storage\BlobCopyDialog.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobMetadataEditor.razor" Link="Components\Storage\BlobMetadataEditor.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobVersionDiffPane.razor" Link="Components\Storage\BlobVersionDiffPane.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobRecoveryPanel.razor" Link="Components\Storage\BlobRecoveryPanel.razor" />
     </ItemGroup>
 </Project>

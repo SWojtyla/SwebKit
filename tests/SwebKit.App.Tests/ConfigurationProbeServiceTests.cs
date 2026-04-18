@@ -191,6 +191,13 @@ public sealed class ConfigurationProbeServiceTests
         public Task DownloadBlobAsync(string containerName, string blobName, Stream destination, IProgress<long>? progress = null, string? versionId = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<BlobVersionItem>> ListBlobVersionsAsync(string containerName, string blobName, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<BlobVersionItem>>([]);
         public Task<string> GetContainerSasUrlAsync(string containerName, TimeSpan expiry, CancellationToken ct = default) => Task.FromResult(string.Empty);
+        public Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default) => Task.FromResult(new StorageCapabilities(false, false, false, false, false, false));
+        public Task<BlobMutationResult> UploadBlobAsync(BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default) => Task.FromResult(new BlobMutationResult(false));
+        public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default) => Task.FromResult(new BlobMutationResult(false));
+        public Task<BlobMutationResult> SetBlobMetadataAsync(string containerName, string blobName, IDictionary<string, string> metadata, string? ifMatchEtag = null, CancellationToken ct = default) => Task.FromResult(new BlobMutationResult(false));
+        public Task<BlobVersionComparison> GetVersionComparisonAsync(string containerName, string blobName, string baseVersionId, string? compareVersionId = null, CancellationToken ct = default) => throw new NotSupportedException("Not implemented in test stub.");
+        public Task<BlobRecoveryResult> RestoreBlobVersionAsync(string containerName, string blobName, string versionId, CancellationToken ct = default) => Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
+        public Task<BlobRecoveryResult> UndeleteBlobAsync(string containerName, string blobName, CancellationToken ct = default) => Task.FromResult(new BlobRecoveryResult(BlobRecoveryState.Unsupported));
     }
 
     private sealed class FakeRedisClientFactory : IRedisClientFactory
@@ -225,6 +232,8 @@ public sealed class ConfigurationProbeServiceTests
         public Task RenameKeyAsync(string oldKey, string newKey, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteHashFieldAsync(string key, string field, CancellationToken ct = default) => Task.CompletedTask;
         public Task<SetScanResult> GetSetMembersPageAsync(string key, long cursor, int pageSize, CancellationToken ct = default) => Task.FromResult(new SetScanResult([], 0, true));
+        public Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default) => Task.FromResult(new RedisSlowLogSummary([], false, top, RedisInsightCapability.Loaded));
+        public Task<RedisPubSubSnapshot> GetPubSubSnapshotAsync(string? pattern = null, int maxChannels = 200, CancellationToken ct = default) => Task.FromResult(new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Loaded));
     }
 
     private sealed class FakeObservabilityResourceDiscovery(IReadOnlyList<ObservabilityResourceInfo> resources) : IObservabilityResourceDiscovery

@@ -4,21 +4,21 @@
 
 title: "Status - redis-ops-insights"
 owner: "GitHub Copilot"
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: ""
 started: "2026-04-12"
-last_updated: "2026-04-17"
+last_updated: "2026-04-18"
 
 ---
 
 ## Quick summary
 
-Planning is complete for a two-wave Redis diagnostics expansion. The next useful implementation step is Wave 1: slowlog and hot-key evidence with bounded read-only server diagnostics.
+Wave 1 (slowlog + hot-key) and Wave 2 (Pub/Sub) backend and UI implementation is complete. Redis functionality docs update remains.
 
 Jira: not linked
 
-Current focus: extend `IRedisClient` and `RedisClient` with slowlog access and build multi-signal hot-key aggregation.
+Current focus: Update `docs/architecture/functionalities/redis.md` with final UI behavior.
 
 ## Progress checklist
 
@@ -30,32 +30,31 @@ Current focus: extend `IRedisClient` and `RedisClient` with slowlog access and b
 
 ### Wave 1 - Slowlog and hot-key evidence
 
-- [ ] Extend `IRedisClient` and `RedisClient` with bounded slowlog access and command-summary models.
-- [ ] Add multi-signal hot-key aggregation with explicit explanation text.
-- [ ] Add UI summaries and drill-through into the selected key or prefix.
+- [x] Extend `IRedisClient` and `RedisClient` with bounded slowlog access and command-summary models.
+- [x] Add multi-signal hot-key aggregation with explicit explanation text (`RedisOpsInsightsAggregator`).
+- [x] Add UI summaries and drill-through into the selected key (`RedisSlowLogPanel`, `RedisOpsInsightsPanel` wired to `SelectKeyAsync`).
 
 ### Wave 2 - Pub/Sub visibility and polish
 
-- [ ] Add Pub/Sub snapshot contracts and client methods.
-- [ ] Add channel and subscriber UI with manual refresh and filter carry-over from the current key context.
-- [ ] Run focused App and Core test passes and update Redis functionality docs with the final behavior.
+- [x] Add Pub/Sub snapshot contracts and client methods.
+- [x] Add channel and subscriber UI with manual refresh (`RedisPubSubPanel`).
+- [ ] Update `docs/architecture/functionalities/redis.md` with final UI behavior.
 
 ## Completed
 
 - Framed the feature as an extension of the current Redis page instead of a separate diagnostics route.
 - Kept all new diagnostics read-only and manual-refresh only.
 - Scoped diagnostics to slowlog, hot-key evidence, and Pub/Sub visibility; TTL forecasting is not in scope.
+- **Wave 1 backend**: `RedisSlowLogSummary`, `RedisHotKeySignal`, `RedisHotKeySummary`, `RedisInsightCapability` models added to `RedisModels.cs`. `GetSlowLogAsync` added to `IRedisClient`, `RedisClient`, and `DemoRedisClient`. `RedisOpsInsightsAggregator` service created and registered as singleton.
+- **Wave 2 backend**: `RedisPubSubChannelInfo`, `RedisPubSubSnapshot` models added. `GetPubSubSnapshotAsync` added to `IRedisClient`, `RedisClient`, and `DemoRedisClient`.
+- **Wave 1+2 UI**: `RedisSlowLogPanel`, `RedisPubSubPanel`, and `RedisOpsInsightsPanel` (tab container) created. `RedisPage.razor` updated with `_slowLog`, `_hotKeys`, `_pubSub` fields, `LoadSlowLogAsync`/`LoadPubSubAsync` methods (BL-2, BL-3 compliant), cache-switch reset, `_insightsCts` disposal.
+- **Tests**: 11 new bUnit tests across 3 test classes. All pass, 0 build errors, 0 warnings.
 
 ## Remaining
 
-- Implement Wave 1 slowlog and hot-key evidence surfaces.
-- Implement Wave 2 Pub/Sub visibility and final UX consolidation.
-- Validate focused Core/App test slices and update `docs/architecture/functionalities/redis.md` during implementation.
+- Update `docs/architecture/functionalities/redis.md` once UI is reviewed.
 
 ## Blockers
-
-- Jira ticket is not linked (informational).
-- Some Redis tiers may not expose the same server commands (`SLOWLOG`, `OBJECT FREQ`, Pub/Sub introspection). The plan already assumes capability-based degradation rather than a hard dependency.
 
 ## Validation
 

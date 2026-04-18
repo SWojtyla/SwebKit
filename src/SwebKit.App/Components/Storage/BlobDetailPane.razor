@@ -18,16 +18,12 @@
     else if (_properties is not null)
     {
         <div class="blob-detail-pane__tab-bar">
-            <button
-                type="button"
-                class="blob-detail-pane__tab @(_activeTab == "properties" ? "is-active" : null)"
-                @onclick='() => _activeTab = "properties"'>
+            <button type="button" class="blob-detail-pane__tab @(_activeTab == "properties" ? "is-active" : null)"
+                    @onclick='() => _activeTab = "properties"'>
                 Properties
             </button>
-            <button
-                type="button"
-                class="blob-detail-pane__tab @(_activeTab == "versions" ? "is-active" : null)"
-                @onclick="SelectVersionsTabAsync">
+            <button type="button" class="blob-detail-pane__tab @(_activeTab == "versions" ? "is-active" : null)"
+                    @onclick="SelectVersionsTabAsync">
                 Versions
             </button>
         </div>
@@ -57,7 +53,8 @@
 
         @if (_actionMessage is not null)
         {
-            <div class="blob-detail-pane__action-message @(_actionOk ? "blob-detail-pane__action-message--success" : "blob-detail-pane__action-message--error")">
+            <div
+                class="blob-detail-pane__action-message @(_actionOk ? "blob-detail-pane__action-message--success" : "blob-detail-pane__action-message--error")">
                 @_actionMessage
             </div>
         }
@@ -84,174 +81,220 @@
                 </table>
 
                 <div class="blob-detail-pane__section">
-                    <button
-                        type="button"
-                        class="blob-detail-pane__toggle"
-                        aria-expanded="@_showMetadata"
-                        @onclick="() => _showMetadata = !_showMetadata">
+                    <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showMetadata"
+                            @onclick="() => _showMetadata = !_showMetadata">
                         <span class="blob-detail-pane__toggle-glyph">@(_showMetadata ? "▼" : "▶")</span>
                         <span>Metadata</span>
                     </button>
                     @if (_showMetadata)
                     {
                         <div class="blob-detail-pane__section-body">
-                            @if (_properties.Metadata.Count == 0)
+                            @if (_editingMetadata)
                             {
-                                <div class="blob-detail-pane__empty">No metadata.</div>
+                                <BlobMetadataEditor CurrentMetadata="_properties.Metadata" ReadOnly="false"
+                                                    OnSave="SaveMetadataAsync" />
+                                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = false">Cancel
+                                </FluentButton>
                             }
                             else
                             {
-                                <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
-                                    @foreach (var kv in _properties.Metadata)
-                                    {
-                                        <tr class="blob-detail-pane__property-row">
-                                            <td class="blob-detail-pane__property-key">@kv.Key</td>
-                                            <td class="blob-detail-pane__property-value">@kv.Value</td>
-                                        </tr>
+                                @if (_properties.Metadata.Count == 0)
+                                {
+                                    <div class="blob-detail-pane__empty">No metadata.</div>
+                                }
+                                else
+                                {
+                                    <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                        @foreach (var kv in _properties.Metadata)
+                                        {
+                                            <tr class="blob-detail-pane__property-row">
+                                                <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                                <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                            </tr>
+                                        }
+                                    </table>
+                                }
+                                @if (AllowMutations)
+                                {
+                                    <div class="blob-detail-pane__section-actions">
+                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = true">Edit
+                                            metadata</FluentButton>
+                                        </div>
                                     }
-                                </table>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <div class="blob-detail-pane__section blob-detail-pane__section--spaced">
-                    <button
-                        type="button"
-                        class="blob-detail-pane__toggle"
-                        aria-expanded="@_showTags"
-                        @onclick="() => _showTags = !_showTags">
-                        <span class="blob-detail-pane__toggle-glyph">@(_showTags ? "▼" : "▶")</span>
-                        <span>Tags</span>
-                    </button>
-                    @if (_showTags)
-                    {
-                        <div class="blob-detail-pane__section-body">
-                            @if (_properties.Tags.Count == 0)
-                            {
-                                <div class="blob-detail-pane__empty">No tags.</div>
-                            }
-                            else
-                            {
-                                <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
-                                    @foreach (var kv in _properties.Tags)
-                                    {
-                                        <tr class="blob-detail-pane__property-row">
-                                            <td class="blob-detail-pane__property-key">@kv.Key</td>
-                                            <td class="blob-detail-pane__property-value">@kv.Value</td>
-                                        </tr>
-                                    }
-                                </table>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <div class="blob-detail-pane__section-title blob-detail-pane__section-title--preview">Content Preview</div>
-
-                @if (_loadingContent)
-                {
-                    <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
-                        <FluentProgressRing />
-                    </div>
-                }
-                else if (_content is null)
-                {
-                    <div class="blob-detail-pane__message">Loading content...</div>
-                }
-                else if (_content.IsBinary || _binaryOverride)
-                {
-                    <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--neutral"
-                         title="@_binaryDetectionMethod">
-                        <span>Binary content - use Download to inspect this blob.</span>
-                        @if (_binaryDetectionMethod is not null)
-                        {
-                            <span class="blob-detail-pane__preview-note">(@_binaryDetectionMethod)</span>
+                                }
+                            </div>
                         }
                     </div>
-                }
-                else
-                {
-                    @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
-                    {
-                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
-                            Preview limited to 512 KB. Download for full content.
-                        </div>
-                    }
-                    else if (_content.WasTruncated)
-                    {
-                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--warning blob-detail-pane__preview-callout--actionable">
-                            <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
-                            <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
-                                          @onclick="LoadFullPreviewAsync">Load</FluentButton>
-                        </div>
-                    }
 
-                    <div class="blob-detail-pane__preview-actions">
-                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                    <div class="blob-detail-pane__section blob-detail-pane__section--spaced">
+                        <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showTags"
+                                @onclick="() => _showTags = !_showTags">
+                            <span class="blob-detail-pane__toggle-glyph">@(_showTags ? "▼" : "▶")</span>
+                            <span>Tags</span>
+                        </button>
+                        @if (_showTags)
+                        {
+                            <div class="blob-detail-pane__section-body">
+                                @if (_properties.Tags.Count == 0)
+                                {
+                                    <div class="blob-detail-pane__empty">No tags.</div>
+                                }
+                                else
+                                {
+                                    <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                        @foreach (var kv in _properties.Tags)
+                                        {
+                                            <tr class="blob-detail-pane__property-row">
+                                                <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                                <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                            </tr>
+                                        }
+                                    </table>
+                                }
+                            </div>
+                        }
                     </div>
-                    <pre class="blob-detail-pane__preview">@_displayContent</pre>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="blob-detail-pane__content">
-                @if (_loadingVersions)
-                {
-                    <div class="blob-detail-pane__loading">
-                        <FluentProgressRing />
-                    </div>
-                }
-                else if (_versionsError is not null)
-                {
-                    <div class="blob-detail-pane__message">@_versionsError</div>
-                }
-                else if (_versions is not null && _versions.Count > 0)
-                {
-                    <table class="blob-detail-pane__versions-table">
-                        <thead>
-                            <tr class="blob-detail-pane__versions-head">
-                                <th class="blob-detail-pane__versions-header">Version ID</th>
-                                <th class="blob-detail-pane__versions-header">Created</th>
-                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--right">Size</th>
-                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--center">Current</th>
-                                <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--actions"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var v in _versions)
+
+                    <div class="blob-detail-pane__section-title blob-detail-pane__section-title--preview">Content Preview</div>
+
+                    @if (_loadingContent)
+                    {
+                        <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
+                            <FluentProgressRing />
+                        </div>
+                    }
+                    else if (_content is null)
+                    {
+                        <div class="blob-detail-pane__message">Loading content...</div>
+                    }
+                    else if (_content.IsBinary || _binaryOverride)
+                    {
+                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--neutral"
+                             title="@_binaryDetectionMethod">
+                            <span>Binary content - use Download to inspect this blob.</span>
+                            @if (_binaryDetectionMethod is not null)
                             {
-                                <tr class="blob-detail-pane__versions-row">
-                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--mono" title="@v.VersionId">@v.VersionId</td>
-                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--nowrap">@(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
-                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--right blob-detail-pane__versions-cell--nowrap">@FormatSize(v.ContentLength ?? 0)</td>
-                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--center">@(v.IsCurrentVersion ? "✔" : "")</td>
-                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--actions">
-                                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
-                                                      @onclick="() => DownloadVersionAsync(v)">@((IsDownloadingVersion(v) ? "Downloading..." : "⬇"))</FluentButton>
-                                    </td>
-                                </tr>
+                                <span class="blob-detail-pane__preview-note">(@_binaryDetectionMethod)</span>
                             }
-                        </tbody>
-                    </table>
-                }
+                        </div>
+                    }
+                    else
+                    {
+                        @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
+                        {
+                            <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
+                                Preview limited to 512 KB. Download for full content.
+                            </div>
+                        }
+                        else if (_content.WasTruncated)
+                        {
+                            <div
+                                class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--warning blob-detail-pane__preview-callout--actionable">
+                                <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
+                                <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
+                                              @onclick="LoadFullPreviewAsync">Load</FluentButton>
+                            </div>
+                        }
+
+                        <div class="blob-detail-pane__preview-actions">
+                            <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                        </div>
+                        <pre class="blob-detail-pane__preview">@_displayContent</pre>
+                    }
+                </div>
+            }
+        else
+            {
+                <div class="blob-detail-pane__content">
+                    @if (_loadingVersions)
+                    {
+                        <div class="blob-detail-pane__loading">
+                            <FluentProgressRing />
+                        </div>
+                    }
+                    else if (_versionsError is not null)
+                    {
+                        <div class="blob-detail-pane__message">@_versionsError</div>
+                    }
+                    else if (_versions is not null && _versions.Count > 0)
+                    {
+                        <table class="blob-detail-pane__versions-table">
+                            <thead>
+                                <tr class="blob-detail-pane__versions-head">
+                                    <th class="blob-detail-pane__versions-header">Version ID</th>
+                                    <th class="blob-detail-pane__versions-header">Created</th>
+                                    <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--right">Size</th>
+                                    <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--center">Current</th>
+                                    <th class="blob-detail-pane__versions-header blob-detail-pane__versions-header--actions"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in _versions)
+                                {
+                                    <tr class="blob-detail-pane__versions-row">
+                                        <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--mono"
+                                            title="@v.VersionId">@v.VersionId</td>
+                                        <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--nowrap">
+                                            @(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                            <td
+                                                class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--right blob-detail-pane__versions-cell--nowrap">
+                                                @FormatSize(v.ContentLength ?? 0)</td>
+                                                <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--center">
+                                                    @(v.IsCurrentVersion ? "✔" : "")</td>
+                                                    <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--actions">
+                                                        <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
+                                                                      @onclick="() => DownloadVersionAsync(v)">@((IsDownloadingVersion(v) ? "Downloading..." :
+                                                            "⬇"))</FluentButton>
+                                                            @if (AllowMutations)
+                                                            {
+                                                                <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_loadingComparison)"
+                                                                              @onclick="() => CompareVersionAsync(v)">Compare</FluentButton>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
                 else
-                {
-                    <div class="blob-detail-pane__message">Versioning is not enabled on this container.</div>
-                }
-            </div>
-        }
-    }
+                                    {
+                                        <div class="blob-detail-pane__message">Versioning is not enabled on this container.</div>
+                                    }
+
+                                    @if (_loadingComparison)
+                                    {
+                                        <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
+                                            <FluentProgressRing />
+                                        </div>
+                                    }
+                                    else if (_comparisonError is not null)
+                                    {
+                                        <div class="blob-detail-pane__message blob-detail-pane__message--error">Comparison failed: @_comparisonError
+                                        </div>
+                                    }
+                                    else if (_versionComparison is not null)
+                                    {
+                                        <BlobVersionDiffPane Comparison="_versionComparison" />
+                                    }
+
+                                    @if (AllowMutations && _capabilities is not null)
+                                    {
+                                        <BlobRecoveryPanel Capabilities="_capabilities" SelectedVersionId="_selectedCompareVersionId"
+                                                           OnRestoreVersion="RestoreVersionAsync" OnUndelete="UndeleteAsync" />
+                                    }
+                                </div>
+                            }
+                        }
 
 
-</div>
+                    </div>
 
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
     [Parameter, EditorRequired] public string ContainerName { get; set; } = string.Empty;
     [Parameter, EditorRequired] public StorageBlobItem Blob { get; set; } = default!;
+    [Parameter] public bool AllowMutations { get; set; }
 
     private BlobProperties? _properties;
     private StorageBlobContent? _content;
@@ -274,6 +317,18 @@
     // STG-7: Binary detection override
     private bool _binaryOverride;
     private string? _binaryDetectionMethod;
+
+    // Wave 2 - Metadata editor
+    private bool _editingMetadata;
+
+    // Wave 2 - Version comparison
+    private string? _selectedCompareVersionId;
+    private BlobVersionComparison? _versionComparison;
+    private bool _loadingComparison;
+    private string? _comparisonError;
+
+    // Wave 3 - Capabilities
+    private StorageCapabilities? _capabilities;
 
     private DownloadUiState? _downloadState;
     private long _lastDownloadUiBytes = -1;
@@ -308,6 +363,12 @@
         _versionsError = null;
         _binaryOverride = false;
         _binaryDetectionMethod = null;
+        _editingMetadata = false;
+        _versionComparison = null;
+        _selectedCompareVersionId = null;
+        _comparisonError = null;
+        _capabilities = null;
+        _loadingComparison = false;
 
         await InvokeAsync(StateHasChanged);
         await Task.WhenAll(LoadPropertiesAsync(), LoadContentAsync(524_288));
@@ -382,8 +443,102 @@
     private async Task SelectVersionsTabAsync()
     {
         _activeTab = "versions";
+        var tasks = new List<Task>();
         if (_versions is null && !_loadingVersions)
-            await LoadVersionsAsync();
+            tasks.Add(LoadVersionsAsync());
+        if (_capabilities is null)
+            tasks.Add(LoadCapabilitiesAsync());
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task LoadCapabilitiesAsync()
+    {
+        try
+        {
+            _capabilities = await Client.GetStorageCapabilitiesAsync();
+        }
+        catch
+        {
+            _capabilities = new StorageCapabilities(false, false, false, false, false, false);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveMetadataAsync(IDictionary<string, string> metadata)
+    {
+        var etag = _properties?.ETag;
+        var result = await Client.SetBlobMetadataAsync(ContainerName, Blob.Name, metadata, etag);
+        if (result.Success)
+        {
+            _actionOk = true;
+            _actionMessage = "Metadata saved.";
+            _editingMetadata = false;
+            await LoadPropertiesAsync();
+        }
+        else
+        {
+            _actionOk = false;
+            _actionMessage = $"Save failed: {result.ErrorMessage}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CompareVersionAsync(BlobVersionItem version)
+    {
+        _selectedCompareVersionId = version.VersionId;
+        _versionComparison = null;
+        _comparisonError = null;
+        _loadingComparison = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _versionComparison = await Client.GetVersionComparisonAsync(ContainerName, Blob.Name, version.VersionId);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _comparisonError = ex.Message;
+        }
+        finally
+        {
+            _loadingComparison = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RestoreVersionAsync(string versionId)
+    {
+        var result = await Client.RestoreBlobVersionAsync(ContainerName, Blob.Name, versionId);
+        if (result.State == BlobRecoveryState.Restored)
+        {
+            _actionOk = true;
+            _actionMessage = $"Version restored.{(result.ResultBlobPath is not null ? $" New path: {result.ResultBlobPath}" : "")}";
+            await LoadPropertiesAsync();
+        }
+        else
+        {
+            _actionOk = false;
+            _actionMessage = $"Restore failed: {result.ErrorMessage ?? result.State.ToString()}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UndeleteAsync()
+    {
+        var result = await Client.UndeleteBlobAsync(ContainerName, Blob.Name);
+        if (result.State == BlobRecoveryState.Undeleted)
+        {
+            _actionOk = true;
+            _actionMessage = "Blob recovered.";
+            await LoadPropertiesAsync();
+        }
+        else
+        {
+            _actionOk = false;
+            _actionMessage = $"Recovery failed: {result.ErrorMessage ?? result.State.ToString()}";
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadVersionsAsync()

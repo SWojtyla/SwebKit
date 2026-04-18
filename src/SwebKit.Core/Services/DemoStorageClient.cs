@@ -230,6 +230,60 @@ public sealed class DemoStorageClient : IStorageClient
         string containerName, TimeSpan expiry, CancellationToken ct = default) =>
         Task.FromResult($"https://devstore.blob.core.windows.net/{containerName}?sv=demo&se={DateTimeOffset.UtcNow.Add(expiry):O}&sp=rl");
 
+    public Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default) =>
+        Task.FromResult(new StorageCapabilities(
+            VersioningEnabled: true,
+            SoftDeleteEnabled: true,
+            CanUpload: true,
+            CanCopy: true,
+            CanSetMetadata: true,
+            CanRestore: true));
+
+    public Task<BlobMutationResult> UploadBlobAsync(
+        BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default) =>
+        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}"));
+
+    public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default) =>
+        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}"));
+
+    public Task<BlobMutationResult> SetBlobMetadataAsync(
+        string containerName, string blobName, IDictionary<string, string> metadata,
+        string? ifMatchEtag = null, CancellationToken ct = default) =>
+        Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}"));
+
+    public Task<BlobVersionComparison> GetVersionComparisonAsync(
+        string containerName, string blobName, string baseVersionId,
+        string? compareVersionId = null, CancellationToken ct = default)
+    {
+        var diff = new BlobMetadataDiff(
+            Before: new Dictionary<string, string?> { ["author"] = "demo", ["version"] = "1" },
+            After: new Dictionary<string, string?> { ["author"] = "demo", ["version"] = "2" },
+            AddedKeys: [],
+            RemovedKeys: [],
+            ChangedKeys: ["version"]);
+
+        return Task.FromResult(new BlobVersionComparison(
+            BaseVersionId: baseVersionId,
+            CompareVersionId: compareVersionId,
+            MetadataDiff: diff,
+            ContentComparePossible: true,
+            BaseSizeBytes: 512,
+            CompareSizeBytes: 540,
+            TextDiff: "- version: 1\n+ version: 2"));
+    }
+
+    public Task<BlobRecoveryResult> RestoreBlobVersionAsync(
+        string containerName, string blobName, string versionId, CancellationToken ct = default) =>
+        Task.FromResult(new BlobRecoveryResult(
+            BlobRecoveryState.Restored,
+            ResultBlobPath: $"{containerName}/{blobName}"));
+
+    public Task<BlobRecoveryResult> UndeleteBlobAsync(
+        string containerName, string blobName, CancellationToken ct = default) =>
+        Task.FromResult(new BlobRecoveryResult(
+            BlobRecoveryState.Undeleted,
+            ResultBlobPath: $"{containerName}/{blobName}"));
+
     private static async Task WriteAsync(
         Stream destination,
         byte[] bytes,
