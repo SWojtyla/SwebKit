@@ -1,20 +1,27 @@
 <div class="health-explorer">
     <div class="health-header">
-        <strong>Keyspace Health</strong>
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
-            @(IsLoading ? "Analyzing..." : "Analyze")
-        </FluentButton>
+        <button class="panel-collapse-btn" type="button" @onclick="() => _collapsed = !_collapsed"
+                aria-expanded="@(!_collapsed)" aria-label="@(_collapsed ? "Expand Keyspace Health" : "Collapse Keyspace Health")">
+            <span class="collapse-chevron @(_collapsed ? "chevron-collapsed" : "")">›</span>
+            <strong>Keyspace Health</strong>
+        </button>
+        @if (!_collapsed)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
+                @(IsLoading ? "Analyzing..." : "Analyze")
+            </FluentButton>
+        }
     </div>
 
-    @if (IsLoading)
+    @if (!_collapsed && IsLoading)
     {
         <div class="health-loading">Analyzing loaded keys for risk signals...</div>
     }
-    else if (Report is null)
+    else if (!_collapsed && Report is null)
     {
         <div class="health-empty">Run Analyze to detect no-TTL, oversized, heavy-prefix, and hot-key signals.</div>
     }
-    else
+    else if (!_collapsed)
     {
         <div class="health-coverage @(Report.IsPartialCoverage ? "coverage-partial" : "coverage-full")">
             @BuildCoverageText(Report)
@@ -107,6 +114,7 @@
     [Parameter] public EventCallback OnAnalyze { get; set; }
     [Parameter] public EventCallback<string> OnFindingSelected { get; set; }
 
+    private bool _collapsed;
     private RedisHealthSeverity? _severityFilter;
 
     private IReadOnlyList<RedisHealthFinding> FilteredFindings =>

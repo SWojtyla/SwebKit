@@ -1,4 +1,14 @@
 <div class="ops-insights-panel">
+    <div class="ops-insights-header">
+        <button class="panel-collapse-btn" type="button" @onclick="() => _collapsed = !_collapsed"
+                aria-expanded="@(!_collapsed)" aria-label="@(_collapsed ? "Expand Ops Insights" : "Collapse Ops Insights")">
+            <span class="collapse-chevron @(_collapsed ? "chevron-collapsed" : "")">›</span>
+            <strong>Ops Insights</strong>
+        </button>
+    </div>
+
+    @if (!_collapsed)
+    {
     <div class="ops-insights-tabs" role="tablist" aria-label="Ops insights">
         <button class="tab-button @(_activeTab == Tab.Slowlog ? "active" : "")" type="button" role="tab"
                 aria-selected="@(_activeTab == Tab.Slowlog ? "true" : "false")" aria-controls="slowlog-panel"
@@ -32,12 +42,14 @@
             </div>
         }
     </div>
+    }
 </div>
 
 @code {
     private enum Tab { Slowlog, PubSub }
 
     private Tab _activeTab = Tab.Slowlog;
+    private bool _collapsed;
 
     [Parameter] public RedisSlowLogSummary? SlowLog { get; set; }
     [Parameter] public RedisHotKeySummary? HotKeys { get; set; }
