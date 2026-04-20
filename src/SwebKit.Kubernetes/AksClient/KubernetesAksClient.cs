@@ -1157,32 +1157,39 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         });
     }
 
-    public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Reads all contexts from the kubeconfig file at <paramref name="kubeconfigPath"/>
+    /// (or the default location when <see langword="null"/>) without establishing a
+    /// cluster connection. Safe to call from configuration UI before a client is set up.
+    /// </summary>
+    public static IReadOnlyList<KubeContextInfo> ReadContextsFromKubeconfig(string? kubeconfigPath = null)
     {
-        var kubeconfigPath = string.IsNullOrWhiteSpace(_kubeconfigPath)
+        var path = string.IsNullOrWhiteSpace(kubeconfigPath)
             ? KubernetesClientConfiguration.KubeConfigDefaultLocation
-            : _kubeconfigPath;
+            : kubeconfigPath;
 
-        var contexts = new List<KubeContextInfo>();
-        if (string.IsNullOrWhiteSpace(kubeconfigPath) || !File.Exists(kubeconfigPath))
-            return Task.FromResult<IReadOnlyList<KubeContextInfo>>(contexts);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return [];
 
-        var config = KubernetesClientConfiguration.LoadKubeConfig(kubeconfigPath);
+        var config = KubernetesClientConfiguration.LoadKubeConfig(path);
         var currentContext = config.CurrentContext;
 
-        foreach (var ctx in config.Contexts ?? [])
-        {
-            contexts.Add(new KubeContextInfo
+        return (config.Contexts ?? [])
+            .Select(ctx => new KubeContextInfo
             {
                 Name = ctx.Name,
                 Cluster = ctx.ContextDetails?.Cluster,
                 User = ctx.ContextDetails?.User,
                 Namespace = ctx.ContextDetails?.Namespace,
                 IsCurrent = string.Equals(ctx.Name, currentContext, StringComparison.Ordinal)
-            });
-        }
+            })
+            .OrderBy(c => c.Name)
+            .ToList();
+    }
 
-        return Task.FromResult<IReadOnlyList<KubeContextInfo>>(contexts.OrderBy(c => c.Name).ToList());
+    public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult(ReadContextsFromKubeconfig(_kubeconfigPath));
     }
 
     public async Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
@@ -3593,6 +3600,29 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     // ── Wave 3: Helm preview ──────────────────────────────────────────────────
 
+    /// <summary>
+    /// Builds a ProcessStartInfo for helm that reads PATH from the registry at call time,
+    /// ensuring newly installed binaries are found even if the app process predates the install.
+    /// </summary>
+    private static ProcessStartInfo HelmStartInfo(string arguments)
+    {
+        var machinePath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? string.Empty;
+        var userPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? string.Empty;
+        var fullPath = $"{machinePath};{userPath}";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "helm",
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        psi.Environment["PATH"] = fullPath;
+        return psi;
+    }
+
     public async Task<HelmDiffPreview> PreviewHelmUpgradeAsync(
         string ns,
         string releaseName,
@@ -3601,18 +3631,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         try
         {
             // Check if helm binary is available
-            using var helmCheck = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "helm",
-                    Arguments = "version --short",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
+            using var helmCheck = new Process { StartInfo = HelmStartInfo("version --short") };
 
             bool helmAvailable;
             try
@@ -3639,18 +3658,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             }
 
             // Check if helm-diff plugin is installed
-            using var pluginCheck = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "helm",
-                    Arguments = "plugin list",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
+            using var pluginCheck = new Process { StartInfo = HelmStartInfo("plugin list") };
 
             pluginCheck.Start();
             var pluginOutput = await pluginCheck.StandardOutput.ReadToEndAsync(ct);
@@ -3675,15 +3683,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
             using var diffProcess = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "helm",
-                    Arguments = $"diff upgrade --namespace {ns} {releaseName} --reuse-values",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                StartInfo = HelmStartInfo($"diff upgrade --namespace {ns} {releaseName} --reuse-values")
             };
 
             diffProcess.Start();
@@ -3729,6 +3729,118 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 ReleaseName = releaseName,
                 Capability = HelmPreviewCapability.Degraded,
                 CapabilityNote = $"Helm diff preview failed: {ex.Message}",
+                Findings = [$"Degraded: {ex.Message}"]
+            };
+        }
+    }
+
+    public async Task<HelmDiffPreview> PreviewHelmRollbackAsync(
+        string ns,
+        string releaseName,
+        int revision,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            // Check if helm binary is available
+            using var helmCheck = new Process { StartInfo = HelmStartInfo("version --short") };
+
+            bool helmAvailable;
+            try
+            {
+                helmCheck.Start();
+                await helmCheck.WaitForExitAsync(ct);
+                helmAvailable = helmCheck.ExitCode == 0;
+            }
+            catch (Win32Exception)
+            {
+                helmAvailable = false;
+            }
+
+            if (!helmAvailable)
+            {
+                return new HelmDiffPreview
+                {
+                    Namespace = ns,
+                    ReleaseName = releaseName,
+                    Capability = HelmPreviewCapability.Unsupported,
+                    CapabilityNote = "The 'helm' binary was not found. Install Helm to enable rollback diff preview.",
+                    Findings = ["helm binary not found on PATH."]
+                };
+            }
+
+            // Check if helm-diff plugin is installed
+            using var pluginCheck = new Process { StartInfo = HelmStartInfo("plugin list") };
+
+            pluginCheck.Start();
+            var pluginOutput = await pluginCheck.StandardOutput.ReadToEndAsync(ct);
+            await pluginCheck.WaitForExitAsync(ct);
+            var hasDiffPlugin = pluginOutput.Contains("diff", StringComparison.OrdinalIgnoreCase);
+
+            if (!hasDiffPlugin)
+            {
+                return new HelmDiffPreview
+                {
+                    Namespace = ns,
+                    ReleaseName = releaseName,
+                    Capability = HelmPreviewCapability.Degraded,
+                    CapabilityNote = "The helm-diff plugin is not installed. Install it with: helm plugin install https://github.com/databus23/helm-diff",
+                    Findings = ["helm-diff plugin not found. Run 'helm plugin install https://github.com/databus23/helm-diff' to enable rollback diff preview."]
+                };
+            }
+
+            // Run helm diff rollback
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
+
+            using var diffProcess = new Process
+            {
+                StartInfo = HelmStartInfo($"diff rollback --namespace {ns} {releaseName} {revision}")
+            };
+
+            diffProcess.Start();
+            var diffOutput = await diffProcess.StandardOutput.ReadToEndAsync(cts.Token);
+            var diffError = await diffProcess.StandardError.ReadToEndAsync(cts.Token);
+            await diffProcess.WaitForExitAsync(cts.Token);
+
+            if (diffProcess.ExitCode != 0)
+            {
+                return new HelmDiffPreview
+                {
+                    Namespace = ns,
+                    ReleaseName = releaseName,
+                    Capability = HelmPreviewCapability.Degraded,
+                    CapabilityNote = "helm diff rollback returned a non-zero exit code.",
+                    Findings = string.IsNullOrWhiteSpace(diffError)
+                        ? ["helm diff rollback exited with a non-zero code without additional output."]
+                        : [diffError.Trim()]
+                };
+            }
+
+            return new HelmDiffPreview
+            {
+                Namespace = ns,
+                ReleaseName = releaseName,
+                Capability = HelmPreviewCapability.Full,
+                CapabilityNote = $"helm diff rollback to revision {revision} completed successfully.",
+                DiffText = string.IsNullOrWhiteSpace(diffOutput) ? "(no changes detected)" : diffOutput,
+                Findings = string.IsNullOrWhiteSpace(diffOutput)
+                    ? [$"No changes detected between the current release and revision {revision}."]
+                    : [$"Diff output generated for rollback to revision {revision}. Review DiffText for the proposed changes."]
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new HelmDiffPreview
+            {
+                Namespace = ns,
+                ReleaseName = releaseName,
+                Capability = HelmPreviewCapability.Degraded,
+                CapabilityNote = $"Helm rollback diff preview failed: {ex.Message}",
                 Findings = [$"Degraded: {ex.Message}"]
             };
         }

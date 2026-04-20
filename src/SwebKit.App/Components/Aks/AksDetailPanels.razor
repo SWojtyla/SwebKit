@@ -13,7 +13,8 @@
             @* ── Helm History / Values / Rollback ── *@
             <AksHelmPanel @ref="_helmPanel" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
                           Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
-                          OnDataChanged="OnDataChanged" />
+                          OnDataChanged="OnDataChanged"
+                          OnPreviewRollback="OnHelmPreviewRollback" />
 
             @* ── Scale ── *@
             @if (_scaleTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null)
@@ -258,6 +259,25 @@
                     </div>
                 }
 
+                @* ── Helm rollback diff preview ── *@
+                @if (_helmRollbackPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Rollback Preview: @_helmRollbackPreviewTarget.ReleaseName → rev @_helmRollbackPreviewTarget.Revision</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmRollbackPreview" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <HelmRollbackPreviewPanel Client="Client" Namespace="@_helmRollbackPreviewTarget.Namespace"
+                                                      ReleaseName="@_helmRollbackPreviewTarget.ReleaseName"
+                                                      Revision="@_helmRollbackPreviewTarget.Revision" />
+                        </div>
+                    </div>
+                }
+
                 @* ── Events panel ── *@
                 @if (ShowEvents)
                 {
@@ -352,6 +372,7 @@
     private sealed record ProbeFailureTarget(string WorkloadKind, string WorkloadName, string Namespace);
     private sealed record PlacementTarget(string WorkloadKind, string WorkloadName, string Namespace);
     private sealed record HelmDiffPreviewTarget(string ReleaseName, string Namespace);
+    private sealed record HelmRollbackPreviewTarget(string ReleaseName, string Namespace, int Revision);
     private (string Kind, string Name, bool EditMode, string? Namespace)? _pendingYamlOpen;
     private (string ReleaseName, HelmPendingAction Action)? _pendingHelmOpen;
 
@@ -370,6 +391,7 @@
     private ProbeFailureTarget? _probeFailureTarget;
     private PlacementTarget? _placementTarget;
     private HelmDiffPreviewTarget? _helmDiffPreviewTarget;
+    private HelmRollbackPreviewTarget? _helmRollbackPreviewTarget;
     private string? _scaleTarget;
     private int _scaleReplicas;
     private bool _scaleIsStatefulSet;
@@ -398,6 +420,7 @@
         _probeFailureTarget is not null ||
         _placementTarget is not null ||
         _helmDiffPreviewTarget is not null ||
+        _helmRollbackPreviewTarget is not null ||
         _yamlViewer?.IsEditing == true ||
         ShowEvents;
 
@@ -555,6 +578,12 @@
         NotifyPanelStateChanged();
     }
 
+    public void ShowHelmRollbackPreview(string releaseName, string ns, int revision)
+    {
+        _helmRollbackPreviewTarget = new(releaseName, ns, revision);
+        NotifyPanelStateChanged();
+    }
+
     // ── Lifecycle ──
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -667,6 +696,10 @@
     private void CloseProbeFailures() { _probeFailureTarget = null; NotifyPanelStateChanged(); }
     private void ClosePlacementAnalysis() { _placementTarget = null; NotifyPanelStateChanged(); }
     private void CloseHelmDiffPreview() { _helmDiffPreviewTarget = null; NotifyPanelStateChanged(); }
+    private void CloseHelmRollbackPreview() { _helmRollbackPreviewTarget = null; NotifyPanelStateChanged(); }
+
+    private void OnHelmPreviewRollback((string ReleaseName, string Namespace, int Revision) args)
+        => ShowHelmRollbackPreview(args.ReleaseName, args.Namespace, args.Revision);
 
     private async Task CloseEvents()
     {

@@ -55,12 +55,20 @@
                                             @if (rev.Status == "superseded")
                                             {
                                                 var r = rev;
-                                                <button class="ctx-item destructive aks-rollback-btn"
-                                                        style="display:inline-flex; align-items:center; gap:4px;"
-                                                        @onclick="() => OnRollbackToRevision(r)">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
-                                                    Rollback
-                                                </button>
+                                                <div style="display:inline-flex; align-items:center; gap:4px;">
+                                                    <button class="ctx-item aks-rollback-btn"
+                                                            style="display:inline-flex; align-items:center; gap:4px;"
+                                                            @onclick="() => OnPreviewRollbackToRevision(r)">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Eye())" Width="14px" />
+                                                        Preview
+                                                    </button>
+                                                    <button class="ctx-item destructive aks-rollback-btn"
+                                                            style="display:inline-flex; align-items:center; gap:4px;"
+                                                            @onclick="() => OnRollbackToRevision(r)">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
+                                                        Rollback
+                                                    </button>
+                                                </div>
                                             }
                                         </td>
                                     }
@@ -105,6 +113,7 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<string> OnError { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
+    [Parameter] public EventCallback<(string ReleaseName, string Namespace, int Revision)> OnPreviewRollback { get; set; }
 
     // History state
     private string? _historyTarget;
@@ -223,8 +232,13 @@
 
     // ── Private methods ──
 
-    private async Task OnRollbackToRevision(HelmRevisionInfo rev)
+    private async Task OnPreviewRollbackToRevision(HelmRevisionInfo rev)
     {
+        if (_historyTarget is null) return;
+        await OnPreviewRollback.InvokeAsync((_historyTarget, Namespace, rev.Revision));
+    }
+
+    private async Task OnRollbackToRevision(HelmRevisionInfo rev)    {
         if (_historyTarget is null || Client is null) return;
         var releaseName = _historyTarget;
 

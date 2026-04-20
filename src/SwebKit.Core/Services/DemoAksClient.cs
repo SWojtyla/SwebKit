@@ -2231,4 +2231,22 @@ public class DemoAksClient : IAksClient
             Findings = ["Helm diff preview is not available in demo mode."]
         };
     }
+
+    public async Task<HelmDiffPreview> PreviewHelmRollbackAsync(
+        string ns,
+        string releaseName,
+        int revision,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(50, ct);
+
+        return new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "Demo mode does not support Helm rollback diff preview.",
+            Findings = ["Helm rollback diff preview is not available in demo mode."]
+        };
+    }
 }

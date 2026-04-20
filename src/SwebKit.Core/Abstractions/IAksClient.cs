@@ -166,4 +166,17 @@ public interface IAksClient
             Capability = HelmPreviewCapability.Unsupported,
             CapabilityNote = "This AKS client does not support Helm diff preview."
         });
+
+    Task<HelmDiffPreview> PreviewHelmRollbackAsync(
+        string ns,
+        string releaseName,
+        int revision,
+        CancellationToken ct = default)
+        => Task.FromResult(new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "This AKS client does not support Helm rollback diff preview."
+        });
 }

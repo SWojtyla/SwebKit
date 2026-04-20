@@ -1,31 +1,66 @@
 @using SwebKit.Core.Domain
+@using SwebKit.Core.Models
+@using SwebKit.Kubernetes.AksClient
 
 <div style="display:grid; gap:10px; padding:12px 0;">
     <FluentTextField Label="Kubeconfig Path (optional)" @bind-Value="KubeconfigPath" style="width:100%;"
-                     Placeholder="C:\\Users\\you\\.kube\\config" />
-    <FluentTextField Label="Default Context (optional)" @bind-Value="KubeconfigContext" style="width:100%;"
-                     Placeholder="my-aks-context" />
-    <FluentTextField Label="Default Namespace (optional)" @bind-Value="DefaultNamespace" style="width:100%;"
-                     Placeholder="default" />
+                     Placeholder="C:\\Users\\you\\.kube\\config" @onblur="OnKubeconfigPathBlur" />
 
-    <div style="display:flex; align-items:center; gap:8px;">
-        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
-        @if (ShowSaved)
+    @* ── Context dropdown ── *@
+    <div>
+        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Default Context
+            (optional)</label>
+            @if (_ctxDropOpen)
+            {
+                <div class="aks-ns-backdrop" @onclick="CloseCtxDrop"></div>
+            }
+            <div class="aks-ns-picker" style="width:100%;">
+                <input class="aks-ns-select aks-ns-search app-native-control" style="width:100%;"
+                       value="@(_ctxDropOpen? _ctxSearchText : (string.IsNullOrWhiteSpace(KubeconfigContext) ? string.Empty : KubeconfigContext))"
+                       placeholder="@(_ctxDropOpen ? "Filter…" : "(use current from kubeconfig)")" @onfocus="OpenCtxDrop"
+                       @oninput="OnCtxSearchInput" readonly="@(!_ctxDropOpen)" @onkeydown="OnCtxKeyDown" />
+                @if (_ctxDropOpen)
+                {
+                    <div class="aks-ns-dropdown">
+                        @* ── "(use current)" option ── *@
+                        <div class="aks-ns-option @(string.IsNullOrWhiteSpace(KubeconfigContext) ? "current" : "")"
+                             @onclick="() => SelectCtx(null)">
+                            (use current from kubeconfig)
+                        </div>
+                        @foreach (var ctx in CtxFiltered)
+                        {
+                            var ctxLocal = ctx;
+                            <div class="aks-ns-option @(ctxLocal.Name == KubeconfigContext ? "current" : "")"
+                                 @onclick="() => SelectCtx(ctxLocal.Name)">
+                                @ctxLocal.Name@(ctxLocal.IsCurrent ? " (current)" : "")
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <FluentTextField Label="Default Namespace (optional)" @bind-Value="DefaultNamespace" style="width:100%;"
+                         Placeholder="default" />
+
+        <div style="display:flex; align-items:center; gap:8px;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
+            @if (ShowSaved)
+            {
+                <span style="font-size:12px; color:var(--color-success);">Saved</span>
+            }
+        </div>
+
+        @if (Environment.AksConfig is not null)
         {
-            <span style="font-size:12px; color:var(--color-success);">Saved</span>
+            <div style="font-size:12px; color:var(--color-text-muted); padding:4px 0;">
+                <strong>Current:</strong>
+                Path: @(Environment.AksConfig.KubeconfigPath ?? "(default)") &middot;
+                Context: @(Environment.AksConfig.KubeconfigContext ?? "(current)") &middot;
+                Namespace: @Environment.AksConfig.DefaultNamespace
+            </div>
         }
     </div>
-
-    @if (Environment.AksConfig is not null)
-    {
-        <div style="font-size:12px; color:var(--color-text-muted); padding:4px 0;">
-            <strong>Current:</strong>
-            Path: @(Environment.AksConfig.KubeconfigPath ?? "(default)") &middot;
-            Context: @(Environment.AksConfig.KubeconfigContext ?? "(current)") &middot;
-            Namespace: @Environment.AksConfig.DefaultNamespace
-        </div>
-    }
-</div>
 
 @code {
     [Parameter, EditorRequired] public AppConfig Environment { get; set; } = default!;
@@ -36,12 +71,68 @@
     private string DefaultNamespace = "default";
     private bool ShowSaved;
 
+    // Context dropdown state
+    private bool _ctxDropOpen;
+    private string _ctxSearchText = string.Empty;
+    private IReadOnlyList<KubeContextInfo> _availableContexts = [];
+
+    private IEnumerable<KubeContextInfo> CtxFiltered =>
+        string.IsNullOrWhiteSpace(_ctxSearchText)
+            ? _availableContexts
+            : _availableContexts.Where(c => c.Name.Contains(_ctxSearchText, StringComparison.OrdinalIgnoreCase));
+
     protected override void OnParametersSet()
     {
         var config = Environment.AksConfig;
         KubeconfigPath = config?.KubeconfigPath ?? string.Empty;
         KubeconfigContext = config?.KubeconfigContext ?? string.Empty;
         DefaultNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
+        LoadContexts();
+    }
+
+    private void LoadContexts()
+    {
+        _availableContexts = KubernetesAksClient.ReadContextsFromKubeconfig(
+            string.IsNullOrWhiteSpace(KubeconfigPath) ? null : KubeconfigPath);
+    }
+
+    private void OnKubeconfigPathBlur()
+    {
+        LoadContexts();
+        // Clear the saved context selection if it no longer exists in the new config
+        if (!string.IsNullOrWhiteSpace(KubeconfigContext) &&
+            !_availableContexts.Any(c => c.Name == KubeconfigContext))
+        {
+            KubeconfigContext = string.Empty;
+        }
+    }
+
+    private void OpenCtxDrop()
+    {
+        _ctxSearchText = string.Empty;
+        _ctxDropOpen = true;
+    }
+
+    private void CloseCtxDrop()
+    {
+        _ctxDropOpen = false;
+        _ctxSearchText = string.Empty;
+    }
+
+    private void OnCtxSearchInput(ChangeEventArgs e)
+    {
+        _ctxSearchText = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void SelectCtx(string? name)
+    {
+        KubeconfigContext = name ?? string.Empty;
+        CloseCtxDrop();
+    }
+
+    private void OnCtxKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Escape") CloseCtxDrop();
     }
 
     private async Task SaveAsync()
