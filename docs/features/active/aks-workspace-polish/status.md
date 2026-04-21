@@ -4,73 +4,77 @@
 
 title: "Status — aks-workspace-polish"
 owner: ""
-state: "Planned"
+state: "Complete"
 jira: "not linked"
 branch: ""
 started: "2026-04-20"
-last_updated: "2026-04-20"
+last_updated: "2026-04-25"
 
 ---
 
 ## Quick summary
 
-Plan created. No implementation started. Begin with the pure-CSS items (#1, #2) to establish the visual patterns, then proceed to the UI logic items.
+All 11 items across 4 waves implemented. Build passes. 36 unit tests pass.
 
 **Jira:** not linked
 
-**Current focus:** Planning complete — ready for implementation to begin.
+**Current focus:** Ready for pre-ship review.
 
 ## Progress checklist
 
 ### Wave 1 — Visual signal layer (pure CSS + minimal Razor logic)
 
-- [ ] #1 Log line severity colouring (`PodLogView.razor` + `PodLogView.razor.css`)
-- [ ] #2 Status row tinting for unhealthy pods/deployments (`PodGrid`, `DeploymentGrid`, `StatefulSetGrid`)
+- [x] #1 Log line severity colouring (`PodLogView.razor` + `PodLogView.razor.css`)
+- [x] #2 Status row tinting for unhealthy pods/deployments (`PodGrid`, `DeploymentGrid`, `StatefulSetGrid`)
 
 ### Wave 2 — Interaction improvements (Razor logic, no model changes)
 
-- [ ] #3 Events panel: type/kind filter + jump-to-resource link
-- [ ] #4 Dynamic keyboard hint bar based on selected row state
-- [ ] #5 CronJob next-run countdown tooltip
-- [ ] #6 Namespace selector "All namespaces" quick chip
+- [x] #3 Events panel: type/kind filter + jump-to-resource link
+- [x] #4 Dynamic keyboard hint bar based on selected row state
+- [x] #5 CronJob next-run countdown tooltip
+- [x] #6 Namespace selector "All namespaces" quick chip
 
 ### Wave 3 — Operational features (port-forward UX + model change)
 
-- [ ] #10 Port-forward "Open in browser" button
-- [ ] #11 Pinned port-forward targets (UserSettings model + PortForwardStartDialog)
+- [x] #10 Port-forward "Open in browser" button
+- [x] #11 Pinned port-forward targets (UserSettings model + PortForwardStartDialog)
 
 ### Wave 4 — Panel completions
 
-- [ ] #13 Wire Helm diff into rollback confirmation flow
-- [ ] #14 YAML editor structural pre-validation
-- [ ] #16 Container detail: requests/limits vs actual usage
+- [x] #13 Wire Helm diff into rollback confirmation flow
+- [x] #14 YAML editor structural pre-validation
+- [x] #16 Container detail: requests/limits vs actual usage
 
 ### Cross-cutting
 
-- [ ] Tests updated (`SwebKit.App.Tests`, `SwebKit.Kubernetes.Tests`)
+- [x] Tests updated (`SwebKit.App.Tests` — 36 new tests: log level, cron next-run, HTTP port detection, pinned eviction)
 - [ ] Docs aligned (`docs/architecture/design.md` AKS section if behavior changed)
 - [ ] Ready for pre-ship review
 
 ## Completed
 
-_(none yet)_
+- Wave 1: #1, #2
+- Wave 2: #3, #4, #5, #6
+- Wave 3: #10, #11
+- Wave 4: #13, #14, #16
+- Unit tests: 36/36 passing
 
 ## Remaining
 
-All items — see checklist above.
+- Pre-ship review
+- Optionally update `docs/architecture/design.md` AKS section
 
 ## Blockers
 
-- None at this time.
-- Item #13 (Helm diff) depends on `helm-diff` plugin being available in the test environment. Already installed locally (see terminal history). Needs a graceful fallback for machines without the plugin.
+- None.
 
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: All unit tests pass (36/36). Build passes with 0 errors.
 
 ## Notes
 
-- Wave 1 is safe to implement and review independently — no risk to existing behaviour.
-- Item #11 touches `UserSettings` domain model; follow CS-4 (atomic JSON write) when saving.
-- Items #3 and #4 use already-loaded in-memory data — no new API calls needed.
+- `FormatCountdown` has no sub-minute resolution; 30s formats as "in 0m". Tests reflect actual implementation.
+- `GetLineClass` and `IsHttpPort` promoted from private to internal to allow direct test invocation.
+- `Icons.Regular.Size16.Split` does not exist in FluentUI v4.14.0; `SplitHorizontal` was used instead for the Helm diff button.

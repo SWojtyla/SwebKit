@@ -129,3 +129,25 @@
     background: var(--aks-grid-selected-bg);
     box-shadow: inset 3px 0 0 var(--aks-grid-selected-outline);
 }
+
+/* ── Status row tinting ── */
+::deep .row-critical td,
+::deep .row-critical {
+    background-color: rgba(229, 57, 53, 0.07);
+}
+
+::deep .row-degraded td,
+::deep .row-degraded {
+    background-color: rgba(255, 152, 0, 0.07);
+}
+
+::deep .row-muted td,
+::deep .row-muted {
+    opacity: 0.6;
+}
+
+::deep .selected-row.row-critical,
+::deep .selected-row.row-degraded,
+::deep .selected-row.row-muted {
+    background-color: var(--aks-grid-selected-bg) !important;
+}

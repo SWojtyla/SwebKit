@@ -265,3 +265,28 @@
     border-color: var(--color-warning);
     background: color-mix(in srgb, var(--color-warning) 12%, var(--aks-tab-inactive-surface));
 }
+
+/* ── All-namespaces chip ── */
+.aks-ns-all-chip {
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.aks-ns-all-chip.active {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border-color: var(--color-accent);
+}
+
+.aks-ns-all-chip:hover:not(.active) {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+}

@@ -36,12 +36,12 @@
             @if (_showSearch)
             {
                 <div class="aks-yaml-search-bar">
-                          <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Search in YAML…" value="@_search"
-                           @oninput="OnSearchInput" autofocus />
+                    <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Search in YAML…"
+                           value="@_search" @oninput="OnSearchInput" autofocus />
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -58,6 +58,19 @@
                     @if (_validationError is not null)
                     {
                         <div class="aks-yaml-validation-error">⚠ @_validationError</div>
+                    }
+                    @if (_validationWarning is not null && _validationError is null)
+                    {
+                        <div class="aks-yaml-validation-warning">
+                            <span>⚠ @_validationWarning</span>
+                            <div class="aks-yaml-warning-actions">
+                                <FluentButton Appearance="Appearance.Accent" Disabled="@_applying" @onclick="ApplyAnyway">Apply anyway
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth"
+                                              @onclick="() => { _validationWarning = null; _bypassValidation = false; StateHasChanged(); }">Fix first
+                                </FluentButton>
+                            </div>
+                        </div>
                     }
                     <div class="aks-yaml-content">
                         @if (_loading)
@@ -121,6 +134,8 @@
     private bool _showSearch;
     private string _replace = string.Empty;
     private string? _validationError;
+    private string? _validationWarning;
+    private bool _bypassValidation;
 
     /// <summary>Whether the YAML panel is currently showing.</summary>
     public bool IsOpen => _target is not null;
@@ -185,6 +200,8 @@
         _showSearch = false;
         _replace = string.Empty;
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         StateHasChanged();
         _ = OnClose.InvokeAsync();
     }
@@ -238,6 +255,8 @@
         _editMode = false;
         _editText = string.Empty;
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         _replace = string.Empty;
         StateHasChanged();
     }
@@ -246,6 +265,8 @@
     {
         _editText = e.Value?.ToString() ?? string.Empty;
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         _editHighlighted = await HighlightAsync(_editText);
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -255,8 +276,12 @@
         if (_target is null || Client is null) return;
 
         _validationError = ValidateYaml(_editText);
-        if (_validationError is not null) { StateHasChanged(); return; }
+        if (_validationError is not null) { _validationWarning = null; _bypassValidation = false; StateHasChanged(); return; }
 
+        _validationWarning = _bypassValidation ? null : CheckYamlStructure(_editText);
+        if (_validationWarning is not null && !_bypassValidation) { StateHasChanged(); return; }
+
+        _bypassValidation = false;
         _applying = true;
         StateHasChanged();
 
@@ -295,6 +320,8 @@
         if (string.IsNullOrEmpty(_search) || !_editMode) return;
         _editText = _editText.Replace(_search, _replace, StringComparison.Ordinal);
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         _editHighlighted = await HighlightAsync(_editText);
         _searchCount = CountOccurrences(_editText, _search);
         _editKey++;
@@ -324,6 +351,37 @@
         {
             return $"YAML parse error at line {ex.Start.Line}: {ex.Message}";
         }
+    }
+
+    private static string? CheckYamlStructure(string yaml)
+    {
+        try
+        {
+            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder().Build();
+            var obj = deserializer.Deserialize<Dictionary<object, object>>(yaml);
+            if (obj is null) return null;
+
+            var missing = new List<string>();
+            if (!obj.ContainsKey("apiVersion")) missing.Add("apiVersion");
+            if (!obj.ContainsKey("kind")) missing.Add("kind");
+            if (!obj.TryGetValue("metadata", out var meta) ||
+                meta is not Dictionary<object, object> metaDict ||
+                !metaDict.ContainsKey("name"))
+                missing.Add("metadata.name");
+
+            return missing.Count == 0 ? null : $"Missing required fields: {string.Join(", ", missing)}";
+        }
+        catch
+        {
+            return null; // Parsing already handled by ValidateYaml
+        }
+    }
+
+    private async Task ApplyAnyway()
+    {
+        _bypassValidation = true;
+        _validationWarning = null;
+        await OnSave();
     }
 
     private static int CountOccurrences(string text, string search)

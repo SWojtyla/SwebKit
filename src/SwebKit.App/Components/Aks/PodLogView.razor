@@ -12,22 +12,24 @@
         </label>
         @if (Containers.Count > 1)
         {
-            <select class="log-container-select app-native-control app-native-select" value="@_selectedContainer" @onchange="OnContainerChanged">
+            <select class="log-container-select app-native-control app-native-select" value="@_selectedContainer"
+                    @onchange="OnContainerChanged">
                 @foreach (var c in Containers)
                 {
                     <option value="@c" selected="@(c == _selectedContainer)">@c</option>
                 }
             </select>
         }
-        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange"
+                @bind:after="OnRangeChanged" aria-label="Log range">
             <option value="@LogRange.Last5m">Last 5m</option>
             <option value="@LogRange.Last10m">Last 10m</option>
             <option value="@LogRange.Last1h">Last 1h</option>
             <option value="@LogRange.All">All</option>
             <option value="@LogRange.PreviousContainer">Previous container</option>
         </select>
-         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
-             class="log-filter-input app-native-control" />
+        <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
+               class="log-filter-input app-native-control" />
         <span class="log-line-count">@WindowSummaryText</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
                       Title="Show older buffered lines">Older</FluentButton>
@@ -43,61 +45,62 @@
             </FluentButton>
         }
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync" Disabled="@(VisibleLines.Count == 0)"
-                      Title="Copy the currently visible log window to the clipboard">Copy visible</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
-                      Disabled="@(Client is null || Namespace is null || PodName is null || _exportingAllLogs)"
-                      Title="Export the full pod log stream as text">
-            @(_exportingAllLogs ? "Exporting…" : "Export all")
-        </FluentButton>
-        @if (IsLive && IsLoading)
-        {
-            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
-                          Title="@(_paused ? "Resume tailing" : "Pause tailing")">
-                @(_paused ? "▶ Resume" : "⏸ Pause")
+        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync"
+                      Disabled="@(VisibleLines.Count == 0)" Title="Copy the currently visible log window to the clipboard">Copy
+            visible</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
+                          Disabled="@(Client is null || Namespace is null || PodName is null || _exportingAllLogs)"
+                          Title="Export the full pod log stream as text">
+                @(_exportingAllLogs ? "Exporting…" : "Export all")
             </FluentButton>
-        }
-    </div>
-
-    <div class="log-status-bar">
-        <span>@BufferSummaryText</span>
-        @if (IsAllRangeSelected)
-        {
-            <span>Requested tail: @_requestedTailLines:N0 lines</span>
-        }
-        @if (_paused)
-        {
-            <span>Paused: new lines are buffered until you resume or jump latest</span>
-        }
-        else if (_pageIndexFromNewest > 0)
-        {
-            <span>Browsing history: latest lines are buffered in the background</span>
-        }
-        @if (_pendingNewLineCount > 0 && CanJumpToLatest)
-        {
-            <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
-        }
-    </div>
-
-    <div class="log-output" @ref="_logContainer">
-        @if (VisibleLines.Count == 0 && !IsLoading)
-        {
-            <div class="log-empty">@EmptyStateText</div>
-        }
-        else
-        {
-            <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
-                <div class="log-line @entry.CssClass">@entry.Line</div>
-            </Virtualize>
-            @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
+            @if (IsLive && IsLoading)
             {
-                <div class="log-tailing">
-                    <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
-                </div>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
+                              Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                    @(_paused ? "▶ Resume" : "⏸ Pause")
+                </FluentButton>
             }
-        }
+        </div>
+
+        <div class="log-status-bar">
+            <span>@BufferSummaryText</span>
+            @if (IsAllRangeSelected)
+            {
+                <span>Requested tail: @_requestedTailLines:N0 lines</span>
+            }
+            @if (_paused)
+            {
+                <span>Paused: new lines are buffered until you resume or jump latest</span>
+            }
+            else if (_pageIndexFromNewest > 0)
+            {
+                <span>Browsing history: latest lines are buffered in the background</span>
+            }
+            @if (_pendingNewLineCount > 0 && CanJumpToLatest)
+            {
+                <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
+            }
+        </div>
+
+        <div class="log-output" @ref="_logContainer">
+            @if (VisibleLines.Count == 0 && !IsLoading)
+            {
+                <div class="log-empty">@EmptyStateText</div>
+            }
+            else
+            {
+                <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
+                    <div class="log-line @entry.CssClass">@entry.Line</div>
+                </Virtualize>
+                @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
+                {
+                    <div class="log-tailing">
+                        <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
+                    </div>
+                }
+            }
+        </div>
     </div>
-</div>
 
 @code {
     [Parameter] public IAksClient? Client { get; set; }
@@ -687,17 +690,30 @@
         }
     }
 
-    private static string GetLineClass(string line)
+    internal static string GetLineClass(string line)
     {
-        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR",
-StringComparison.OrdinalIgnoreCase))
-            return "error";
-        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN",
-StringComparison.OrdinalIgnoreCase))
-            return "warn";
-        if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
-            return "debug";
-        return "";
+        if (line.Length == 0 || line[0] == '{')
+            return "log-level-default";
+        var window = line.Length > 120 ? line[..120] : line;
+        if (window.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[FATAL]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[CRIT]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("FATAL", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("CRITICAL", StringComparison.OrdinalIgnoreCase))
+            return "log-level-error";
+        if (window.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[WARN]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("WARN", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("WARNING", StringComparison.OrdinalIgnoreCase))
+            return "log-level-warn";
+        if (window.Contains("[DBG]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[TRC]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[VRB]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("DEBUG", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("TRACE", StringComparison.OrdinalIgnoreCase))
+            return "log-level-debug";
+        return "log-level-default";
     }
 
     public async ValueTask DisposeAsync()

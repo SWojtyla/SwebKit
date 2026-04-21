@@ -153,3 +153,25 @@
     background: color-mix(in srgb, var(--aks-cell-accent-surface) 76%, var(--color-accent-subtle));
     border-color: var(--color-accent);
 }
+
+/* ── Status row tinting ── */
+::deep .row-critical td,
+::deep .row-critical {
+    background-color: rgba(229, 57, 53, 0.07);
+}
+
+::deep .row-degraded td,
+::deep .row-degraded {
+    background-color: rgba(255, 152, 0, 0.07);
+}
+
+::deep .row-muted td,
+::deep .row-muted {
+    opacity: 0.6;
+}
+
+::deep .selected-row.row-critical,
+::deep .selected-row.row-degraded,
+::deep .selected-row.row-muted {
+    background-color: var(--aks-grid-selected-bg) !important;
+}

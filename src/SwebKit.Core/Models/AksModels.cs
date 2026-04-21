@@ -22,7 +22,7 @@ public class PortForwardSession
     public PortForwardStatus Status { get; set; } = PortForwardStatus.Starting;
     public string? LastError { get; set; }
     public bool IsActive => Status == PortForwardStatus.Active;
-    public string LocalUrl => $"http://localhost:{LocalPort}";
+    public string LocalUrl => LocalPort is 443 or 8443 ? $"https://localhost:{LocalPort}" : $"http://localhost:{LocalPort}";
 
     // Fired by the IAksClient implementation on every status transition.
     public Action<PortForwardSession>? OnStatusChanged { get; set; }

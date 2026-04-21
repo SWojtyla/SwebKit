@@ -51,4 +51,13 @@ public sealed class UserSettings
 {
     public string Theme { get; set; } = string.Empty;
     public bool WarmupConnectionsOnStartup { get; set; } = true;
+    public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
 }
+
+public sealed record PinnedPortForwardEntry(
+    string Label,
+    string? Namespace,
+    string? PodLabelSelector,
+    int RemotePort,
+    int LocalPort,
+    DateTimeOffset PinnedAt);

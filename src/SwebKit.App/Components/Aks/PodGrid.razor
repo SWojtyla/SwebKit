@@ -3,7 +3,7 @@
 @inject INotificationService Notify
 
 <FluentDataGrid Items="@FilteredItems" TGridItem="PodInfo" Virtualize="true" ItemSize="36"
-                RowClass="@(p => p.Name == SelectedPod?.Name ? "selected-row" : "")"
+                RowClass="@(p => PodRowClass(p, SelectedPod))"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name" SortBy="@(GridSort<PodInfo>.ByAscending(p => p.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
@@ -47,7 +47,7 @@
                 <div class="aks-metric-cell">
                     <span class="aks-metric @CpuClass(cpuMetric.Value)"
                           title="@($"{cpuMetric.Value * 1000:F0}m / ~{CpuCeiling}m")">@($"{cpuMetric.Value *
-                                                                                                                    1000:F0}m")</span>
+                                                                                                                                            1000:F0}m")</span>
                         <div class="aks-metric-bar-track">
                             <div class="aks-metric-bar-fill @CpuClass(cpuMetric.Value)" style="width:@($"{cpuPct:F0}")%"></div>
                         </div>
@@ -192,5 +192,19 @@
         if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d {(int)(span.TotalHours % 24)}h ago";
         if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h {(int)(span.TotalMinutes % 60)}m ago";
         return $"{(int)span.TotalMinutes}m ago";
+    }
+
+    private static string PodRowClass(PodInfo p, PodInfo? selected)
+    {
+        var tint = p.Status switch
+        {
+            var s when s.Contains("CrashLoopBackOff") || s.Contains("OOMKilled") || s.Contains("ImagePullBackOff") ||
+                       s.Contains("ErrImagePull") || (s.StartsWith("Error") && !s.StartsWith("ErrorPull")) => "row-critical",
+            var s when s.Contains("Pending") || s.Contains("ContainerCreating") || s.Contains("Terminating") => "row-degraded",
+            var s when s is "Completed" or "Succeeded" => "row-muted",
+            _ => ""
+        };
+        var selection = p.Name == selected?.Name ? "selected-row" : "";
+        return $"{tint} {selection}".Trim();
     }
 }

@@ -13,8 +13,7 @@
             @* ── Helm History / Values / Rollback ── *@
             <AksHelmPanel @ref="_helmPanel" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
                           Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
-                          OnDataChanged="OnDataChanged"
-                          OnPreviewRollback="OnHelmPreviewRollback" />
+                          OnDataChanged="OnDataChanged" OnPreviewRollback="OnHelmPreviewRollback" />
 
             @* ── Scale ── *@
             @if (_scaleTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null)
@@ -37,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -77,7 +76,7 @@
 
                 @* ── Container details ── *@
                 @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                                                                        _logDeploymentName is null)
+                                                                                                                        _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -136,7 +135,7 @@
 
                 @* ── Ingress analysis ── *@
                 @if (_ingressAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -154,7 +153,7 @@
 
                 @* ── Network policy analysis ── *@
                 @if (_networkPolicyAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -173,7 +172,7 @@
 
                 @* ── Namespace quota ── *@
                 @if (_namespaceQuotaTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -190,7 +189,7 @@
 
                 @* ── Pod disruption budgets ── *@
                 @if (_pdbTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -207,7 +206,7 @@
 
                 @* ── Probe failure summary ── *@
                 @if (_probeFailureTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -225,7 +224,7 @@
 
                 @* ── Placement constraints ── *@
                 @if (_placementTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -243,7 +242,7 @@
 
                 @* ── Helm diff preview ── *@
                 @if (_helmDiffPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -261,86 +260,109 @@
 
                 @* ── Helm rollback diff preview ── *@
                 @if (_helmRollbackPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                    _logDeploymentName is null)
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
-                            <span class="aks-section-title">Rollback Preview: @_helmRollbackPreviewTarget.ReleaseName → rev @_helmRollbackPreviewTarget.Revision</span>
-                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmRollbackPreview" Title="Close">
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                            </FluentButton>
+                            <span class="aks-section-title">Rollback Preview: @_helmRollbackPreviewTarget.ReleaseName → rev
+                                @_helmRollbackPreviewTarget.Revision</span>
+                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmRollbackPreview" Title="Close">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                                </FluentButton>
+                            </div>
+                            <div class="aks-yaml-content">
+                                <HelmRollbackPreviewPanel Client="Client" Namespace="@_helmRollbackPreviewTarget.Namespace"
+                                                          ReleaseName="@_helmRollbackPreviewTarget.ReleaseName"
+                                                          Revision="@_helmRollbackPreviewTarget.Revision" />
+                            </div>
                         </div>
-                        <div class="aks-yaml-content">
-                            <HelmRollbackPreviewPanel Client="Client" Namespace="@_helmRollbackPreviewTarget.Namespace"
-                                                      ReleaseName="@_helmRollbackPreviewTarget.ReleaseName"
-                                                      Revision="@_helmRollbackPreviewTarget.Revision" />
-                        </div>
-                    </div>
-                }
+                    }
 
-                @* ── Events panel ── *@
-                @if (ShowEvents)
-                {
-                    <div class="aks-panel-pane">
-                        <div class="aks-section-header">
-                            <span class="aks-section-title">Events</span>
-                            <span class="aks-section-count">@Events.Count</span>
-                            @if (Events.Any(e => e.Type == "Warning"))
-                            {
-                                <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                                                                                            == "Warning")
-                                </span>
-                            }
-                            <span class="aks-toolbar-spacer"></span>
-                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
-                            </FluentButton>
-                        </div>
-                        <div class="aks-events-list">
-                            @if (Events.Count == 0)
-                            {
-                                <div class="aks-events-empty">No recent events</div>
-                            }
-                            else
-                            {
-                                @foreach (var evt in Events)
+                    @* ── Events panel ── *@
+                    @if (ShowEvents)
+                    {
+                        <div class="aks-panel-pane">
+                            <div class="aks-section-header">
+                                <span class="aks-section-title">Events</span>
+                                <span class="aks-section-count">@Events.Count</span>
+                                @if (Events.Any(e => e.Type == "Warning"))
                                 {
-                                    <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
-                                        <div class="aks-event-header">
-                                            @if (evt.Type == "Warning")
-                                            {
-                                                <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
-                                                    <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                                                </span>
-                                            }
-                                            <span class="aks-event-reason">@evt.Reason</span>
-                                            @if (evt.Count > 1)
-                                            {
-                                                <span class="aks-event-count">×@evt.Count</span>
-                                            }
-                                            <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
-                                        </div>
-                                        <div class="aks-event-detail">
-                                            <span class="aks-event-object">@evt.InvolvedObjectName</span>
-                                            @evt.Message
-                                        </div>
-                                    </div>
+                                    <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
+                                                                                                                                                                                                                                                                                    == "Warning")
+                                    </span>
                                 }
-                            }
+                                <span class="aks-toolbar-spacer"></span>
+                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                                </FluentButton>
+                            </div>
+                            <div class="aks-events-filter-bar">
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.All ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.All">All</button>
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Warning ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Warning">Warning</button>
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Normal ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Normal">Normal</button>
+                            </div>
+                            <div class="aks-events-list">
+                                @if (!FilteredEvents.Any())
+                                {
+                                    <div class="aks-events-empty">No recent events</div>
+                                }
+                                else
+                                {
+                                    @foreach (var evt in FilteredEvents)
+                                    {
+                                        <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
+                                            <div class="aks-event-header">
+                                                @if (evt.Type == "Warning")
+                                                {
+                                                    <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
+                                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                                    </span>
+                                                }
+                                                <span class="aks-event-reason">@evt.Reason</span>
+                                                @if (evt.Count > 1)
+                                                {
+                                                    <span class="aks-event-count">×@evt.Count</span>
+                                                }
+                                                <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
+                                                @{
+                                                    var jumpableKinds = new[] { "Deployment", "Pod", "StatefulSet", "CronJob", "Job" };
+                                                    var canJump = jumpableKinds.Contains(evt.InvolvedObjectKind) && evt.InvolvedObjectName is not
+                            null;
+                                                    var resourceExists = canJump && ResourceExistsForEvent(evt);
+                                                }
+                                                @if (canJump)
+                                                {
+                                                    var capturedEvt = evt;
+                                                    <button class="aks-evt-jump-btn" disabled="@(!resourceExists)"
+                                                            title="@(resourceExists ? $"Go to {capturedEvt.InvolvedObjectKind} {capturedEvt.InvolvedObjectName}" : "Resource not currently loaded")"
+                                                            @onclick="() => OnJumpToResource.InvokeAsync(capturedEvt)"
+                                                            @onclick:stopPropagation>→</button>
+                                                }
+                                            </div>
+                                            <div class="aks-event-detail">
+                                                <span class="aks-event-object">@evt.InvolvedObjectName</span>
+                                                @evt.Message
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
                         </div>
-                    </div>
-                }
+                    }
 
-            </div>
-        </ResizablePanel>
-    }
+                </div>
+            </ResizablePanel>
+        }
 
 @code {
     // ── Parameters ──
@@ -355,6 +377,7 @@
     [Parameter] public List<PodInfo> Pods { get; set; } = [];
     [Parameter] public bool ShowEvents { get; set; }
     [Parameter] public EventCallback OnShowEventsChanged { get; set; }
+    [Parameter] public EventCallback<KubernetesEvent> OnJumpToResource { get; set; }
     [Parameter] public EventCallback<string> OnError { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
     [Parameter] public EventCallback OnPanelStateChanged { get; set; }
@@ -362,6 +385,25 @@
     // ── Child refs ──
     private AksYamlViewer _yamlViewer = default!;
     private AksHelmPanel _helmPanel = default!;
+
+    // ── Event filter ──
+    private enum EventTypeFilter { All, Warning, Normal }
+    private EventTypeFilter _eventTypeFilter = EventTypeFilter.All;
+
+    private IEnumerable<KubernetesEvent> FilteredEvents => _eventTypeFilter switch
+    {
+        EventTypeFilter.Warning => Events.Where(e => e.Type == "Warning"),
+        EventTypeFilter.Normal => Events.Where(e => e.Type == "Normal"),
+        _ => Events
+    };
+
+    private bool ResourceExistsForEvent(KubernetesEvent evt) => evt.InvolvedObjectKind switch
+    {
+        "Deployment" => Deployments.Any(d => d.Name == evt.InvolvedObjectName),
+        "StatefulSet" => StatefulSets.Any(s => s.Name == evt.InvolvedObjectName),
+        "Pod" => Pods.Any(p => p.Name == evt.InvolvedObjectName),
+        _ => false // Jobs and CronJobs — not currently checked
+    };
 
     // ── Pending-open state (BL-6: @ref inside @if cannot be used until after first render) ──
     private enum HelmPendingAction { History, Values, Rollback }

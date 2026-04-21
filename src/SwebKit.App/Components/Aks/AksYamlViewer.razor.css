@@ -125,6 +125,24 @@
     flex-shrink: 0;
 }
 
+.aks-yaml-validation-warning {
+    margin: 4px 8px;
+    padding: 8px 10px;
+    background: rgba(255, 152, 0, 0.12);
+    border: 1px solid rgba(255, 152, 0, 0.4);
+    border-radius: 4px;
+    font-size: var(--font-size-sm);
+    color: var(--color-warning);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.aks-yaml-warning-actions {
+    display: flex;
+    gap: 8px;
+}
+
 /* ── YAML search highlights ── */
 ::deep .yml-search-match {
     background: rgba(255, 214, 0, 0.35);

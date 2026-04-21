@@ -40,6 +40,8 @@
             <div class="aks-ns-backdrop" @onclick="CloseNsDrop"></div>
         }
         <label class="aks-ns-label">Namespace</label>
+        <button class="aks-ns-all-chip @(CurrentNamespace == "*" ? "active" : "")" title="All namespaces"
+                @onclick="SelectAllNamespaces">*</button>
         <div class="aks-ns-picker">
             <input class="aks-ns-select aks-ns-search app-native-control"
                    value="@(_nsDropOpen? _nsSearchText : CurrentNamespace)"
@@ -242,6 +244,8 @@
         _nsSearchText = string.Empty;
         await OnNamespaceChanged.InvokeAsync(ns);
     }
+
+    private Task SelectAllNamespaces() => SelectNs("*");
 
     private static bool IsNetworkResourceType(string resourceType)
         => NetworkResourceTypes.Contains(resourceType, StringComparer.Ordinal);

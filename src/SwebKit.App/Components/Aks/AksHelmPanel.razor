@@ -31,10 +31,7 @@
                                 <th class="sortable-th" @onclick='() => SetSort("appver")'>App Version @SortIndicator("appver")</th>
                                 <th class="sortable-th" @onclick='() => SetSort("updated")'>Updated @SortIndicator("updated")</th>
                                 <th>Description</th>
-                                @if (_rollbackMode)
-                                {
-                                    <th></th>
-                                }
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -49,29 +46,36 @@
                                     <td>@rev.AppVersion</td>
                                     <td>@rev.Updated?.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td>@rev.Description</td>
-                                    @if (_rollbackMode)
-                                    {
-                                        <td>
-                                            @if (rev.Status == "superseded")
-                                            {
-                                                var r = rev;
-                                                <div style="display:inline-flex; align-items:center; gap:4px;">
-                                                    <button class="ctx-item aks-rollback-btn"
-                                                            style="display:inline-flex; align-items:center; gap:4px;"
-                                                            @onclick="() => OnPreviewRollbackToRevision(r)">
-                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Eye())" Width="14px" />
-                                                        Preview
-                                                    </button>
-                                                    <button class="ctx-item destructive aks-rollback-btn"
-                                                            style="display:inline-flex; align-items:center; gap:4px;"
-                                                            @onclick="() => OnRollbackToRevision(r)">
-                                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
-                                                        Rollback
-                                                    </button>
-                                                </div>
-                                            }
-                                        </td>
-                                    }
+                                    <td>
+                                        @if (!_rollbackMode && rev.Status != "deployed")
+                                        {
+                                            var r = rev;
+                                            <button class="ctx-item aks-rollback-btn"
+                                                    style="display:inline-flex; align-items:center; gap:4px;"
+                                                    @onclick="() => OnPreviewRollbackToRevision(r)">
+                                                <FluentIcon Value="@(new Icons.Regular.Size16.SplitHorizontal())" Width="14px" />
+                                                Diff
+                                            </button>
+                                        }
+                                        else if (_rollbackMode && rev.Status == "superseded")
+                                        {
+                                            var r = rev;
+                                            <div style="display:inline-flex; align-items:center; gap:4px;">
+                                                <button class="ctx-item aks-rollback-btn"
+                                                        style="display:inline-flex; align-items:center; gap:4px;"
+                                                        @onclick="() => OnPreviewRollbackToRevision(r)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Eye())" Width="14px" />
+                                                    Preview
+                                                </button>
+                                                <button class="ctx-item destructive aks-rollback-btn"
+                                                        style="display:inline-flex; align-items:center; gap:4px;"
+                                                        @onclick="() => OnRollbackToRevision(r)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
+                                                    Rollback
+                                                </button>
+                                            </div>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -238,7 +242,8 @@
         await OnPreviewRollback.InvokeAsync((_historyTarget, Namespace, rev.Revision));
     }
 
-    private async Task OnRollbackToRevision(HelmRevisionInfo rev)    {
+    private async Task OnRollbackToRevision(HelmRevisionInfo rev)
+    {
         if (_historyTarget is null || Client is null) return;
         var releaseName = _historyTarget;
 

@@ -506,6 +506,11 @@
     white-space: nowrap;
 }
 
+.aks-kbd-hint--dimmed {
+    opacity: 0.4;
+    cursor: default;
+}
+
 .aks-kbd-hints kbd {
     display: inline-block;
     padding: 1px 4px;

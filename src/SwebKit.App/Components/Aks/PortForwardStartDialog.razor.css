@@ -104,3 +104,67 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+.pf-pinned-section {
+    margin-top: 8px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 8px;
+}
+
+.pf-pinned-header {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.pf-pinned-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.pf-pinned-use {
+    flex: 1;
+    text-align: left;
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-pinned-use:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.pf-pinned-remove {
+    padding: 2px 6px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.pf-pinned-remove:hover {
+    color: var(--color-error);
+}
+
+.pf-pin-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding-left: 4px;
+}

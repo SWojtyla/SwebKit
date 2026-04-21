@@ -24,7 +24,7 @@
                     SortBy="@(GridSort<CronJobInfo>.ByAscending(cj => cj.Schedule ?? ""))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>
-            <span class="aks-cron-schedule" title="@context.Schedule">@context.Schedule</span>
+            <span class="aks-cron-schedule" title="@GetCronTooltip(context)">@context.Schedule</span>
         </div>
     </TemplateColumn>
     <TemplateColumn Title="Active" Width="70px" SortBy="@(GridSort<CronJobInfo>.ByDescending(cj => cj.ActiveCount))">
@@ -86,5 +86,13 @@
         if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d";
         if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
         return $"{(int)span.TotalMinutes}m";
+    }
+
+    private static string GetCronTooltip(CronJobInfo cj)
+    {
+        if (cj.Suspend) return "Suspended";
+        if (CronNextRun.TryCalculate(cj.Schedule, DateTimeOffset.UtcNow, out var next))
+            return CronNextRun.FormatCountdown(next, DateTimeOffset.UtcNow);
+        return $"{cj.Schedule} (next run unavailable for non-standard expressions)";
     }
 }

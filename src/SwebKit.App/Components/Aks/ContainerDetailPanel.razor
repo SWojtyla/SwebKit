@@ -44,6 +44,9 @@
         @* Resources *@
         <div class="cdp-section">
             <div class="cdp-label">Resources</div>
+            @{
+                var metrics = GetContainerMetrics(_containers[_selectedIdx].Name);
+            }
             <table class="cdp-table">
                 <tbody>
                     <tr>
@@ -58,72 +61,82 @@
                         <td class="cdp-res-label">Memory limit</td>
                         <td class="cdp-res-val">@(_containers[_selectedIdx].Resources.MemoryLimit ?? "—")</td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
-
-        @* Env vars *@
-        <div class="cdp-section cdp-envvars">
-            <div class="cdp-label">Environment Variables (@_containers[_selectedIdx].EnvVars.Count)</div>
-            <table class="cdp-env-table">
-                <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Source</th>
-                        <th>Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var ev in _containers[_selectedIdx].EnvVars)
-                    {
-                        var envKey = ev;
-                        <tr>
-                            <td class="cdp-env-name">@ev.Name</td>
-                            <td class="cdp-env-source">
-                                @switch (ev.Source)
-                                {
-                                    case EnvVarSourceKind.ConfigMapRef:
-                                        <span class="cdp-source-tag cdp-source-cm">cm:@ev.SourceName/@ev.SourceKey</span>
-                                        break;
-                                    case EnvVarSourceKind.SecretRef:
-                                        <span class="cdp-source-tag cdp-source-secret">secret:@ev.SourceName/@ev.SourceKey</span>
-                                        break;
-                                    case EnvVarSourceKind.FieldRef:
-                                        <span class="cdp-source-tag cdp-source-field">fieldRef</span>
-                                        break;
-                                    default:
-                                        <span class="cdp-source-plain">—</span>
-                                        break;
-                                }
-                            </td>
-                            <td class="cdp-env-value">
-                                @if (ev.Source == EnvVarSourceKind.SecretRef && !ev.IsResolved)
-                                {
-                                    @if (_revealedSecretValues.TryGetValue($"{ev.SourceName}/{ev.SourceKey}", out var revealed))
-                                    {
-                                        <code class="cdp-revealed">@revealed</code>
-                                    }
-                                    else
-                                    {
-                                        <span class="cdp-masked">•••••••</span>
-                                        <button class="cdp-reveal-btn" @onclick="() => RevealSecretEnvVar(envKey)">reveal</button>
-                                    }
-                                }
-                                else
-                                {
-                                    <span
-                                        class="@(ev.Source == EnvVarSourceKind.FieldRef || ev.Source == EnvVarSourceKind.ConfigMapRef && ev.Value is null ? "cdp-muted" : "")">
-                                        @(ev.Value ?? "—")
-                                    </span>
-                                }
-                            </td>
+                        <td class="cdp-res-label">CPU usage</td>
+                        <td class="cdp-res-val" colspan="3">@(metrics is not null ? $"{metrics.CpuCores * 1000:F0}m" :
+                                            "Metrics unavailable")</td>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                        <tr>
+                            <td class="cdp-res-label">Memory usage</td>
+                            <td class="cdp-res-val" colspan="3">@(metrics is not null ? FormatBytes(metrics.MemoryBytes) :
+                                                        "Metrics unavailable")</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                @* Env vars *@
+                <div class="cdp-section cdp-envvars">
+                    <div class="cdp-label">Environment Variables (@_containers[_selectedIdx].EnvVars.Count)</div>
+                    <table class="cdp-env-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Source</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ev in _containers[_selectedIdx].EnvVars)
+                            {
+                                var envKey = ev;
+                                <tr>
+                                    <td class="cdp-env-name">@ev.Name</td>
+                                    <td class="cdp-env-source">
+                                        @switch (ev.Source)
+                                        {
+                                            case EnvVarSourceKind.ConfigMapRef:
+                                                <span class="cdp-source-tag cdp-source-cm">cm:@ev.SourceName/@ev.SourceKey</span>
+                                                break;
+                                            case EnvVarSourceKind.SecretRef:
+                                                <span class="cdp-source-tag cdp-source-secret">secret:@ev.SourceName/@ev.SourceKey</span>
+                                                break;
+                                            case EnvVarSourceKind.FieldRef:
+                                                <span class="cdp-source-tag cdp-source-field">fieldRef</span>
+                                                break;
+                                            default:
+                                                <span class="cdp-source-plain">—</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td class="cdp-env-value">
+                                        @if (ev.Source == EnvVarSourceKind.SecretRef && !ev.IsResolved)
+                                        {
+                                            @if (_revealedSecretValues.TryGetValue($"{ev.SourceName}/{ev.SourceKey}", out var revealed))
+                                            {
+                                                <code class="cdp-revealed">@revealed</code>
+                                            }
+                                            else
+                                            {
+                                                <span class="cdp-masked">•••••••</span>
+                                                <button class="cdp-reveal-btn" @onclick="() => RevealSecretEnvVar(envKey)">reveal</button>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span
+                                                class="@(ev.Source == EnvVarSourceKind.FieldRef || ev.Source == EnvVarSourceKind.ConfigMapRef && ev.Value is null ? "cdp-muted" : "")">
+                                                @(ev.Value ?? "—")
+                                            </span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
-    }
-</div>
 
 @code {
     [Parameter] public IAksClient? Client { get; set; }
@@ -131,6 +144,7 @@
     [Parameter] public string? PodName { get; set; }
 
     private List<ContainerDetail> _containers = [];
+    private PodMetrics? _podMetrics;
     private int _selectedIdx;
     private bool _isLoading;
     private string? _error;
@@ -148,6 +162,7 @@
         _isLoading = true;
         _error = null;
         _containers = [];
+        _podMetrics = null;
         _selectedIdx = 0;
         _secretCache.Clear();
         _revealedSecretValues.Clear();
@@ -155,7 +170,11 @@
 
         try
         {
-            _containers = (await Client.GetContainerDetailsAsync(Namespace, PodName, _cts.Token)).ToList();
+            var detailsTask = Client.GetContainerDetailsAsync(Namespace, PodName, _cts.Token);
+            var metricsTask = TryGetMetricsAsync(Namespace, PodName, _cts.Token);
+            await Task.WhenAll(detailsTask, metricsTask);
+            _containers = detailsTask.Result.ToList();
+            _podMetrics = metricsTask.Result;
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _error = ex.Message; }
@@ -165,6 +184,29 @@
     protected override void OnAfterRender(bool firstRender)
     {
         if (firstRender) _isRendered = true;
+    }
+
+    private async Task<PodMetrics?> TryGetMetricsAsync(string ns, string podName, CancellationToken ct)
+    {
+        try
+        {
+            if (Client is null) return null;
+            var list = await Client.GetPodMetricsAsync(ns, ct);
+            return list.FirstOrDefault(m => m.PodName == podName || podName.StartsWith(m.PodName));
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; } // Metrics server may be unavailable
+    }
+
+    private ContainerMetrics? GetContainerMetrics(string containerName)
+        => _podMetrics?.Containers.FirstOrDefault(c => c.Name == containerName);
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F1}Gi";
+        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024):F0}Mi";
+        if (bytes >= 1024) return $"{bytes / 1024.0:F0}Ki";
+        return $"{bytes}B";
     }
 
     private async Task RevealSecretEnvVar(EnvVarDetail ev)

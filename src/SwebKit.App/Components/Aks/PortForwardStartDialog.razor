@@ -22,6 +22,24 @@
                        class="port-forward-start__input app-native-control" />
             </div>
 
+            @if (PinnedEntries.Count > 0)
+            {
+                <div class="pf-pinned-section">
+                    <div class="pf-pinned-header">Pinned</div>
+                    @foreach (var pin in PinnedEntries)
+                    {
+                        var p = pin;
+                        <div class="pf-pinned-row">
+                            <button class="pf-pinned-use" title="Use this pinned target" @onclick="() => UsePinned(p)">
+                                @p.Label
+                            </button>
+                            <button class="pf-pinned-remove" title="Remove pin"
+                                    @onclick="() => OnPinRemove.InvokeAsync(p)">✕</button>
+                        </div>
+                    }
+                </div>
+            }
+
             @if (_error is not null)
             {
                 <p class="port-forward-start__message port-forward-start__message--error">@_error</p>
@@ -37,6 +55,13 @@
                         class="port-forward-start__btn port-forward-start__btn--primary @(!IsValid ? "port-forward-start__btn--disabled" : string.Empty)">
                     Start
                 </button>
+                @if (_lastStartedLocalPort.HasValue)
+                {
+                    <label class="pf-pin-toggle" title="Remember this target for future sessions">
+                        <input type="checkbox" @bind="_pinAfterStart" />
+                        Pin this
+                    </label>
+                }
             </div>
         </div>
     </div>
@@ -49,10 +74,16 @@
     [Parameter] public int RemotePort { get; set; }
     [Parameter] public EventCallback<int> OnStart { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public string KubeconfigContext { get; set; } = "";
+    [Parameter] public IReadOnlyList<PinnedPortForwardEntry> PinnedEntries { get; set; } = [];
+    [Parameter] public EventCallback<PinnedPortForwardEntry> OnPinAdd { get; set; }
+    [Parameter] public EventCallback<PinnedPortForwardEntry> OnPinRemove { get; set; }
 
     private int LocalPort;
     private string? _error;
     private string? _portWarning;
+    private bool _pinAfterStart;
+    private int? _lastStartedLocalPort;
 
     private bool IsValid => LocalPort is >= 1024 and <= 65535;
 
@@ -62,6 +93,8 @@
         if (Visible) LocalPort = RemotePort;
         _error = null;
         _portWarning = null;
+        _lastStartedLocalPort = null;
+        _pinAfterStart = false;
     }
 
     private async Task Start()
@@ -97,6 +130,27 @@
         }
 
         await OnStart.InvokeAsync(LocalPort);
+
+        _lastStartedLocalPort = LocalPort;
+        if (_pinAfterStart && !string.IsNullOrEmpty(PodName))
+        {
+            var entry = new PinnedPortForwardEntry(
+                Label: $"{PodName}:{RemotePort}",
+                Namespace: Namespace,
+                PodLabelSelector: PodName,
+                RemotePort: RemotePort,
+                LocalPort: LocalPort,
+                PinnedAt: DateTimeOffset.UtcNow);
+            await OnPinAdd.InvokeAsync(entry);
+        }
+
+        _pinAfterStart = false;
+    }
+
+    private void UsePinned(PinnedPortForwardEntry pin)
+    {
+        LocalPort = pin.LocalPort;
+        StateHasChanged();
     }
 
     private Task Cancel() => OnCancel.InvokeAsync();

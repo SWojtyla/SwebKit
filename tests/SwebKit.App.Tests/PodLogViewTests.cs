@@ -70,4 +70,50 @@ public sealed class PodLogViewTests
 
         Assert.Null(captured);
     }
+
+    [Theory]
+    [InlineData("2024-01-01T00:00:00Z ERROR something failed", "log-level-error")]
+    [InlineData("FATAL: out of memory", "log-level-error")]
+    [InlineData("[CRIT] system overload", "log-level-error")]
+    public void GetLineClass_ErrorVariants_ReturnErrorClass(string line, string expectedClass)
+    {
+        var cls = PodLogView.GetLineClass(line);
+        Assert.Equal(expectedClass, cls);
+    }
+
+    [Theory]
+    [InlineData("2024-01-01T00:00:00Z WARN connection slow")]
+    [InlineData("[WRN] disk space low")]
+    [InlineData("WARNING: retry limit approaching")]
+    public void GetLineClass_WarnVariants_ReturnWarnClass(string line)
+    {
+        Assert.Equal("log-level-warn", PodLogView.GetLineClass(line));
+    }
+
+    [Theory]
+    [InlineData("DEBUG initializing component")]
+    [InlineData("[DBG] entering handler")]
+    [InlineData("[TRC] span opened")]
+    public void GetLineClass_DebugVariants_ReturnDebugClass(string line)
+    {
+        Assert.Equal("log-level-debug", PodLogView.GetLineClass(line));
+    }
+
+    [Fact]
+    public void GetLineClass_JsonLine_ReturnsDefault()
+    {
+        Assert.Equal("log-level-default", PodLogView.GetLineClass("{\"level\":\"error\",\"msg\":\"oops\"}"));
+    }
+
+    [Fact]
+    public void GetLineClass_PlainLine_ReturnsDefault()
+    {
+        Assert.Equal("log-level-default", PodLogView.GetLineClass("starting up server on port 8080"));
+    }
+
+    [Fact]
+    public void GetLineClass_EmptyLine_ReturnsDefault()
+    {
+        Assert.Equal("log-level-default", PodLogView.GetLineClass(""));
+    }
 }

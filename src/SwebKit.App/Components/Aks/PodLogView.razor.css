@@ -155,6 +155,24 @@
     color: var(--color-text-muted);
 }
 
+/* log-level-* scheme — backward-compat aliases kept above */
+.log-line.log-level-error {
+    color: var(--color-error);
+    background: rgba(229, 57, 53, 0.06);
+}
+
+.log-line.log-level-warn {
+    color: var(--color-warning);
+}
+
+.log-line.log-level-debug {
+    color: var(--color-text-muted);
+}
+
+.log-line.log-level-default {
+    /* inherits base .log-line styles */
+}
+
 .log-tailing {
     display: flex;
     align-items: center;

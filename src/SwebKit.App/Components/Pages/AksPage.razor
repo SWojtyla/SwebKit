@@ -14,6 +14,7 @@
 @inject IAksClientBootstrapper AksBootstrapper
 @inject IAksWarmupCache AksWarmupCache
 @inject OperatorWorkspaceService Workspaces
+@inject PinnedPortForwardService PinnedPortForwards
 
 <div class="aks-page" @oncontextmenu:preventDefault>
     <div class="page-shell-header">
@@ -208,8 +209,8 @@
                         <span class="aks-kbd-hint"><kbd>n</kbd> network</span>
                     }
                     @if (ActiveResourceType is "Deployments" or "StatefulSets" or "ConfigMaps" or "Secrets"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
-                                                                                                                        "CronJobs")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    or "Services" or "Ingresses" or "GatewayClasses" or "Gateways" or "HTTPRoutes" or "Pods" or "Jobs" or
+                                                                                                                                            "CronJobs")
                     {
                         <span class="aks-kbd-hint"><kbd>y</kbd> yaml</span>
                     }
@@ -223,9 +224,27 @@
                     }
                     @if (ActiveResourceType == "Pods")
                     {
-                        <span class="aks-kbd-hint"><kbd>s</kbd> shell</span>
+                        var podRunning = SelectedPod?.Status is "Running";
+                        var podTerminating = SelectedPod?.Status?.Contains("Terminating") == true;
+                        var shellUnavailable = SelectedPod is not null && !podRunning;
+
+                        <span class="aks-kbd-hint @(shellUnavailable ? "aks-kbd-hint--dimmed" : "")"
+                              title="@(shellUnavailable ? "Shell not available — pod is not running" : "")">
+                            <kbd>s</kbd> shell
+                        </span>
                         <span class="aks-kbd-hint"><kbd>p</kbd> port-fwd</span>
-                        <span class="aks-kbd-hint"><kbd>d</kbd> kill</span>
+                        @if (!podTerminating)
+                        {
+                            <span class="aks-kbd-hint"><kbd>d</kbd> kill</span>
+                        }
+                    }
+                    @if (ActiveResourceType == "CronJobs")
+                    {
+                        var cronSuspended = SelectedCronJob?.Suspend == true;
+                        <span class="aks-kbd-hint @(cronSuspended ? "aks-kbd-hint--dimmed" : "")"
+                              title="@(cronSuspended ? "CronJob is suspended" : "")">
+                            <kbd>r</kbd> trigger
+                        </span>
                     }
                     @if (ActiveResourceType == "Helm")
                     {
@@ -245,7 +264,8 @@
             <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
                              Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments" Pods="@Pods"
                              StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
-                             OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged" />
+                             OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged"
+                             OnJumpToResource="HandleJumpToResource" />
 
         </div>
     }
@@ -431,8 +451,11 @@
 
 @* ── Port-forward start dialog ── *@
 <PortForwardStartDialog Visible="@ShowPortForwardDialog" PodName="@(_pfDialogPod?.Name ?? "")"
-                        Namespace="@(_pfDialogPod?.Namespace ?? "")" RemotePort="@_pfDialogRemotePort" OnStart="OnStartPortForward"
-                        OnCancel="@(() => { ShowPortForwardDialog = false; StateHasChanged(); })" />
+                        Namespace="@(_pfDialogPod?.Namespace ?? "")" RemotePort="@_pfDialogRemotePort" KubeconfigContext="@ActiveContext"
+                        PinnedEntries="@PinnedPortForwards.GetPins(ActiveContext)" OnStart="OnStartPortForward"
+                        OnCancel="@(() => { ShowPortForwardDialog = false; StateHasChanged(); })"
+                        OnPinAdd="@(async entry => await PinnedPortForwards.AddPinAsync(ActiveContext, entry))"
+                        OnPinRemove="@(async entry => await PinnedPortForwards.RemovePinAsync(ActiveContext, entry))" />
 
 @code {
 
@@ -1551,6 +1574,22 @@ StringComparison.Ordinal))
         ActiveResourceType = type;
         ClearSelection();
         _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private void HandleJumpToResource(KubernetesEvent evt)
+    {
+        var targetResourceType = evt.InvolvedObjectKind switch
+        {
+            "Deployment" => "Deployments",
+            "StatefulSet" => "StatefulSets",
+            "Pod" => "Pods",
+            "CronJob" => "CronJobs",
+            "Job" => "Jobs",
+            _ => null
+        };
+        if (targetResourceType is null) return;
+        SwitchResourceType(targetResourceType);
+        ActiveFilter = evt.InvolvedObjectName ?? string.Empty;
     }
 
     private void OnFilterChanged(string value)

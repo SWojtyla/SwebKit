@@ -75,6 +75,8 @@
         <Compile Include="..\..\src\SwebKit.App\Services\RedisWarmupCache.cs" Link="Services\RedisWarmupCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ServiceBusWarmupCache.cs" Link="Services\ServiceBusWarmupCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ConnectionWarmupService.cs" Link="Services\ConnectionWarmupService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\PinnedPortForwardService.cs" Link="Services\PinnedPortForwardService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Aks\CronNextRun.cs" Link="Components\Aks\CronNextRun.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageListView.razor" Link="Components\ServiceBus\MessageListView.razor" />
