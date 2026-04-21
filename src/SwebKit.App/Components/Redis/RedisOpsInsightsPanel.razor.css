@@ -1,3 +1,33 @@
+.panel-collapse-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.panel-collapse-btn:hover {
+    color: var(--color-accent, #3b82f6);
+}
+
+.collapse-chevron {
+    display: inline-block;
+    font-size: 1.1rem;
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform 0.15s ease;
+    color: var(--color-text-muted);
+}
+
+.collapse-chevron.chevron-collapsed {
+    transform: rotate(0deg);
+}
+
 .ops-insights-panel {
     display: flex;
     flex-direction: column;
