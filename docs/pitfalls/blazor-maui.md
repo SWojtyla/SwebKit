@@ -288,16 +288,25 @@ Services.AddSingleton(new OperatorWorkspaceService(appState, uiState, navigation
 
 **Symptom:** Space, Enter, and other character keys appear to do nothing (or undo themselves) while typing in a textarea that is bound via `@oninput` + async JSInterop. The cursor jumps to the end after each keypress.
 
-**Cause:** `@oninput` fires a Blazor event, which triggers async work (e.g., `JS.InvokeAsync` for live highlighting) then calls `StateHasChanged`. Blazor reconciles the textarea's `value` DOM property from its C# field — resetting whatever the user just typed before the async round-trip completes. In desktop browsers this is masked by timing; in MAUI's embedded WebView the round-trip is long enough to be visible on every keystroke.
+**Cause (primary):** A parent div has `@onkeydown:preventDefault="@_preventGridKey"` where `_preventGridKey` is set to `true` whenever the user presses an action key (e.g. `Enter`, `y`, `n`). Blazor bakes the value of `_preventGridKey` from the last render into the JS event listener registration. When a textarea inside that div has focus, its `keydown` events bubble up to the parent, and `preventDefault()` is called on them — cancelling the textarea's default action (insert character) before any text reaches the textarea's value.
 
-**Fix:** Let JS own the textarea value for the lifetime of the editing session:
+**Cause (secondary):** `@oninput` on the textarea triggers async JSInterop + `StateHasChanged`. Blazor reconciles the textarea's `value` DOM property from its C# field on every render, resetting whatever the user typed during the async round-trip.
 
-1. Remove `@oninput` and any Blazor-bound content from the textarea and highlight `<pre>`.
-2. Call `initEditor(textarea, pre, initialValue)` from `OnAfterRenderAsync` once — JS seeds the value, wires live highlighting, scroll sync, and Tab-indent internally.
-3. Read the live value back with `getEditorValue(textarea)` only when needed (on save, on replace-all, on search-count in edit mode).
-4. For programmatic content changes (replace-all), push via `setEditorValue(textarea, pre, value)` — never re-key the component to force a Blazor re-render.
+**Fix:**
 
-**Rule:** for any rich textarea overlay pattern (highlight-behind-textarea), move all keystroke-level state out of Blazor and into JS. Blazor should only read/write the value at coarse-grained boundaries (open, save, close).
+1. In the textarea's JS initialisation, call `e.stopPropagation()` on every `keydown` event. This prevents bubbling to parent Blazor handlers entirely.
+2. Also remove `@oninput` from the textarea and let JS own the value to eliminate the secondary Blazor re-render reset.
+
+```javascript
+textareaEl.addEventListener('keydown', function (e) {
+  e.stopPropagation(); // block parent @onkeydown:preventDefault from firing
+  if (e.key === 'Tab') {
+    e.preventDefault(); /* insert spaces */
+  }
+});
+```
+
+**Rule:** any textarea overlay inside a Blazor component that lives under a parent element with `@onkeydown:preventDefault` must call `e.stopPropagation()` in JS before the event reaches the parent. Never rely on Blazor's dynamic `preventDefault` state being correct for input elements — the baked-in value from the last render can be stale.
 
 ---
 

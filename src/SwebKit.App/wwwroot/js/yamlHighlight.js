@@ -43,8 +43,11 @@ window.yamlHighlight = {
     // Live highlighting — JS handles this; Blazor does not interfere on every keystroke.
     textareaEl.addEventListener('input', updateHighlight);
 
-    // Tab inserts two spaces instead of moving focus.
+    // Stop ALL keydown events from bubbling to parent Blazor handlers (e.g. AksPage grid navigation).
+    // Without this, the parent div's @onkeydown:preventDefault fires on Enter/letter keys and cancels
+    // the textarea's default action before any character is inserted.
     textareaEl.addEventListener('keydown', function (e) {
+      e.stopPropagation();
       if (e.key === 'Tab') {
         e.preventDefault();
         var start = textareaEl.selectionStart;
