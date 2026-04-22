@@ -590,19 +590,25 @@
 
         try
         {
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var filePath = Path.Combine(downloads, fileName);
+
             var lineCount = 0;
-            var content = new System.Text.StringBuilder(capacity: 64 * 1024);
             var opts = BuildExportOptions();
             var container = ResolveSelectedContainer();
 
-            await foreach (var line in Client.StreamPodLogsAsync(ns, podName, container, opts))
+            await using (var writer = new StreamWriter(filePath, append: false, System.Text.Encoding.UTF8))
             {
-                content.AppendLine(line);
-                lineCount++;
+                await foreach (var line in Client.StreamPodLogsAsync(ns, podName, container, opts))
+                {
+                    await writer.WriteLineAsync(line);
+                    lineCount++;
+                }
             }
 
-            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content.ToString());
-            Notify.ShowSuccess($"Exported {lineCount:N0} lines to {fileName}");
+            Notify.ShowSuccess($"Exported {lineCount:N0} lines to {filePath}");
         }
         catch (OperationCanceledException)
         {

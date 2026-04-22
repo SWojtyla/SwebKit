@@ -10,15 +10,16 @@
             <span class="log-live-dot @(IsLive && IsLoading ? "active" : "")"></span>
             Live
         </label>
-        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange"
+                @bind:after="OnRangeChanged" aria-label="Log range">
             <option value="@LogRange.Last5m">Last 5m</option>
             <option value="@LogRange.Last10m">Last 10m</option>
             <option value="@LogRange.Last1h">Last 1h</option>
             <option value="@LogRange.All">All</option>
             <option value="@LogRange.PreviousContainer">Previous container</option>
         </select>
-         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
-             class="log-filter-input app-native-control" />
+        <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
+               class="log-filter-input app-native-control" />
         <span class="log-line-count">@WindowSummaryText</span>
         <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
                       Title="Show older buffered lines">Older</FluentButton>
@@ -34,86 +35,86 @@
             </FluentButton>
         }
         <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync" Disabled="@(VisibleLines.Count == 0)"
-                      Title="Copy the currently visible merged log window to the clipboard">Copy visible</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
-                      Disabled="@(Client is null || Namespace is null || DeploymentName is null || _exportingAllLogs)"
-                      Title="Export the full merged deployment log stream as text">
-            @(_exportingAllLogs ? "Exporting…" : "Export all")
-        </FluentButton>
-        @if (IsLive && IsLoading)
-        {
-            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
-                          Title="@(_paused ? "Resume tailing" : "Pause tailing")">
-                @(_paused ? "▶ Resume" : "⏸ Pause")
+        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync"
+                      Disabled="@(VisibleLines.Count == 0)" Title="Copy the currently visible merged log window to the clipboard">
+            Copy visible</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
+                          Disabled="@(Client is null || Namespace is null || DeploymentName is null || _exportingAllLogs)"
+                          Title="Export the full merged deployment log stream as text">
+                @(_exportingAllLogs ? "Exporting…" : "Export all")
             </FluentButton>
-        }
-    </div>
-
-    <div class="log-status-bar">
-        <span>@BufferSummaryText</span>
-        @if (IsAllRangeSelected)
-        {
-            <span>Requested tail: @_requestedTailLines:N0 lines</span>
-        }
-        @if (_paused)
-        {
-            <span>Paused: new lines are buffered until you resume or jump latest</span>
-        }
-        else if (_pageIndexFromNewest > 0)
-        {
-            <span>Browsing history: latest lines are buffered in the background</span>
-        }
-        <span>Merged by timestamp</span>
-        @if (HasFocusedPod)
-        {
-            <button type="button" class="log-jump-btn" @onclick="ClearFocusedPod">All pods: @TruncatePodSuffix(_focusedPodName!)</button>
-        }
-        @if (_pendingNewLineCount > 0 && CanJumpToLatest)
-        {
-            <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
-        }
-    </div>
-
-    @* Pod legend *@
-    @if (PodLegend.Count > 0)
-    {
-        <div class="mplog-legend">
-            @foreach (var kv in PodLegend)
+            @if (IsLive && IsLoading)
             {
-                <button type="button"
-                        class="mplog-legend-item @(IsPodFocused(kv.Key) ? "focused" : string.Empty)"
-                        @onclick="() => ToggleFocusedPod(kv.Key)"
-                        title="Focus or clear focus for pod @kv.Key in the merged view">
-                    <span class="mplog-dot mplog-pod-@kv.Value"></span>
-                    <span class="mplog-legend-name">@TruncatePodSuffix(kv.Key)</span>
-                </button>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
+                              Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                    @(_paused ? "▶ Resume" : "⏸ Pause")
+                </FluentButton>
             }
         </div>
-    }
 
-    <div class="log-output" @ref="_logContainer">
-        @if (VisibleLines.Count == 0 && !IsLoading)
-        {
-            <div class="log-empty">@EmptyStateText</div>
-        }
-        else
-        {
-            <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
-                <div class="log-line mplog-pod-@entry.ColorIndex">
-                    <span class="mplog-pod-tag">@entry.PodTag</span>
-                    @entry.Line
-                </div>
-            </Virtualize>
-            @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
+        <div class="log-status-bar">
+            <span>@BufferSummaryText</span>
+            @if (IsAllRangeSelected)
             {
-                <div class="log-tailing">
-                    <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
+                <span>Requested tail: @_requestedTailLines:N0 lines</span>
+            }
+            @if (_paused)
+            {
+                <span>Paused: new lines are buffered until you resume or jump latest</span>
+            }
+            else if (_pageIndexFromNewest > 0)
+            {
+                <span>Browsing history: latest lines are buffered in the background</span>
+            }
+            <span>Merged by timestamp</span>
+            @if (HasFocusedPod)
+            {
+                <button type="button" class="log-jump-btn" @onclick="ClearFocusedPod">All pods:
+                    @TruncatePodSuffix(_focusedPodName!)</button>
+                }
+                @if (_pendingNewLineCount > 0 && CanJumpToLatest)
+                {
+                    <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
+                }
+            </div>
+
+            @* Pod legend *@
+            @if (PodLegend.Count > 0)
+            {
+                <div class="mplog-legend">
+                    @foreach (var kv in PodLegend)
+                    {
+                        <button type="button" class="mplog-legend-item @(IsPodFocused(kv.Key) ? "focused" : string.Empty)"
+                                @onclick="() => ToggleFocusedPod(kv.Key)" title="Focus or clear focus for pod @kv.Key in the merged view">
+                            <span class="mplog-dot mplog-pod-@kv.Value"></span>
+                            <span class="mplog-legend-name">@TruncatePodSuffix(kv.Key)</span>
+                        </button>
+                    }
                 </div>
             }
-        }
-    </div>
-</div>
+
+            <div class="log-output" @ref="_logContainer">
+                @if (VisibleLines.Count == 0 && !IsLoading)
+                {
+                    <div class="log-empty">@EmptyStateText</div>
+                }
+                else
+                {
+                    <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
+                        <div class="log-line mplog-pod-@entry.ColorIndex">
+                            <span class="mplog-pod-tag">@entry.PodTag</span>
+                            @entry.Line
+                        </div>
+                    </Virtualize>
+                    @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
+                    {
+                        <div class="log-tailing">
+                            <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
+                        </div>
+                    }
+                }
+            </div>
+        </div>
 
 @code {
     [Parameter] public IAksClient? Client { get; set; }
@@ -595,22 +596,28 @@
 
         try
         {
-            var lineCount = 0;
-            var content = new System.Text.StringBuilder(capacity: 64 * 1024);
-            await foreach (var line in Client.StreamDeploymentLogsAsync(ns, deploymentName, BuildExportOptions()))
-            {
-                if (HasFocusedPod && !string.Equals(line.PodName, _focusedPodName, StringComparison.Ordinal))
-                    continue;
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var filePath = Path.Combine(downloads, fileName);
 
-                content.Append('[')
-                    .Append(TruncatePodSuffix(line.PodName))
-                    .Append("] ")
-                    .AppendLine(line.Line);
-                lineCount++;
+            var lineCount = 0;
+            await using (var writer = new StreamWriter(filePath, append: false, System.Text.Encoding.UTF8))
+            {
+                await foreach (var line in Client.StreamDeploymentLogsAsync(ns, deploymentName, BuildExportOptions()))
+                {
+                    if (HasFocusedPod && !string.Equals(line.PodName, _focusedPodName, StringComparison.Ordinal))
+                        continue;
+
+                    await writer.WriteAsync('[');
+                    await writer.WriteAsync(TruncatePodSuffix(line.PodName));
+                    await writer.WriteAsync("] ");
+                    await writer.WriteLineAsync(line.Line);
+                    lineCount++;
+                }
             }
 
-            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content.ToString());
-            Notify.ShowSuccess("Exported merged logs", $"{lineCount:N0} lines → {fileName}");
+            Notify.ShowSuccess("Exported merged logs", $"{lineCount:N0} lines → {filePath}");
         }
         catch (OperationCanceledException)
         {
