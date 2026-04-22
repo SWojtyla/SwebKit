@@ -8,7 +8,7 @@ state: "Complete"
 jira: "not linked"
 branch: ""
 started: "2026-04-20"
-last_updated: "2026-04-25"
+last_updated: "2026-04-22"
 
 ---
 
@@ -78,3 +78,4 @@ All 11 items across 4 waves implemented. Build passes. 36 unit tests pass.
 - `FormatCountdown` has no sub-minute resolution; 30s formats as "in 0m". Tests reflect actual implementation.
 - `GetLineClass` and `IsHttpPort` promoted from private to internal to allow direct test invocation.
 - `Icons.Regular.Size16.Split` does not exist in FluentUI v4.14.0; `SplitHorizontal` was used instead for the Helm diff button.
+- YAML editor key-input fix: JS now fully owns the textarea value (`initEditor` / `getEditorValue` / `setEditorValue`). Blazor only reads the value at save/replace-all boundaries. Fixes Space and Enter doing nothing in MAUI's WebView (BL-14).

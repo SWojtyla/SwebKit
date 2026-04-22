@@ -84,9 +84,8 @@
                         else if (_editMode)
                         {
                             <div class="aks-yaml-edit-wrap" @key="_editKey">
-                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre">@_editHighlighted</pre>
-                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"
-                                          @oninput="OnEditInput">@_editText</textarea>
+                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre"></pre>
+                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"></textarea>
                             </div>
                         }
                         else
@@ -119,7 +118,6 @@
 
     // Highlighted markup for YAML panels
     private MarkupString _highlighted;
-    private MarkupString _editHighlighted;
 
     // Edit overlay refs & lifecycle flags
     private ElementReference _editTextarea;
@@ -169,7 +167,6 @@
             {
                 _editMode = true;
                 _editText = _text ?? string.Empty;
-                _editHighlighted = _highlighted;
                 _editKey++;
                 _initEditOverlay = true;
             }
@@ -211,7 +208,7 @@
         if (_initEditOverlay)
         {
             _initEditOverlay = false;
-            await JS.InvokeVoidAsync("yamlHighlight.initEditOverlay", _editTextarea, _editPre);
+            await JS.InvokeVoidAsync("yamlHighlight.initEditor", _editTextarea, _editPre, _editText);
         }
     }
 
@@ -220,8 +217,9 @@
         _search = e.Value?.ToString() ?? string.Empty;
         if (_editMode)
         {
+            var currentText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
             _searchCount = string.IsNullOrEmpty(_search) ? 0
-                : CountOccurrences(_editText, _search);
+                : CountOccurrences(currentText, _search);
             StateHasChanged();
             return;
         }
@@ -243,7 +241,6 @@
     {
         _editMode = true;
         _editText = _text ?? string.Empty;
-        _editHighlighted = _highlighted;
         _editKey++;
         _initEditOverlay = true;
         StateHasChanged();
@@ -261,19 +258,12 @@
         StateHasChanged();
     }
 
-    private async Task OnEditInput(ChangeEventArgs e)
-    {
-        _editText = e.Value?.ToString() ?? string.Empty;
-        _validationError = null;
-        _validationWarning = null;
-        _bypassValidation = false;
-        _editHighlighted = await HighlightAsync(_editText);
-        await InvokeAsync(StateHasChanged); // BL-2
-    }
-
     private async Task OnSave()
     {
         if (_target is null || Client is null) return;
+
+        // JS owns the textarea value — read it back before validating or applying.
+        _editText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
 
         _validationError = ValidateYaml(_editText);
         if (_validationError is not null) { _validationWarning = null; _bypassValidation = false; StateHasChanged(); return; }
@@ -318,13 +308,15 @@
     private async Task OnReplaceAll()
     {
         if (string.IsNullOrEmpty(_search) || !_editMode) return;
+        // Read the live value from JS before replacing.
+        _editText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
         _editText = _editText.Replace(_search, _replace, StringComparison.Ordinal);
         _validationError = null;
         _validationWarning = null;
         _bypassValidation = false;
-        _editHighlighted = await HighlightAsync(_editText);
+        // Push the new value back to the textarea and highlight pre via JS — no Blazor re-key needed.
+        await JS.InvokeVoidAsync("yamlHighlight.setEditorValue", _editTextarea, _editPre, _editText);
         _searchCount = CountOccurrences(_editText, _search);
-        _editKey++;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
