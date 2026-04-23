@@ -1,3 +1,4 @@
+@inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject AppStateService AppState
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
@@ -54,7 +55,7 @@
                         {
                             <div class="workspace-hub__resource-card">
                                 <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
-                                                                CurrentSnapshot.Resource.DisplayName)</div>
+                                                                                                    CurrentSnapshot.Resource.DisplayName)</div>
                                     <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
                                     <div class="workspace-hub__save-row">
                                         <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
@@ -68,7 +69,8 @@
                                         <button class="workspace-hub__action-btn" @onclick="OpenCurrentResourceAsync">Open</button>
                                         @if (IsCurrentFavorite)
                                         {
-                                            <button class="workspace-hub__delete-btn" @onclick="RemoveCurrentFavoriteAsync">Remove</button>
+                                            <button class="workspace-hub__delete-btn"
+                                                    @onclick="RemoveCurrentFavoriteAsync">Remove</button>
                                         }
                                     </div>
                                 </div>
@@ -96,75 +98,75 @@
                                             ✕
                                         </button>
                                     </div>
-                                    }
                                 }
-                            </div>
+                            }
+                        </div>
 
-                            <div class="workspace-hub__section">
-                                <div class="workspace-hub__section-title">Recent</div>
-                                @if (RecentResources.Count == 0)
+                        <div class="workspace-hub__section">
+                            <div class="workspace-hub__section-title">Recent</div>
+                            @if (RecentResources.Count == 0)
+                            {
+                                <div class="workspace-hub__empty">No recent resources yet.</div>
+                            }
+                            else
+                            {
+                                @foreach (var recent in RecentResources)
                                 {
-                                    <div class="workspace-hub__empty">No recent resources yet.</div>
-                                }
-                                else
-                                {
-                                    @foreach (var recent in RecentResources)
-                                    {
-                                        <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
-                                            <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
-                                                                            recent.Snapshot.Resource.DisplayName)</span>
-                                                <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
-                                            </button>
-                                        }
+                                    <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
+                                        <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
+                                                                                                                        recent.Snapshot.Resource.DisplayName)</span>
+                                            <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
+                                        </button>
                                     }
-                                </div>
+                                }
                             </div>
                         </div>
+                    </div>
                 }
-    </div>
+            </div>
 
-    @if (!AppState.UseDemoData)
+            @if (!AppState.UseDemoData)
+            {
+                <div class="top-bar__popover-anchor">
+                    <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
+                            aria-label="Enable demo mode">Demo</button>
+                    @if (_showDemoConfirm)
                     {
-                        <div class="top-bar__popover-anchor">
-                            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
-                                    aria-label="Enable demo mode">Demo</button>
-                            @if (_showDemoConfirm)
-                            {
-                                <div class="demo-confirm-popover">
-                                    <div class="demo-confirm-title">Enable demo mode?</div>
-                                    <div class="demo-confirm-copy">
-                                        Live connections will be replaced with synthetic data.
-                                    </div>
-                                    <div class="demo-confirm-actions">
-                                        <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
-                                        <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
-                                    </div>
-                                </div>
-                            }
+                        <div class="demo-confirm-popover">
+                            <div class="demo-confirm-title">Enable demo mode?</div>
+                            <div class="demo-confirm-copy">
+                                Live connections will be replaced with synthetic data.
+                            </div>
+                            <div class="demo-confirm-actions">
+                                <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
+                                <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
+                            </div>
                         </div>
                     }
-
-                    <div class="top-bar__popover-anchor">
-                        <button class="top-bar-icon-btn" @onclick="ToggleHistory" title="Notifications"
-                                aria-label="@NotificationButtonLabel" aria-expanded="@_isHistoryOpen" aria-haspopup="dialog">
-                            <span aria-hidden="true">🔔</span>
-                            @if (UnreadCount > 0)
-                            {
-                                <span class="top-bar-icon-badge">@UnreadCount</span>
-                            }
-                        </button>
-                        @if (_isHistoryOpen)
-                        {
-                            <div class="top-bar-popover top-bar-popover--history">
-                                <NotificationHistory OnClose="CloseHistory" />
-                            </div>
-                        }
-                    </div>
-
-                    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette">
-                        &gt;_ Command Palette <kbd>Ctrl+P</kbd>
-                    </button>
                 </div>
+            }
+
+            <div class="top-bar__popover-anchor">
+                <button class="top-bar-icon-btn" @onclick="ToggleHistory" title="Notifications"
+                        aria-label="@NotificationButtonLabel" aria-expanded="@_isHistoryOpen" aria-haspopup="dialog">
+                    <span aria-hidden="true">🔔</span>
+                    @if (UnreadCount > 0)
+                    {
+                        <span class="top-bar-icon-badge">@UnreadCount</span>
+                    }
+                </button>
+                @if (_isHistoryOpen)
+                {
+                    <div class="top-bar-popover top-bar-popover--history">
+                        <NotificationHistory OnClose="CloseHistory" />
+                    </div>
+                }
+            </div>
+
+            <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette">
+                &gt;_ Command Palette <kbd>Ctrl+P</kbd>
+            </button>
+        </div>
 
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
@@ -177,27 +179,34 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
     private bool _showDemoConfirm;
     private string _favoriteName = string.Empty;
     private int _lastSeenCount;
-    private AreaConnectionState? CurrentAreaState => ConnectionStateService.States.TryGetValue(CurrentContext.Area, out var
-state) ? state : null;
+
+    // Cached to avoid ConnState dictionary snapshot on every render (each call does new Dictionary<>)
+    private AreaConnectionState? _currentAreaState;
+
+    // Cached workspace lists — rebuilt only in OnWorkspaceChanged, not on every render
+    private IReadOnlyList<FavoriteResource> _favoriteResources = [];
+    private IReadOnlyList<RecentResourceEntry> _recentResources = [];
+
+    private AreaConnectionState? CurrentAreaState => _currentAreaState;
     private WorkspaceSnapshot? CurrentSnapshot => Workspaces.GetCurrentSnapshot(CurrentContext.Area);
     private FavoriteResource? CurrentFavorite => CurrentSnapshot is null
         ? null
         : Workspaces.GetFavoriteResource(CurrentSnapshot.Resource.Key);
     private bool IsCurrentFavorite => CurrentFavorite is not null;
-    private IReadOnlyList<FavoriteResource> FavoriteResources => Workspaces.GetFavoriteResources().Take(5).ToList();
-    private IReadOnlyList<RecentResourceEntry> RecentResources => Workspaces.GetRecentResources().Take(5).ToList();
+    private IReadOnlyList<FavoriteResource> FavoriteResources => _favoriteResources;
+    private IReadOnlyList<RecentResourceEntry> RecentResources => _recentResources;
     private int UnreadCount => Math.Max(0, Notifications.All.Count - _lastSeenCount);
     private string NotificationButtonLabel => UnreadCount > 0
         ? $"Notifications, {UnreadCount} unread"
         : "Notifications";
-    private string? ConnectionBadgeText => CurrentAreaState?.State switch
+    private string? ConnectionBadgeText => _currentAreaState?.State switch
     {
         ConnectionState.Connected => "Connected",
         ConnectionState.Error => "Needs attention",
         ConnectionState.NotConfigured => "Needs setup",
         _ => null,
     };
-    private string ConnectionBadgeClass => CurrentAreaState?.State switch
+    private string ConnectionBadgeClass => _currentAreaState?.State switch
     {
         ConnectionState.Connected => "shell-pill--success",
         ConnectionState.Error => "shell-pill--warning",
@@ -205,8 +214,19 @@ state) ? state : null;
         _ => "shell-pill--muted",
     };
 
+    private void RefreshAreaState()
+    {
+        ConnectionStateService.States.TryGetValue(CurrentContext.Area, out var state);
+        _currentAreaState = state;
+    }
+
+    protected override void OnParametersSet() => RefreshAreaState();
+
     protected override void OnInitialized()
     {
+        RefreshAreaState();
+        _favoriteResources = Workspaces.GetFavoriteResources().Take(5).ToList();
+        _recentResources = Workspaces.GetRecentResources().Take(5).ToList();
         Notifications.NotificationsChanged += OnNotificationsChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
         ConnectionStateService.StatesChanged += OnConnectionStateChanged;
@@ -220,21 +240,27 @@ state) ? state : null;
             _lastSeenCount = Notifications.All.Count;
         }
 
-        InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
-    private void OnConnectionStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnConnectionStateChanged()
+    {
+        RefreshAreaState();
+        RequestCoalescedRender();
+    }
 
-    private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
+    private void OnDemoModeChanged() => RequestCoalescedRender();
 
     private void OnWorkspaceChanged()
     {
+        _favoriteResources = Workspaces.GetFavoriteResources().Take(5).ToList();
+        _recentResources = Workspaces.GetRecentResources().Take(5).ToList();
         if (_isWorkspaceHubOpen)
         {
             SyncFavoriteName();
         }
 
-        InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
     private void ToggleHistory()

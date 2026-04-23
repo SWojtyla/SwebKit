@@ -1,3 +1,4 @@
+@inherits SwebKit.App.Components.Shared.SwebKitComponentBase
 @inject ITaskQueue TaskQueue
 @inject IPortForwardSessionService SessionService
 @inject IConnectionStateService ConnState
@@ -123,15 +124,25 @@
     private PeriodicTimer? _clockTimer;
     private CancellationTokenSource _cts = new();
     private string CurrentArea => CurrentRoute.Area;
-    private string? CurrentAreaStatusText => ConnState.States.TryGetValue(CurrentArea, out var state)
-        ? state.State switch
+
+    // Cached — updated in OnChanged and OnParametersSet to avoid ConnState dictionary snapshot per render
+    private string? _currentAreaStatusText;
+
+    private void UpdateAreaStatusText()
+    {
+        ConnState.States.TryGetValue(CurrentArea, out var state);
+        _currentAreaStatusText = state?.State switch
         {
             ConnectionState.Connected => $"{CurrentRoute.Label} ready",
             ConnectionState.Error => $"{CurrentRoute.Label} needs attention",
             ConnectionState.NotConfigured => $"{CurrentRoute.Label} not configured",
             _ => $"{CurrentRoute.Label} starting"
-        }
-        : null;
+        };
+    }
+
+    private string? CurrentAreaStatusText => _currentAreaStatusText;
+
+    protected override void OnParametersSet() => UpdateAreaStatusText();
 
     protected override void OnInitialized()
     {
@@ -153,18 +164,22 @@
         try
         {
             while (await _clockTimer!.WaitForNextTickAsync(ct))
-                await InvokeAsync(StateHasChanged);
+                RequestCoalescedRender();
         }
         catch (OperationCanceledException) { }
     }
 
-    private void OnChanged() => InvokeAsync(StateHasChanged);
+    private void OnChanged()
+    {
+        UpdateAreaStatusText();
+        RequestCoalescedRender();
+    }
 
     private void OnRefreshRequested(RefreshRequestedEvent refresh)
     {
         _lastRefresh = DateTime.UtcNow;
         _lastRefreshArea = refresh.Area;
-        InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
     private static string FormatRefresh(DateTime utc, string? area)

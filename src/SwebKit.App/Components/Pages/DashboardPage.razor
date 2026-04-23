@@ -31,7 +31,7 @@
                 <span class="shell-pill shell-pill--warning">Demo mode</span>
             }
             <span class="shell-pill shell-pill--muted">@pinnedItems.Count favorite@(pinnedItems.Count == 1 ? "" :
-                          "s")</span>
+                                          "s")</span>
                 @if (Monitor.IsMonitoring)
                 {
                     <span class="shell-pill shell-pill--accent">@Monitor.MonitoredNamespaces.Count
@@ -66,7 +66,7 @@
                         <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
                     </span>
                     <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                                                                                                                                                                                                            "—")</span>
+                                                                                                                                                                                                                                                                    "—")</span>
                         <span class="hero-stat-label">Redis</span>
                     </div>
                     <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
@@ -74,7 +74,7 @@
                             <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
                         </span>
                         <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                                                                                                                                                                                                                                         "—")</span>
+                                                                                                                                                                                                                                                                                                                     "—")</span>
                             <span class="hero-stat-label">Pipelines</span>
                         </div>
                     </div>
@@ -246,6 +246,10 @@
 
     protected override void OnInitialized()
     {
+        // Determine configured state before the first render so tiles show the correct
+        // state immediately rather than flashing "not configured" until the background
+        // task runs DetermineConfiguredState.
+        DetermineConfiguredState();
         Events.Subscribe<ActivityEvent>(OnActivityReceived);
         Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnPodHealthDetected;
@@ -352,11 +356,7 @@
                 _healthRefreshGate.Release();
             }
         }
-
-        if (!ct.IsCancellationRequested)
-        {
-            await InvokeAsync(StateHasChanged);
-        }
+        // Each tile calls StateHasChanged when it finishes — no single batch update needed here.
     }
 
     private async Task RefreshHealthTileAsync(
@@ -383,6 +383,13 @@
         catch (Exception ex)
         {
             setError(ex.Message);
+        }
+        finally
+        {
+            // Update this tile's UI as soon as it finishes, independent of the other tiles.
+            // OperationCanceledException (navigation away) skips this via the throw above.
+            if (!ct.IsCancellationRequested)
+                await InvokeAsync(StateHasChanged);
         }
     }
 

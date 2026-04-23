@@ -1,4 +1,4 @@
-@inherits LayoutComponentBase
+@inherits SwebKit.App.Components.Shared.SwebKitLayoutBase
 @inject AppStateService AppState
 @inject IAppEventBus Events
 @inject TabService Tabs
@@ -126,6 +126,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
         {
             await AppState.InitializeAsync();
             Tabs.RestoreTabs(UiState.State.OpenTabs);
+            RequestRender();
             await InvokeAsync(StateHasChanged); // BL-2: dispatch on Blazor thread
 
             // Fire warmup in background — non-blocking, all failures are silent
@@ -173,6 +174,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
 
         await LoadThemeAsync();
 
+        RequestRender();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -182,6 +184,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
         await PersistThemeAsync();
         await ClearLegacyThemeStorageAsync();
 
+        RequestRender();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -192,7 +195,6 @@ AppState.Config.IsProduction, AppState.UseDemoData);
         UpdateCurrentRoute(Nav.Uri);
         Events.Subscribe<NavigateToAreaEvent>(OnNavigateToArea);
         Events.Subscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
-        Tabs.TabsChanged += StateHasChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
         AppState.Initialized += OnAppStateInitialized;
         Nav.LocationChanged += OnLocationChanged;
@@ -202,10 +204,10 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     {
         // Invalidate warm clients on re-init — credentials may have changed
         ConnectionWarmup.InvalidateCaches();
-        InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
-    private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
+    private void OnDemoModeChanged() => RequestCoalescedRender();
 
     private string GetProfileLoadWarningText()
     {
@@ -233,6 +235,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     private Task ToggleNavAsync()
     {
         IsNavExpanded = !IsNavExpanded;
+        RequestRender();
         return InvokeAsync(StateHasChanged);
     }
 
@@ -246,13 +249,14 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         UpdateCurrentRoute(e.Location);
-        InvokeAsync(StateHasChanged);
+        RequestCoalescedRender();
     }
 
     private void OnCommandPaletteRequested(CommandPaletteRequestedEvent _) =>
         InvokeAsync(() =>
         {
             IsCommandPaletteOpen = true;
+            RequestRender();
             StateHasChanged();
         });
 
@@ -374,7 +378,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
             Execute = () =>
             {
                 IsCommandPaletteOpen = true;
-                InvokeAsync(StateHasChanged);
+                RequestCoalescedRender();
                 return Task.CompletedTask;
             }
         });
@@ -389,7 +393,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
             Execute = () =>
             {
                 _isShortcutsPanelOpen = true;
-                InvokeAsync(StateHasChanged);
+                RequestCoalescedRender();
                 return Task.CompletedTask;
             }
         });
@@ -538,6 +542,7 @@ AppState.Config.IsProduction, AppState.UseDemoData);
             case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
             case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
         }
+        RequestRender();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -556,7 +561,6 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     {
         Events.Unsubscribe<NavigateToAreaEvent>(OnNavigateToArea);
         Events.Unsubscribe<CommandPaletteRequestedEvent>(OnCommandPaletteRequested);
-        Tabs.TabsChanged -= StateHasChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
         AppState.Initialized -= OnAppStateInitialized;
         Nav.LocationChanged -= OnLocationChanged;

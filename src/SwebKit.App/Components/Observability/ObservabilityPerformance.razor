@@ -250,21 +250,25 @@
         Legend = new Legend { Position = LegendPosition.Bottom },
     };
 
-    private List<OperationPerformance> FilteredOperationList { get; private set; } = [];
-    private int DegradedOperationCount { get; private set; }
-    private string BusiestOperation { get; private set; } = "n/a";
+    private List<OperationPerformance> _filteredOps = [];
+    private int _degradedOpCount;
+    private string _busiestOperation = "n/a";
+
+    private List<OperationPerformance> FilteredOperationList => _filteredOps;
+    private int DegradedOperationCount => _degradedOpCount;
+    private string BusiestOperation => _busiestOperation;
 
     private void RebuildFilteredOps()
     {
-        FilteredOperationList =
+        _filteredOps =
             (string.IsNullOrWhiteSpace(_filter)
                 ? _ops
                 : _ops.Where(op => op.OperationName.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(op => op.RequestCount)
             .ThenByDescending(op => op.P95Ms)
             .ToList();
-        DegradedOperationCount = _ops.Count(IsDegraded);
-        BusiestOperation = _ops.OrderByDescending(op => op.RequestCount).FirstOrDefault()?.OperationName ?? "n/a";
+        _degradedOpCount = _ops.Count(IsDegraded);
+        _busiestOperation = _ops.OrderByDescending(op => op.RequestCount).FirstOrDefault()?.OperationName ?? "n/a";
     }
 
     protected override async Task OnParametersSetAsync()

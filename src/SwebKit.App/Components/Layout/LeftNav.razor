@@ -24,6 +24,24 @@
     [Parameter] public string CurrentArea { get; set; } = "service-bus";
     [Parameter] public EventCallback<string> OnNavigate { get; set; }
 
+    // Suppress re-renders when neither visible parameter has changed (BL-5 / BL-16)
+    private bool _prevIsExpanded = true;
+    private string _prevCurrentArea = "";
+    private bool _isDirty = true; // ensure first render runs
+
+    protected override void OnParametersSet()
+    {
+        _isDirty = IsExpanded != _prevIsExpanded ||
+                   !string.Equals(CurrentArea, _prevCurrentArea, StringComparison.Ordinal);
+        if (_isDirty)
+        {
+            _prevIsExpanded = IsExpanded;
+            _prevCurrentArea = CurrentArea;
+        }
+    }
+
+    protected override bool ShouldRender() => _isDirty;
+
     private static string GetGroupId(string label)
     {
         var normalized = string.Concat(label.Where(char.IsLetterOrDigit));

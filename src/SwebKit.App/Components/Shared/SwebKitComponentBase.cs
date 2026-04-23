@@ -11,6 +11,7 @@ namespace SwebKit.App.Components.Shared;
 public abstract class SwebKitComponentBase : ComponentBase
 {
     private bool _needsRender = true;
+    private bool _renderPending; // coalescing gate
 
     protected bool IsLoading { get; private set; }
     protected string? ErrorMessage { get; private set; }
@@ -27,6 +28,24 @@ public abstract class SwebKitComponentBase : ComponentBase
     /// Must be called before <see cref="ComponentBase.InvokeAsync(Action)"/> or StateHasChanged.
     /// </summary>
     protected void RequestRender() => _needsRender = true;
+
+    /// <summary>
+    /// Coalesces rapid event-driven re-render requests into a single Blazor render cycle.
+    /// Safe to call from any thread (uses InvokeAsync internally).
+    /// Sets the ShouldRender gate so the queued render is not suppressed.
+    /// Use in event callback handlers instead of raw InvokeAsync(StateHasChanged).
+    /// </summary>
+    protected void RequestCoalescedRender()
+    {
+        _needsRender = true;
+        if (_renderPending) return;
+        _renderPending = true;
+        _ = InvokeAsync(() =>
+        {
+            _renderPending = false;
+            StateHasChanged();
+        });
+    }
 
     /// <summary>
     /// Executes an async operation with standard loading/error handling.
