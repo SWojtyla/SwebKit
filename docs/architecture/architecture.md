@@ -15,7 +15,7 @@ SwebKit is a .NET MAUI Blazor Hybrid desktop operations tool for Azure-focused d
 - Desktop entry point and DI composition: `src/SwebKit.App/MauiProgram.cs`
 - Blazor shell host: `src/SwebKit.App/MainPage.xaml` and `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - Shared domain and persistence contracts: `src/SwebKit.Core`
-- Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`, `releases.json`)
+- Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`, `user-settings.json`, `releases.json`, `scheduled-messages.json`, plus sibling `.bak` recovery copies)
 - External runtime integrations:
   - Azure Service Bus and Azure Blob Storage
   - AKS Kubernetes API
@@ -37,7 +37,7 @@ flowchart LR
     App --> Obs[SwebKit.Observability\nApp Insights provider and discovery]
     App --> Cred[Windows Credential Store]
 
-    Core --> LocalState[(Local JSON state\nprofiles.json, ui-state.json, releases.json)]
+    Core --> LocalState[(Local JSON state\nprofiles.json, ui-state.json, user-settings.json, releases.json, scheduled-messages.json)]
 
     Azure --> SB[(Azure Service Bus)]
     Azure --> Blob[(Azure Blob Storage)]
@@ -61,6 +61,7 @@ Key files:
 - `src/SwebKit.App/Components/Routes.razor`
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`
+- `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`
 
 ### SwebKit.Core (`src/SwebKit.Core`)
 
@@ -131,28 +132,32 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 - `docs/architecture/functionalities/storage.md`
 - `docs/architecture/functionalities/releases.md`
 - `docs/architecture/functionalities/observability.md`
+- `docs/architecture/functionalities/incident-timeline.md`
 - `docs/architecture/functionalities/settings-and-configuration.md`
 
 ## Cross-Cutting Concerns
 
-| Concern                          | Where it lives                                                                                               | Notes                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Dependency injection             | `src/SwebKit.App/MauiProgram.cs`                                                                             | Registers core services, platform services, and infrastructure clients.      |
-| Credentials and secrets          | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                | Secrets are resolved at runtime and not persisted in JSON config files.      |
-| Profile and UI-state persistence | `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs` | Backed by `%APPDATA%/SwebKit` files via `AppDataPaths`.                      |
-| Eventing and shared app state    | `src/SwebKit.Core/Services/AppEventBus.cs`, `src/SwebKit.Core/Services/AppStateService.cs`                   | Coordinates area navigation, refresh events, and environment-level state.    |
-| Demo mode routing                | `src/SwebKit.Core/Services/Demo*Client.cs`, `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`         | `UseDemoData` toggles between real and synthetic providers.                  |
-| HTTP resilience                  | `src/SwebKit.App/MauiProgram.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                    | Azure DevOps named HttpClient uses standard resilience handler with retries. |
-| Command and shortcut system      | `src/SwebKit.App/Services/CommandRegistry.cs`, `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`             | Global and area-scoped commands drive keyboard workflows.                    |
+| Concern                           | Where it lives                                                                                                                                                                                                                                                                                  | Notes                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Dependency injection              | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                                                                                                                                                | Registers core services, platform services, and infrastructure clients.                                |
+| Credentials and secrets           | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                                                                                                                                   | Secrets are resolved at runtime and not persisted in JSON config files.                                |
+| App-data persistence              | `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs`, `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`, `src/SwebKit.Core/Configuration/ReleaseRepository.cs`, `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs` | Backed by `%APPDATA%/SwebKit` files via `AppDataPaths`, with atomic writes and `.bak` recovery copies. |
+| Eventing and shared app state     | `src/SwebKit.Core/Services/AppEventBus.cs`, `src/SwebKit.Core/Services/AppStateService.cs`                                                                                                                                                                                                      | Coordinates area navigation, refresh events, and shared app state.                                     |
+| Demo mode routing                 | `src/SwebKit.Core/Services/Demo*Client.cs`, `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                                                                                                                                            | `UseDemoData` toggles between real and synthetic providers.                                            |
+| HTTP resilience                   | `src/SwebKit.App/MauiProgram.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                                                                                                                                                       | Azure DevOps named HttpClient uses standard resilience handler with retries.                           |
+| Command and shortcut system       | `src/SwebKit.App/Services/CommandRegistry.cs`, `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                                                                                                                                                | Global and area-scoped commands drive keyboard workflows.                                              |
+| Workspace and resource navigation | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.Core/Domain/WorkspaceModels.cs`, `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                                              | Provider-backed search, named favorites, recents, and route-first snapshot restore live here.          |
 
 ## Where To Start For Common Tasks
 
-| Task                                                  | Start here                                                                                                            |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Add or change app-level service registration          | `src/SwebKit.App/MauiProgram.cs`                                                                                      |
-| Add a new routed page and navigation entry            | `src/SwebKit.App/Components/Pages/` and `src/SwebKit.App/Components/Layout/LeftNav.razor`                             |
-| Extend persisted environment configuration            | `src/SwebKit.Core/Domain/AppConfig.cs` and `src/SwebKit.Core/Configuration/ProfileRepository.cs`                      |
-| Implement a new Service Bus operation                 | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`      |
-| Add AKS diagnostics behavior                          | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`           |
-| Extend Observability querying or discovery            | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs` |
-| Add Azure DevOps Pipelines/Releases workflow behavior | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                             |
+| Task                                                                        | Start here                                                                                                                                                                     |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add or change app-level service registration                                | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
+| Add a new routed page and navigation entry                                  | `src/SwebKit.App/Components/Pages/` and `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                      |
+| Extend persisted app configuration                                          | `src/SwebKit.Core/Domain/AppConfig.cs` and `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                               |
+| Extend shell resource search, named favorites, recents, or snapshot restore | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Services/OperatorResourceSearchProviders.cs`, and `src/SwebKit.Core/Domain/WorkspaceModels.cs`        |
+| Implement a new Service Bus operation                                       | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
+| Add AKS diagnostics behavior                                                | `src/SwebKit.Core/Abstractions/IAksClient.cs` and `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                                                    |
+| Extend Observability querying or discovery                                  | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                          |
+| Extend the incident timeline workbench UI                                   | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`, `src/SwebKit.App/Components/IncidentTimeline/`, and `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` |
+| Add Azure DevOps Pipelines/Releases workflow behavior                       | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |

@@ -2,158 +2,269 @@
 @inject IAppEventBus Events
 @inject CommandRegistry Commands
 @inject INotificationService Notifications
+@inject IConnectionStateService ConnectionStateService
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 <div class="top-bar">
-    <button class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
-            aria-label="Toggle sidebar">&#9776;</button>
-    <span class="app-logo-text" style="margin-right:8px;">SwebKit</span>
-
-    <div style="display:flex; align-items:center; flex:1;"></div>
-
-    @if (!AppState.UseDemoData)
-    {
-        <div style="position:relative; margin-right:8px;">
-            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
-                    aria-label="Enable demo mode">Demo</button>
-            @if (_showDemoConfirm)
-            {
-                <div class="demo-confirm-popover">
-                    <div style="font-weight:600; margin-bottom:6px;">Enable demo mode?</div>
-                    <div style="font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:10px; line-height:1.4;">
-                        Live connections will be replaced with synthetic data.
-                    </div>
-                    <div style="display:flex; gap:6px; justify-content:flex-end;">
-                        <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
-                        <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
-                    </div>
-                </div>
-            }
+    <div class="top-bar__start">
+        <button type="button" class="nav-toggle" @onclick="OnNavToggle" title="Toggle navigation"
+                aria-label="Toggle sidebar">&#9776;</button>
+        <span class="app-logo-text">SwebKit</span>
+        <div class="top-bar__context" aria-live="polite">
+            <span class="top-bar__context-eyebrow">@CurrentContext.GroupLabel</span>
+            <span class="top-bar__context-title">@CurrentContext.Title</span>
+            <span class="top-bar__context-summary">@CurrentContext.Summary</span>
         </div>
-    }
+    </div>
 
-    <div style="position:relative; margin-right:8px;">
-        <button @onclick="ToggleHistory"
-                style="background:transparent; border:none; color:var(--env-text); font-size:18px; cursor:pointer; padding:4px 8px; position:relative; line-height:1;"
-                title="Notifications" aria-label="Notifications">
-            🔔
-            @if (UnreadCount > 0)
-            {
-                <span
-                style="position:absolute; top:0; right:0; background:#EF4444; color:white; font-size:9px; font-weight:700; border-radius:8px; padding:1px 4px; line-height:1.4; min-width:14px; text-align:center;">@UnreadCount</span>
-            }
-        </button>
-        @if (_isHistoryOpen)
+    <div class="top-bar__spacer"></div>
+
+    <div class="top-bar__badges" aria-label="Page status">
+        @if (!string.IsNullOrWhiteSpace(ConnectionBadgeText))
         {
-            <div style="position:absolute; top:100%; right:0; z-index:8000;">
-                <NotificationHistory />
-            </div>
+            <span class="shell-pill @ConnectionBadgeClass">@ConnectionBadgeText</span>
+        }
+        @if (CurrentContext.IsProduction)
+        {
+            <span class="shell-pill shell-pill--danger">Production</span>
+        }
+        @if (AppState.UseDemoData)
+        {
+            <span class="shell-pill shell-pill--warning">Demo</span>
         }
     </div>
 
-    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette"
-            style="background:rgba(127,127,127,0.15); color:var(--env-text); border:1px solid rgba(127,127,127,0.3); border-radius:var(--radius-sm); padding:4px 10px; font-size:var(--font-size-sm); cursor:pointer;">
-        &gt;_ Command Palette &nbsp;<kbd>Ctrl+P</kbd>
-    </button>
-</div>
+    <div class="top-bar__popover-anchor">
+        <button class="top-bar-icon-btn" @onclick="ToggleWorkspaceHub" title="Resources and favorites"
+                aria-label="Resources and favorites" aria-expanded="@_isWorkspaceHubOpen" aria-haspopup="dialog">
+            <span aria-hidden="true">⌘</span>
+        </button>
+        @if (_isWorkspaceHubOpen)
+        {
+            <div class="top-bar-popover top-bar-popover--workspace">
+                <div class="workspace-hub">
+                    <div class="workspace-hub__section">
+                        <div class="workspace-hub__section-title">Current</div>
+                        @if (CurrentSnapshot is null)
+                        {
+                            <div class="workspace-hub__empty">Open a resource to save it as a favorite.</div>
+                        }
+                        else
+                        {
+                            <div class="workspace-hub__resource-card">
+                                <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
+                                                                CurrentSnapshot.Resource.DisplayName)</div>
+                                    <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
+                                    <div class="workspace-hub__save-row">
+                                        <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
+                                               @oninput="OnFavoriteNameChanged" />
+                                        <button class="workspace-hub__action-btn workspace-hub__action-btn--primary"
+                                                @onclick="SaveFavoriteAsync">
+                                            @(IsCurrentFavorite ? "Update" : "Save")
+                                        </button>
+                                    </div>
+                                    <div class="workspace-hub__resource-actions">
+                                        <button class="workspace-hub__action-btn" @onclick="OpenCurrentResourceAsync">Open</button>
+                                        @if (IsCurrentFavorite)
+                                        {
+                                            <button class="workspace-hub__delete-btn" @onclick="RemoveCurrentFavoriteAsync">Remove</button>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
 
-<style>
-    .nav-toggle {
-        background: transparent;
-        border: none;
-        color: var(--env-text);
-        font-size: 18px;
-        cursor: pointer;
-        padding: 4px 8px;
-    }
+                        <div class="workspace-hub__section">
+                            <div class="workspace-hub__section-title">Favorites</div>
+                            @if (FavoriteResources.Count == 0)
+                            {
+                                <div class="workspace-hub__empty">No favorites saved yet.</div>
+                            }
+                            else
+                            {
+                                @foreach (var favorite in FavoriteResources)
+                                {
+                                    <div class="workspace-hub__list-row">
+                                        <button class="workspace-hub__list-item" @onclick="() => OpenFavoriteAsync(favorite)">
+                                            <span class="workspace-hub__list-title">@GetFavoriteTitle(favorite)</span>
+                                            <span class="workspace-hub__list-summary">@BuildFavoriteSummary(favorite)</span>
+                                        </button>
+                                        <button class="workspace-hub__delete-btn" title="Remove favorite"
+                                                aria-label="Remove favorite @GetFavoriteTitle(favorite)"
+                                                @onclick="() => RemoveFavoriteAsync(favorite)">
+                                            ✕
+                                        </button>
+                                    </div>
+                                    }
+                                }
+                            </div>
 
-    kbd {
-        background: rgba(0, 0, 0, 0.2);
-        padding: 1px 4px;
-        border-radius: 2px;
-        font-size: 10px;
-        color: var(--env-text);
-    }
+                            <div class="workspace-hub__section">
+                                <div class="workspace-hub__section-title">Recent</div>
+                                @if (RecentResources.Count == 0)
+                                {
+                                    <div class="workspace-hub__empty">No recent resources yet.</div>
+                                }
+                                else
+                                {
+                                    @foreach (var recent in RecentResources)
+                                    {
+                                        <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
+                                            <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
+                                                                            recent.Snapshot.Resource.DisplayName)</span>
+                                                <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                }
+    </div>
 
-    .demo-toggle-btn {
-        background: rgba(127, 127, 127, 0.15);
-        border: 1px solid rgba(127, 127, 127, 0.3);
-        border-radius: var(--radius-sm);
-        color: var(--env-text);
-        opacity: 0.75;
-        font-size: var(--font-size-xs);
-        padding: 3px 10px;
-        cursor: pointer;
-    }
+    @if (!AppState.UseDemoData)
+                    {
+                        <div class="top-bar__popover-anchor">
+                            <button class="demo-toggle-btn" @onclick="ShowDemoConfirm" title="Enable demo mode"
+                                    aria-label="Enable demo mode">Demo</button>
+                            @if (_showDemoConfirm)
+                            {
+                                <div class="demo-confirm-popover">
+                                    <div class="demo-confirm-title">Enable demo mode?</div>
+                                    <div class="demo-confirm-copy">
+                                        Live connections will be replaced with synthetic data.
+                                    </div>
+                                    <div class="demo-confirm-actions">
+                                        <button class="demo-confirm-cancel" @onclick="HideDemoConfirm">Cancel</button>
+                                        <button class="demo-confirm-enable" @onclick="EnableDemoAsync">Enable</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
 
-    .demo-toggle-btn:hover {
-        opacity: 1;
-        background: rgba(127, 127, 127, 0.25);
-    }
+                    <div class="top-bar__popover-anchor">
+                        <button class="top-bar-icon-btn" @onclick="ToggleHistory" title="Notifications"
+                                aria-label="@NotificationButtonLabel" aria-expanded="@_isHistoryOpen" aria-haspopup="dialog">
+                            <span aria-hidden="true">🔔</span>
+                            @if (UnreadCount > 0)
+                            {
+                                <span class="top-bar-icon-badge">@UnreadCount</span>
+                            }
+                        </button>
+                        @if (_isHistoryOpen)
+                        {
+                            <div class="top-bar-popover top-bar-popover--history">
+                                <NotificationHistory OnClose="CloseHistory" />
+                            </div>
+                        }
+                    </div>
 
-    .demo-confirm-popover {
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        background: var(--color-surface-2);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        padding: 12px 14px;
-        width: 230px;
-        box-shadow: var(--shadow-md);
-        z-index: 9000;
-        color: var(--color-text);
-        font-size: var(--font-size-sm);
-    }
-
-    .demo-confirm-cancel {
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-sm);
-        color: var(--color-text-muted);
-        font-size: var(--font-size-xs);
-        padding: 3px 10px;
-        cursor: pointer;
-    }
-
-    .demo-confirm-enable {
-        background: #d97706;
-        border: none;
-        border-radius: var(--radius-sm);
-        color: white;
-        font-size: var(--font-size-xs);
-        font-weight: 600;
-        padding: 3px 10px;
-        cursor: pointer;
-    }
-</style>
+                    <button class="cmd-palette-btn" @onclick="OpenCommandPalette" aria-label="Open command palette">
+                        &gt;_ Command Palette <kbd>Ctrl+P</kbd>
+                    </button>
+                </div>
 
 @code {
     [Parameter] public EventCallback OnNavToggle { get; set; }
+    [Parameter]
+    public ShellRouteContext CurrentContext { get; set; } =
+ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
 
     private bool _isHistoryOpen;
+    private bool _isWorkspaceHubOpen;
     private bool _showDemoConfirm;
+    private string _favoriteName = string.Empty;
     private int _lastSeenCount;
+    private AreaConnectionState? CurrentAreaState => ConnectionStateService.States.TryGetValue(CurrentContext.Area, out var
+state) ? state : null;
+    private WorkspaceSnapshot? CurrentSnapshot => Workspaces.GetCurrentSnapshot(CurrentContext.Area);
+    private FavoriteResource? CurrentFavorite => CurrentSnapshot is null
+        ? null
+        : Workspaces.GetFavoriteResource(CurrentSnapshot.Resource.Key);
+    private bool IsCurrentFavorite => CurrentFavorite is not null;
+    private IReadOnlyList<FavoriteResource> FavoriteResources => Workspaces.GetFavoriteResources().Take(5).ToList();
+    private IReadOnlyList<RecentResourceEntry> RecentResources => Workspaces.GetRecentResources().Take(5).ToList();
     private int UnreadCount => Math.Max(0, Notifications.All.Count - _lastSeenCount);
+    private string NotificationButtonLabel => UnreadCount > 0
+        ? $"Notifications, {UnreadCount} unread"
+        : "Notifications";
+    private string? ConnectionBadgeText => CurrentAreaState?.State switch
+    {
+        ConnectionState.Connected => "Connected",
+        ConnectionState.Error => "Needs attention",
+        ConnectionState.NotConfigured => "Needs setup",
+        _ => null,
+    };
+    private string ConnectionBadgeClass => CurrentAreaState?.State switch
+    {
+        ConnectionState.Connected => "shell-pill--success",
+        ConnectionState.Error => "shell-pill--warning",
+        ConnectionState.NotConfigured => "shell-pill--muted",
+        _ => "shell-pill--muted",
+    };
 
     protected override void OnInitialized()
     {
         Notifications.NotificationsChanged += OnNotificationsChanged;
         AppState.DemoModeChanged += OnDemoModeChanged;
+        ConnectionStateService.StatesChanged += OnConnectionStateChanged;
+        Workspaces.Changed += OnWorkspaceChanged;
     }
 
-    private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
+    private void OnNotificationsChanged()
+    {
+        if (_lastSeenCount > Notifications.All.Count)
+        {
+            _lastSeenCount = Notifications.All.Count;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnConnectionStateChanged() => InvokeAsync(StateHasChanged);
+
     private void OnDemoModeChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnWorkspaceChanged()
+    {
+        if (_isWorkspaceHubOpen)
+        {
+            SyncFavoriteName();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
 
     private void ToggleHistory()
     {
         _isHistoryOpen = !_isHistoryOpen;
+        _isWorkspaceHubOpen = false;
+        _showDemoConfirm = false;
         if (_isHistoryOpen)
+        {
             _lastSeenCount = Notifications.All.Count;
+        }
     }
+
+    private void ToggleWorkspaceHub()
+    {
+        _isWorkspaceHubOpen = !_isWorkspaceHubOpen;
+        _isHistoryOpen = false;
+        _showDemoConfirm = false;
+        if (_isWorkspaceHubOpen)
+        {
+            SyncFavoriteName();
+        }
+    }
+
+    private void CloseHistory() => _isHistoryOpen = false;
 
     private void ShowDemoConfirm()
     {
+        _isWorkspaceHubOpen = false;
+        _isHistoryOpen = false;
         _showDemoConfirm = true;
     }
 
@@ -168,11 +279,105 @@
         await AppState.SetDemoModeAsync(true);
     }
 
-    private void OpenCommandPalette() => Events.Publish(new CommandPaletteRequestedEvent());
+    private void OpenCommandPalette()
+    {
+        _isWorkspaceHubOpen = false;
+        Events.Publish(new CommandPaletteRequestedEvent());
+    }
+
+    private void OnFavoriteNameChanged(ChangeEventArgs args)
+    {
+        _favoriteName = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task SaveFavoriteAsync()
+    {
+        if (CurrentSnapshot is null)
+        {
+            return;
+        }
+
+        await Workspaces.SaveFavoriteAsync(CurrentSnapshot, _favoriteName);
+        SyncFavoriteName();
+    }
+
+    private async Task RemoveCurrentFavoriteAsync()
+    {
+        if (CurrentSnapshot is null)
+        {
+            return;
+        }
+
+        await Workspaces.RemoveFavoriteAsync(CurrentSnapshot.Resource.Key);
+        SyncFavoriteName();
+    }
+
+    private Task OpenCurrentResourceAsync() => CurrentSnapshot is null
+        ? Task.CompletedTask
+        : OpenSnapshotAsync(CurrentSnapshot);
+
+    private Task OpenFavoriteAsync(FavoriteResource favorite) => OpenSnapshotAsync(favorite.Snapshot);
+
+    private Task RemoveFavoriteAsync(FavoriteResource favorite) =>
+        Workspaces.RemoveFavoriteAsync(favorite.Snapshot.Resource.Key);
+
+    private Task OpenRecentAsync(RecentResourceEntry recent) => OpenSnapshotAsync(recent.Snapshot);
+
+    private async Task OpenSnapshotAsync(WorkspaceSnapshot snapshot)
+    {
+        _isWorkspaceHubOpen = false;
+        await Workspaces.OpenSnapshotAsync(snapshot, recordRecent: true);
+    }
+
+    private void SyncFavoriteName()
+    {
+        if (CurrentSnapshot is null)
+        {
+            _favoriteName = string.Empty;
+            return;
+        }
+
+        _favoriteName = GetEffectiveFavoriteName(CurrentFavorite, CurrentSnapshot);
+    }
+
+    private static string GetFavoriteTitle(FavoriteResource favorite)
+    {
+        var configuredName = favorite.Name.Trim();
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName
+            : configuredName;
+    }
+
+    private static string GetEffectiveFavoriteName(FavoriteResource? favorite, WorkspaceSnapshot snapshot)
+    {
+        var configuredName = favorite?.Name?.Trim();
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? snapshot.Resource.DisplayPath ?? snapshot.Resource.DisplayName
+            : configuredName;
+    }
+
+    private static string BuildFavoriteSummary(FavoriteResource favorite)
+    {
+        var resourceLabel = favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName;
+        var resourceSummary = BuildResourceSummary(favorite.Snapshot);
+        return string.Equals(GetFavoriteTitle(favorite), resourceLabel, StringComparison.Ordinal)
+            ? resourceSummary
+            : $"{resourceLabel} | {resourceSummary}";
+    }
+
+    private static string BuildResourceSummary(WorkspaceSnapshot snapshot)
+    {
+        var areaLabel = ShellNavigation.ForArea(snapshot.Resource.Area).Label;
+        return string.IsNullOrWhiteSpace(snapshot.Resource.Summary)
+            ? areaLabel
+            : $"{areaLabel} | {snapshot.Resource.Summary}";
+    }
 
     public void Dispose()
     {
         Notifications.NotificationsChanged -= OnNotificationsChanged;
         AppState.DemoModeChanged -= OnDemoModeChanged;
+        ConnectionStateService.StatesChanged -= OnConnectionStateChanged;
+        Workspaces.Changed -= OnWorkspaceChanged;
     }
 }

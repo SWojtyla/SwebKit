@@ -11,7 +11,7 @@
     </button>
     @if (IsActive)
     {
-        <select class="auto-refresh-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
+        <select class="auto-refresh-select app-native-control app-native-select" value="@IntervalSeconds" @onchange="OnIntervalChanged">
             <option value="10">10s</option>
             <option value="30">30s</option>
             <option value="60">60s</option>
@@ -23,6 +23,7 @@
     [Parameter] public EventCallback OnRefresh { get; set; }
     [Parameter] public bool Paused { get; set; }
     [Parameter] public int InitialInterval { get; set; } = 30;
+    [Parameter] public bool InitialEnabled { get; set; }
     [Parameter] public EventCallback<int> IntervalChanged { get; set; }
 
     private bool IsActive;
@@ -35,6 +36,12 @@
         if (!_initialized)
         {
             IntervalSeconds = InitialInterval > 0 ? InitialInterval : 30;
+            IsActive = InitialEnabled;
+            if (IsActive)
+            {
+                StartTimer();
+            }
+
             _initialized = true;
         }
     }

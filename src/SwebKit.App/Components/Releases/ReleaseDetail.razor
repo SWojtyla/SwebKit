@@ -1,9 +1,13 @@
 @inject ReleaseRepository ReleaseRepo
+@inject IAksClientBootstrapper AksBootstrapper
+@inject AppStateService AppState
+@inject RuntimeDriftService DriftService
+@inject DeploymentValidationService ValidationService
 
 <div class="release-detail">
     @if (Release is null)
     {
-        <div class="text-muted" style="padding:20px 0;">
+        <div class="release-detail__empty-state text-muted">
             Select a release from the list, or create a new one.
         </div>
     }
@@ -32,11 +36,11 @@
                 }
                 <div class="release-detail__readiness">
                     @{
-                        var (readinessIcon, readinessLabel, readinessColor) = ComputeReadiness();
+                        var readiness = ComputeReadiness();
                     }
-                    <span style="color:@readinessColor; display:inline-flex; align-items:center; gap:4px;">
-                        <FluentIcon Value="@readinessIcon" Width="14px" />
-                        <span style="font-size:12px; font-weight:600;">@readinessLabel</span>
+                    <span class="release-detail__readiness-badge @readiness.ToneClass">
+                        <FluentIcon Value="@readiness.Icon" Width="14px" />
+                        <span class="release-detail__readiness-label">@readiness.Label</span>
                     </span>
                 </div>
             </div>
@@ -50,111 +54,220 @@
             @if (!IsDemoOnly)
             {
                 <div class="release-detail__actions">
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditComponents.InvokeAsync())">Manage
-                        Scope</FluentButton>
-                        <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTagManager">Tag Manager</FluentButton>
-                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditRelease.InvokeAsync())">Edit
-                        </FluentButton>
-                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnDeleteRelease.InvokeAsync())"
-                                      style="color:var(--color-error);">Delete</FluentButton>
+                    <span class="release-detail__action">
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditComponents.InvokeAsync())">
+                            Manage Scope</FluentButton>
+                        </span>
+                        <span class="release-detail__action">
+                            <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTagManager">Tag Manager</FluentButton>
+                        </span>
+                        <span class="release-detail__action">
+                            <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnEditRelease.InvokeAsync())">Edit
+                            </FluentButton>
+                        </span>
+                        <span class="release-detail__action release-detail__action--danger">
+                            <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => OnDeleteRelease.InvokeAsync())">
+                                Delete</FluentButton>
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                @* ── Component × Environment matrix ── *@
+                @if (_scopedComponents.Count == 0)
+                {
+                    <div class="release-detail__empty-scope text-muted text-sm">
+                        No components in scope. Click <strong>Manage Scope</strong> to add repos and pipelines.
                     </div>
                 }
-            </div>
-
-            @* ── Component × Environment matrix ── *@
-            @if (_scopedComponents.Count == 0)
-            {
-                <div class="text-muted text-sm" style="padding:16px 0;">
-                    No components in scope. Click <strong>Manage Scope</strong> to add repos and pipelines.
-                </div>
-            }
-            else
-            {
-                <div style="overflow-x:auto;" tabindex="0" @onkeydown="HandleMatrixKeyDown"
-                     @onkeydown:preventDefault="_preventMatrixKey">
-                    <table class="release-matrix">
-                        <thead>
-                            <tr>
-                                <th style="min-width:180px;">Component</th>
-                                <th style="min-width:80px;">Tag</th>
-                                @foreach (var env in _discoveredEnvironments)
-                                {
-                                    <th style="min-width:100px;">@env</th>
-                                }
-                                <th style="min-width:60px;">Ready</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @for (int idx = 0; idx < _scopedComponents.Count; idx++)
-                            {
-                                var comp = _scopedComponents[idx];
-                                var compData = _boardData.GetValueOrDefault(comp.ComponentName);
-                                var runName = _runNames.GetValueOrDefault(comp.ComponentName);
-                                var isRowSelected = idx == _selectedComponentIdx;
-                                <tr style="@(isRowSelected ? "background:var(--color-accent-subtle);" : "")">
-                                    <td>
-                                        <div class="release-matrix-comp-name">@comp.ComponentName</div>
-                                        @if (runName is not null)
-                                        {
-                                            <div class="release-matrix-run">#@runName</div>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (comp.TagConfirmed)
-                                        {
-                                            <span class="release-matrix-tag--confirmed">@comp.TargetTag</span>
-                                        }
-                                        else if (!string.IsNullOrEmpty(comp.TargetTag))
-                                        {
-                                            <span class="text-muted">@comp.TargetTag</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">—</span>
-                                        }
-                                    </td>
+                else
+                {
+                    <div class="release-detail__matrix-shell" tabindex="0" @onkeydown="HandleMatrixKeyDown"
+                         @onkeydown:preventDefault="_preventMatrixKey">
+                        <table class="release-matrix">
+                            <thead>
+                                <tr>
+                                    <th class="release-matrix__header release-matrix__header--component">Component</th>
+                                    <th class="release-matrix__header release-matrix__header--tag">Tag</th>
+                                    <th class="release-matrix__header release-matrix__header--drift">Runtime</th>
+                                    <th class="release-matrix__header release-matrix__header--validation">Validation</th>
                                     @foreach (var env in _discoveredEnvironments)
                                     {
-                                        var cell = compData?.GetValueOrDefault(env);
+                                        <th class="release-matrix__header release-matrix__header--environment">@env</th>
+                                    }
+                                    <th class="release-matrix__header release-matrix__header--ready">Ready</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int idx = 0; idx < _scopedComponents.Count; idx++)
+                                {
+                                    var comp = _scopedComponents[idx];
+                                    var compData = _boardData.GetValueOrDefault(comp.ComponentName);
+                                    var runName = _runNames.GetValueOrDefault(comp.ComponentName);
+                                    var isRowSelected = idx == _selectedComponentIdx;
+                                    <tr
+                                        class="@(isRowSelected ? "release-matrix__row release-matrix__row--selected" : "release-matrix__row")">
                                         <td>
-                                            @if (cell is not null)
+                                            <div class="release-matrix-comp-name">@comp.ComponentName</div>
+                                            @if (runName is not null)
                                             {
-                                                <a href="@cell.WebUrl" target="_blank" title="@cell.State / @cell.Result"
-                                                       style="text-decoration:none;">
-                                                    <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
-                                                </a>
+                                                <div class="release-matrix-run">#@runName</div>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (comp.TagConfirmed)
+                                            {
+                                                <span class="release-matrix-tag--confirmed">@comp.TargetTag</span>
+                                            }
+                                            else if (!string.IsNullOrEmpty(comp.TargetTag))
+                                            {
+                                                <span class="text-muted">@comp.TargetTag</span>
                                             }
                                             else
                                             {
                                                 <span class="text-muted">—</span>
                                             }
                                         </td>
-                                    }
-                                    <td>
-                                        @{
-                                            var (icon, tooltip) = ComponentReadiness(comp, compData);
+                                        <td>
+                                            @{
+                                                var drift = _driftResults.GetValueOrDefault(comp.ComponentName);
+                                            }
+                                            @if (_driftLoading)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">…</span>
+                                            }
+                                            else if (drift is not null)
+                                            {
+                                                <span class="release-matrix-drift @DriftCssClass(drift.State)" title="@DriftTooltip(drift)">
+                                                    @DriftLabel(drift.State)
+                                                </span>
+                                            }
+                                            else if (comp.RuntimeBinding is not null)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">—</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="release-matrix-drift release-matrix-drift--notconfigured"
+                                                      title="Set a runtime binding in Manage Scope to enable drift detection.">Not set</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @{
+                                                var isValidating = _validating.GetValueOrDefault(comp.ComponentName);
+                                                var latestValidation = _latestValidation.GetValueOrDefault(comp.ComponentName);
+                                            }
+                                            @if (isValidating)
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">…</span>
+                                            }
+                                            else if (latestValidation is not null)
+                                            {
+                                                <span class="release-validation-badge @ValidationCssClass(latestValidation.State)"
+                                                      title="@ValidationTooltip(latestValidation)">
+                                                    @ValidationLabel(latestValidation.State)
+                                                </span>
+                                                @if (!IsDemoOnly)
+                                                {
+                                                    <button class="release-validation-revalidate" title="Re-validate"
+                                                            @onclick="@(() => ValidateComponentAsync(comp))">↺</button>
+                                                }
+                                                <button class="release-validation-history-toggle" title="Show validation history"
+                                                        @onclick="@(() => ToggleValidationHistory(comp.ComponentName))">
+                                                    @(_validationHistoryComponent == comp.ComponentName ? "▲" : "▼")
+                                                </button>
+                                            }
+                                            else if (!IsDemoOnly && comp.RuntimeBinding is not null
+                                                && !string.IsNullOrWhiteSpace(comp.RuntimeBinding.Namespace)
+                                                && !string.IsNullOrWhiteSpace(comp.RuntimeBinding.WorkloadName))
+                                            {
+                                                <button class="release-validation-run-btn"
+                                                        @onclick="@(() => ValidateComponentAsync(comp))">Validate</button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:10px;">—</span>
+                                            }
+                                        </td>
+                                        @foreach (var env in _discoveredEnvironments)
+                                        {
+                                            var cell = compData?.GetValueOrDefault(env);
+                                            <td>
+                                                @if (cell is not null)
+                                                {
+                                                    <a class="release-matrix__status-link" href="@cell.WebUrl" target="_blank"
+                                                           title="@cell.State / @cell.Result">
+                                                        <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">—</span>
+                                                }
+                                            </td>
                                         }
-                                        <span title="@tooltip" style="display:inline-flex; align-items:center;">
-                                            <FluentIcon Value="@icon" Width="14px" />
-                                        </span>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
+                                        <td>
+                                            @{
+                                                var (icon, tooltip) = ComponentReadiness(comp, compData);
+                                            }
+                                            <span class="release-matrix__readiness-icon" title="@tooltip">
+                                                <FluentIcon Value="@icon" Width="14px" />
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
 
-            @* ── Tag Manager (inline toggle) ── *@
-            @if (_showTagManager)
-            {
-                <div class="pipeline-section" style="margin-top:24px;">
-                    <h4 class="pipeline-section-title">Tag Manager</h4>
-                    <TagManager Release="Release" />
-                </div>
+                @* ── Validation history panel ── *@
+                @if (_validationHistoryComponent is not null && _validationHistory.Count > 0)
+                {
+                    <div class="pipeline-section release-detail__validation-history">
+                        <h4 class="pipeline-section-title">
+                            Validation history — @_validationHistoryComponent
+                        </h4>
+                        <table class="release-validation-history-table">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Result</th>
+                                    <th>Target</th>
+                                    <th>Observed</th>
+                                    <th>Source</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in _validationHistory)
+                                {
+                                    <tr>
+                                        <td class="text-muted text-sm">@v.ValidatedAt.ToLocalTime().ToString("MMM d HH:mm")</td>
+                                        <td><span
+                                            class="release-validation-badge @ValidationCssClass(v.State)">@ValidationLabel(v.State)</span>
+                                        </td>
+                                        <td class="text-sm">@(v.TargetTag ?? "—")</td>
+                                        <td class="text-sm">@(v.ObservedTag ?? "—")</td>
+                                        <td class="text-muted text-sm">@(v.ObservedSource ?? "—")</td>
+                                        <td class="text-muted text-sm">@(v.Note ?? "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @* ── Tag Manager (inline toggle) ── *@
+                @if (_showTagManager)
+                {
+                    <div class="pipeline-section release-detail__tag-manager">
+                        <h4 class="pipeline-section-title">Tag Manager</h4>
+                        <TagManager Release="Release" />
+                    </div>
+                }
             }
-        }
-    </div>
+        </div>
 
 
 @code {
@@ -170,16 +283,29 @@
     private bool _showTagManager;
     private int _selectedComponentIdx = -1;
     private bool _preventMatrixKey;
+    private bool _driftLoading;
 
     private List<string> _discoveredEnvironments = [];
     private List<ComponentScope> _scopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
     private Dictionary<string, Dictionary<string, CellData>> _boardData = new();
     private Dictionary<string, string> _runNames = new();
+    private Dictionary<string, RuntimeDriftResult> _driftResults = new();
+
+    // Wave 3 — validation state
+    private Dictionary<string, bool> _validating = new();
+    private Dictionary<string, DeploymentValidationSnapshot?> _latestValidation = new();
+    private string? _validationHistoryComponent;
+    private List<DeploymentValidationSnapshot> _validationHistory = [];
 
     public record CellData(string State, string Result, string DisplayText, string CssClass, string? WebUrl);
 
+    private ReleaseRecord? _loadedRelease;
+
     protected override async Task OnParametersSetAsync()
     {
+        // BL-3: guard before await to prevent double-load on parent re-renders
+        if (ReferenceEquals(_loadedRelease, Release)) return;
+        _loadedRelease = Release;
         if (Release is not null && _scopedComponents.Count > 0)
             await LoadAsync();
     }
@@ -190,6 +316,10 @@
         _errorMessage = null;
         _boardData.Clear();
         _runNames.Clear();
+        _driftResults.Clear();
+        _latestValidation.Clear();
+        _validationHistoryComponent = null;
+        _validationHistory = [];
         _discoveredEnvironments = [];
 
         try
@@ -260,6 +390,84 @@
         }
         catch (Exception ex) { _errorMessage = ex.Message; }
         finally { _isLoading = false; }
+
+        // Load persisted validation snapshots so history is visible immediately.
+        LoadPersistedValidationSnapshots();
+
+        // Load drift lazily so the board shows quickly even if AKS is slow.
+        await LoadDriftAsync();
+    }
+
+    private void LoadPersistedValidationSnapshots()
+    {
+        if (Release is null) return;
+        foreach (var comp in _scopedComponents)
+        {
+            var latest = ReleaseRepo.GetValidationSnapshots(Release.Id, comp.ComponentName)
+                .FirstOrDefault(); // already ordered newest-first
+            _latestValidation[comp.ComponentName] = latest;
+        }
+    }
+
+    private async Task LoadDriftAsync()
+    {
+        var componentsWithBinding = _scopedComponents
+            .Where(c => c.RuntimeBinding is { } rb
+                && !string.IsNullOrWhiteSpace(rb.Namespace)
+                && !string.IsNullOrWhiteSpace(rb.WorkloadName))
+            .ToList();
+
+        if (componentsWithBinding.Count == 0)
+        {
+            // Mark components without binding immediately so the column renders without spinning.
+            foreach (var comp in _scopedComponents)
+                _driftResults.TryAdd(comp.ComponentName,
+                    new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.NotConfigured,
+                        comp.TargetTag, null, null, "No runtime binding configured."));
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _driftLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var bootstrapResult = await AksBootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+                ClientOverride: null,
+                UseDemoData: AppState.UseDemoData,
+                Config: AppState.Config.AksConfig,
+                RequestedContext: null,
+                RequestedNamespace: null));
+
+            if (bootstrapResult.Client is not null)
+            {
+                var results = await DriftService.GetDriftAsync(_scopedComponents, bootstrapResult.Client);
+                _driftResults.Clear();
+                foreach (var r in results)
+                    _driftResults[r.ComponentName] = r;
+            }
+            else
+            {
+                // AKS not configured — mark all as NotConfigured.
+                foreach (var comp in _scopedComponents)
+                    _driftResults.TryAdd(comp.ComponentName,
+                        new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.NotConfigured,
+                            comp.TargetTag, null, null, "AKS not configured."));
+            }
+        }
+        catch
+        {
+            foreach (var comp in _scopedComponents)
+                _driftResults.TryAdd(comp.ComponentName,
+                    new RuntimeDriftResult(comp.ComponentName, RuntimeDriftState.Unknown,
+                        comp.TargetTag, null, null, "Drift query failed."));
+        }
+        finally
+        {
+            _driftLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private static string? ResolveEnvironmentName(AdoPipelineStage stage, List<string> environments)
@@ -287,6 +495,134 @@
         return null;
     }
 
+    private static string DriftCssClass(RuntimeDriftState state) => state switch
+    {
+        RuntimeDriftState.Matched => "release-matrix-drift--matched",
+        RuntimeDriftState.Drifted => "release-matrix-drift--drifted",
+        RuntimeDriftState.Unknown => "release-matrix-drift--unknown",
+        _ => "release-matrix-drift--notconfigured"
+    };
+
+    private static string DriftLabel(RuntimeDriftState state) => state switch
+    {
+        RuntimeDriftState.Matched => "Matched",
+        RuntimeDriftState.Drifted => "Drifted",
+        RuntimeDriftState.Unknown => "Unknown",
+        _ => "Not set"
+    };
+
+    private static string DriftTooltip(RuntimeDriftResult drift) => drift.State switch
+    {
+        RuntimeDriftState.Matched =>
+            $"Target {drift.TargetTag} matches runtime {drift.ObservedTag} ({drift.ObservedSource})",
+        RuntimeDriftState.Drifted =>
+            $"Target {drift.TargetTag} \u2260 runtime {drift.ObservedTag} ({drift.ObservedSource})",
+        RuntimeDriftState.Unknown =>
+            drift.Note ?? "Drift state could not be determined.",
+        _ => drift.Note ?? "No runtime binding configured."
+    };
+
+    // ── Validation helpers ────────────────────────────────────────────────────
+
+    private async Task ValidateComponentAsync(ComponentScope comp)
+    {
+        if (Release is null) return;
+        _validating[comp.ComponentName] = true;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        DeploymentValidationSnapshot snapshot;
+        try
+        {
+            var bootstrapResult = await AksBootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+                ClientOverride: null,
+                UseDemoData: AppState.UseDemoData,
+                Config: AppState.Config.AksConfig,
+                RequestedContext: null,
+                RequestedNamespace: null));
+
+            if (bootstrapResult.Client is not null)
+            {
+                snapshot = await ValidationService.ValidateAsync(comp, bootstrapResult.Client);
+            }
+            else
+            {
+                snapshot = new DeploymentValidationSnapshot
+                {
+                    ComponentName = comp.ComponentName,
+                    State = DeploymentValidationState.Partial,
+                    TargetTag = comp.TargetTag,
+                    AksQueried = false,
+                    Note = "AKS not configured."
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            snapshot = new DeploymentValidationSnapshot
+            {
+                ComponentName = comp.ComponentName,
+                State = DeploymentValidationState.Failed,
+                TargetTag = comp.TargetTag,
+                AksQueried = true,
+                Note = $"Validation failed: {ex.Message}"
+            };
+        }
+
+        snapshot.ReleaseId = Release.Id;
+        await ReleaseRepo.AddValidationSnapshotAsync(snapshot);
+        _latestValidation[comp.ComponentName] = snapshot;
+        _validating[comp.ComponentName] = false;
+
+        // Refresh history panel if it is open for this component.
+        if (_validationHistoryComponent == comp.ComponentName)
+            _validationHistory = [.. ReleaseRepo.GetValidationSnapshots(Release.Id, comp.ComponentName)];
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void ToggleValidationHistory(string componentName)
+    {
+        if (_validationHistoryComponent == componentName)
+        {
+            _validationHistoryComponent = null;
+            _validationHistory = [];
+        }
+        else
+        {
+            _validationHistoryComponent = componentName;
+            _validationHistory = Release is null ? [] :
+                [.. ReleaseRepo.GetValidationSnapshots(Release.Id, componentName)];
+        }
+        StateHasChanged();
+    }
+
+    private static string ValidationCssClass(DeploymentValidationState state) => state switch
+    {
+        DeploymentValidationState.Passed => "release-validation-badge--passed",
+        DeploymentValidationState.Drifted => "release-validation-badge--drifted",
+        DeploymentValidationState.Partial => "release-validation-badge--partial",
+        _ => "release-validation-badge--failed"
+    };
+
+    private static string ValidationLabel(DeploymentValidationState state) => state switch
+    {
+        DeploymentValidationState.Passed => "Passed",
+        DeploymentValidationState.Drifted => "Drifted",
+        DeploymentValidationState.Partial => "Partial",
+        _ => "Failed"
+    };
+
+    private static string ValidationTooltip(DeploymentValidationSnapshot v) => v.State switch
+    {
+        DeploymentValidationState.Passed =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — target {v.TargetTag} matches runtime {v.ObservedTag}",
+        DeploymentValidationState.Drifted =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — target {v.TargetTag} ≠ runtime {v.ObservedTag}",
+        DeploymentValidationState.Partial =>
+            $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — partial: {v.Note}",
+        _ => $"Validated {v.ValidatedAt.ToLocalTime():MMM d HH:mm} — failed: {v.Note}"
+    };
+
     private (Icon Icon, string Tooltip) ComponentReadiness(ComponentScope comp, Dictionary<string, CellData>? envData)
     {
         if (envData is null) return (new Icons.Regular.Size16.CircleOff(), "No deployment data");
@@ -299,10 +635,10 @@
         return (new Icons.Regular.Size16.CircleOff(), "Unknown state");
     }
 
-    private (Icon Icon, string Label, string Color) ComputeReadiness()
+    private (Icon Icon, string Label, string ToneClass) ComputeReadiness()
     {
         if (_scopedComponents.Count == 0)
-            return (new Icons.Regular.Size16.CircleOff(), "No components", "var(--color-text-muted)");
+            return (new Icons.Regular.Size16.CircleOff(), "No components", "release-detail__readiness-badge--muted");
 
         var hasFailure = false;
         var hasPending = false;
@@ -317,10 +653,12 @@
             if (!comp.TagConfirmed) allReady = false;
         }
 
-        if (hasFailure) return (new Icons.Filled.Size16.DismissCircle(), "Not Ready", "var(--color-error)");
-        if (hasPending) return (new Icons.Regular.Size16.Clock(), "In Progress", "var(--color-accent)");
-        if (allReady) return (new Icons.Filled.Size16.CheckmarkCircle(), "Release Ready", "var(--color-success)");
-        return (new Icons.Regular.Size16.Warning(), "Partially Ready", "var(--color-text-muted)");
+        if (hasFailure) return (new Icons.Filled.Size16.DismissCircle(), "Not Ready",
+"release-detail__readiness-badge--danger");
+        if (hasPending) return (new Icons.Regular.Size16.Clock(), "In Progress", "release-detail__readiness-badge--accent");
+        if (allReady) return (new Icons.Filled.Size16.CheckmarkCircle(), "Release Ready",
+"release-detail__readiness-badge--success");
+        return (new Icons.Regular.Size16.Warning(), "Partially Ready", "release-detail__readiness-badge--warning");
     }
 
     private static string StatusClass(ReleaseStatus s) => s switch

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.DevOps.Tests.Fakes;
 
@@ -8,6 +10,26 @@ namespace SwebKit.DevOps.Tests;
 
 public sealed class DevOpsClientTests
 {
+  [Fact]
+  public void HttpClientFactory_CanCreateMultipleAzureDevOpsClientsWithoutReusingAuthHandler()
+  {
+    var services = new ServiceCollection();
+    services.AddSingleton<ICredentialStore>(new FakeCredentialStore());
+    services.AddTransient<DevOpsAuthHandler>();
+    services.AddHttpClient("AzureDevOps")
+      .ConfigurePrimaryHttpMessageHandler(static () => new FakeHttpMessageHandler())
+      .AddHttpMessageHandler<DevOpsAuthHandler>();
+
+    using var provider = services.BuildServiceProvider();
+    var factory = provider.GetRequiredService<IHttpClientFactory>();
+
+    using var first = factory.CreateClient("AzureDevOps");
+    var secondException = Record.Exception(() => factory.CreateClient("AzureDevOps"));
+
+    Assert.NotNull(first);
+    Assert.Null(secondException);
+  }
+
   // ── Factory helper ──────────────────────────────────────────────────────
   // DevOpsClient(IHttpClientFactory, DevOpsConfig, ILogger).
   // DevOpsAuthHandler is stateless and reads the PAT key from the current request.

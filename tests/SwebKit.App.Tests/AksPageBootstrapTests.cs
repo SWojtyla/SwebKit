@@ -23,6 +23,7 @@ public sealed class AksPageBootstrapTests : TestContext
     public AksPageBootstrapTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -35,7 +36,7 @@ public sealed class AksPageBootstrapTests : TestContext
         Services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
 
         var eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), eventBus);
+        _appState = new AppStateService(new ProfileRepository(), uiState, eventBus);
         _appState.Config.AksConfig = new AksConfig
         {
             DefaultNamespace = "default",
@@ -46,14 +47,17 @@ public sealed class AksPageBootstrapTests : TestContext
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(_appState);
-        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
+        Services.AddSingleton(uiState);
+        Services.AddSingleton<INotificationService>(new NotificationService(uiState));
         Services.AddSingleton<IPortForwardSessionService>(new FakePortForwardSessionService());
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton(new PageDataCache());
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IPodHealthMonitorService>(new FakePodHealthMonitorService());
         Services.AddSingleton<IAksClientBootstrapper>(_bootstrapper);
+        Services.AddSingleton<IAksWarmupCache>(new AksWarmupCache());
+        Services.AddScoped<OperatorWorkspaceService>();
     }
 
     [Fact]
@@ -162,7 +166,12 @@ public sealed class AksPageBootstrapTests : TestContext
         public Task<PortForwardSession> StartPortForwardAsync(string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default) => Task.FromResult(new PortForwardSession { Namespace = ns, ResourceName = resourceName, LocalPort = localPort, RemotePort = remotePort, Status = PortForwardStatus.Active });
         public Task StopPortForwardAsync(PortForwardSession session, CancellationToken ct = default) => Task.CompletedTask;
         public Task OpenShellAsync(string ns, string podName, string container, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ServiceInfo>>([]);
         public Task<IReadOnlyList<IngressInfo>> GetIngressesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<IngressInfo>>([]);
+        public Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default) => Task.FromResult(new IngressAnalysis { Namespace = ns, IngressName = ingressName, Summary = string.Empty });
+        public Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(string ns, string workloadKind, string workloadName, CancellationToken ct = default) => Task.FromResult(new NetworkPolicyAnalysis { Namespace = ns, WorkloadKind = workloadKind, WorkloadName = workloadName, Summary = string.Empty });
+        public Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<GatewayInfo>>([]);
+        public Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<HttpRouteInfo>>([]);
         public Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>([]);
         public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>(["default"]);
         public Task<IReadOnlyList<KubeContextInfo>> GetContextsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<KubeContextInfo>>([new KubeContextInfo { Name = "default", IsCurrent = true }]);

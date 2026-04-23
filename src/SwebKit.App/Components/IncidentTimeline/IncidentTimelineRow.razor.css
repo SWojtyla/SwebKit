@@ -1,0 +1,139 @@
+.incident-row {
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    padding: 14px 16px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.incident-row:last-child {
+    border-bottom: 0;
+}
+
+.incident-row:hover,
+.incident-row:focus-visible,
+.incident-row--selected {
+    background: var(--color-accent-subtle);
+    outline: none;
+}
+
+.incident-row__topline {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    align-items: flex-start;
+}
+
+.incident-row__timeblock {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 110px;
+}
+
+.incident-row__time {
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.incident-row__date,
+.incident-row__summary,
+.incident-row__resource {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.incident-row__badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.incident-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.incident-row__title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.incident-row__why {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+}
+
+.incident-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-sm);
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.incident-badge--source-aks {
+    background: rgba(52, 180, 200, 0.12);
+    border-color: rgba(52, 180, 200, 0.35);
+}
+
+.incident-badge--source-observability {
+    background: rgba(0, 120, 212, 0.12);
+    border-color: rgba(0, 120, 212, 0.35);
+}
+
+.incident-badge--source-service-bus {
+    background: rgba(232, 144, 74, 0.12);
+    border-color: rgba(232, 144, 74, 0.35);
+}
+
+.incident-badge--source-releases {
+    background: rgba(74, 184, 122, 0.12);
+    border-color: rgba(74, 184, 122, 0.35);
+}
+
+.incident-badge--severity-info {
+    background: rgba(144, 144, 168, 0.16);
+}
+
+.incident-badge--severity-warning {
+    background: rgba(251, 140, 0, 0.14);
+}
+
+.incident-badge--severity-error,
+.incident-badge--severity-critical {
+    background: rgba(229, 57, 53, 0.14);
+}
+
+.incident-badge--relevance-direct {
+    background: rgba(67, 160, 71, 0.14);
+}
+
+.incident-badge--relevance-corroborating {
+    background: rgba(0, 120, 212, 0.14);
+}
+
+.incident-badge--relevance-contextual {
+    background: rgba(144, 144, 168, 0.16);
+}
+
+@media (max-width: 900px) {
+    .incident-row__topline {
+        flex-direction: column;
+    }
+
+    .incident-row__badges {
+        justify-content: flex-start;
+    }
+}

@@ -1,0 +1,113 @@
+@using Microsoft.JSInterop
+@using SwebKit.Core.Abstractions
+@using SwebKit.Core.Models
+
+@inject IIncidentSnapshotExporter Exporter
+@inject IJSRuntime JS
+
+<div class="export-dialog-overlay" @onclick="HandleOverlayClick">
+    <div class="export-dialog" @onclick:stopPropagation="true" data-testid="export-dialog">
+        <div class="export-dialog-header">
+            <h3 class="export-dialog-title">Export Incident Snapshot</h3>
+            <button class="export-dialog-close-btn" @onclick="HandleClose" aria-label="Close export dialog">×</button>
+        </div>
+
+        <div class="export-dialog-body">
+            @if (_snapshot is null)
+            {
+                <p class="export-dialog-loading">Building snapshot…</p>
+            }
+            else
+            {
+                <dl class="export-dialog-meta">
+                    <dt>Workload scope</dt>
+                    <dd>@_snapshot.WorkloadScope</dd>
+                    <dt>Window</dt>
+                    <dd>@_snapshot.WindowUtc</dd>
+                    <dt>Coverage</dt>
+                    <dd>
+                        <span class="export-coverage-badge export-coverage-badge--@_snapshot.Coverage.ToLowerInvariant()">
+                            @_snapshot.Coverage
+                        </span>
+                        @if (_snapshot.WasTruncated)
+                        {
+                            <span class="export-truncated-note"> (evidence was truncated)</span>
+                        }
+                    </dd>
+                    <dt>Evidence items</dt>
+                    <dd>@_snapshot.Items.Count</dd>
+                </dl>
+
+                <div class="export-format-row">
+                    <span class="export-format-label">Format</span>
+                    <label class="export-format-option">
+                        <input type="radio" name="export-format" value="json" checked="@(_format == "json")"
+                               @onchange='() => _format = "json"' data-testid="export-format-json" />
+                        JSON
+                    </label>
+                    <label class="export-format-option">
+                        <input type="radio" name="export-format" value="md" checked="@(_format == "md")"
+                               @onchange='() => _format = "md"' data-testid="export-format-md" />
+                        Markdown
+                    </label>
+                </div>
+
+                <div class="export-filename-preview">
+                    <span class="export-filename-label">File name</span>
+                    <code class="export-filename-value">@Exporter.GetSuggestedFileName(_snapshot, _format)</code>
+                </div>
+
+                <p class="export-disclaimer">@_snapshot.Disclaimer</p>
+            }
+        </div>
+
+        <div class="export-dialog-footer">
+            <button class="export-cancel-btn" @onclick="HandleClose">Cancel</button>
+            <button class="export-confirm-btn" disabled="@(_snapshot is null || _exporting)" @onclick="HandleConfirm"
+                    data-testid="export-confirm-btn">
+                @(_exporting ? "Saving…" : "Save file")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IncidentTimelinePage Page { get; set; } = null!;
+    [Parameter] public IncidentInvestigationSeed? Seed { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private IncidentSnapshotExport? _snapshot;
+    private string _format = "json";
+    private bool _exporting;
+
+    protected override void OnParametersSet()
+    {
+        if (_snapshot is null)
+            _snapshot = Exporter.Build(Page, Seed);
+    }
+
+    private async Task HandleConfirm()
+    {
+        if (_snapshot is null || _exporting) return;
+
+        _exporting = true;
+        try
+        {
+            var fileName = Exporter.GetSuggestedFileName(_snapshot, _format);
+            var (content, mimeType) = _format == "md"
+                ? (Exporter.ToMarkdown(_snapshot), "text/markdown")
+                : (Exporter.ToJson(_snapshot), "application/json");
+
+            await JS.InvokeVoidAsync("SwebKitUi.downloadTextFile", fileName, content, mimeType);
+            await OnClose.InvokeAsync();
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private async Task HandleClose() => await OnClose.InvokeAsync();
+
+    private async Task HandleOverlayClick() => await OnClose.InvokeAsync();
+}

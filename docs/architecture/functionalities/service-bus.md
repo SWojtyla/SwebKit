@@ -2,6 +2,7 @@
 
 ## What Is Supported
 
+- Incident Timeline backend can surface best-effort queue/subscription symptoms for explicitly mapped Service Bus entities, combining peeks plus runtime properties and degrading coverage per entity instead of failing the whole source.
 - Add/remove global Service Bus namespaces in the UI.
 - Connect namespaces from stored credentials.
 - Restore cached namespace connection snapshots immediately, then reconnect each connectable namespace independently in the background.
@@ -26,7 +27,8 @@
 - Resubmit dead-letter messages to original or target entity, processing the full requested sequence set across receive batches.
 - Complete dead-letter messages with the same exhaustive sequence matching.
 - Use production-safe confirmation dialogs for destructive actions.
-- Pin entity links per environment from settings.
+- Favorite Service Bus resources through the shared operator workspace model, with the Service Bus page, dashboard pins, command palette, and top-bar workspace hub all reading the same canonical favorite snapshots.
+- Save and restore Service Bus workspace state, including the active entity or scheduled tab, the open tab set, and namespace-pane collapse state, using route-first restore after namespace reconnect.
 
 ## Core Runtime Flow
 
@@ -38,6 +40,7 @@
 6. `MessageComposer` can save templates to profile-backed app state and apply templates selected from `TemplatePicker` before send/replay/schedule actions.
 7. `TemplatePicker` supports in-dialog search and inline validation for invalid template rename/edit inputs, then persists template mutations through `AppStateService`.
 8. Destructive mutations are gated by `ConfirmDialog`, and post-mutation refresh is handled via list reload plus refresh-token wiring for DLQ flows.
+9. `ServiceBusPage` publishes semantic workspace snapshots for the active tab and tab set; shell-level recent/favorite reopen flows navigate first and then rehydrate the page state.
 
 ## Main Code Locations
 
@@ -52,11 +55,14 @@
 - `src/SwebKit.Core/Abstractions/IServiceBusClient.cs`
 - `src/SwebKit.Core/Abstractions/IServiceBusNamespaceBootstrapper.cs`
 - `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`
+- `src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusEvidenceSignalSource.cs`
 - `src/SwebKit.Azure/ServiceBus/DeadLetterSequenceProcessor.cs`
 - `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs`
 
 ## Important Notes
 
+- Incident timeline Service Bus evidence is mapping-first: only entities explicitly linked under `AppConfig.IncidentTimeline.WorkloadMappings` are queried for incident evidence.
+- The current adapter is best-effort and optimized for queue/subscription mappings. Unsupported or inaccessible mapped entities surface degraded source coverage instead of causing a full incident-timeline failure.
 - `AzureServiceBusClient` supports both connection-string and AAD-style setup paths.
 - Scoped entity path connection strings are handled to surface only reachable entities.
 - Entity status toggles are exposed through `SetQueueEnabledAsync`, `SetTopicEnabledAsync`, and `SetSubscriptionEnabledAsync`.
@@ -73,13 +79,18 @@
   - active mode uses `CompleteMessagesAsync(entityPath, sequenceNumbers)`
   - DLQ mode uses `CompleteDeadLetterAsync(entityPath, sequenceNumbers)`
 - Filtered export for parity Wave 2 is JSON-only; CSV export is intentionally deferred.
-- Production protections rely on current environment and are enforced by `ConfirmDialog` at UI interaction level.
+- Production protections rely on the current production-marked configuration and are enforced by `ConfirmDialog` at UI interaction level.
 - Service Bus UI uses a collapsible entity panel and a responsive message detail drawer (push on wide screens, overlay on narrow).
 - Entity names in the entity list wrap to full visibility (no single-line truncation/horizontal-scroll pattern).
 - Topic rows retain expand/collapse behavior; queue/subscription operational actions are centralized in the selected-entity action bar.
+- Favorite and unfavorite changes update immediately in the entity list, and the dashboard pinned panel plus shell workspace surfaces reflect the same canonical Service Bus resource list.
+- `ServiceBusPage` keeps legacy `ServiceBusEntityLinks` synchronized for compatibility, but the canonical shell-level contract is now `FavoriteResources` plus page-owned semantic restore state.
 - Message list row density and column profiles are persisted in `UiStateRepository` per `{namespaceId}:{entityPath}:{mode}` scope and can be reset to defaults from the column chooser.
-- Namespace pane collapsed/expanded state remains persisted in local storage.
+- Namespace pane collapsed/expanded state is now persisted in `UiStateRepository`, so it survives the same atomic app-data save and backup recovery path as the rest of the local UI state.
+- Named favorites and recent-resource reopen flows restore route-first, then rebuild tabs from semantic tab-state payloads after the namespace reconnect fan-out completes.
 - Demo namespaces and cached reconnect semantics are composed through `IServiceBusNamespaceBootstrapper`; `ServiceBusPage` preserves the visible namespace list and per-row progress while the background reconnect fan-out runs.
+- Local scheduled-message metadata now persists through the same atomic write and `.bak` recovery path used by the other app-data repositories, so a partial write does not wipe the scheduled-message history list.
+- Service Bus settings remain reachable from shell navigation and unconfigured-state CTAs; the main route header no longer reserves space for a one-off Settings button.
 
 ## Validation Pointers
 

@@ -1,19 +1,26 @@
-<div class="nav-item @(CurrentArea == Area ? "active" : "")" data-area="@Area" role="button" aria-label="@Label"
-     aria-current="@(CurrentArea == Area ? "page" : null)" @onclick="Navigate" title="@(IsExpanded ? "" : Label)">
+<button type="button" class="nav-item @(CurrentArea == Area ? "active" : string.Empty)" data-area="@Area"
+        aria-label="@Label" aria-current="@(CurrentArea == Area ? "page" : null)" @onclick="Navigate" title="@TooltipText">
     <FluentIcon Value="@NavIcon" Width="20px" />
     @if (IsExpanded)
     {
-        <span>@Label</span>
+        <span class="nav-item-label">@Label</span>
     }
-</div>
+</button>
 
 @code {
     [Parameter] public Icon NavIcon { get; set; } = new Icons.Regular.Size24.Settings();
     [Parameter] public string Label { get; set; } = "";
     [Parameter] public string Area { get; set; } = "";
+    [Parameter] public string GroupLabel { get; set; } = "";
     [Parameter] public bool IsExpanded { get; set; } = true;
     [Parameter] public string CurrentArea { get; set; } = "";
     [Parameter] public EventCallback<string> OnNavigate { get; set; }
+
+    private string? TooltipText => IsExpanded
+        ? null
+        : string.IsNullOrWhiteSpace(GroupLabel)
+            ? Label
+            : $"{GroupLabel}: {Label}";
 
     private Task Navigate() => OnNavigate.InvokeAsync(Area);
 }

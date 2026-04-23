@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.ServiceBus;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
@@ -33,13 +34,9 @@ public sealed class EntityTreeTests : TestContext
             Assert.Equal("orders", queueName.TextContent.Trim());
             Assert.Equal("orders", queueName.GetAttribute("title"));
 
-            var activeButton = cut.Find(".entity-mode-btn.active");
-            var dlqButton = cut.Find(".entity-mode-btn.dlq");
-
-            Assert.Equal("A", activeButton.QuerySelector(".entity-mode-short")!.TextContent.Trim());
-            Assert.Equal("42", activeButton.QuerySelector(".entity-mode-count")!.TextContent.Trim());
-            Assert.Equal("D", dlqButton.QuerySelector(".entity-mode-short")!.TextContent.Trim());
-            Assert.Equal("3", dlqButton.QuerySelector(".entity-mode-count")!.TextContent.Trim());
+            var activeChip = cut.Find(".entity-active-chip");
+            Assert.Equal("A", activeChip.QuerySelector(".entity-active-label")!.TextContent.Trim());
+            Assert.Equal("42", activeChip.QuerySelector(".entity-active-count")!.TextContent.Trim());
         });
     }
 
@@ -54,10 +51,20 @@ public sealed class EntityTreeTests : TestContext
             .Add(p => p.NamespaceId, Guid.NewGuid())
             .Add(p => p.OnEntityModeSelected, value => selection = value));
 
+        // Click queue row to select it
         cut.WaitForAssertion(() =>
         {
-            var dlqButton = cut.Find(".entity-mode-btn.dlq");
-            dlqButton.Click();
+            var queueRow = cut.FindAll(".entity-tree-item")
+                .First(item => item.TextContent.Contains("orders", StringComparison.OrdinalIgnoreCase));
+            queueRow.Click();
+        });
+
+        // Click "Open DLQ" in the action bar
+        cut.WaitForAssertion(() =>
+        {
+            var dlqBtn = cut.FindAll("button.entity-tree-action-btn")
+                .First(b => b.TextContent.Contains("Open DLQ", StringComparison.OrdinalIgnoreCase));
+            dlqBtn.Click();
         });
 
         Assert.NotNull(selection);
@@ -101,7 +108,7 @@ public sealed class EntityTreeTests : TestContext
         {
             var topicRow = cut.Find(".entity-tree-topic");
             Assert.Contains("bundle-1", topicRow.TextContent);
-            Assert.Contains("▶", topicRow.TextContent);
+            Assert.Equal("+", topicRow.QuerySelector(".entity-tree-glyph")!.TextContent.Trim());
             Assert.DoesNotContain("&#", cut.Markup, StringComparison.Ordinal);
         });
 
@@ -110,10 +117,10 @@ public sealed class EntityTreeTests : TestContext
         cut.WaitForAssertion(() =>
         {
             var topicRow = cut.Find(".entity-tree-topic");
-            Assert.Contains("▼", topicRow.TextContent);
+            Assert.Equal("-", topicRow.QuerySelector(".entity-tree-glyph")!.TextContent.Trim());
 
             var subscriptionRow = cut.Find(".entity-tree-subscription");
-            Assert.Contains("↳", subscriptionRow.TextContent);
+            Assert.Equal(">", subscriptionRow.QuerySelector(".entity-tree-glyph")!.TextContent.Trim());
             Assert.Contains("processor-a", subscriptionRow.TextContent);
             Assert.DoesNotContain("&#", cut.Markup, StringComparison.Ordinal);
         });
@@ -128,21 +135,27 @@ public sealed class EntityTreeTests : TestContext
             .Add(p => p.Client, client)
             .Add(p => p.NamespaceId, Guid.NewGuid()));
 
+        // Select the queue row to bring up the action bar
         cut.WaitForAssertion(() =>
         {
             var queueRow = cut.FindAll(".entity-tree-item")
                 .First(item => item.TextContent.Contains("orders", StringComparison.OrdinalIgnoreCase));
+            queueRow.Click();
+        });
 
-            Assert.Contains("Disabled", queueRow.TextContent, StringComparison.OrdinalIgnoreCase);
-            queueRow.QuerySelector(".entity-toggle-btn")!.Click();
+        // Verify action bar shows "Disabled" and click "Enable"
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("Disabled", cut.Find(".entity-tree-selected-status").TextContent.Trim());
+            cut.FindAll("button.entity-tree-action-btn")
+                .First(b => b.TextContent.Trim() == "Enable")
+                .Click();
         });
 
         cut.WaitForAssertion(() =>
         {
             Assert.Contains(client.QueueToggleCalls, call => call.QueueName == "orders" && call.Enabled);
-            var queueRow = cut.FindAll(".entity-tree-item")
-                .First(item => item.TextContent.Contains("orders", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains("Active", queueRow.TextContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Active", cut.Find(".entity-tree-selected-status").TextContent.Trim());
         });
     }
 
@@ -155,11 +168,19 @@ public sealed class EntityTreeTests : TestContext
             .Add(p => p.Client, client)
             .Add(p => p.NamespaceId, Guid.NewGuid()));
 
+        // Click topic row to select it (also expands it)
         cut.WaitForAssertion(() =>
         {
-            var topicRow = cut.Find(".entity-tree-topic");
-            Assert.Contains("Disabled", topicRow.TextContent, StringComparison.OrdinalIgnoreCase);
-            topicRow.QuerySelector(".entity-toggle-btn")!.Click();
+            cut.Find(".entity-tree-topic").Click();
+        });
+
+        // Verify action bar shows "Disabled" and click "Enable"
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("Disabled", cut.Find(".entity-tree-selected-status").TextContent.Trim());
+            cut.FindAll("button.entity-tree-action-btn")
+                .First(b => b.TextContent.Trim() == "Enable")
+                .Click();
         });
 
         Assert.Contains(client.TopicToggleCalls, call => call.TopicName == "bundle-1" && call.Enabled);
@@ -174,17 +195,66 @@ public sealed class EntityTreeTests : TestContext
             .Add(p => p.Client, client)
             .Add(p => p.NamespaceId, Guid.NewGuid()));
 
-        cut.Find(".entity-tree-topic").Click();
-
+        // Click topic row to expand it
         cut.WaitForAssertion(() =>
         {
-            var subscriptionRow = cut.Find(".entity-tree-subscription");
-            Assert.Contains("Disabled", subscriptionRow.TextContent, StringComparison.OrdinalIgnoreCase);
-            subscriptionRow.QuerySelector(".entity-toggle-btn")!.Click();
+            cut.Find(".entity-tree-topic").Click();
+        });
+
+        // Click subscription row to select it
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".entity-tree-subscription").Click();
+        });
+
+        // Verify action bar shows "Disabled" and click "Enable"
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("Disabled", cut.Find(".entity-tree-selected-status").TextContent.Trim());
+            cut.FindAll("button.entity-tree-action-btn")
+                .First(b => b.TextContent.Trim() == "Enable")
+                .Click();
         });
 
         Assert.Contains(client.SubscriptionToggleCalls,
             call => call.TopicName == "bundle-1" && call.SubscriptionName == "processor-a" && call.Enabled);
+    }
+
+    [Fact]
+    public void LinkedEntitiesParameterChange_ReRendersPinButtonState()
+    {
+        var client = new FakeServiceBusClient();
+        var namespaceId = Guid.NewGuid();
+
+        var cut = RenderComponent<EntityTree>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, namespaceId));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pinButton = cut.Find("button[aria-label='Pin queue orders to dashboard']");
+            Assert.DoesNotContain("pinned", pinButton.ClassName, StringComparison.Ordinal);
+            Assert.Contains("☆", pinButton.TextContent, StringComparison.Ordinal);
+        });
+
+        cut.SetParametersAndRender(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.NamespaceId, namespaceId)
+            .Add(p => p.LinkedEntities,
+            [
+                new SbEntityLink
+                {
+                    NamespaceId = namespaceId,
+                    EntityPath = "orders"
+                }
+            ]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pinButton = cut.Find("button[aria-label='Unpin queue orders from dashboard']");
+            Assert.Contains("pinned", pinButton.ClassName, StringComparison.Ordinal);
+            Assert.Contains("★", pinButton.TextContent, StringComparison.Ordinal);
+        });
     }
 
     private sealed class FakeServiceBusClient : IServiceBusClient
@@ -280,7 +350,7 @@ public sealed class EntityTreeTests : TestContext
         public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
             Task.CompletedTask;
 
-        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default) =>
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) =>

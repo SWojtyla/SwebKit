@@ -1,0 +1,109 @@
+<div class="slowlog-panel">
+    @if (Summary is null)
+    {
+        <div class="panel-loading">Loading slow log...</div>
+    }
+    else if (Summary.Capability is RedisInsightCapability.Unsupported)
+    {
+        <div class="capability-notice capability-unsupported" role="status">
+            <strong>Unsupported:</strong> SLOWLOG is not available on this Redis target. Hot-key signals, if shown below,
+            are derived from key metadata only.
+        </div>
+    }
+    else if (Summary.Capability is RedisInsightCapability.PermissionLimited)
+    {
+        <div class="capability-notice capability-limited" role="status">
+            <strong>Permission limited:</strong> Insufficient permissions to read SLOWLOG. Hot-key signals, if shown below,
+            are derived from key metadata only.
+        </div>
+    }
+    else
+    {
+        @if (Summary.Truncated)
+        {
+            <div class="truncated-notice" role="status">Results truncated — showing @Summary.MaxReturned most recent entries.
+            </div>
+        }
+
+        @if (Summary.Entries.Count == 0)
+        {
+            <div class="slowlog-empty">No recent slow commands recorded.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="slowlog-table">
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Executed at</th>
+                            <th>Duration (ms)</th>
+                            <th>Command</th>
+                            <th>Arguments</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Summary.Entries)
+                        {
+                            <tr>
+                                <td>@entry.Id</td>
+                                <td>@entry.ExecutedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td>@entry.Duration.TotalMilliseconds.ToString("F1")</td>
+                                <td>@entry.Command</td>
+                                <td class="args-cell">@Truncate(entry.Arguments, 80)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+
+    @if (HotKeys is not null && HotKeys.Signals.Count > 0)
+    {
+        <div class="hotkey-section">
+            <strong>Hot-key signals</strong>
+            @if (HotKeys.IsPartial && HotKeys.PartialReason is not null)
+            {
+                <div class="capability-notice capability-partial" role="status">
+                    Note: @HotKeys.PartialReason
+                </div>
+            }
+            <ul class="hotkey-list">
+                @foreach (var signal in HotKeys.Signals)
+                {
+                    <li class="hotkey-item">
+                        @if (OnNavigateToKey.HasDelegate)
+                        {
+                            <button class="hotkey-key-link" type="button"
+                                    @onclick="() => OnNavigateToKey.InvokeAsync(signal.Key)">@signal.Key</button>
+                        }
+                        else
+                        {
+                            <span class="hotkey-key">@signal.Key</span>
+                        }
+                        <span class="hotkey-source">Source: @signal.SignalSource</span>
+                        <span class="hotkey-explanation">@signal.Explanation</span>
+                        @if (signal.FrequencyScore.HasValue)
+                        {
+                            <span class="hotkey-freq">Frequency score: @signal.FrequencyScore.Value.ToString("F0")</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RedisSlowLogSummary? Summary { get; set; }
+    [Parameter] public RedisHotKeySummary? HotKeys { get; set; }
+    [Parameter] public EventCallback<string> OnNavigateToKey { get; set; }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            return value;
+        return value[..maxLength] + "…";
+    }
+}

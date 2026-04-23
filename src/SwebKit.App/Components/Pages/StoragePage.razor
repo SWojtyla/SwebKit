@@ -1,84 +1,150 @@
 @page "/storage"
-@using SwebKit.Azure.Storage
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
+@inject IAppEventBus Events
 @inject IConnectionStateService ConnectionState
 @inject SwebKit.Core.Services.DemoStorageClient DemoStorage
+@inject IStorageClientFactory StorageFactory
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject INotificationService Notifications
 @inject IJSRuntime JS
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
 <div class="storage-page-shell">
+    <div class="page-shell-header">
+        <RoutePageHeader Area="storage"
+                         Subtitle="Inspect containers, blobs, and download flows for the active storage account.">
+            <Meta>
+                <span class="shell-pill shell-pill--muted">@_storageAccounts.Count account@(_storageAccounts.Count == 1 ? "" : "s")</span>
+                @if (!string.IsNullOrWhiteSpace(SelectedStorageAccountDisplayName))
+                {
+                    <span class="shell-pill shell-pill--accent">@SelectedStorageAccountDisplayName</span>
+                }
+                @if (AppState.UseDemoData)
+                {
+                    <span class="shell-pill shell-pill--warning">Demo mode</span>
+                }
+            </Meta>
+            <Actions>
+                <a class="page-header-action-btn" href="/settings?section=storage">Settings</a>
+            </Actions>
+        </RoutePageHeader>
+    </div>
 
     @if (_storageAccounts.Count == 0)
     {
         <div class="storage-not-configured">
-            <p style="margin:0 0 8px;">Storage is not configured for this environment.</p>
-            <p style="margin:0;">Go to <strong>Settings</strong> and configure the <strong>Storage (Azure Blob)</strong>
-                section.</p>
+            <EmptyState Icon="📦" Title="Storage is not configured"
+                        Subtitle="Connect an Azure Blob account in Settings before opening containers and blob detail views.">
+                <Actions>
+                    <a href="/settings?section=storage">Open Storage settings</a>
+                </Actions>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
+        @if (_storageAccounts.Count > 1)
+        {
+            <div class="storage-account-bar">
+                <span>Account:</span>
+                <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
+                    @foreach (var acc in _storageAccounts)
+                    {
+                        <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
+                    }
+                </select>
             </div>
         }
-    else
+
+        @if (_storageClient is null)
         {
-            @* ── Account selector (only when >1 account) ── *@
-            @if (_storageAccounts.Count > 1)
-            {
-                <div class="storage-account-bar">
-                    <span>Account:</span>
-                    <select class="storage-select" value="@_selectedAccountId" @onchange="OnAccountChangedAsync">
-                        @foreach (var acc in _storageAccounts)
-                        {
-                            <option value="@acc.Id">@acc.DisplayName (@acc.AccountName)</option>
-                        }
-                    </select>
-                </div>
-            }
+            <div class="storage-not-configured">
+                <EmptyState Icon="⚠" Title="Selected storage account is unavailable"
+                            Subtitle="The saved storage configuration is incomplete or invalid for this configuration.">
+                    <Actions>
+                        <a href="/settings?section=storage">Review Storage settings</a>
+                    </Actions>
+                </EmptyState>
+            </div>
+        }
+        else
+        {
+            <StorageMutationBanner MutationsEnabled="@(_storageClient.Config.AllowMutations)"
+                                   AccountName="@_storageClient.Config.AccountName" />
 
-            @if (_storageClient is null)
-            {
-                <div class="storage-not-configured">
-                    Selected storage account has invalid configuration.
+            <div class="storage-body">
+                <div class="storage-container-pane">
+                    <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
+                                          SelectedContainerChanged="OnContainerSelectedAsync" />
                 </div>
-            }
-            else
-            {
-                <div class="storage-body">
-                    @* ── Left pane: containers ── *@
-                    <div class="storage-container-pane">
-                        <StorageContainerTree Client="_storageClient" SelectedContainer="_selectedContainer"
-                                              SelectedContainerChanged="OnContainerSelectedAsync" />
-                    </div>
 
-                    @* ── Right pane ── *@
-                    <div class="storage-blob-pane">
-                        @if (_selectedContainer is null)
+                <div class="storage-blob-pane">
+                    @if (_selectedContainer is null)
+                    {
+                        <EmptyState Icon="📁" Title="Select a container"
+                                    Subtitle="Choose a container from the left pane to inspect blobs, metadata, and download options." />
+                    }
+                    else
+                    {
+                        @if (_storageClient.Config.AllowMutations)
                         {
-                            <div class="storage-not-configured text-muted text-sm">Select a container.</div>
-                        }
-                        else
-                        {
-                            <div class="storage-blob-split">
-                                <div
-                                    style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
-                                    <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
-                                                     SelectedBlob="_selectedBlob" SelectedBlobChanged="OnBlobSelectedAsync" />
-                                </div>
-                                @if (_selectedBlob is not null)
-                                {
-                                    <div class="storage-detail-pane">
-                                        <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob" />
-                                    </div>
-                                }
+                            <div class="storage-mutation-actions">
+                                <FluentButton Appearance="Appearance.Accent"
+                                              @onclick="() => { _showUploadDialog = true; _mutationMessage = null; }">Upload</FluentButton>
                             </div>
                         }
-                    </div>
+
+                        @if (!string.IsNullOrWhiteSpace(_mutationMessage))
+                        {
+                            <div class="@(_mutationSuccess ? "storage-mutation-result storage-mutation-result--success" : "storage-mutation-result storage-mutation-result--error")"
+                                 role="status">
+                                @_mutationMessage
+                            </div>
+                        }
+
+                        <div class="storage-blob-split">
+                            <div
+                                style="flex:1; height:100%; overflow:hidden; border-right:@(_selectedBlob is not null ? "1px solid var(--color-border)" : "none");">
+                                <StorageBlobList Client="_storageClient" ContainerName="@_selectedContainer"
+                                                 SelectedBlob="_selectedBlob" SelectedBlobChanged="OnBlobSelectedAsync" />
+                            </div>
+                            @if (_selectedBlob is not null)
+                            {
+                                <div class="storage-detail-pane">
+                                    @if (_storageClient.Config.AllowMutations)
+                                    {
+                                        <div class="storage-blob-mutation-bar">
+                                            <FluentButton Appearance="Appearance.Lightweight" @onclick="OpenCopyDialogAsync">Copy
+                                            </FluentButton>
+                                        </div>
+                                    }
+                                    <BlobDetailPane Client="_storageClient" ContainerName="@_selectedContainer" Blob="_selectedBlob"
+                                                    AllowMutations="@(_storageClient.Config.AllowMutations)" />
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
+            </div>
+
+            @if (_showUploadDialog && _selectedContainer is not null)
+            {
+                <BlobUploadDialog Visible="true" ContainerName="@_selectedContainer" OnConfirm="HandleUploadAsync"
+                                  OnCancel="() => { _showUploadDialog = false; _mutationMessage = null; }" />
+            }
+
+            @if (_showCopyDialog && _selectedBlob is not null && _selectedContainer is not null)
+            {
+                <BlobCopyDialog Visible="true" SourceContainer="@_selectedContainer" SourceBlobName="@_selectedBlob.Name"
+                                AvailableContainers="@_containerNames" OnConfirm="HandleCopyAsync"
+                                OnCancel="() => { _showCopyDialog = false; _mutationMessage = null; }" />
             }
         }
-
-    </div>
+    }
+</div>
 
 @code {
     private IStorageClient? _storageClient;
@@ -87,11 +153,22 @@
     private string? _selectedContainer;
     private StorageBlobItem? _selectedBlob;
     private CancellationTokenSource _cts = new();
+    private bool _showUploadDialog;
+    private bool _showCopyDialog;
+    private string? _mutationMessage;
+    private bool _mutationSuccess;
+    private IReadOnlyList<string> _containerNames = [];
+
+    private string? SelectedStorageAccountDisplayName =>
+        _storageAccounts.FirstOrDefault(acc => acc.Id == _selectedAccountId)?.DisplayName;
 
     protected override void OnInitialized()
     {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.RegisterRestoreHandler("storage", RestoreWorkspaceAsync);
         RebuildClient();
         RegisterStorageCommands();
+        _ = Workspaces.ApplyPendingRestoreAsync("storage");
     }
 
     private void RegisterStorageCommands()
@@ -102,7 +179,12 @@
             Label = "Refresh Blobs",
             Category = "Storage",
             AreaScope = "storage",
-            Execute = () => { RebuildClient(); InvokeAsync(StateHasChanged); return Task.CompletedTask; }
+            Execute = () =>
+            {
+                RebuildClient();
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            }
         });
         Commands.Register(new AppCommand
         {
@@ -128,9 +210,25 @@
     {
         _cts.Cancel();
         _cts.Dispose();
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("storage");
         foreach (var id in new[] { "storage-refresh", "storage-download-blob", "storage-copy-sas" })
+        {
             Commands.Unregister(id);
+        }
+
         Selection.SetSelection("storage", null);
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "storage", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        RebuildClient();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void RebuildClient()
@@ -143,6 +241,7 @@
             _selectedAccountId = DemoStorage.Config.Id;
             _storageClient = DemoStorage;
             ConnectionState.SetConnected("storage");
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
             return;
         }
 
@@ -150,6 +249,7 @@
         if (_storageAccounts.Count == 0)
         {
             ConnectionState.SetNotConfigured("storage");
+            Workspaces.ClearCurrentSnapshot("storage");
             return;
         }
 
@@ -159,13 +259,15 @@
 
         try
         {
-            _storageClient = new AzureStorageClient(selected, CredentialStore);
+            _storageClient = StorageFactory.Create(selected);
             ConnectionState.SetConnected("storage");
         }
         catch (Exception ex)
         {
             ConnectionState.SetError("storage", ex.Message);
         }
+
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task OnAccountChangedAsync(ChangeEventArgs e)
@@ -174,6 +276,7 @@
         _selectedContainer = null;
         _selectedBlob = null;
         RebuildClient();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -181,6 +284,7 @@
     {
         _selectedContainer = container;
         _selectedBlob = null;
+        await PublishWorkspaceSnapshotAsync(recordRecent: !string.IsNullOrWhiteSpace(container));
         await InvokeAsync(StateHasChanged);
     }
 
@@ -188,6 +292,80 @@
     {
         _selectedBlob = blob;
         Selection.SetSelection("storage", blob);
+        await PublishWorkspaceSnapshotAsync(recordRecent: blob is not null);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("storage");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        var account = _storageAccounts.FirstOrDefault(candidate => candidate.Id == _selectedAccountId);
+        if (account is null)
+        {
+            return null;
+        }
+
+        var kind = _selectedBlob is not null
+            ? "blob"
+            : !string.IsNullOrWhiteSpace(_selectedContainer)
+                ? "container"
+                : "account";
+        var displayName = _selectedBlob?.Name ?? _selectedContainer ?? account.DisplayName;
+        var displayPath = _selectedBlob is not null
+            ? $"{account.DisplayName}/{_selectedContainer}/{_selectedBlob.Name}"
+            : !string.IsNullOrWhiteSpace(_selectedContainer)
+                ? $"{account.DisplayName}/{_selectedContainer}"
+                : account.DisplayName;
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"storage:{account.Id}:{_selectedContainer}:{_selectedBlob?.Name}",
+                Area = "storage",
+                Kind = kind,
+                DisplayName = displayName,
+                DisplayPath = displayPath,
+                Summary = account.AccountName,
+                Icon = "📁",
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["accountId"] = account.Id,
+                ["container"] = _selectedContainer ?? string.Empty,
+                ["blobName"] = _selectedBlob?.Name ?? string.Empty,
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        _selectedAccountId = snapshot.RestoreState.TryGetValue("accountId", out var accountId)
+            ? accountId
+            : _selectedAccountId;
+        RebuildClient();
+
+        _selectedContainer = snapshot.RestoreState.TryGetValue("container", out var container)
+            && !string.IsNullOrWhiteSpace(container)
+            ? container
+            : null;
+        _selectedBlob = snapshot.RestoreState.TryGetValue("blobName", out var blobName)
+            && !string.IsNullOrWhiteSpace(blobName)
+            ? new StorageBlobItem(blobName, false, null, null, null, null)
+            : null;
+
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -228,4 +406,52 @@
         }
     }
 
+    private async Task OpenCopyDialogAsync()
+    {
+        _containerNames = [];
+        if (_storageClient is not null)
+        {
+            try
+            {
+                var containers = await _storageClient.ListContainersAsync(_cts.Token);
+                _containerNames = containers.Select(c => c.Name).ToList();
+            }
+            catch (OperationCanceledException) { return; }
+            catch { /* best-effort */ }
+        }
+        _showCopyDialog = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleUploadAsync((BlobUploadOptions Options, Stream FileStream) payload)
+    {
+        if (_storageClient is null) return;
+        _mutationMessage = null;
+        var result = await _storageClient.UploadBlobAsync(payload.Options, payload.FileStream, null, _cts.Token);
+        if (result.Success)
+        {
+            _showUploadDialog = false;
+        }
+        _mutationMessage = result.Success
+            ? $"Uploaded to {result.ResultBlobPath}"
+            : $"Upload failed: {result.ErrorMessage}";
+        _mutationSuccess = result.Success;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleCopyAsync(BlobCopyOptions options)
+    {
+        if (_storageClient is null) return;
+        _mutationMessage = null;
+        var result = await _storageClient.CopyBlobAsync(options, _cts.Token);
+        if (result.Success)
+        {
+            _showCopyDialog = false;
+        }
+        _mutationMessage = result.Success
+            ? $"Copied to {result.ResultBlobPath}"
+            : $"Copy failed: {result.ErrorMessage}";
+        _mutationSuccess = result.Success;
+        await InvokeAsync(StateHasChanged);
+    }
 }

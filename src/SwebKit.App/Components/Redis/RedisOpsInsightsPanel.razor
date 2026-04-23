@@ -1,0 +1,60 @@
+<div class="ops-insights-panel">
+    <div class="ops-insights-header">
+        <button class="panel-collapse-btn" type="button" @onclick="() => _collapsed = !_collapsed"
+                aria-expanded="@(!_collapsed)" aria-label="@(_collapsed ? "Expand Ops Insights" : "Collapse Ops Insights")">
+            <span class="collapse-chevron @(_collapsed ? "chevron-collapsed" : "")">›</span>
+            <strong>Ops Insights</strong>
+        </button>
+    </div>
+
+    @if (!_collapsed)
+    {
+    <div class="ops-insights-tabs" role="tablist" aria-label="Ops insights">
+        <button class="tab-button @(_activeTab == Tab.Slowlog ? "active" : "")" type="button" role="tab"
+                aria-selected="@(_activeTab == Tab.Slowlog ? "true" : "false")" aria-controls="slowlog-panel"
+                id="tab-slowlog" @onclick="() => _activeTab = Tab.Slowlog">
+            Slowlog
+        </button>
+        <button class="tab-button @(_activeTab == Tab.PubSub ? "active" : "")" type="button" role="tab"
+                aria-selected="@(_activeTab == Tab.PubSub ? "true" : "false")" aria-controls="pubsub-panel" id="tab-pubsub"
+                @onclick="() => _activeTab = Tab.PubSub">
+            Pub/Sub
+        </button>
+    </div>
+
+    <div class="tab-content">
+        @if (_activeTab == Tab.Slowlog)
+        {
+            <div id="slowlog-panel" role="tabpanel" aria-labelledby="tab-slowlog">
+                <div class="panel-toolbar">
+                    @if (OnRefreshSlowLog.HasDelegate)
+                    {
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="OnRefreshSlowLog">Refresh</FluentButton>
+                    }
+                </div>
+                <RedisSlowLogPanel Summary="@SlowLog" HotKeys="@HotKeys" OnNavigateToKey="@OnNavigateToKey" />
+            </div>
+        }
+        else
+        {
+            <div id="pubsub-panel" role="tabpanel" aria-labelledby="tab-pubsub">
+                <RedisPubSubPanel Snapshot="@PubSub" OnRefresh="@OnRefreshPubSub" />
+            </div>
+        }
+    </div>
+    }
+</div>
+
+@code {
+    private enum Tab { Slowlog, PubSub }
+
+    private Tab _activeTab = Tab.Slowlog;
+    private bool _collapsed;
+
+    [Parameter] public RedisSlowLogSummary? SlowLog { get; set; }
+    [Parameter] public RedisHotKeySummary? HotKeys { get; set; }
+    [Parameter] public RedisPubSubSnapshot? PubSub { get; set; }
+    [Parameter] public EventCallback OnRefreshSlowLog { get; set; }
+    [Parameter] public EventCallback OnRefreshPubSub { get; set; }
+    [Parameter] public EventCallback<string> OnNavigateToKey { get; set; }
+}

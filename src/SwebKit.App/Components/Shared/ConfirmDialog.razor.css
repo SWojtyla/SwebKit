@@ -1,0 +1,104 @@
+.confirm-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-backdrop);
+    backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+    display: grid;
+    gap: var(--spacing-md);
+    width: min(440px, calc(100vw - 32px));
+    padding: 24px;
+    color-scheme: var(--control-color-scheme);
+    background: var(--color-panel-raised, var(--color-surface-2));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+}
+
+.confirm-dialog-production {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--color-prod);
+    color: var(--color-solid-foreground);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.confirm-dialog-title {
+    margin: 0;
+    font-size: 15px;
+    color: var(--color-text);
+}
+
+.confirm-dialog-message {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+}
+
+.confirm-dialog-typing {
+    display: grid;
+    gap: 6px;
+}
+
+.confirm-dialog-typing-copy {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.confirm-dialog-input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.confirm-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.confirm-dialog-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: filter 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+}
+
+.confirm-dialog-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+}
+
+.confirm-dialog-btn--prod {
+    background: var(--color-prod);
+}
+
+.confirm-dialog-btn--secondary {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+.confirm-dialog-btn--primary:hover:not(.confirm-dialog-btn--disabled),
+.confirm-dialog-btn--secondary:hover {
+    filter: brightness(1.05);
+}
+
+.confirm-dialog-btn--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

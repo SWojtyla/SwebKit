@@ -1,0 +1,26 @@
+@using SwebKit.Core.Models
+
+<section class="incident-timeline-list" aria-labelledby="incident-timeline-heading" data-testid="incident-timeline-list">
+    <div class="incident-timeline-list__header">
+        <div>
+            <h2 id="incident-timeline-heading">Evidence timeline</h2>
+            <p>Time-ordered evidence for the selected workload scope.</p>
+        </div>
+        <span class="incident-timeline-list__count">@(Items.Count == 1 ? "1 item" : $"{Items.Count} items")</span>
+    </div>
+
+    <div class="incident-timeline-list__rows" role="list">
+        @foreach (var item in Items)
+        {
+            <IncidentTimelineRow Item="item"
+                                 IsSelected="@string.Equals(item.ItemId, SelectedItemId, StringComparison.Ordinal)"
+                                 OnSelect="OnSelectItem" />
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<IncidentTimelineItem> Items { get; set; } = [];
+    [Parameter] public string? SelectedItemId { get; set; }
+    [Parameter] public EventCallback<IncidentTimelineItem> OnSelectItem { get; set; }
+}

@@ -3,34 +3,30 @@
 
 @if (Visible)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; display:flex; align-items:center; justify-content:center;"
-         @onkeydown="OnBackdropKeyDown">
-        <div style="background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:8px; padding:24px; max-width:440px; width:90%;"
-             @ref="_dialogRef">
+    <div class="confirm-dialog-backdrop" @onkeydown="OnBackdropKeyDown">
+        <div class="confirm-dialog" role="dialog" aria-modal="true" @ref="_dialogRef">
             @if (IsProduction)
             {
-                <div
-                    style="background:var(--color-prod); color:white; padding:6px 12px; border-radius:4px; margin-bottom:16px; font-size:12px; font-weight:600;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" /> PRODUCTION
-                    — This action cannot be undone
+                <div class="confirm-dialog-production">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="16px" style="flex-shrink:0;" />
+                    PRODUCTION — This action cannot be undone
                 </div>
             }
-            <h3 style="margin:0 0 8px; font-size:15px;">@Title</h3>
-            <p style="margin:0 0 16px; font-size:13px; color:var(--color-text-muted);">@Message</p>
+            <h3 class="confirm-dialog-title">@Title</h3>
+            <p class="confirm-dialog-message">@Message</p>
 
             @if (RequireTyping && IsProduction)
             {
-                <div style="margin-bottom:16px;">
-                    <p style="font-size:12px; margin:0 0 6px;">Type <strong>CONFIRM</strong> to proceed:</p>
-                    <input type="text" @bind="TypingConfirm"
-                           style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;" />
+                <div class="confirm-dialog-typing">
+                    <p class="confirm-dialog-typing-copy">Type <strong>CONFIRM</strong> to proceed:</p>
+                    <input type="text" @bind="TypingConfirm" class="confirm-dialog-input app-native-control" />
                 </div>
             }
 
-            <div style="display:flex; gap:8px; justify-content:flex-end;">
-                <button @onclick="Cancel" style="padding:6px 16px; cursor:pointer;">Cancel</button>
+            <div class="confirm-dialog-actions">
+                <button @onclick="Cancel" class="confirm-dialog-btn confirm-dialog-btn--secondary">Cancel</button>
                 <button @onclick="Confirm" disabled="@IsConfirmDisabled"
-                        style="padding:6px 16px; background:@(IsProduction ? "var(--color-prod)" : "var(--color-accent)"); color:white; border:none; border-radius:4px; cursor:pointer; @(IsConfirmDisabled ? "opacity:0.5;" : "")">
+                        class="confirm-dialog-btn confirm-dialog-btn--primary @(IsProduction ? "confirm-dialog-btn--prod" : string.Empty) @(IsConfirmDisabled ? "confirm-dialog-btn--disabled" : string.Empty)">
                     @ConfirmLabel
                 </button>
             </div>

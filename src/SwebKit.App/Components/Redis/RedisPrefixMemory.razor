@@ -1,16 +1,23 @@
 <div class="prefix-memory panel">
     <div class="pm-header">
-        <strong>Memory by Prefix</strong>
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
-            @(IsLoading ? "Analyzing..." : "Analyze")
-        </FluentButton>
+        <button class="panel-collapse-btn" type="button" @onclick="() => _collapsed = !_collapsed"
+                aria-expanded="@(!_collapsed)" aria-label="@(_collapsed ? "Expand Memory by Prefix" : "Collapse Memory by Prefix")">
+            <span class="collapse-chevron @(_collapsed ? "chevron-collapsed" : "")">›</span>
+            <strong>Memory by Prefix</strong>
+        </button>
+        @if (!_collapsed)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="OnAnalyze" Disabled="@IsLoading">
+                @(IsLoading ? "Analyzing..." : "Analyze")
+            </FluentButton>
+        }
     </div>
 
-    @if (Buckets.Count == 0 && !IsLoading)
+    @if (!_collapsed && Buckets.Count == 0 && !IsLoading)
     {
         <div class="pm-empty">Click Analyze to scan memory usage by prefix.</div>
     }
-    else if (Buckets.Count > 0)
+    else if (!_collapsed && Buckets.Count > 0)
     {
         <div class="pm-coverage">
             Sampled @ScannedKeyCount of @TotalKeyCount loaded keys.
@@ -39,6 +46,8 @@
     [Parameter] public int TotalKeyCount { get; set; }
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public EventCallback OnAnalyze { get; set; }
+
+    private bool _collapsed;
 
     private static string FormatBytes(long bytes)
     {

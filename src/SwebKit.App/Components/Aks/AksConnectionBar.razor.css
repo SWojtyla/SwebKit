@@ -6,9 +6,15 @@
 .aks-toolbar {
     display: flex;
     flex-direction: column;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    background: var(--aks-toolbar-surface);
+    border-bottom: 1px solid var(--aks-toolbar-border);
+    border-radius: var(--aks-toolbar-radius);
+    box-shadow: var(--aks-toolbar-shadow);
+    overflow: visible;
     flex-shrink: 0;
+    position: relative;
+    isolation: isolate;
+    z-index: var(--z-dropdown);
 }
 
 /* Row 1: connection status, context, namespace, actions */
@@ -16,7 +22,7 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    padding: 6px var(--spacing-md);
+    padding: 8px var(--spacing-md);
 }
 
 /* Row 2: resource type tabs */
@@ -28,6 +34,26 @@
     overflow-x: auto;
 }
 
+.aks-network-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: 0 var(--spacing-sm) 6px;
+    border-top: 1px solid var(--aks-toolbar-border);
+    background: var(--aks-monitor-surface);
+    overflow-x: auto;
+}
+
+.aks-network-tab-label {
+    padding: 0 var(--spacing-sm);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
+    white-space: nowrap;
+}
+
 .aks-context-label {
     font-size: var(--font-size-sm);
     color: var(--color-text);
@@ -36,7 +62,7 @@
 .aks-toolbar-divider {
     width: 1px;
     height: 20px;
-    background: var(--color-border);
+    background: var(--aks-toolbar-border);
     flex-shrink: 0;
 }
 
@@ -54,10 +80,13 @@
 /* ── Namespace dropdown select (existing context + namespace style) ── */
 .aks-ns-select {
     padding: 3px var(--spacing-sm);
-    background: var(--color-bg);
+    padding-right: 22px;
+    background: var(--aks-filter-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border: 1px solid var(--aks-filter-border);
+    border-radius: var(--aks-chip-radius);
+    color-scheme: var(--control-color-scheme);
+    box-shadow: var(--control-shadow);
     font-size: var(--font-size-sm);
     outline: none;
     min-width: 120px;
@@ -71,15 +100,36 @@
 /* ── Namespace picker (searchable custom dropdown) ── */
 .aks-ns-picker {
     position: relative;
+    z-index: var(--z-dropdown); /* must exceed backdrop (--z-dropdown - 1) to receive clicks */
 }
 
 .aks-ns-search {
-    cursor: default;
+    cursor: pointer;
     min-width: 150px;
 }
 
 .aks-ns-search:not([readonly]) {
     cursor: text;
+}
+
+/* Chevron indicator to signal the picker is interactive */
+.aks-ns-picker::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--color-text-muted);
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.aks-ns-picker:focus-within::after {
+    opacity: 0.5;
 }
 
 .aks-ns-backdrop {
@@ -95,12 +145,14 @@
     min-width: 200px;
     max-height: 260px;
     overflow-y: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    color-scheme: var(--control-color-scheme);
+    background: var(--color-panel-card, var(--aks-dropdown-surface));
+    border: 1px solid var(--color-card-border-strong, var(--aks-toolbar-border));
+    border-radius: var(--aks-toolbar-radius);
+    box-shadow: var(--aks-dropdown-shadow);
     z-index: var(--z-dropdown);
     padding: var(--spacing-xs) 0;
+    backdrop-filter: blur(14px);
 }
 
 .aks-ns-option {
@@ -114,22 +166,25 @@
 }
 
 .aks-ns-option:hover {
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--color-accent-subtle) 72%, transparent);
 }
 
 .aks-ns-option.current {
     color: var(--color-accent);
     font-weight: 600;
+    background: color-mix(in srgb, var(--color-accent-subtle) 70%, transparent);
 }
 
 /* ── Resource type tabs ── */
 .aks-resource-tab {
     padding: var(--spacing-xs) var(--spacing-md);
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-tab-radius);
     font-size: var(--font-size-sm);
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.1s;
@@ -137,22 +192,62 @@
 
 .aks-resource-tab:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 78%, var(--aks-tab-inactive-surface));
 }
 
 .aks-resource-tab.active {
     color: var(--color-accent);
-    border-color: var(--color-accent);
-    background: rgba(0, 120, 212, 0.08);
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--aks-toolbar-border));
+    background: var(--aks-tab-active-surface);
+}
+
+.aks-resource-tab--toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.aks-resource-tab-caret {
+    font-size: 10px;
+    transition: transform 0.1s ease;
+}
+
+.aks-resource-tab--toggle[aria-expanded="true"] .aks-resource-tab-caret {
+    transform: rotate(180deg);
+}
+
+.aks-resource-subtab {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--aks-tab-inactive-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-tab-radius);
+    font-size: var(--font-size-sm);
+    letter-spacing: var(--aks-tab-letter-spacing);
+    text-transform: var(--aks-tab-transform);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+}
+
+.aks-resource-subtab:hover {
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 72%, var(--aks-tab-inactive-surface));
+}
+
+.aks-resource-subtab.active {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--aks-toolbar-border));
+    background: var(--aks-tab-active-surface);
 }
 
 /* ── Events toggle button (in toolbar row) ── */
 .aks-events-toggle {
     padding: 3px 10px;
-    background: transparent;
+    background: var(--aks-tab-inactive-surface);
     color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-chip-radius);
     font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
@@ -162,11 +257,36 @@
 
 .aks-events-toggle:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--aks-tab-active-surface) 72%, var(--aks-tab-inactive-surface));
 }
 
 .aks-events-toggle.active {
     color: var(--color-warning);
     border-color: var(--color-warning);
-    background: rgba(255, 165, 0, 0.08);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--aks-tab-inactive-surface));
+}
+
+/* ── All-namespaces chip ── */
+.aks-ns-all-chip {
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.aks-ns-all-chip.active {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border-color: var(--color-accent);
+}
+
+.aks-ns-all-chip:hover:not(.active) {
+    border-color: var(--color-accent);
+    color: var(--color-text);
 }

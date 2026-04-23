@@ -20,7 +20,7 @@
 
 ## Core Runtime Flow
 
-1. `RedisPage` reads active environment Redis config.
+1. `RedisPage` reads the persisted Redis config.
 2. In demo mode it creates `DemoRedisClient`; otherwise `SwebKit.Redis.RedisClient`.
 3. Page renders immediately with loading indicator; connection and scan run asynchronously (non-blocking navigation).
 4. Scan walks Redis cursor pages with the requested `MATCH` pattern across the full keyspace, stops after a bounded loaded-match page for the tree, buffers any SCAN overflow beyond that cap, and resumes from the same filtered cursor when the user clicks `Load more matches`.

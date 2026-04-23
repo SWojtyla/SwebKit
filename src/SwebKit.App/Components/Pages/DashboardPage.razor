@@ -1,187 +1,225 @@
 @page "/"
 @page "/dashboard"
 @inject AppStateService AppState
+@inject IConfigurationHealthService ConfigurationHealth
+@inject IConfigurationProbeService ConfigurationProbes
 @inject IDevOpsClientFactory DevOpsClientFactory
+@inject IServiceBusClientFactory SbClientFactory
+@inject IAksClientFactory AksClientFactory
+@inject IRedisClientFactory RedisClientFactory
 @inject IAppEventBus Events
 @inject ICredentialStore CredentialStore
 @inject IPodHealthMonitorService Monitor
+@inject NavigationManager Nav
 @inject SwebKit.Core.Services.DemoDevOpsClient DemoDevOpsClient
+@inject SwebKit.Core.Services.DemoAksClient DemoAksClient
+@inject SwebKit.Core.Services.DemoRedisClient DemoRedisClient
+@inject OperatorWorkspaceService Workspaces
 @implements IDisposable
 
+@{
+    var pinnedItems = GetPinnedItems();
+    var readinessReport = BuildReadinessReport();
+    var showReadiness = readinessReport.RequiresDashboardAttention;
+}
+
 <div class="dashboard-page">
-
-    <div class="dashboard-header">
-        <div>
-            <h1 class="dashboard-title">SwebKit</h1>
-            <p class="dashboard-subtitle">Here's what needs attention.</p>
-        </div>
-        <button class="dashboard-refresh-btn" @onclick="RefreshAll" title="Refresh health data" aria-label="Refresh">
-            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="16px" />
-        </button>
-    </div>
-
-    @* ── Hero stats row ── *@
-    <div class="dashboard-hero-row">
-        <div class="hero-stat @(_sbConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="20px" />
-            </span>
-            <span class="hero-stat-value">@(_sbData is not null ? $"{_sbData.Value} {_sbData.Label}" : "—")</span>
-            <span class="hero-stat-label">Service Bus</span>
-        </div>
-        <div class="hero-stat @(_aksConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="20px" />
-            </span>
-            <span class="hero-stat-value">@(_aksData is not null ? $"{_aksData.Value} {_aksData.Label}" : "—")</span>
-            <span class="hero-stat-label">AKS</span>
-        </div>
-        <div class="hero-stat @(_redisConfigured ? "" : "hero-stat--unconfigured")">
-            <span class="hero-stat-icon">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
-            </span>
-            <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
-                                                                        "—")</span>
-                <span class="hero-stat-label">Redis</span>
-            </div>
-            <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
-                <span class="hero-stat-icon">
-                    <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
-                </span>
-                <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
-                                                                                     "—")</span>
-                    <span class="hero-stat-label">Pipelines</span>
-                </div>
-            </div>
-
-            @* ── Health tiles ── *@
-            <section class="dashboard-section">
-                <h2 class="dashboard-section-title">Health</h2>
-                <div class="health-grid">
-                    <div class="health-tile-wrap health-tile-wrap--servicebus">
-                        <HealthTile Title="Service Bus" Icon="⇄" IsConfigured="@_sbConfigured" Data="@_sbData" Error="@_sbError"
-                                    OnNavigateToSettings="NavigateToSettings" />
-                    </div>
-                    <div class="health-tile-wrap health-tile-wrap--aks">
-                        <HealthTile Title="AKS" Icon="☁" IsConfigured="@_aksConfigured" Data="@_aksData" Error="@_aksError"
-                                    OnNavigateToSettings="NavigateToSettings" />
-                    </div>
-                    <div class="health-tile-wrap health-tile-wrap--redis">
-                        <HealthTile Title="Redis" Icon="⬡" IsConfigured="@_redisConfigured" Data="@_redisData"
-                                    Error="@_redisError" OnNavigateToSettings="NavigateToSettings" />
-                    </div>
-                    <div class="health-tile-wrap health-tile-wrap--pipelines">
-                        <HealthTile Title="Pipelines" Icon="🚀" IsConfigured="@_releasesConfigured" Data="@_releasesData"
-                                    Error="@_releasesError" OnNavigateToSettings="NavigateToSettings" />
-                    </div>
-                </div>
-            </section>
-
-            @* ── Pod Health Alerts (only when monitoring is active) ── *@
-            @if (Monitor.IsMonitoring || _monitorAlerts.Count > 0)
+    <RoutePageHeader Area="dashboard" Subtitle="Here's what needs attention.">
+        <Meta>
+            @if (AppState.UseDemoData)
             {
-                <section class="dashboard-section">
-                    <h2 class="dashboard-section-title">
-                        Pod Health
-                        @if (Monitor.IsMonitoring)
-                        {
-                            <span class="ph-monitoring-badge">monitoring</span>
-                        }
-                    </h2>
+                <span class="shell-pill shell-pill--warning">Demo mode</span>
+            }
+            <span class="shell-pill shell-pill--muted">@pinnedItems.Count favorite@(pinnedItems.Count == 1 ? "" :
+                          "s")</span>
+                @if (Monitor.IsMonitoring)
+                {
+                    <span class="shell-pill shell-pill--accent">@Monitor.MonitoredNamespaces.Count
+                        namespace@(Monitor.MonitoredNamespaces.Count == 1 ? "" : "s") monitored</span>
+                    }
+                </Meta>
+            </RoutePageHeader>
 
-                    @* ── Monitored namespaces row ── *@
-                    @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
-                    {
-                        <div class="ph-ns-row">
-                            @foreach (var ns in Monitor.MonitoredNamespaces)
-                            {
-                                <span class="ph-ns-chip">
-                                    <span class="ph-ns-chip-label">@ns</span>
-                                    <button class="ph-ns-chip-remove" title="Stop monitoring @ns" aria-label="Stop monitoring @ns"
-                                            @onclick="() => StopMonitoringNamespaceAsync(ns)">✕</button>
-                                </span>
-                            }
-                            @if (Monitor.MonitoredNamespaces.Count > 1)
-                            {
-                                <button class="ph-ns-stop-all" @onclick="StopAllMonitoringAsync" title="Stop all pod health monitoring">
-                                    Stop all
-                                </button>
-                            }
-                        </div>
-                    }
-
-                    @if (_monitorAlerts.Count == 0)
-                    {
-                        <p class="dashboard-empty">No pod health events detected.</p>
-                    }
-                    else
-                    {
-                        <div class="ph-alert-list">
-                            @foreach (var evt in _monitorAlerts.Take(6))
-                            {
-                                <div class="ph-alert-row ph-@evt.EventType.ToString().ToLowerInvariant()">
-                                    <span class="ph-alert-icon">⚠</span>
-                                    <div class="ph-alert-body">
-                                        <span class="ph-alert-pod">@evt.PodName</span>
-                                        <span class="ph-alert-meta">@evt.Namespace — @evt.EventType</span>
-                                    </div>
-                                    <span class="ph-alert-time">@RelativeTime(evt.DetectedAt)</span>
-                                </div>
-                            }
-                        </div>
-                        @if (_monitorAlerts.Count > 6)
-                        {
-                            <p class="ph-overflow-hint">+@(_monitorAlerts.Count - 6) more — see AKS page for full history</p>
-                        }
-                    }
-                </section>
+            @if (showReadiness)
+            {
+                <ConfigurationReadinessDashboard Report="readinessReport" SettingsHrefBuilder="GetSettingsHref" />
             }
 
-            @* ── Lower 2-column: activity feed + pinned ── *@
-            <div class="dashboard-lower">
-                <section class="dashboard-activity-panel">
-                    <h2 class="dashboard-section-title">Recent Activity</h2>
-                    @if (_activities.Count == 0)
+            @* ── Hero stats row ── *@
+            <div class="dashboard-hero-row">
+                <div class="hero-stat @(_sbConfigured ? "" : "hero-stat--unconfigured")">
+                    <span class="hero-stat-icon">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="20px" />
+                    </span>
+                    <span class="hero-stat-value">@(_sbData is not null ? $"{_sbData.Value} {_sbData.Label}" : "—")</span>
+                    <span class="hero-stat-label">Service Bus</span>
+                </div>
+                <div class="hero-stat @(_aksConfigured ? "" : "hero-stat--unconfigured")">
+                    <span class="hero-stat-icon">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="20px" />
+                    </span>
+                    <span class="hero-stat-value">@(_aksData is not null ? $"{_aksData.Value} {_aksData.Label}" : "—")</span>
+                    <span class="hero-stat-label">AKS</span>
+                </div>
+                <div class="hero-stat @(_redisConfigured ? "" : "hero-stat--unconfigured")">
+                    <span class="hero-stat-icon">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="20px" />
+                    </span>
+                    <span class="hero-stat-value">@(_redisData is not null ? $"{_redisData.Value} {_redisData.Label}" :
+                                                                                                                                                                                                                                            "—")</span>
+                        <span class="hero-stat-label">Redis</span>
+                    </div>
+                    <div class="hero-stat @(_releasesConfigured ? "" : "hero-stat--unconfigured")">
+                        <span class="hero-stat-icon">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="20px" />
+                        </span>
+                        <span class="hero-stat-value">@(_releasesData is not null ? $"{_releasesData.Value} {_releasesData.Label}" :
+                                                                                                                                                                                                                                                                                         "—")</span>
+                            <span class="hero-stat-label">Pipelines</span>
+                        </div>
+                    </div>
+
+                    @* ── Health tiles ── *@
+                    <section class="dashboard-section">
+                        <h2 class="dashboard-section-title">Health</h2>
+                        <div class="health-grid">
+                            <div class="health-tile-wrap health-tile-wrap--servicebus">
+                                <HealthTile Title="Service Bus" Icon="⇄" IsConfigured="@_sbConfigured" Data="@_sbData" Error="@_sbError"
+                                            OnNavigateToSettings="NavigateToSettings" />
+                            </div>
+                            <div class="health-tile-wrap health-tile-wrap--aks">
+                                <HealthTile Title="AKS" Icon="☁" IsConfigured="@_aksConfigured" Data="@_aksData" Error="@_aksError"
+                                            OnNavigateToSettings="NavigateToSettings" />
+                            </div>
+                            <div class="health-tile-wrap health-tile-wrap--redis">
+                                <HealthTile Title="Redis" Icon="⬡" IsConfigured="@_redisConfigured" Data="@_redisData"
+                                            Error="@_redisError" OnNavigateToSettings="NavigateToSettings" />
+                            </div>
+                            <div class="health-tile-wrap health-tile-wrap--pipelines">
+                                <HealthTile Title="Pipelines" Icon="🚀" IsConfigured="@_releasesConfigured" Data="@_releasesData"
+                                            Error="@_releasesError" OnNavigateToSettings="NavigateToSettings" />
+                            </div>
+                        </div>
+                    </section>
+
+                    @* ── Pod Health Alerts (only when monitoring is active) ── *@
+                    @if (Monitor.IsMonitoring || _monitorAlerts.Count > 0)
                     {
-                        <p class="dashboard-empty">No recent activity — actions you take will appear here.</p>
-                    }
-                    else
-                    {
-                        <div class="activity-list">
-                            @foreach (var a in _activities)
+                        <section class="dashboard-section">
+                            <h2 class="dashboard-section-title">
+                                Pod Health
+                                @if (Monitor.IsMonitoring)
+                                {
+                                    <span class="ph-monitoring-badge">monitoring</span>
+                                }
+                            </h2>
+
+                            @* ── Monitored namespaces row ── *@
+                            @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
                             {
-                                <div class="activity-item">
-                                    <span class="activity-icon">@a.Icon</span>
-                                    <span class="activity-desc">@a.Description</span>
-                                    <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                                <div class="ph-ns-row">
+                                    @foreach (var ns in Monitor.MonitoredNamespaces)
+                                    {
+                                        <span class="ph-ns-chip">
+                                            <span class="ph-ns-chip-label">@ns</span>
+                                            <button class="ph-ns-chip-remove" title="Stop monitoring @ns" aria-label="Stop monitoring @ns"
+                                                    @onclick="() => StopMonitoringNamespaceAsync(ns)">✕</button>
+                                        </span>
+                                    }
+                                    @if (Monitor.MonitoredNamespaces.Count > 1)
+                                    {
+                                        <button class="ph-ns-stop-all" @onclick="StopAllMonitoringAsync" title="Stop all pod health monitoring">
+                                            Stop all
+                                        </button>
+                                    }
                                 </div>
                             }
-                        </div>
-                    }
-                </section>
 
-                <aside class="dashboard-pinned-panel">
-                    <h2 class="dashboard-section-title">Pinned</h2>
-                    @if (_pins.Count == 0)
-                    {
-                        <p class="dashboard-empty">No pinned items — pin queues and pods from their respective pages.</p>
-                    }
-                    else
-                    {
-                        <div class="pinned-chips">
-                            @foreach (var pin in _pins)
+                            @if (_monitorAlerts.Count == 0)
                             {
-                                <button class="pinned-chip" @onclick="() => NavigateToPin(pin)" title="@pin.DisplayPath">
-                                    <span class="pinned-chip-icon">@PinIcon(pin.EntityType)</span>
-                                    <span class="pinned-chip-name">@pin.DisplayPath</span>
-                                </button>
+                                <p class="dashboard-empty">No pod health events detected.</p>
                             }
-                        </div>
+                            else
+                            {
+                                <div class="ph-alert-list">
+                                    @foreach (var evt in _monitorAlerts.Take(6))
+                                    {
+                                        <div class="ph-alert-row ph-@evt.EventType.ToString().ToLowerInvariant()">
+                                            <span class="ph-alert-icon">⚠</span>
+                                            <div class="ph-alert-body">
+                                                <span class="ph-alert-pod">@evt.PodName</span>
+                                                <span class="ph-alert-meta">@evt.Namespace — @evt.EventType</span>
+                                            </div>
+                                            <span class="ph-alert-time">@RelativeTime(evt.DetectedAt)</span>
+                                        </div>
+                                    }
+                                </div>
+                                @if (_monitorAlerts.Count > 6)
+                                {
+                                    <p class="ph-overflow-hint">+@(_monitorAlerts.Count - 6) more — see AKS page for full history</p>
+                                }
+                            }
+                        </section>
                     }
-                </aside>
-            </div>
 
-        </div>
+                    @* ── Lower 2-column: activity feed + pinned ── *@
+                    <div class="dashboard-lower">
+                        <section class="dashboard-activity-panel">
+                            <h2 class="dashboard-section-title">Recent Activity</h2>
+                            @if (_activities.Count == 0)
+                            {
+                                <EmptyState Icon="⋯" Title="No recent activity"
+                                            Subtitle="Actions you take across Service Bus, AKS, and Pipelines will appear here.">
+                                    <Actions>
+                                        <a href="/service-bus">Open Service Bus</a>
+                                        <a href="/aks">Open AKS</a>
+                                    </Actions>
+                                </EmptyState>
+                            }
+                            else
+                            {
+                                <div class="activity-list">
+                                    @foreach (var a in _activities)
+                                    {
+                                        <div class="activity-item">
+                                            <span class="activity-icon">@a.Icon</span>
+                                            <span class="activity-desc">@a.Description</span>
+                                            <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </section>
+
+                        <aside class="dashboard-pinned-panel">
+                            <h2 class="dashboard-section-title">Favorites</h2>
+                            @if (pinnedItems.Count == 0)
+                            {
+                                <EmptyState Icon="⌘" Title="No favorites"
+                                            Subtitle="Save queues, topics, subscriptions, or workloads as favorites to keep them close.">
+                                    <Actions>
+                                        <a href="/service-bus">Browse Service Bus</a>
+                                        <a href="/aks">Browse AKS</a>
+                                    </Actions>
+                                </EmptyState>
+                            }
+                            else
+                            {
+                                <div class="pinned-chips">
+                                    @foreach (var pin in pinnedItems)
+                                    {
+                                        <button class="pinned-chip" @onclick="() => NavigateToPin(pin)"
+                                                title="@(pin.Snapshot.Resource.DisplayPath ?? pin.Snapshot.Resource.DisplayName)">
+                                            <span class="pinned-chip-icon">@pin.Icon</span>
+                                            <span class="pinned-chip-name">@pin.DisplayPath</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </aside>
+                    </div>
+
+                </div>
 
 @code {
     // ── Health state ────────────────────────────────────────────────────────────────
@@ -197,17 +235,21 @@
     private readonly List<ActivityRecord> _activities = [];
 
     // ── Pinned entities ─────────────────────────────────────────────────────────────
-    private IReadOnlyList<FavoriteEntity> _pins = [];
+    private sealed record DashboardPinnedItem(string DisplayPath, string Icon, WorkspaceSnapshot Snapshot);
+
+    private static readonly TimeSpan HealthRefreshBudget = TimeSpan.FromSeconds(8);
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────────
     private readonly CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _healthRefreshGate = new(1, 1);
     private PeriodicTimer? _refreshTimer;
 
     protected override void OnInitialized()
     {
-        _pins = AppState.Config.FavoriteEntities;
         Events.Subscribe<ActivityEvent>(OnActivityReceived);
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected += OnPodHealthDetected;
+        Workspaces.Changed += OnWorkspaceChanged;
         // Seed from ring buffer so alerts already recorded before dashboard load are visible.
         _monitorAlerts.AddRange(Monitor.RecentEvents);
     }
@@ -253,6 +295,18 @@
         });
     }
 
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "dashboard", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(RefreshAll);
+    }
+
+    private void OnWorkspaceChanged() => InvokeAsync(StateHasChanged);
+
     private Task RefreshAll() => LoadHealthDataAsync(_cts.Token);
 
     private async Task StopMonitoringNamespaceAsync(string ns)
@@ -269,19 +323,67 @@
 
     private async Task LoadHealthDataAsync(CancellationToken ct)
     {
+        var enteredGate = false;
+
         DetermineConfiguredState();
         await InvokeAsync(StateHasChanged);
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        linked.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            enteredGate = await _healthRefreshGate.WaitAsync(0, ct);
+            if (!enteredGate)
+            {
+                return;
+            }
 
-        await Task.WhenAll(
-            FetchServiceBusAsync(linked.Token),
-            FetchAksAsync(linked.Token),
-            FetchRedisAsync(linked.Token),
-            FetchReleasesAsync(linked.Token));
+            await Task.WhenAll(
+                RefreshHealthTileAsync("Service Bus", FetchServiceBusAsync, error => _sbError = error, ct),
+                RefreshHealthTileAsync("AKS", FetchAksAsync, error => _aksError = error, ct),
+                RefreshHealthTileAsync("Redis", FetchRedisAsync, error => _redisError = error, ct),
+                RefreshHealthTileAsync("Pipelines", FetchReleasesAsync, error => _releasesError = error, ct));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (enteredGate)
+            {
+                _healthRefreshGate.Release();
+            }
+        }
 
-        await InvokeAsync(StateHasChanged);
+        if (!ct.IsCancellationRequested)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshHealthTileAsync(
+        string areaName,
+        Func<CancellationToken, Task> refresh,
+        Action<string?> setError,
+        CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(HealthRefreshBudget);
+
+        try
+        {
+            await refresh(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            setError($"Timed out while refreshing {areaName}.");
+        }
+        catch (Exception ex)
+        {
+            setError(ex.Message);
+        }
     }
 
     private void DetermineConfiguredState()
@@ -311,8 +413,15 @@
                 {
                     var connStr = CredentialStore.Get(ns.CredentialKey);
                     if (string.IsNullOrWhiteSpace(connStr)) continue;
-                    await using var client = new SwebKit.Azure.ServiceBus.AzureServiceBusClient(connStr);
-                    dlq += await SumDlqAsync(client, ct);
+                    var client = SbClientFactory.Create(connStr);
+                    try
+                    {
+                        dlq += await SumDlqAsync(client, ct);
+                    }
+                    finally
+                    {
+                        if (client is IAsyncDisposable d) await d.DisposeAsync();
+                    }
                 }
             }
             _sbData = new HealthTileData((int)dlq, "dead-lettered", DateTimeOffset.Now);
@@ -327,9 +436,7 @@
     private static async Task<long> SumDlqAsync(IServiceBusClient client, CancellationToken ct)
     {
         var queues = await client.ListQueuesAsync(ct);
-        var statsTasks = queues.Select(q => client.GetEntityStatsAsync(q.EntityPath, ct));
-        var stats = await Task.WhenAll(statsTasks);
-        return stats.Sum(s => s.DeadLetterMessageCount);
+        return queues.Sum(queue => queue.Stats?.DeadLetterMessageCount ?? 0);
     }
 
     // ── AKS ─────────────────────────────────────────────────────────────────────────
@@ -343,10 +450,8 @@
             var ns = aksConfig?.DefaultNamespace ?? "default";
 
             IAksClient client = AppState.UseDemoData
-                ? new DemoAksClient()
-                : new SwebKit.Kubernetes.AksClient.KubernetesAksClient(
-                    aksConfig!.KubeconfigContext,
-                    aksConfig.KubeconfigPath);
+                ? DemoAksClient
+                : AksClientFactory.Create(aksConfig!.KubeconfigContext, aksConfig.KubeconfigPath);
 
             var pods = await client.GetPodsAsync(ns, null, ct);
             var unhealthy = pods.Count(p => p.Status is not ("Running" or "Succeeded" or "Completed"));
@@ -367,8 +472,8 @@
         try
         {
             IRedisClient client = AppState.UseDemoData
-                ? new DemoRedisClient(0)
-                : await SwebKit.Redis.RedisClient.CreateAsync(AppState.Config.RedisConfig!.ActiveCache!);
+                ? DemoRedisClient
+                : await RedisClientFactory.CreateAsync(AppState.Config.RedisConfig!.ActiveCache!, ct);
 
             using (client)
             {
@@ -421,25 +526,76 @@
 
     private void NavigateToSettings() => Events.Publish(new NavigateToAreaEvent("settings"));
 
-    private void NavigateToPin(FavoriteEntity pin)
+    private ConfigurationHealthContext CreateReadinessContext()
     {
-        var area = pin.EntityType switch
+        var baseContext = new ConfigurationHealthContext(
+            AppState.Config,
+            AppState.ServiceBusNamespaces,
+            AppState.UseDemoData,
+            AppState.HasProfileLoadFailure,
+            AppState.ProfilePersistenceBlockedMessage);
+
+        return baseContext with { ProbeSnapshot = ConfigurationProbes.GetLatest(baseContext) };
+    }
+
+    private ConfigurationHealthReport BuildReadinessReport() => ConfigurationHealth.BuildReport(CreateReadinessContext());
+
+    private string GetSettingsHref(string section) => Nav.ToAbsoluteUri($"/settings?section={section}").PathAndQuery;
+
+    private Task NavigateToPin(DashboardPinnedItem pin) => Workspaces.OpenSnapshotAsync(pin.Snapshot, recordRecent: true);
+
+    private IReadOnlyList<DashboardPinnedItem> GetPinnedItems()
+    {
+        var items = new List<DashboardPinnedItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var favorite in Workspaces.GetFavoriteResources())
         {
-            EntityType.Queue or EntityType.Topic or EntityType.Subscription => "service-bus",
-            EntityType.Deployment => "aks",
-            _ => "settings"
-        };
-        Events.Publish(new NavigateToAreaEvent(area));
+            AddPinnedItem(items, seen, BuildFavoritePinnedItem(favorite));
+        }
+
+        return items;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────
 
-    private static string PinIcon(EntityType type) => type switch
+    private DashboardPinnedItem BuildFavoritePinnedItem(FavoriteResource favorite)
     {
-        EntityType.Queue or EntityType.Topic or EntityType.Subscription => "⇄",
-        EntityType.Deployment => "☁",
-        _ => "⬡"
-    };
+        var icon = favorite.Snapshot.Resource.Area switch
+        {
+            "service-bus" => "⇄",
+            "aks" => "☁",
+            "observability" => "📈",
+            "storage" => "📁",
+            "redis" => "⚡",
+            _ => favorite.Snapshot.Resource.Icon ?? "⌘"
+        };
+
+        return new DashboardPinnedItem(
+            GetFavoriteLabel(favorite),
+            icon,
+            favorite.Snapshot.Clone());
+    }
+
+    private static string GetFavoriteLabel(FavoriteResource favorite)
+    {
+        var configuredName = favorite.Name.Trim();
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? favorite.Snapshot.Resource.DisplayPath ?? favorite.Snapshot.Resource.DisplayName
+            : configuredName;
+    }
+
+    private static void AddPinnedItem(
+        List<DashboardPinnedItem> items,
+        HashSet<string> seen,
+        DashboardPinnedItem item)
+    {
+        var key = item.Snapshot.Resource.Key;
+        if (seen.Add(key))
+        {
+            items.Add(item);
+        }
+    }
 
     private static string RelativeTime(DateTimeOffset at)
     {
@@ -454,9 +610,12 @@
     public void Dispose()
     {
         Events.Unsubscribe<ActivityEvent>(OnActivityReceived);
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         Monitor.PodHealthDetected -= OnPodHealthDetected;
+        Workspaces.Changed -= OnWorkspaceChanged;
         _cts.Cancel();
         _cts.Dispose();
+        _healthRefreshGate.Dispose();
         _refreshTimer?.Dispose();
     }
 }

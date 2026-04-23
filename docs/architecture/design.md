@@ -11,9 +11,11 @@ Update this file when control flow, runtime responsibilities, or integration bou
 This document expands [architecture.md](architecture.md) for the most important implementation flows:
 
 - App bootstrap and shell hydration
+- Operator workspace search, favorites, recents, and route-first restore
 - Service Bus namespace connection and message browsing
 - AKS diagnostics and side-panel operations
 - Observability resource selection and query execution
+- Incident timeline workbench bootstrap, request-state, and evidence inspection
 - Settings persistence and config propagation
 
 Folder maps and broad navigation conventions are intentionally kept in `codebase-guide.md`.
@@ -52,10 +54,51 @@ sequenceDiagram
 ### Design Notes
 
 - `MainLayout` uses two-phase startup: immediate shell render, then full state hydration.
-- `ProfileRepository.LoadAsync()` returns `ProfileLoadResult`; `AppStateService` keeps startup non-fatal but blocks profile persistence after a failed load so `profiles.json` is not overwritten.
+- `ProfileRepository.LoadAsync()` returns `ProfileLoadResult`; it first attempts the primary `profiles.json`, then recovers from a `.bak` copy when the primary file is missing or unreadable. `AppStateService` keeps startup non-fatal, only blocks persistence when both the primary file and backup fail to load, and surfaces a shell banner when recovery was needed.
 - `MainLayout` renders the shell even on profile-load failure and surfaces a non-fatal warning banner from `AppState.HasProfileLoadFailure`.
+- Profile, UI-state, and user-settings saves now write to a temp file, replace the primary file atomically, and refresh a sibling `.bak` file so rebuild/relaunch cycles do not depend on an in-place overwrite completing cleanly.
 - `AppStateService` raises `Initialized` and `DemoModeChanged` so layouts and pages can re-render safely.
 - Keyboard shortcuts are registered from `OnAfterRenderAsync` to avoid JS interop calls before a DOM is available.
+- After tab restore, `MainLayout` fires `ConnectionWarmupService.WarmAsync(openAreas)` as a fire-and-forget background task. It fans out AKS and Redis warmup in parallel (each with a 10 s timeout). On success, warm clients are stored in `IAksWarmupCache` / `IRedisWarmupCache`. Pages check these caches at the top of their connect paths before calling their bootstrappers. Caches are invalidated on profile reload via `ConnectionWarmupService.InvalidateCaches()`. Warmup can be disabled via `UserSettings.WarmupConnectionsOnStartup = false`.
+
+## Operator Workspace Flow
+
+### Intent
+
+Keep resource search, recent resources, and named favorites on one semantic model while letting routed pages own their restore details.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Shell as CommandPalette / TopBar / Dashboard
+    participant Workspace as OperatorWorkspaceService
+    participant Profiles as ProfileRepository
+    participant UiState as UiStateRepository
+    participant Page as Routed Page
+
+    User->>Page: Open or change page context
+    Page->>Workspace: PublishSnapshotAsync(snapshot, recordRecent?)
+    Workspace->>UiState: Save recent resources when needed
+    Workspace-->>Shell: Raise Changed event
+    User->>Shell: Save, rename, or remove current favorite
+    Shell->>Workspace: SaveFavoriteAsync / RemoveFavoriteAsync
+    Workspace->>Profiles: Persist environment-scoped data via AppState
+    User->>Shell: Reopen recent/favorite/resource result
+    Shell->>Workspace: OpenSnapshotAsync(...)
+    Workspace->>Page: Invoke restore handler if already on target route
+    Workspace->>Shell: Otherwise navigate to target area route
+    Page->>Workspace: ApplyPendingRestoreAsync(area)
+    Workspace->>Page: Restore semantic route/resource/filter state
+```
+
+### Design Notes
+
+- Durable named favorites live in `profiles.json`; recent resources stay in local `ui-state.json`.
+- `OperatorWorkspaceService` owns current snapshots, provider-backed search, favorites, recents, and pending route-first restores.
+- Participating pages register one area restore handler and publish semantic snapshots only; they never serialize live component objects or service graphs.
+- Search providers are additive. New capability areas can contribute resource candidates without reopening one central palette branch.
 
 ## Service Bus Namespace and Message Browse Flow
 
@@ -185,6 +228,81 @@ sequenceDiagram
 - The selected resource ID/name persists in `AppState.Config.ObservabilityConfig`.
 - Demo mode swaps both discovery and provider implementations without changing page-level flow.
 
+## Incident Timeline Frontend Workbench Flow
+
+### Intent
+
+Bootstrap workload scope from the current AKS context, keep manual refresh explicit, and present one evidence-first workbench with visible source coverage and a detail panel.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Page as IncidentTimelinePage
+    participant AppState as AppStateService
+    participant Bootstrap as IAksClientBootstrapper
+    participant Timeline as IIncidentTimelineService
+
+    User->>Page: Open Incident Timeline
+    Page->>AppState: Wait for initialized config
+    Page->>Bootstrap: BootstrapAsync(current context, namespace)
+    Bootstrap-->>Page: Context list, namespace list, active scope defaults
+    Page->>Page: Seed workload from explicit mapping or watched deployment
+    Page->>Timeline: GetTimelineAsync(query)
+    Timeline-->>Page: IncidentTimelinePage
+    Page-->>User: Scope summary, coverage strip, timeline rows, detail panel
+    User->>Page: Edit scope or source toggles
+    Page-->>User: Mark pending refresh, keep current evidence visible
+    User->>Page: Refresh
+    Page->>Page: Cancel in-flight request, increment request version
+    Page->>Timeline: GetTimelineAsync(updated query)
+    Timeline-->>Page: Latest result only
+```
+
+### Design Notes
+
+- `IncidentTimelinePage` uses `IAksClientBootstrapper` to normalize context and namespace selection so the workbench follows the same AKS bootstrap seam as the AKS page.
+- The page keeps draft scope edits separate from the currently loaded result. It shows a pending-refresh summary instead of auto-loading on every edit.
+- Each refresh cancels any in-flight request and applies results only when the request version matches the latest requested scope.
+- The UI never re-implements inclusion logic. It only projects `IncidentTimelinePage`, `IncidentTimelineItem`, and `IncidentTimelineSourceStatus` from `SwebKit.Core`.
+
+## Incident Timeline Backend Aggregation Flow
+
+### Intent
+
+Assemble workload-scoped incident evidence from AKS, App Insights, Service Bus, and Azure DevOps without moving merge logic into the UI and without inventing ownership heuristics.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant UI as Incident Timeline Page
+    participant Timeline as IncidentTimelineService
+    participant Aks as AksTimelineSignalSource
+    participant Obs as AppInsightsTimelineSignalSource
+    participant Sb as ServiceBusEvidenceSignalSource
+    participant Ado as DevOpsReleaseTimelineSignalSource
+
+    UI->>Timeline: GetTimelineAsync(query)
+    Timeline->>Aks: FetchAsync(query)
+    Timeline->>Obs: FetchAsync(query)
+    Timeline->>Sb: FetchAsync(query)
+    Timeline->>Ado: FetchAsync(query)
+    Aks-->>Timeline: Direct AKS evidence + coverage
+    Obs-->>Timeline: Corroborating App Insights evidence or Unmapped
+    Sb-->>Timeline: Direct Service Bus evidence or Partial/Failed
+    Ado-->>Timeline: Contextual release/deployment evidence + coverage
+    Timeline-->>UI: UTC-ordered items, per-source status, partial/truncation flags
+```
+
+### Design Notes
+
+- `IncidentTimelineService` owns fan-out, per-source timeout budgets, deterministic UTC ordering, and best-effort partial results.
+- AKS is the anchor source; non-AKS sources participate only when `AppConfig.IncidentTimeline.WorkloadMappings` explicitly maps them to the selected workload.
+- Source adapters return coverage states (`Loaded`, `Partial`, `Unmapped`, `TimedOut`, `Failed`, etc.) so the UI can surface incomplete evidence without guessing.
+- The backend currently supports AKS `Deployment`, `StatefulSet`, and `Pod` scopes. `DaemonSet` is intentionally left unsupported until a dedicated AKS contract exists.
+
 ## Settings Save and Config Propagation Flow
 
 ### Intent
@@ -221,25 +339,28 @@ sequenceDiagram
 - `SaveConfigAsync()` returns `false` when profile persistence is blocked after a failed load; settings forms surface the blocked-save message and keep the current session state in memory.
 - Credentials are referenced by logical keys; secret material remains in credential store.
 - DevOps settings validation and live pages create fresh clients through `IDevOpsClientFactory`; saving settings affects only future client snapshots.
-- Environment selection is profile-based (`Environments` and `ActiveEnvironmentName` in `ProfileData`).
+- `ProfileRepository` now persists one active `AppConfig` and only keeps legacy multi-environment compatibility at load time for migration.
 
 ## Key Reference Points
 
-| File                                                          | Responsibility                                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/SwebKit.App/MauiProgram.cs`                              | DI composition root and infrastructure registration.                                  |
-| `src/SwebKit.App/Components/Layout/MainLayout.razor`          | App shell lifecycle, startup sequencing, and global command registration.             |
-| `src/SwebKit.Core/Services/AppStateService.cs`                | Shared app state, initialization, demo mode toggling, and persistence calls.          |
-| `src/SwebKit.Core/Configuration/ProfileRepository.cs`         | Profile/environment load-save lifecycle for `profiles.json`.                          |
-| `src/SwebKit.Core/Configuration/UiStateRepository.cs`         | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences. |
-| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`       | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.          |
-| `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs` | Service Bus namespace bootstrap and connection seam used by the page.                 |
-| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`       | Service Bus SDK implementation and message/entity operations.                         |
-| `src/SwebKit.App/Components/Pages/AksPage.razor`              | AKS page orchestration and resource panel lifecycle.                                  |
-| `src/SwebKit.App/Services/AksClientBootstrapper.cs`           | AKS client/context/namespace bootstrap seam used by the page.                         |
-| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`     | Kubernetes operations, auth fallback, and log/port-forward behavior.                  |
-| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`    | Resource selection, tab routing, and provider-driven refresh logic.                   |
-| `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`    | Observability provider activation seam for demo/live resource binding.                |
-| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`       | KQL execution and typed observability result mapping.                                 |
-| `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`, `src/SwebKit.DevOps/DevOpsClientFactory.cs` | Immutable live DevOps client creation from the current saved settings. |
-| `src/SwebKit.DevOps/DevOpsClient.cs`                          | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                    |
+| File                                                                                                 | Responsibility                                                                         |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `src/SwebKit.App/MauiProgram.cs`                                                                     | DI composition root and infrastructure registration.                                   |
+| `src/SwebKit.App/Components/Layout/MainLayout.razor`                                                 | App shell lifecycle, startup sequencing, and global command registration.              |
+| `src/SwebKit.Core/Services/AppStateService.cs`                                                       | Shared app state, initialization, demo mode toggling, and persistence calls.           |
+| `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                | Single-config load-save lifecycle plus legacy-profile migration for `profiles.json`.   |
+| `src/SwebKit.Core/Configuration/UiStateRepository.cs`                                                | UI state persistence (`ui-state.json`) including tabs, filters, and view preferences.  |
+| `src/SwebKit.App/Components/Pages/ServiceBusPage.razor`                                              | Service Bus page orchestration, namespace lifecycle, tab workspace behavior.           |
+| `src/SwebKit.App/Services/ServiceBusNamespaceBootstrapper.cs`                                        | Service Bus namespace bootstrap and connection seam used by the page.                  |
+| `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                              | Service Bus SDK implementation and message/entity operations.                          |
+| `src/SwebKit.App/Components/Pages/AksPage.razor`                                                     | AKS page orchestration and resource panel lifecycle.                                   |
+| `src/SwebKit.App/Services/AksClientBootstrapper.cs`                                                  | AKS client/context/namespace bootstrap seam used by the page.                          |
+| `src/SwebKit.Kubernetes/AksClient/KubernetesAksClient.cs`                                            | Kubernetes operations, auth fallback, and log/port-forward behavior.                   |
+| `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                           | Resource selection, tab routing, and provider-driven refresh logic.                    |
+| `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`                                           | Observability provider activation seam for demo/live resource binding.                 |
+| `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                              | KQL execution and typed observability result mapping.                                  |
+| `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`                                        | Incident timeline workbench orchestration, request cancellation, and detail selection. |
+| `src/SwebKit.App/Components/IncidentTimeline/`                                                       | Incident timeline toolbar, coverage, list, row, detail panel, and empty-state UI.      |
+| `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs`                                          | Aggregated incident evidence service consumed by the page.                             |
+| `src/SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`, `src/SwebKit.DevOps/DevOpsClientFactory.cs` | Immutable live DevOps client creation from the current saved settings.                 |
+| `src/SwebKit.DevOps/DevOpsClient.cs`                                                                 | Pipeline/run/approval/git integration with Azure DevOps REST APIs.                     |

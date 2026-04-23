@@ -1,0 +1,166 @@
+@implements IDisposable
+
+<div class="placement-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading placement analysis..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="placement-panel-error">@_error</div>
+    }
+    else if (_analysis is null)
+    {
+        <div class="placement-panel-empty">No placement data available.</div>
+    }
+    else
+    {
+        <div class="placement-panel-toolbar">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        <div class="placement-panel-section">
+            <div class="placement-panel-section-title">Declared Constraints</div>
+            @if (!_analysis.HasNodeSelector && !_analysis.HasNodeAffinity && !_analysis.HasPodAffinity &&
+                             !_analysis.HasPodAntiAffinity && !_analysis.HasTolerations && !_analysis.HasTopologySpreadConstraints)
+            {
+                <div class="placement-panel-empty">No placement constraints declared in pod spec.</div>
+            }
+            else
+            {
+                <ul class="placement-panel-list">
+                    @if (_analysis.HasNodeSelector)
+                    {
+                        <li>
+                            <strong>Node Selector:</strong>
+                            @string.Join(", ", _analysis.NodeSelector.Select(kv => $"{kv.Key}={kv.Value}"))
+                        </li>
+                    }
+                    @if (_analysis.HasNodeAffinity)
+                    {
+                        <li><strong>Node Affinity</strong> declared</li>
+                    }
+                    @if (_analysis.HasPodAffinity)
+                    {
+                        <li><strong>Pod Affinity</strong> declared</li>
+                    }
+                    @if (_analysis.HasPodAntiAffinity)
+                    {
+                        <li><strong>Pod Anti-Affinity</strong> declared</li>
+                    }
+                    @if (_analysis.HasTolerations)
+                    {
+                        <li>
+                            <strong>Tolerations:</strong>
+                            @string.Join(", ", _analysis.Tolerations)
+                        </li>
+                    }
+                    @if (_analysis.HasTopologySpreadConstraints)
+                    {
+                        <li>
+                            <strong>Topology Spread Constraints:</strong>
+                            @string.Join(", ", _analysis.TopologySpreadKeys)
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+
+        @if (_analysis.RecentSchedulingFailureEvents.Count > 0)
+        {
+            <div class="placement-panel-section">
+                <div class="placement-panel-section-title">Scheduling Events</div>
+                <ul class="placement-panel-list">
+                    @foreach (var ev in _analysis.RecentSchedulingFailureEvents)
+                    {
+                        <li>@ev</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @if (_analysis.Findings.Count > 0)
+        {
+            <div class="placement-panel-section">
+                <div class="placement-panel-section-title">Findings</div>
+                <ul class="placement-panel-list">
+                    @foreach (var finding in _analysis.Findings)
+                    {
+                        <li>@finding</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="placement-panel-footnote">@_analysis.Limitation</div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public string WorkloadKind { get; set; } = "Deployment";
+    [Parameter] public string? WorkloadName { get; set; }
+
+    private PlacementAnalysis? _analysis;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Namespace}/{WorkloadKind}/{WorkloadName}";
+        if (_loadedKey == key) return;
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(WorkloadName))
+        {
+            _analysis = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _analysis = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _analysis = await Client.GetPlacementAnalysisAsync(Namespace, WorkloadKind, WorkloadName, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

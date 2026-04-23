@@ -251,6 +251,88 @@ public sealed class RedisClient : IRedisClient
         _mux.Dispose();
     }
 
+    public async Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            var result = await _server.ExecuteAsync("SLOWLOG", new object[] { "GET", top });
+            var entries = ParseSlowLogEntries(result);
+            return new RedisSlowLogSummary(entries, entries.Count == top, top, RedisInsightCapability.Loaded);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RedisCommandException ex) when (
+            ex.Message.Contains("unknown command", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RedisSlowLogSummary([], false, top, RedisInsightCapability.Unsupported);
+        }
+        catch (RedisServerException ex) when (IsPermissionError(ex.Message))
+        {
+            return new RedisSlowLogSummary([], false, top, RedisInsightCapability.PermissionLimited);
+        }
+        catch (Exception)
+        {
+            return new RedisSlowLogSummary([], false, top, RedisInsightCapability.Failed);
+        }
+    }
+
+    public async Task<RedisPubSubSnapshot> GetPubSubSnapshotAsync(
+        string? pattern = null,
+        int maxChannels = 200,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            var channelPattern = string.IsNullOrEmpty(pattern) ? "*" : pattern;
+            var channelsResult = await _server.ExecuteAsync("PUBSUB", new object[] { "CHANNELS", channelPattern });
+
+            var allChannels = channelsResult.IsNull
+                ? []
+                : ((RedisResult[])channelsResult!)
+                    .Select(r => r.ToString() ?? string.Empty)
+                    .Where(s => s.Length > 0)
+                    .ToList();
+
+            var truncated = allChannels.Count > maxChannels;
+            var channels = truncated ? allChannels.Take(maxChannels).ToList() : allChannels;
+
+            List<RedisPubSubChannelInfo> channelInfos;
+            if (channels.Count > 0)
+            {
+                var numsubArgs = new List<object> { "NUMSUB" };
+                numsubArgs.AddRange(channels);
+                var numsubResult = await _server.ExecuteAsync("PUBSUB", numsubArgs);
+                channelInfos = ParseNumsubResult(numsubResult, channels);
+            }
+            else
+            {
+                channelInfos = [];
+            }
+
+            var numpatResult = await _server.ExecuteAsync("PUBSUB", new object[] { "NUMPAT" });
+            var patternCount = numpatResult.IsNull ? 0L : (long)numpatResult;
+
+            return new RedisPubSubSnapshot(channelInfos, patternCount, truncated, maxChannels, RedisInsightCapability.Loaded);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (RedisCommandException ex) when (
+            ex.Message.Contains("unknown command", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Unsupported);
+        }
+        catch (RedisServerException ex) when (IsPermissionError(ex.Message))
+        {
+            return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.PermissionLimited);
+        }
+        catch (Exception)
+        {
+            return new RedisPubSubSnapshot([], 0, false, maxChannels, RedisInsightCapability.Failed);
+        }
+    }
+
     private Task<long?> TryGetMemoryUsageAsync(string key) =>
         TryValueAsync(async () =>
         {
@@ -384,4 +466,73 @@ public sealed class RedisClient : IRedisClient
 
     private static long GetLong(Dictionary<string, string> metrics, string key) =>
         ParseLong(GetString(metrics, key));
+
+    private static IReadOnlyList<RedisSlowLogEntryInfo> ParseSlowLogEntries(RedisResult result)
+    {
+        if (result.IsNull)
+            return [];
+
+        var rows = (RedisResult[])result!;
+        var entries = new List<RedisSlowLogEntryInfo>(rows.Length);
+
+        foreach (var row in rows)
+        {
+            if (row.IsNull)
+                continue;
+
+            var fields = (RedisResult[])row!;
+            if (fields.Length < 4)
+                continue;
+
+            if (!long.TryParse(fields[0].ToString(), out var id))
+                continue;
+            if (!long.TryParse(fields[1].ToString(), out var unixSeconds))
+                continue;
+            if (!long.TryParse(fields[2].ToString(), out var durationMicros))
+                continue;
+
+            var cmdArgs = fields[3].IsNull ? [] : (RedisResult[])fields[3]!;
+            var command = cmdArgs.Length > 0 ? cmdArgs[0].ToString() ?? string.Empty : string.Empty;
+            var arguments = cmdArgs.Length > 1
+                ? string.Join(" ", cmdArgs.Skip(1).Select(a => a.ToString() ?? string.Empty))
+                : string.Empty;
+
+            string? clientName = fields.Length >= 6 ? fields[5].ToString() : null;
+            if (string.IsNullOrEmpty(clientName))
+                clientName = null;
+
+            entries.Add(new RedisSlowLogEntryInfo(
+                id,
+                DateTimeOffset.FromUnixTimeSeconds(unixSeconds),
+                TimeSpan.FromMicroseconds(durationMicros),
+                command,
+                arguments,
+                clientName));
+        }
+
+        return entries;
+    }
+
+    private static List<RedisPubSubChannelInfo> ParseNumsubResult(RedisResult result, List<string> channels)
+    {
+        if (result.IsNull)
+            return channels.Select(c => new RedisPubSubChannelInfo(c, 0)).ToList();
+
+        var pairs = (RedisResult[])result!;
+        var channelInfos = new List<RedisPubSubChannelInfo>(pairs.Length / 2);
+        for (var i = 0; i + 1 < pairs.Length; i += 2)
+        {
+            var channel = pairs[i].ToString() ?? string.Empty;
+            _ = long.TryParse(pairs[i + 1].ToString(), out var count);
+            channelInfos.Add(new RedisPubSubChannelInfo(channel, count));
+        }
+
+        return channelInfos;
+    }
+
+    private static bool IsPermissionError(string message) =>
+        message.Contains("NOPERM", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("permission", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("denied", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("not allowed", StringComparison.OrdinalIgnoreCase);
 }

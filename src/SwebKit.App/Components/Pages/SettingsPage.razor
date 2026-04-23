@@ -1,43 +1,52 @@
 @page "/settings"
 @inject AppStateService AppState
+@inject UserSettingsRepository UserSettings
+@inject IConfigurationHealthService ConfigurationHealth
+@inject IConfigurationProbeService ConfigurationProbes
 @inject ICredentialStore CredentialStore
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @implements IDisposable
 
+@{
+    var readinessReport = BuildReadinessReport();
+    var currentAreaHealth = GetCurrentAreaHealth(readinessReport);
+}
+
 <div class="settings-shell">
 
     @* ── Left navigation sidebar ── *@
     <nav class="settings-nav">
-        <button class="settings-nav-item @(_active == "appearance" ? "active" : "")"
-                @onclick="@(() => _active = "appearance")">
+        <button class="@GetNavItemClass(AppearanceSection)" @onclick="@(() => SelectSection(AppearanceSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.PaintBrush())" Width="18px" />
             Appearance
         </button>
-        <button class="settings-nav-item @(_active == "servicebus" ? "active" : "")"
-                @onclick="@(() => _active = "servicebus")">
+        <button class="@GetNavItemClass(ServiceBusSection)" @onclick="@(() => SelectSection(ServiceBusSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowSwap())" Width="18px" />
             Service Bus
         </button>
-        <button class="settings-nav-item @(_active == "aks" ? "active" : "")" @onclick="@(() => _active = "aks")">
+        <button class="@GetNavItemClass(AksSection)" @onclick="@(() => SelectSection(AksSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Cloud())" Width="18px" />
             AKS
         </button>
-        <button class="settings-nav-item @(_active == "redis" ? "active" : "")" @onclick="@(() => _active = "redis")">
+        <button class="@GetNavItemClass(RedisSection)" @onclick="@(() => SelectSection(RedisSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Database())" Width="18px" />
             Redis
         </button>
-        <button class="settings-nav-item @(_active == "devops" ? "active" : "")" @onclick="@(() => _active = "devops")">
+        <button class="@GetNavItemClass(DevOpsSection)" @onclick="@(() => SelectSection(DevOpsSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Rocket())" Width="18px" />
             DevOps
         </button>
-        <button class="settings-nav-item @(_active == "storage" ? "active" : "")"
-                @onclick="@(() => _active = "storage")">
+        <button class="@GetNavItemClass(IncidentTimelineSection)"
+                @onclick="@(() => SelectSection(IncidentTimelineSection))">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Width="18px" />
+            Incident Timeline
+        </button>
+        <button class="@GetNavItemClass(StorageSection)" @onclick="@(() => SelectSection(StorageSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
             Storage
         </button>
-        <button class="settings-nav-item @(_active == "observability" ? "active" : "")"
-                @onclick="@(() => _active = "observability")">
+        <button class="@GetNavItemClass(ObservabilitySection)" @onclick="@(() => SelectSection(ObservabilitySection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="18px" />
             Observability
         </button>
@@ -45,6 +54,24 @@
 
     @* ── Right content well ── *@
     <div class="settings-content">
+        <RoutePageHeader Area="settings" Subtitle="@CurrentSectionSubtitle">
+            <Meta>
+                <span class="shell-pill shell-pill--muted">Section: @CurrentSectionTitle</span>
+                @if (IsDirty)
+                {
+                    <span class="shell-pill shell-pill--warning">Unsaved changes</span>
+                }
+                @if (AppState.Config.IsProduction)
+                {
+                    <span class="shell-pill shell-pill--danger">Production safeguards on</span>
+                }
+                @if (string.Equals(_active, ObservabilitySection, StringComparison.Ordinal))
+                {
+                    <span class="shell-pill shell-pill--muted">Azure CLI identity</span>
+                }
+            </Meta>
+        </RoutePageHeader>
+
         @if (IsDirty)
         {
             <div class="settings-unsaved-banner" role="status">
@@ -53,15 +80,18 @@
             </div>
         }
 
+        <ConfigurationReadinessAreaCard Report="readinessReport" Area="currentAreaHealth"
+                                        IsProductionConfiguration="@AppState.Config.IsProduction" IsRunningLiveChecks="@_isRunningLiveChecks"
+                                        OnRunLiveChecks="RunLiveChecksAsync" />
+
         @switch (_active)
         {
-            case "appearance":
-                <h3 class="page-title">Appearance</h3>
+            case AppearanceSection:
                 <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
 
                 <div class="settings-field-group">
                     <p class="settings-hint">
-                        Mark this environment as production. Destructive operations (e.g. DLQ resubmit/delete) will show
+                        Mark this configuration as production. Destructive operations (e.g. DLQ resubmit/delete) will show
                         an extra confirmation step requiring you to type CONFIRM.
                     </p>
                     <FluentCheckbox Value="@AppState.Config.IsProduction"
@@ -69,35 +99,46 @@
                         This is a production environment
                     </FluentCheckbox>
                 </div>
+
+                <div class="settings-field-group">
+                    <p class="settings-hint">
+                        Pre-warm connections to Service Bus, AKS, and Redis in the background when the app starts.
+                        Disable this if startup warmup causes issues or you prefer on-demand connects.
+                    </p>
+                    <FluentCheckbox Value="@UserSettings.Settings.WarmupConnectionsOnStartup"
+                                    ValueChanged="@(async (bool v) => { UserSettings.Settings.WarmupConnectionsOnStartup = v; await UserSettings.SaveAsync(); })">
+                        Warm up connections on startup
+                    </FluentCheckbox>
+                </div>
                 break;
 
-            case "servicebus":
-                <h3 class="page-title">Service Bus</h3>
+            case ServiceBusSection:
                 <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "aks":
-                <h3 class="page-title">AKS / Kubernetes</h3>
+            case AksSection:
                 <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "redis":
-                <h3 class="page-title">Redis</h3>
+            case RedisSection:
                 <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
                 break;
 
-            case "devops":
-                <h3 class="page-title">Azure DevOps (Releases)</h3>
+            case DevOpsSection:
                 <DevOpsConfigForm OnSaved="SaveAsync" />
                 break;
 
-            case "storage":
-                <h3 class="page-title">Storage (Azure Blob)</h3>
+            case IncidentTimelineSection:
+                <IncidentTimelineConfigForm Environment="AppState.Config" OnSaved="SaveAsync"
+                                            OnChanged="HandleDraftChangedAsync" SuggestedNamespace="IncidentNamespace"
+                                            SuggestedWorkloadKind="IncidentWorkloadKind" SuggestedWorkloadName="IncidentWorkloadName" />
+                break;
+
+            case StorageSection:
                 <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
                 break;
 
-            case "observability":
-                <h3 class="page-title">Observability</h3>
+            case ObservabilitySection:
                 <div class="settings-info-card">
                     <div class="settings-info-icon">🔑</div>
                     <div>
@@ -177,20 +218,77 @@
 </div>
 
 @code {
-    [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
+    private const string AppearanceSection = "appearance";
+    private const string ServiceBusSection = "servicebus";
+    private const string AksSection = "aks";
+    private const string RedisSection = "redis";
+    private const string DevOpsSection = "devops";
+    private const string IncidentTimelineSection = "incident-timeline";
+    private const string StorageSection = "storage";
+    private const string ObservabilitySection = "observability";
 
-    private string _active = "appearance";
+    [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
+    [SupplyParameterFromQuery(Name = "section")] private string? RequestedSection { get; set; }
+    [SupplyParameterFromQuery(Name = "namespace")] private string? IncidentNamespace { get; set; }
+    [SupplyParameterFromQuery(Name = "workloadKind")] private string? IncidentWorkloadKind { get; set; }
+    [SupplyParameterFromQuery(Name = "workloadName")] private string? IncidentWorkloadName { get; set; }
+
+    private string _active = AppearanceSection;
     private string? _savedMessage;
     private string _configSnapshot = string.Empty;
     private IDisposable? _navGuard;
+    private string? _lastRequestedSection;
+    private readonly CancellationTokenSource _liveChecksCts = new();
+    private bool _isRunningLiveChecks;
 
     private bool IsDirty => _configSnapshot.Length > 0
         && _configSnapshot != CurrentConfigJson();
+
+    private string CurrentSectionTitle => _active switch
+    {
+        AppearanceSection => "Appearance",
+        ServiceBusSection => "Service Bus",
+        AksSection => "AKS / Kubernetes",
+        RedisSection => "Redis",
+        DevOpsSection => "Azure DevOps (Releases)",
+        IncidentTimelineSection => "Incident Timeline",
+        StorageSection => "Storage (Azure Blob)",
+        ObservabilitySection => "Observability",
+        _ => "Settings"
+    };
+
+    private string CurrentSectionSubtitle => _active switch
+    {
+        AppearanceSection => "Tune shell themes, demo behavior, and safety defaults for this configuration.",
+        ServiceBusSection => "Manage namespace connections and how messaging workspaces open by default.",
+        AksSection => "Choose the cluster context and namespace defaults that drive the AKS workspace.",
+        RedisSection => "Select the active cache and the connection profile used by Redis views.",
+        DevOpsSection => "Connect Azure DevOps so pipeline, release, and approval data can flow into the shell.",
+        IncidentTimelineSection => "Point timeline analysis at the namespace and workload metadata it should inspect.",
+        StorageSection => "Configure Azure Blob access for storage inspection and related workflows.",
+        ObservabilitySection => "Review query limits and the Azure CLI identity model used for Application Insights access.",
+        _ => "Manage workspace-specific configuration for the app."
+    };
 
     protected override void OnInitialized()
     {
         _configSnapshot = CurrentConfigJson();
         _navGuard = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(_lastRequestedSection, RequestedSection, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastRequestedSection = RequestedSection;
+
+        if (NormalizeSection(RequestedSection) is { } normalizedSection)
+        {
+            _active = normalizedSection;
+        }
     }
 
     private async ValueTask OnLocationChanging(LocationChangingContext context)
@@ -210,6 +308,7 @@
     private async Task SaveAsync()
     {
         var persisted = await AppState.SaveConfigAsync();
+        ConfigurationProbes.Invalidate();
         _configSnapshot = CurrentConfigJson();
         _savedMessage = persisted
             ? "Settings saved."
@@ -226,8 +325,76 @@
             await _layout.SetThemeAsync(theme);
     }
 
+    private async Task HandleDraftChangedAsync() => await InvokeAsync(StateHasChanged);
+
+    private async Task RunLiveChecksAsync()
+    {
+        if (_isRunningLiveChecks)
+        {
+            return;
+        }
+
+        _isRunningLiveChecks = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await ConfigurationProbes.RunAsync(CreateReadinessContext(), _liveChecksCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_liveChecksCts.IsCancellationRequested)
+            {
+                throw;
+            }
+        }
+        finally
+        {
+            _isRunningLiveChecks = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SelectSection(string section) => _active = section;
+
+    private ConfigurationHealthContext CreateReadinessContext()
+    {
+        var baseContext = new ConfigurationHealthContext(
+            AppState.Config,
+            AppState.ServiceBusNamespaces,
+            AppState.UseDemoData,
+            AppState.HasProfileLoadFailure,
+            AppState.ProfilePersistenceBlockedMessage);
+
+        return baseContext with { ProbeSnapshot = ConfigurationProbes.GetLatest(baseContext) };
+    }
+
+    private ConfigurationHealthReport BuildReadinessReport() => ConfigurationHealth.BuildReport(CreateReadinessContext());
+
+    private ConfigurationAreaHealth? GetCurrentAreaHealth(ConfigurationHealthReport readinessReport) =>
+        readinessReport.Areas.FirstOrDefault(area => string.Equals(area.SettingsSection, _active, StringComparison.Ordinal));
+
+    private string GetNavItemClass(string section) => string.Equals(_active, section, StringComparison.Ordinal)
+        ? "settings-nav-item active"
+        : "settings-nav-item";
+
+    private static string? NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
+    {
+        AppearanceSection => AppearanceSection,
+        ServiceBusSection => ServiceBusSection,
+        AksSection => AksSection,
+        RedisSection => RedisSection,
+        DevOpsSection => DevOpsSection,
+        IncidentTimelineSection => IncidentTimelineSection,
+        StorageSection => StorageSection,
+        ObservabilitySection => ObservabilitySection,
+        _ => null,
+    };
+
     public void Dispose()
     {
+        _liveChecksCts.Cancel();
+        _liveChecksCts.Dispose();
         _navGuard?.Dispose();
     }
 }

@@ -1,0 +1,134 @@
+.netpol-analysis-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    color: var(--color-text);
+}
+
+.netpol-analysis-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.netpol-analysis-name {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+}
+
+.netpol-analysis-meta,
+.netpol-analysis-muted,
+.netpol-analysis-footnote {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.netpol-analysis-summary {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface-2);
+}
+
+.netpol-analysis-summary-label,
+.netpol-analysis-section-title,
+.netpol-analysis-card-title,
+.netpol-analysis-rule-title {
+    display: block;
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.netpol-analysis-summary p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.netpol-analysis-badges,
+.netpol-analysis-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+}
+
+.netpol-analysis-badge,
+.netpol-analysis-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-sm);
+}
+
+.netpol-analysis-badge.is-isolated {
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--color-warning);
+}
+
+.netpol-analysis-badge.is-open {
+    background: rgba(67, 160, 71, 0.12);
+    color: var(--color-success);
+}
+
+.netpol-analysis-badge.is-neutral,
+.netpol-analysis-chip {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+}
+
+.netpol-analysis-grid,
+.netpol-analysis-policy-list {
+    display: grid;
+    gap: var(--spacing-sm);
+}
+
+.netpol-analysis-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.netpol-analysis-card {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface-2);
+}
+
+.netpol-analysis-policy-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.netpol-analysis-policy-name {
+    font-weight: 600;
+}
+
+.netpol-analysis-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.netpol-analysis-rule-group + .netpol-analysis-rule-group {
+    margin-top: var(--spacing-sm);
+}
+
+.netpol-analysis-error,
+.netpol-analysis-empty {
+    padding: var(--spacing-md);
+    border-radius: 10px;
+    background: var(--color-surface-2);
+}
+
+.netpol-analysis-error {
+    color: var(--color-error);
+    border: 1px solid color-mix(in srgb, var(--color-error) 25%, var(--color-border));
+}

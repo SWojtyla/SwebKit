@@ -1,0 +1,213 @@
+.export-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+}
+
+.export-dialog {
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 8px;
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.export-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.export-dialog-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--colorNeutralForeground1);
+}
+
+.export-dialog-close-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--colorNeutralForeground3);
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.export-dialog-close-btn:hover {
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground1);
+}
+
+.export-dialog-body {
+    padding: 16px 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.export-dialog-loading {
+    color: var(--colorNeutralForeground2);
+    font-size: 13px;
+    margin: 0;
+}
+
+.export-dialog-meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 6px;
+    margin: 0 0 16px;
+    font-size: 13px;
+}
+
+.export-dialog-meta dt {
+    color: var(--colorNeutralForeground2);
+    font-weight: 500;
+}
+
+.export-dialog-meta dd {
+    margin: 0;
+    color: var(--colorNeutralForeground1);
+    word-break: break-all;
+}
+
+.export-coverage-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.export-coverage-badge--full {
+    background: var(--colorStatusSuccessBackground1);
+    color: var(--colorStatusSuccessForeground1);
+}
+
+.export-coverage-badge--partial {
+    background: var(--colorStatusWarningBackground1);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.export-coverage-badge--degraded {
+    background: var(--colorStatusDangerBackground1);
+    color: var(--colorStatusDangerForeground1);
+}
+
+.export-truncated-note {
+    font-size: 11px;
+    color: var(--colorStatusWarningForeground1);
+    margin-left: 4px;
+}
+
+.export-format-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.export-format-label {
+    font-size: 13px;
+    color: var(--colorNeutralForeground2);
+    font-weight: 500;
+    min-width: 48px;
+}
+
+.export-format-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--colorNeutralForeground1);
+}
+
+.export-filename-preview {
+    background: var(--colorNeutralBackground3);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 4px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 14px;
+}
+
+.export-filename-label {
+    font-size: 11px;
+    color: var(--colorNeutralForeground3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.export-filename-value {
+    font-size: 12px;
+    color: var(--colorNeutralForeground1);
+    word-break: break-all;
+}
+
+.export-disclaimer {
+    font-size: 11px;
+    color: var(--colorNeutralForeground3);
+    font-style: italic;
+    margin: 0;
+    border-top: 1px solid var(--colorNeutralStroke2);
+    padding-top: 10px;
+}
+
+.export-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.export-cancel-btn {
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke1);
+    color: var(--colorNeutralForeground1);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.export-cancel-btn:hover {
+    background: var(--colorNeutralBackground2);
+}
+
+.export-confirm-btn {
+    background: var(--colorBrandBackground);
+    border: none;
+    color: var(--colorNeutralForegroundOnBrand);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.export-confirm-btn:hover:not(:disabled) {
+    background: var(--colorBrandBackgroundHover);
+}
+
+.export-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

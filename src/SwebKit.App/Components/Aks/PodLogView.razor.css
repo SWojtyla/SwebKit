@@ -3,6 +3,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -10,11 +11,40 @@
 .log-toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
     padding: 6px 10px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+}
+
+.log-status-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 4px 10px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+}
+
+.log-jump-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+}
+
+.log-jump-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
 }
 
 .log-live-toggle {
@@ -62,6 +92,17 @@
     border-color: var(--color-accent);
 }
 
+.log-container-select,
+.log-range-select {
+    min-width: 118px;
+    padding: 3px var(--spacing-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: var(--font-size-sm);
+}
+
 .log-line-count {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
@@ -72,6 +113,7 @@
 /* ── Log output ── */
 .log-output {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
     font-size: var(--font-size-sm);
@@ -91,7 +133,9 @@
 .log-line {
     padding: 0 var(--spacing-xs);
     border-radius: 2px;
-    word-break: break-all;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .log-line:hover {
@@ -109,6 +153,24 @@
 
 .log-line.debug {
     color: var(--color-text-muted);
+}
+
+/* log-level-* scheme — backward-compat aliases kept above */
+.log-line.log-level-error {
+    color: var(--color-error);
+    background: rgba(229, 57, 53, 0.06);
+}
+
+.log-line.log-level-warn {
+    color: var(--color-warning);
+}
+
+.log-line.log-level-debug {
+    color: var(--color-text-muted);
+}
+
+.log-line.log-level-default {
+    /* inherits base .log-line styles */
 }
 
 .log-tailing {

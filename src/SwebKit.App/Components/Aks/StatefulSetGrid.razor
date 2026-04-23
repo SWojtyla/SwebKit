@@ -1,7 +1,7 @@
 @* Renders the StatefulSets FluentDataGrid. *@
 
 <FluentDataGrid Items="@FilteredItems" TGridItem="StatefulSetInfo" Virtualize="true" ItemSize="36"
-                RowClass="@(s => s.Name == SelectedStatefulSet?.Name ? "selected-row" : "")"
+                RowClass="@(ss => StatefulSetRowClass(ss, SelectedStatefulSet))"
                 OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
     <TemplateColumn Title="Name" SortBy="@(GridSort<StatefulSetInfo>.ByAscending(s => s.Name))">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
@@ -51,6 +51,15 @@
             }
         </div>
     </TemplateColumn>
+    <TemplateColumn Title="Network" Width="110px">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <button class="aks-analysis-btn" @onclick="() => OnOpenNetworkAnalysis.InvokeAsync(context)"
+                    @onclick:stopPropagation>
+                Inspect
+            </button>
+        </div>
+    </TemplateColumn>
 </FluentDataGrid>
 
 @code {
@@ -63,5 +72,18 @@ Enumerable.Empty<StatefulSetInfo>().AsQueryable();
     [Parameter] public EventCallback<StatefulSetInfo> OnSelectRow { get; set; }
     [Parameter] public EventCallback<(MouseEventArgs, StatefulSetInfo)> OnContextMenu { get; set; }
     [Parameter] public EventCallback<HpaInfo> OnOpenHpa { get; set; }
+    [Parameter] public EventCallback<StatefulSetInfo> OnOpenNetworkAnalysis { get; set; }
     [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static string StatefulSetRowClass(StatefulSetInfo ss, StatefulSetInfo? selected)
+    {
+        var tint = ss switch
+        {
+            { Replicas: > 0, ReadyReplicas: 0 } => "row-critical",
+            var x when x.ReadyReplicas < x.Replicas && x.ReadyReplicas > 0 => "row-degraded",
+            _ => ""
+        };
+        var selection = ss.Name == selected?.Name ? "selected-row" : "";
+        return $"{tint} {selection}".Trim();
+    }
 }

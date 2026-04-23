@@ -1,0 +1,204 @@
+@inject INotificationService Notifications
+
+@if (Visible && Group is not null)
+{
+    <div class="group-trigger-overlay">
+        <div class="group-trigger-dialog">
+            <div class="group-trigger-dialog__header">
+                <h3 class="group-trigger-dialog__title">Trigger — @Group.Name</h3>
+                <button class="group-trigger-dialog__close" @onclick="Close" disabled="@_running" title="Close">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+                </button>
+            </div>
+
+            @if (Group.Pipelines.Count == 0)
+            {
+                <div class="text-muted text-sm" style="padding:16px 0;">No pipelines in this group.</div>
+            }
+            else
+            {
+                <div class="group-trigger-dialog__list">
+                    @foreach (var row in _rows)
+                    {
+                        <div class="trigger-row">
+                            <div class="trigger-row__info">
+                                <span class="trigger-row__name">@row.Entry.PipelineName</span>
+                                <span class="trigger-row__project text-muted text-sm">@row.Entry.ProjectName</span>
+                            </div>
+                            <div class="trigger-row__branch">
+                                @if (_branchesByProject.TryGetValue(row.Entry.ProjectName, out var branches) && branches.Count > 0)
+                                {
+                                    <select class="form-input trigger-row__branch-select" value="@row.Branch"
+                                            @onchange="@(e => row.Branch = e.Value?.ToString() ?? "main")" disabled="@_running">
+                                        @foreach (var b in branches)
+                                        {
+                                            <option value="@b">@b</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <input class="form-input trigger-row__branch-input" type="text" @bind="row.Branch"
+                                           disabled="@_running" placeholder="main" />
+                                }
+                            </div>
+                            <div class="trigger-row__status">
+                                @switch (row.Status)
+                                {
+                                    case TriggerStatus.Idle:
+                                        <span class="trigger-status trigger-status--idle">—</span>
+                                        break;
+                                    case TriggerStatus.Running:
+                                        <span class="trigger-status trigger-status--running">Running…</span>
+                                        break;
+                                    case TriggerStatus.Success:
+                                        <span class="trigger-status trigger-status--success">✓ Triggered</span>
+                                        break;
+                                    case TriggerStatus.Error:
+                                        <span class="trigger-status trigger-status--error" title="@row.ErrorMessage">✕ Failed</span>
+                                        break;
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="group-trigger-dialog__footer">
+                    @if (_allDone)
+                    {
+                        <button class="group-trigger-dialog__close-btn" @onclick="Close">Close</button>
+                    }
+                    else
+                    {
+                        <button class="group-trigger-dialog__close-btn" @onclick="Close" disabled="@_running">Cancel</button>
+                        <button class="group-trigger-dialog__run-btn" @onclick="RunAllAsync" disabled="@_running">
+                            @(_running ? "Running…" : "▶ Run All")
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public PipelineGroup? Group { get; set; }
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<TriggerRow> _rows = [];
+    private Dictionary<string, List<string>> _branchesByProject = new();
+    private bool _running;
+    private bool _allDone;
+
+    private enum TriggerStatus { Idle, Running, Success, Error }
+
+    private class TriggerRow
+    {
+        public PipelineGroupEntry Entry { get; init; } = default!;
+        public string Branch { get; set; } = "main";
+        public TriggerStatus Status { get; set; } = TriggerStatus.Idle;
+        public string? ErrorMessage { get; set; }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Visible || Group is null) return;
+
+        // Rebuild rows only when the dialog opens (group changes or becomes visible)
+        if (_rows.Count == 0 || _rows[0].Entry.PipelineId != Group.Pipelines.FirstOrDefault()?.PipelineId)
+        {
+            _rows = Group.Pipelines.Select(e => new TriggerRow { Entry = e }).ToList();
+            _allDone = false;
+            _running = false;
+            _branchesByProject.Clear();
+            _ = LoadBranchesAsync();
+        }
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        if (Group is null) return;
+
+        var projectNames = Group.Pipelines.Select(e => e.ProjectName).Distinct().ToList();
+        foreach (var project in projectNames)
+        {
+            try
+            {
+                var repos = await DevOpsClient.GetRepositoriesAsync(project);
+                if (repos.Count > 0)
+                {
+                    // Load branches from all repos, merge, deduplicate
+                    var branchTasks = repos.Select(r => DevOpsClient.GetBranchesAsync(project, r.Id));
+                    var results = await Task.WhenAll(branchTasks);
+                    var branches = results
+                        .SelectMany(b => b)
+                        .Distinct()
+                        .OrderBy(b => b)
+                        .ToList();
+
+                    _branchesByProject[project] = branches;
+
+                    // Pre-select "main" or first branch for all rows of this project
+                    var defaultBranch = branches.Contains("main") ? "main" : branches.FirstOrDefault() ?? "main";
+                    foreach (var row in _rows.Where(r => r.Entry.ProjectName == project && r.Branch == "main"))
+                    {
+                        if (!branches.Contains(row.Branch))
+                            row.Branch = defaultBranch;
+                    }
+                }
+            }
+            catch { /* leave text input */ }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RunAllAsync()
+    {
+        if (Group is null) return;
+        _running = true;
+
+        foreach (var row in _rows)
+        {
+            row.Status = TriggerStatus.Running;
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                await DevOpsClient.TriggerPipelineRunAsync(row.Entry.ProjectName, row.Entry.PipelineId, row.Branch);
+                row.Status = TriggerStatus.Success;
+            }
+            catch (Exception ex)
+            {
+                row.Status = TriggerStatus.Error;
+                row.ErrorMessage = ex.Message;
+            }
+
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(200);
+        }
+
+        _running = false;
+        _allDone = true;
+
+        var successCount = _rows.Count(r => r.Status == TriggerStatus.Success);
+        var errorCount = _rows.Count(r => r.Status == TriggerStatus.Error);
+
+        if (errorCount == 0)
+            Notifications.ShowSuccess($"All {successCount} pipeline{(successCount == 1 ? "" : "s")} triggered", Group.Name);
+        else
+            Notifications.ShowError($"{errorCount} pipeline{(errorCount == 1 ? "" : "s")} failed to trigger");
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Close()
+    {
+        _rows = [];
+        _branchesByProject.Clear();
+        _allDone = false;
+        await OnClose.InvokeAsync();
+    }
+}

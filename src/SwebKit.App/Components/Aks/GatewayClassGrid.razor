@@ -1,0 +1,69 @@
+@* Renders the Gateway API GatewayClasses FluentDataGrid. *@
+
+<div class="aks-gatewayclass-grid-shell">
+    <FluentDataGrid Items="@FilteredItems" TGridItem="GatewayClassInfo"
+                    RowClass="@(gatewayClass => HasSameIdentity(gatewayClass, SelectedGatewayClass) ? "selected-row" : "")"
+                    OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+        <TemplateColumn Title="Name" Width="220px"
+                        SortBy="@(GridSort<GatewayClassInfo>.ByAscending(gatewayClass => gatewayClass.Name))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-resource-name">@context.Name</span>
+                @if (context.IsDefault)
+                {
+                    <span class="aks-gatewayclass-badge">Default</span>
+                }
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Controller" Width="340px"
+                        SortBy="@(GridSort<GatewayClassInfo>.ByAscending(gatewayClass => gatewayClass.ControllerName ?? ""))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-gatewayclass-controller">@(context.ControllerName ?? "—")</span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Parameters" Width="320px"
+                        SortBy="@(GridSort<GatewayClassInfo>.ByAscending(gatewayClass => gatewayClass.ParametersReference ?? ""))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-gatewayclass-parameters">@(context.ParametersReference ?? "—")</span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Description" Width="520px"
+                        SortBy="@(GridSort<GatewayClassInfo>.ByAscending(gatewayClass => gatewayClass.Description ?? ""))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-gatewayclass-description">@(context.Description ?? "—")</span>
+            </div>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Width="120px"
+                        SortBy="@(GridSort<GatewayClassInfo>.ByAscending(gatewayClass => gatewayClass.Status))">
+            <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+                 @oncontextmenu:preventDefault>
+                <span class="aks-status @GetStatusClass(context.Status)">@context.Status</span>
+            </div>
+        </TemplateColumn>
+    </FluentDataGrid>
+</div>
+
+@code {
+    [Parameter]
+    public IQueryable<GatewayClassInfo> FilteredItems { get; set; } =
+        Enumerable.Empty<GatewayClassInfo>().AsQueryable();
+
+    [Parameter] public GatewayClassInfo? SelectedGatewayClass { get; set; }
+    [Parameter] public EventCallback<GatewayClassInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, GatewayClassInfo)> OnContextMenu { get; set; }
+
+    private static bool HasSameIdentity(GatewayClassInfo candidate, GatewayClassInfo? selected) =>
+        selected is not null
+        && string.Equals(candidate.Name, selected.Name, StringComparison.Ordinal);
+
+    private static string GetStatusClass(string status)
+        => status switch
+        {
+            "Accepted" or "SupportedVersion" => "running",
+            "Pending" => "pending",
+            _ => "error"
+        };
+}

@@ -7,7 +7,7 @@
 <div class="obs-logs">
     <div class="obs-logs-layout">
         <!-- Left: preset + saved queries sidebar -->
-        <div class="obs-logs-sidebar">
+        <div class="obs-logs-sidebar surface-card obs-logs__sidebar-panel">
             <div class="obs-sidebar-section-title">Presets</div>
             @foreach (var preset in _presets)
             {
@@ -19,7 +19,7 @@
 
             @if (_savedQueries.Any())
             {
-                <div class="obs-sidebar-section-title" style="margin-top:12px">Saved Queries</div>
+                <div class="obs-sidebar-section-title obs-logs__saved-heading">Saved Queries</div>
                 @foreach (var group in GroupedSavedQueries)
                 {
                     @if (group.Key is not null)
@@ -355,7 +355,7 @@
                         <span class="obs-exec-time">(@_result.ExecutionTime.TotalMilliseconds:F0 ms)</span>
                     </div>
 
-                    <div class="obs-results-grid">
+                    <div class="obs-results-grid surface-card obs-logs__results-grid">
                         <FluentDataGrid Items="_result.Rows.AsQueryable()" TGridItem="LogRow">
                             @foreach (var col in _result.ColumnNames)
                             {
@@ -379,17 +379,21 @@
 
     @if (_saveDialogOpen)
     {
-        <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
-            <FluentDialogHeader>Save Query</FluentDialogHeader>
-            <FluentDialogBody>
-                <FluentTextField @bind-Value="_saveQueryName" Label="Query Name"
-                                 Placeholder="folder/query-name (use / for folders)" Autofocus="true" />
-            </FluentDialogBody>
-            <FluentDialogFooter>
-                <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
-                <FluentButton @onclick="() => { _saveDialogOpen = false; _saveDialogHidden = true; }">Cancel</FluentButton>
-            </FluentDialogFooter>
-        </FluentDialog>
+        <div class="obs-logs__save-dialog-shell">
+            <FluentDialog @bind-Hidden="_saveDialogHidden" Modal="true" TrapFocus="true">
+                <FluentDialogHeader>Save Query</FluentDialogHeader>
+                <FluentDialogBody>
+                    <div class="obs-logs__save-field">
+                        <FluentTextField @bind-Value="_saveQueryName" Label="Query Name"
+                                         Placeholder="folder/query-name (use / for folders)" Autofocus="true" />
+                    </div>
+                </FluentDialogBody>
+                <FluentDialogFooter>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmSaveAsync">Save</FluentButton>
+                    <FluentButton @onclick="() => { _saveDialogOpen = false; _saveDialogHidden = true; }">Cancel</FluentButton>
+                </FluentDialogFooter>
+            </FluentDialog>
+        </div>
     }
 
 @inject IJSRuntime JS
@@ -513,10 +517,12 @@ Enum.GetValues<GuidedKqlFilterOperator>();
         if (_editor is null) return;
 
         // Ctrl+Enter → Run query
+#pragma warning disable CS0618
         await _editor.AddAction("run-query", "Run Query",
             [(int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter],
             null, null, "navigation", 1.0,
             async (_, _) => await RunQueryAsync());
+#pragma warning restore CS0618
     }
 
     protected override async Task OnParametersSetAsync()
@@ -540,7 +546,8 @@ Enum.GetValues<GuidedKqlFilterOperator>();
             _guidedDraftInitialized = true;
         }
 
-        if (!string.IsNullOrWhiteSpace(PendingQuery) && PendingQueryVersion != 0 && PendingQueryVersion != _handledPendingQueryVersion)
+        if (!string.IsNullOrWhiteSpace(PendingQuery) && PendingQueryVersion != 0 && PendingQueryVersion !=
+_handledPendingQueryVersion)
         {
             _handledPendingQueryVersion = PendingQueryVersion;
             await LoadQueryAsync(PendingQuery);

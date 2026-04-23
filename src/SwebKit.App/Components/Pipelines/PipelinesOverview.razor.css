@@ -51,6 +51,17 @@
 .overview-stat--waiting { background: rgba(251,140,0,0.15);  color: var(--color-warning); }
 .overview-stat--ok      { background: rgba(67,160,71,0.15);  color: var(--color-success); }
 
+.overview-stat--link {
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+    .overview-stat--link:hover {
+        filter: brightness(1.2);
+    }
+
 .overview-card__pipeline-list {
     display: flex;
     flex-direction: column;

@@ -35,7 +35,10 @@
                         }
                         @if (s.PendingApprovals > 0)
                         {
-                            <span class="overview-stat overview-stat--waiting">@s.PendingApprovals awaiting approval</span>
+                            <button class="overview-stat overview-stat--waiting overview-stat--link"
+                                    @onclick="() => OnNavigateToApprovals.InvokeAsync()" title="Go to Approvals">
+                                @s.PendingApprovals awaiting approval ›
+                            </button>
                         }
                         @if (s.RunningCount == 0 && s.FailedCount == 0 && s.PendingApprovals == 0)
                         {
@@ -68,6 +71,7 @@
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
     [Parameter] public EventCallback<(AdoProject Project, AdoPipeline Pipeline)> OnPipelineSelected { get; set; }
+    [Parameter] public EventCallback OnNavigateToApprovals { get; set; }
     [Parameter] public List<string> PinnedProjects { get; set; } = [];
 
     private bool _isLoading;

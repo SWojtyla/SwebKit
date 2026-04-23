@@ -1,8 +1,9 @@
 .resource-filter {
     display: flex;
     align-items: center;
-    padding: var(--spacing-xs) var(--spacing-md);
-    border-bottom: 1px solid var(--color-border);
+    padding: 8px var(--spacing-md);
+    border-bottom: 1px solid var(--aks-filter-border);
+    background: var(--aks-filter-surface);
     gap: var(--spacing-xs);
     flex-shrink: 0;
 }
@@ -10,10 +11,10 @@
 .resource-filter-input {
     flex: 1;
     padding: var(--spacing-xs) var(--spacing-sm);
-    background: var(--color-bg);
+    background: var(--color-table-input-bg, var(--color-bg));
     color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border: 1px solid var(--aks-filter-border);
+    border-radius: var(--aks-chip-radius);
     font-size: 12px;
     outline: none;
     min-width: 0;
@@ -34,11 +35,11 @@
     cursor: pointer;
     font-size: var(--font-size-sm);
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     flex-shrink: 0;
 }
 
 .resource-filter-clear:hover {
     color: var(--color-text);
-    background: var(--color-surface-2);
+    background: var(--aks-tab-inactive-surface);
 }

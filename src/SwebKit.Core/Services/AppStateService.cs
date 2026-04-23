@@ -29,6 +29,7 @@ public class AppStateService
     public bool IsInitialized { get; private set; }
     public ProfileLoadResult ProfileLoadResult { get; private set; } = ProfileLoadResult.NotStarted;
     public bool HasProfileLoadFailure => ProfileLoadResult.IsFailure;
+    public bool HasProfileLoadRecovery => ProfileLoadResult.IsRecovery;
     public bool IsProfilePersistenceBlocked => _profiles.IsPersistenceBlocked;
     public string? ProfilePersistenceBlockedMessage =>
         IsProfilePersistenceBlocked ? _profiles.CreatePersistenceBlockedException().Message : null;
@@ -92,33 +93,6 @@ public class AppStateService
         _profiles.DeleteMessageTemplate(id);
         await TryPersistProfilesAsync();
     }
-
-    public IReadOnlyList<AppConfig> Environments => _profiles.Environments;
-    public string? ActiveEnvironmentName => _profiles.ActiveEnvironmentName;
-
-    public async Task CloneEnvironmentAsync(string newName)
-    {
-        _profiles.CloneEnvironment(newName);
-        await TryPersistProfilesAsync();
-    }
-
-    public async Task SwitchEnvironmentAsync(string name)
-    {
-        _profiles.SwitchEnvironment(name);
-        await TryPersistProfilesAsync();
-        Initialized?.Invoke(); // notify UI to re-render with new config
-    }
-
-    public async Task RemoveEnvironmentAsync(string name)
-    {
-        _profiles.RemoveEnvironment(name);
-        await TryPersistProfilesAsync();
-        Initialized?.Invoke();
-    }
-
-    public ProfileData GetProfileData() => _profiles.GetProfileData();
-
-    public void ReplaceProfileData(ProfileData data) => _profiles.ReplaceProfileData(data);
 
     private Task<bool> TryPersistProfilesAsync() => _profiles.TrySaveAsync();
 }

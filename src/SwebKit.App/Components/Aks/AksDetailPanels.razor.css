@@ -81,7 +81,7 @@
 
 .aks-scale-step-btn:hover {
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-solid-foreground);
     border-color: var(--color-accent);
 }
 
@@ -218,4 +218,55 @@
 .aks-event-object {
     color: var(--color-accent);
     margin-right: var(--spacing-xs);
+}
+
+/* ── Events filter chips ── */
+.aks-events-filter-bar {
+    display: flex;
+    gap: 6px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.aks-evt-filter-chip {
+    padding: 2px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.aks-evt-filter-chip.active {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border-color: var(--color-accent);
+}
+
+.aks-evt-filter-chip:hover:not(.active) {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+}
+
+/* ── Event jump button ── */
+.aks-evt-jump-btn {
+    padding: 1px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: auto;
+}
+
+.aks-evt-jump-btn:hover:not([disabled]) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.aks-evt-jump-btn[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
 }

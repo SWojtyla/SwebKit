@@ -1,0 +1,55 @@
+@using SwebKit.Core.Models
+
+<button type="button"
+        class="incident-row @(IsSelected ? "incident-row--selected" : null)"
+        aria-pressed="@(IsSelected ? "true" : "false")"
+        data-testid="@($"incident-row-{Item.ItemId}")"
+        @onclick="HandleSelect">
+    <div class="incident-row__topline">
+        <div class="incident-row__timeblock">
+            <span class="incident-row__time">@Item.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+            <span class="incident-row__date">@Item.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd")</span>
+        </div>
+
+        <div class="incident-row__badges">
+            <span class="incident-badge @IncidentTimelineDisplay.GetSourceClass(Item.Source)">@IncidentTimelineDisplay.GetSourceLabel(Item.Source)</span>
+            <span class="incident-badge @IncidentTimelineDisplay.GetSeverityClass(Item.Severity)">@IncidentTimelineDisplay.GetSeverityLabel(Item.Severity)</span>
+            <span class="incident-badge @IncidentTimelineDisplay.GetRelevanceClass(Item.PrimaryRelevance)">@IncidentTimelineDisplay.GetRelevanceLabel(Item.PrimaryRelevance)</span>
+        </div>
+    </div>
+
+    <div class="incident-row__body">
+        <div class="incident-row__title">@Item.Title</div>
+        @if (!string.IsNullOrWhiteSpace(Item.Summary))
+        {
+            <div class="incident-row__summary">@Item.Summary</div>
+        }
+        <div class="incident-row__why">Linked because: @GetReasonPreview()</div>
+        @if (Item.ResourceRef is not null)
+        {
+            <div class="incident-row__resource">@GetResourceLabel(Item.ResourceRef)</div>
+        }
+    </div>
+</button>
+
+@code {
+    [Parameter, EditorRequired] public IncidentTimelineItem Item { get; set; } = default!;
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback<IncidentTimelineItem> OnSelect { get; set; }
+
+    private Task HandleSelect() => OnSelect.InvokeAsync(Item);
+
+    private string GetReasonPreview() =>
+        Item.LinkReasons.FirstOrDefault()?.Explanation
+        ?? "the evidence falls inside the selected investigation window.";
+
+    private static string GetResourceLabel(IncidentResourceRef resourceRef)
+    {
+        if (!string.IsNullOrWhiteSpace(resourceRef.Namespace))
+        {
+            return $"{resourceRef.ResourceType}: {resourceRef.Namespace}/{resourceRef.ResourceName}";
+        }
+
+        return $"{resourceRef.ResourceType}: {resourceRef.ResourceName}";
+    }
+}

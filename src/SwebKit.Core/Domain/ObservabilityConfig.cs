@@ -25,6 +25,9 @@ public class ObservabilityConfig
     public double FailureRateAmberThreshold { get; set; } = 0.01;
     public double LatencyRedThresholdMs { get; set; } = 2000;
     public double LatencyAmberThresholdMs { get; set; } = 500;
+
+    /// <summary>Additive SLO definitions for the SLO tracking panel. Existing config loads fine when absent.</summary>
+    public List<SloDefinition> SloDefinitions { get; set; } = [];
 }
 
 public class SavedQuery

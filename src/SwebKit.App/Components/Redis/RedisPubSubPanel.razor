@@ -1,0 +1,68 @@
+<div class="pubsub-panel">
+    @if (Snapshot is null)
+    {
+        <div class="panel-loading">Loading Pub/Sub snapshot...</div>
+    }
+    else if (Snapshot.Capability is RedisInsightCapability.Unsupported)
+    {
+        <div class="capability-notice capability-unsupported" role="status">
+            <strong>Unsupported:</strong> Pub/Sub channel inspection is not available on this Redis target.
+        </div>
+    }
+    else if (Snapshot.Capability is RedisInsightCapability.PermissionLimited)
+    {
+        <div class="capability-notice capability-limited" role="status">
+            <strong>Permission limited:</strong> Insufficient permissions to read Pub/Sub channel information.
+        </div>
+    }
+    else
+    {
+        <div class="pubsub-summary">
+            <span>Channels: <strong>@Snapshot.Channels.Count</strong></span>
+            <span>Pattern subscriptions: <strong>@Snapshot.PatternSubscriptionCount</strong></span>
+            @if (Snapshot.Truncated)
+            {
+                <span class="truncated-notice" role="status">Truncated to @Snapshot.MaxChannels channels.</span>
+            }
+        </div>
+
+        @if (Snapshot.Channels.Count == 0)
+        {
+            <div class="pubsub-empty">No active channels.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="pubsub-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Channel</th>
+                            <th scope="col">Subscribers</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var channel in Snapshot.Channels)
+                        {
+                            <tr tabindex="0">
+                                <td>@channel.Channel</td>
+                                <td>@channel.SubscriberCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+
+    @if (OnRefresh.HasDelegate)
+    {
+        <div class="panel-actions">
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="OnRefresh">Refresh</FluentButton>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RedisPubSubSnapshot? Snapshot { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+}

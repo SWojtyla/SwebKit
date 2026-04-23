@@ -22,7 +22,22 @@ public interface IServiceBusClient
     Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default);
     /// <summary>Cancels a previously scheduled message by its broker sequence number.</summary>
     Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default);
-    Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default);
+    /// <summary>
+    /// Resubmits dead-lettered messages by sequence number. Optional <paramref name="remapRules"/> transform each
+    /// message before forwarding. Optional <paramref name="targetEntityPath"/> overrides the destination entity.
+    /// </summary>
+    Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default);
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
+}
+
+public interface IServiceBusClientFactory
+{
+    /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
+    IServiceBusClient Create(string connectionString);
+
+    /// <summary>
+    /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.
+    /// </summary>
+    string ParseFullyQualifiedNamespace(string connectionString);
 }

@@ -2,7 +2,7 @@
 
 @if (HasOpenPanel)
 {
-    <ResizablePanel DefaultWidth="420" MinWidth="280" MaxWidth="900">
+    <ResizablePanel DefaultWidth="620" MinWidth="320" MaxWidth="1600">
         <div class="aks-panels-col">
 
             @* ── YAML viewer / editor ── *@
@@ -13,7 +13,7 @@
             @* ── Helm History / Values / Rollback ── *@
             <AksHelmPanel @ref="_helmPanel" Client="Client" Namespace="@Namespace" IsProduction="@IsProduction"
                           Confirm="Confirm" Notifications="Notifications" OnClose="OnChildPanelClosed" OnError="OnError"
-                          OnDataChanged="OnDataChanged" />
+                          OnDataChanged="OnDataChanged" OnPreviewRollback="OnHelmPreviewRollback" />
 
             @* ── Scale ── *@
             @if (_scaleTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null)
@@ -30,14 +30,14 @@
                         <div class="aks-scale-stepper">
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Max(0, _scaleReplicas - 1)">−</button>
-                            <input type="number" class="aks-scale-input" min="0" max="100" @bind="_scaleReplicas"
-                                   @bind:event="oninput" />
+                            <input type="number" class="aks-scale-input app-native-control" min="0" max="100"
+                                   @bind="_scaleReplicas" @bind:event="oninput" />
                             <button class="aks-scale-step-btn"
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -56,7 +56,7 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
                         </div>
-                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" />
+                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" Containers="@_logPodContainers" />
                     </div>
                 }
 
@@ -76,7 +76,7 @@
 
                 @* ── Container details ── *@
                 @if (_containerDetailPodName is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
-                                                                        _logDeploymentName is null)
+                                                                                                                        _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
@@ -133,69 +133,236 @@
                     </div>
                 }
 
-                @* ── Events panel ── *@
-                @if (ShowEvents)
+                @* ── Ingress analysis ── *@
+                @if (_ingressAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
-                            <span class="aks-section-title">Events</span>
-                            <span class="aks-section-count">@Events.Count</span>
-                            @if (Events.Any(e => e.Type == "Warning"))
-                            {
-                                <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                    == "Warning")
-                                </span>
-                            }
-                            <span class="aks-toolbar-spacer"></span>
-                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
+                            <span class="aks-section-title">Ingress Analysis: @_ingressAnalysisTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseIngressAnalysis" Title="Close">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
                         </div>
-                        <div class="aks-events-list">
-                            @if (Events.Count == 0)
-                            {
-                                <div class="aks-events-empty">No recent events</div>
-                            }
-                            else
-                            {
-                                @foreach (var evt in Events)
-                                {
-                                    <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
-                                        <div class="aks-event-header">
-                                            @if (evt.Type == "Warning")
-                                            {
-                                                <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
-                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
-                                                    <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
-                                                </span>
-                                            }
-                                            <span class="aks-event-reason">@evt.Reason</span>
-                                            @if (evt.Count > 1)
-                                            {
-                                                <span class="aks-event-count">×@evt.Count</span>
-                                            }
-                                            <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
-                                        </div>
-                                        <div class="aks-event-detail">
-                                            <span class="aks-event-object">@evt.InvolvedObjectName</span>
-                                            @evt.Message
-                                        </div>
-                                    </div>
-                                }
-                            }
+                        <div class="aks-yaml-content">
+                            <IngressAnalysisPanel Client="Client" Namespace="@_ingressAnalysisTarget.Namespace"
+                                                  IngressName="@_ingressAnalysisTarget.Name" />
                         </div>
                     </div>
                 }
 
-            </div>
-        </ResizablePanel>
-    }
+                @* ── Network policy analysis ── *@
+                @if (_networkPolicyAnalysisTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Network Policies: @_networkPolicyAnalysisTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseNetworkPolicyAnalysis" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <NetworkPolicyAnalysisPanel Client="Client" Namespace="@_networkPolicyAnalysisTarget.Namespace"
+                                                        WorkloadKind="@_networkPolicyAnalysisTarget.WorkloadKind"
+                                                        WorkloadName="@_networkPolicyAnalysisTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Namespace quota ── *@
+                @if (_namespaceQuotaTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Namespace Quotas: @_namespaceQuotaTarget.Namespace</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseNamespaceQuota" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <NamespaceQuotaPanel Client="Client" Namespace="@_namespaceQuotaTarget.Namespace" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Pod disruption budgets ── *@
+                @if (_pdbTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Pod Disruption Budgets: @_pdbTarget.Namespace</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="ClosePodDisruptionBudgets" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <PodDisruptionBudgetPanel Client="Client" Namespace="@_pdbTarget.Namespace" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Probe failure summary ── *@
+                @if (_probeFailureTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Probe Failures: @_probeFailureTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseProbeFailures" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <ProbeFailurePanel Client="Client" Namespace="@_probeFailureTarget.Namespace"
+                                               WorkloadKind="@_probeFailureTarget.WorkloadKind" WorkloadName="@_probeFailureTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Placement constraints ── *@
+                @if (_placementTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Placement: @_placementTarget.WorkloadName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="ClosePlacementAnalysis" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <PlacementConstraintsPanel Client="Client" Namespace="@_placementTarget.Namespace"
+                                                       WorkloadKind="@_placementTarget.WorkloadKind" WorkloadName="@_placementTarget.WorkloadName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Helm diff preview ── *@
+                @if (_helmDiffPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Helm Preview: @_helmDiffPreviewTarget.ReleaseName</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmDiffPreview" Title="Close">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                            </FluentButton>
+                        </div>
+                        <div class="aks-yaml-content">
+                            <HelmDiffPreviewPanel Client="Client" Namespace="@_helmDiffPreviewTarget.Namespace"
+                                                  ReleaseName="@_helmDiffPreviewTarget.ReleaseName" />
+                        </div>
+                    </div>
+                }
+
+                @* ── Helm rollback diff preview ── *@
+                @if (_helmRollbackPreviewTarget is not null && _yamlViewer?.IsOpen != true && _logPodName is null &&
+                                                                    _logDeploymentName is null)
+                {
+                    <div class="aks-panel-pane">
+                        <div class="aks-section-header">
+                            <span class="aks-section-title">Rollback Preview: @_helmRollbackPreviewTarget.ReleaseName → rev
+                                @_helmRollbackPreviewTarget.Revision</span>
+                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHelmRollbackPreview" Title="Close">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                                </FluentButton>
+                            </div>
+                            <div class="aks-yaml-content">
+                                <HelmRollbackPreviewPanel Client="Client" Namespace="@_helmRollbackPreviewTarget.Namespace"
+                                                          ReleaseName="@_helmRollbackPreviewTarget.ReleaseName"
+                                                          Revision="@_helmRollbackPreviewTarget.Revision" />
+                            </div>
+                        </div>
+                    }
+
+                    @* ── Events panel ── *@
+                    @if (ShowEvents)
+                    {
+                        <div class="aks-panel-pane">
+                            <div class="aks-section-header">
+                                <span class="aks-section-title">Events</span>
+                                <span class="aks-section-count">@Events.Count</span>
+                                @if (Events.Any(e => e.Type == "Warning"))
+                                {
+                                    <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
+                                                                                                                                                                                                                                                                                    == "Warning")
+                                    </span>
+                                }
+                                <span class="aks-toolbar-spacer"></span>
+                                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                                </FluentButton>
+                            </div>
+                            <div class="aks-events-filter-bar">
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.All ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.All">All</button>
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Warning ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Warning">Warning</button>
+                                <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Normal ? "active" : "")"
+                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Normal">Normal</button>
+                            </div>
+                            <div class="aks-events-list">
+                                @if (!FilteredEvents.Any())
+                                {
+                                    <div class="aks-events-empty">No recent events</div>
+                                }
+                                else
+                                {
+                                    @foreach (var evt in FilteredEvents)
+                                    {
+                                        <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
+                                            <div class="aks-event-header">
+                                                @if (evt.Type == "Warning")
+                                                {
+                                                    <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
+                                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                                    </span>
+                                                }
+                                                <span class="aks-event-reason">@evt.Reason</span>
+                                                @if (evt.Count > 1)
+                                                {
+                                                    <span class="aks-event-count">×@evt.Count</span>
+                                                }
+                                                <span class="aks-event-time">@evt.LastTimestamp?.ToString("HH:mm:ss")</span>
+                                                @{
+                                                    var jumpableKinds = new[] { "Deployment", "Pod", "StatefulSet", "CronJob", "Job" };
+                                                    var canJump = jumpableKinds.Contains(evt.InvolvedObjectKind) && evt.InvolvedObjectName is not
+                            null;
+                                                    var resourceExists = canJump && ResourceExistsForEvent(evt);
+                                                }
+                                                @if (canJump)
+                                                {
+                                                    var capturedEvt = evt;
+                                                    <button class="aks-evt-jump-btn" disabled="@(!resourceExists)"
+                                                            title="@(resourceExists ? $"Go to {capturedEvt.InvolvedObjectKind} {capturedEvt.InvolvedObjectName}" : "Resource not currently loaded")"
+                                                            @onclick="() => OnJumpToResource.InvokeAsync(capturedEvt)"
+                                                            @onclick:stopPropagation>→</button>
+                                                }
+                                            </div>
+                                            <div class="aks-event-detail">
+                                                <span class="aks-event-object">@evt.InvolvedObjectName</span>
+                                                @evt.Message
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+
+                </div>
+            </ResizablePanel>
+        }
 
 @code {
     // ── Parameters ──
@@ -207,8 +374,10 @@
     [Parameter] public List<KubernetesEvent> Events { get; set; } = [];
     [Parameter] public List<DeploymentInfo> Deployments { get; set; } = [];
     [Parameter] public List<StatefulSetInfo> StatefulSets { get; set; } = [];
+    [Parameter] public List<PodInfo> Pods { get; set; } = [];
     [Parameter] public bool ShowEvents { get; set; }
     [Parameter] public EventCallback OnShowEventsChanged { get; set; }
+    [Parameter] public EventCallback<KubernetesEvent> OnJumpToResource { get; set; }
     [Parameter] public EventCallback<string> OnError { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
     [Parameter] public EventCallback OnPanelStateChanged { get; set; }
@@ -217,18 +386,54 @@
     private AksYamlViewer _yamlViewer = default!;
     private AksHelmPanel _helmPanel = default!;
 
+    // ── Event filter ──
+    private enum EventTypeFilter { All, Warning, Normal }
+    private EventTypeFilter _eventTypeFilter = EventTypeFilter.All;
+
+    private IEnumerable<KubernetesEvent> FilteredEvents => _eventTypeFilter switch
+    {
+        EventTypeFilter.Warning => Events.Where(e => e.Type == "Warning"),
+        EventTypeFilter.Normal => Events.Where(e => e.Type == "Normal"),
+        _ => Events
+    };
+
+    private bool ResourceExistsForEvent(KubernetesEvent evt) => evt.InvolvedObjectKind switch
+    {
+        "Deployment" => Deployments.Any(d => d.Name == evt.InvolvedObjectName),
+        "StatefulSet" => StatefulSets.Any(s => s.Name == evt.InvolvedObjectName),
+        "Pod" => Pods.Any(p => p.Name == evt.InvolvedObjectName),
+        _ => false // Jobs and CronJobs — not currently checked
+    };
+
     // ── Pending-open state (BL-6: @ref inside @if cannot be used until after first render) ──
     private enum HelmPendingAction { History, Values, Rollback }
+    private sealed record IngressAnalysisTarget(string Name, string Namespace);
+    private sealed record NetworkPolicyAnalysisTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record NamespaceQuotaTarget(string Namespace);
+    private sealed record PodDisruptionBudgetTarget(string Namespace);
+    private sealed record ProbeFailureTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record PlacementTarget(string WorkloadKind, string WorkloadName, string Namespace);
+    private sealed record HelmDiffPreviewTarget(string ReleaseName, string Namespace);
+    private sealed record HelmRollbackPreviewTarget(string ReleaseName, string Namespace, int Revision);
     private (string Kind, string Name, bool EditMode, string? Namespace)? _pendingYamlOpen;
     private (string ReleaseName, HelmPendingAction Action)? _pendingHelmOpen;
 
     // ── Internal state ──
     private string? _logPodName;
     private string? _logDeploymentName;
+    private IReadOnlyList<string> _logPodContainers = [];
     private string? _containerDetailPodName;
     private ConfigMapInfo? _configMapDetailTarget;
     private SecretInfo? _secretDetailTarget;
     private HpaInfo? _hpaDetailTarget;
+    private IngressAnalysisTarget? _ingressAnalysisTarget;
+    private NetworkPolicyAnalysisTarget? _networkPolicyAnalysisTarget;
+    private NamespaceQuotaTarget? _namespaceQuotaTarget;
+    private PodDisruptionBudgetTarget? _pdbTarget;
+    private ProbeFailureTarget? _probeFailureTarget;
+    private PlacementTarget? _placementTarget;
+    private HelmDiffPreviewTarget? _helmDiffPreviewTarget;
+    private HelmRollbackPreviewTarget? _helmRollbackPreviewTarget;
     private string? _scaleTarget;
     private int _scaleReplicas;
     private bool _scaleIsStatefulSet;
@@ -250,6 +455,14 @@
         _secretDetailTarget is not null ||
         _containerDetailPodName is not null ||
         _hpaDetailTarget is not null ||
+        _ingressAnalysisTarget is not null ||
+        _networkPolicyAnalysisTarget is not null ||
+        _namespaceQuotaTarget is not null ||
+        _pdbTarget is not null ||
+        _probeFailureTarget is not null ||
+        _placementTarget is not null ||
+        _helmDiffPreviewTarget is not null ||
+        _helmRollbackPreviewTarget is not null ||
         _yamlViewer?.IsEditing == true ||
         ShowEvents;
 
@@ -305,10 +518,13 @@
     }
 
     // Pod logs
-    public void ShowPodLogs(string podName)
+    public void ShowPodLogs(string podName, IReadOnlyList<string>? containers = null)
     {
         _yamlViewer?.Close();
         _logPodName = podName;
+        _logPodContainers = containers?.Count > 0
+            ? [.. containers]
+            : [.. Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Containers ?? []];
         NotifyPanelStateChanged();
     }
 
@@ -316,6 +532,7 @@
     {
         _logPodName = null;
         _logDeploymentName = deploymentName;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -323,6 +540,7 @@
     {
         _logPodName = null;
         _logDeploymentName = null;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -348,6 +566,63 @@
     public void ShowHpaDetail(HpaInfo? hpa)
     {
         _hpaDetailTarget = hpa;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowIngressAnalysis(string ingressName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _ingressAnalysisTarget = new(ingressName, targetNamespace ?? Namespace);
+        _networkPolicyAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowNetworkPolicyAnalysis(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _networkPolicyAnalysisTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        _ingressAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowNamespaceQuota(string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _namespaceQuotaTarget = new(targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowPodDisruptionBudgets(string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _pdbTarget = new(targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowProbeFailures(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _probeFailureTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowPlacementAnalysis(string workloadKind, string workloadName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _placementTarget = new(workloadKind, workloadName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowHelmDiffPreview(string releaseName, string? targetNamespace = null)
+    {
+        ResetTransientPanels();
+        _helmDiffPreviewTarget = new(releaseName, targetNamespace ?? Namespace);
+        NotifyPanelStateChanged();
+    }
+
+    public void ShowHelmRollbackPreview(string releaseName, string ns, int revision)
+    {
+        _helmRollbackPreviewTarget = new(releaseName, ns, revision);
         NotifyPanelStateChanged();
     }
 
@@ -418,6 +693,7 @@
     private void CloseDeploymentLogs()
     {
         _logDeploymentName = null;
+        _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
@@ -445,6 +721,28 @@
         NotifyPanelStateChanged();
     }
 
+    private void CloseIngressAnalysis()
+    {
+        _ingressAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseNetworkPolicyAnalysis()
+    {
+        _networkPolicyAnalysisTarget = null;
+        NotifyPanelStateChanged();
+    }
+
+    private void CloseNamespaceQuota() { _namespaceQuotaTarget = null; NotifyPanelStateChanged(); }
+    private void ClosePodDisruptionBudgets() { _pdbTarget = null; NotifyPanelStateChanged(); }
+    private void CloseProbeFailures() { _probeFailureTarget = null; NotifyPanelStateChanged(); }
+    private void ClosePlacementAnalysis() { _placementTarget = null; NotifyPanelStateChanged(); }
+    private void CloseHelmDiffPreview() { _helmDiffPreviewTarget = null; NotifyPanelStateChanged(); }
+    private void CloseHelmRollbackPreview() { _helmRollbackPreviewTarget = null; NotifyPanelStateChanged(); }
+
+    private void OnHelmPreviewRollback((string ReleaseName, string Namespace, int Revision) args)
+        => ShowHelmRollbackPreview(args.ReleaseName, args.Namespace, args.Revision);
+
     private async Task CloseEvents()
     {
         await OnShowEventsChanged.InvokeAsync();
@@ -461,6 +759,19 @@
     {
         StateHasChanged();
         _ = OnPanelStateChanged.InvokeAsync();
+    }
+
+    private void ResetTransientPanels()
+    {
+        _yamlViewer?.Close();
+        _logPodName = null;
+        _logDeploymentName = null;
+        _logPodContainers = [];
+        _containerDetailPodName = null;
+        _configMapDetailTarget = null;
+        _secretDetailTarget = null;
+        _hpaDetailTarget = null;
+        _scaleTarget = null;
     }
 
     private static string TruncatePodName(string name)

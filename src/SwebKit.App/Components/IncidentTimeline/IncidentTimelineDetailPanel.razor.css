@@ -1,0 +1,158 @@
+.incident-detail-panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    overflow: hidden;
+}
+
+.incident-detail-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.incident-detail-panel__header h2,
+.incident-detail-panel__section h3 {
+    margin: 0;
+}
+
+.incident-detail-panel__header p,
+.incident-detail-panel__timestamp,
+.incident-detail-panel__empty,
+.incident-detail-panel__placeholder {
+    margin: 4px 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.incident-detail-panel__placeholder,
+.incident-detail-panel__content {
+    padding: 16px;
+}
+
+.incident-detail-panel__content {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.incident-detail-panel__badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.incident-detail-panel__title {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.incident-detail-panel__summary {
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+.incident-detail-panel__section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.incident-detail-panel__reasons {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.incident-detail-panel__resource {
+    font-size: var(--font-size-sm);
+}
+
+.incident-detail-panel__metadata {
+    display: grid;
+    grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+    gap: 8px 12px;
+    margin: 0;
+}
+
+.incident-detail-panel__metadata dt {
+    font-weight: 600;
+}
+
+.incident-detail-panel__metadata dd {
+    margin: 0;
+    color: var(--color-text-muted);
+    word-break: break-word;
+}
+
+.incident-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-sm);
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.incident-badge--source-aks {
+    background: rgba(52, 180, 200, 0.12);
+    border-color: rgba(52, 180, 200, 0.35);
+}
+
+.incident-badge--source-observability {
+    background: rgba(0, 120, 212, 0.12);
+    border-color: rgba(0, 120, 212, 0.35);
+}
+
+.incident-badge--source-service-bus {
+    background: rgba(232, 144, 74, 0.12);
+    border-color: rgba(232, 144, 74, 0.35);
+}
+
+.incident-badge--source-releases {
+    background: rgba(74, 184, 122, 0.12);
+    border-color: rgba(74, 184, 122, 0.35);
+}
+
+.incident-badge--severity-info {
+    background: rgba(144, 144, 168, 0.16);
+}
+
+.incident-badge--severity-warning {
+    background: rgba(251, 140, 0, 0.14);
+}
+
+.incident-badge--severity-error,
+.incident-badge--severity-critical {
+    background: rgba(229, 57, 53, 0.14);
+}
+
+.incident-badge--relevance-direct {
+    background: rgba(67, 160, 71, 0.14);
+}
+
+.incident-badge--relevance-corroborating {
+    background: rgba(0, 120, 212, 0.14);
+}
+
+.incident-badge--relevance-contextual {
+    background: rgba(144, 144, 168, 0.16);
+}
+
+@media (max-width: 900px) {
+    .incident-detail-panel__metadata {
+        grid-template-columns: 1fr;
+    }
+}

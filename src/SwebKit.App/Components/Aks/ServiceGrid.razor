@@ -1,0 +1,75 @@
+@* Renders the Services FluentDataGrid. *@
+
+<FluentDataGrid Items="@FilteredItems" TGridItem="ServiceInfo" Virtualize="true" ItemSize="36"
+                RowClass="@(service => HasSameIdentity(service, SelectedService) ? "selected-row" : "")"
+                OnRowClick="@(r => { if (r.Item is not null) OnSelectRow.InvokeAsync(r.Item); })">
+    <TemplateColumn Title="Name" Width="230px" SortBy="@(GridSort<ServiceInfo>.ByAscending(service => service.Name))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            <span class="aks-resource-name">@context.Name</span>
+        </div>
+    </TemplateColumn>
+    @if (IsMultiNamespace)
+    {
+        <TemplateColumn Title="Namespace" Width="140px"
+                        SortBy="@(GridSort<ServiceInfo>.ByAscending(service => service.Namespace))">
+            <span class="aks-ns-cell"
+                  @onclick="() => OnNamespaceClick.InvokeAsync(context.Namespace)">@context.Namespace</span>
+        </TemplateColumn>
+    }
+    <TemplateColumn Title="Type" Width="120px" SortBy="@(GridSort<ServiceInfo>.ByAscending(service => service.Type))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.Type
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Cluster IP" Width="150px" SortBy="@(GridSort<ServiceInfo>.ByAscending(service => service.ClusterIp))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @context.ClusterIp
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="External" Width="220px"
+                    SortBy="@(GridSort<ServiceInfo>.ByAscending(service => string.Join(",", service.ExternalAddresses)))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @FormatAddresses(context)
+        </div>
+    </TemplateColumn>
+    <TemplateColumn Title="Ports" Width="280px"
+                    SortBy="@(GridSort<ServiceInfo>.ByAscending(service => string.Join(",", service.Ports.Select(port => port.Port))))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @FormatPorts(context)
+        </div>
+    </TemplateColumn>
+</FluentDataGrid>
+
+@code {
+    [Parameter] public IQueryable<ServiceInfo> FilteredItems { get; set; } = Enumerable.Empty<ServiceInfo>().AsQueryable();
+    [Parameter] public bool IsMultiNamespace { get; set; }
+    [Parameter] public ServiceInfo? SelectedService { get; set; }
+    [Parameter] public EventCallback<ServiceInfo> OnSelectRow { get; set; }
+    [Parameter] public EventCallback<(MouseEventArgs, ServiceInfo)> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceClick { get; set; }
+
+    private static bool HasSameIdentity(ServiceInfo candidate, ServiceInfo? selected) =>
+        selected is not null
+        && string.Equals(candidate.Name, selected.Name, StringComparison.Ordinal)
+        && string.Equals(candidate.Namespace, selected.Namespace, StringComparison.Ordinal);
+
+    private static string FormatAddresses(ServiceInfo service) => service.ExternalAddresses.Count == 0
+        ? "-"
+        : string.Join(", ", service.ExternalAddresses);
+
+    private static string FormatPorts(ServiceInfo service) => service.Ports.Count == 0
+        ? "-"
+        : string.Join(", ", service.Ports.Select(FormatPort));
+
+    private static string FormatPort(ServicePortInfo port)
+    {
+        var protocol = string.IsNullOrWhiteSpace(port.Protocol) ? "TCP" : port.Protocol;
+        var targetPort = string.IsNullOrWhiteSpace(port.TargetPort) ? string.Empty : $" -> {port.TargetPort}";
+        return $"{port.Port}/{protocol}{targetPort}";
+    }
+}

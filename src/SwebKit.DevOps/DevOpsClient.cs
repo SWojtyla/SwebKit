@@ -117,9 +117,16 @@ public class DevOpsClient : IDevOpsClient
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Get, $"{OrgApi}/projects?api-version=7.1&$top=1");
-        using var response = await _http.SendAsync(request, ct);
-        return response.IsSuccessStatusCode;
+        try
+        {
+            using var request = CreateRequest(HttpMethod.Get, $"{OrgApi}/projects?api-version=7.1&$top=1");
+            using var response = await _http.SendAsync(request, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     // ── Projects ──

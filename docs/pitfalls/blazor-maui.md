@@ -266,4 +266,48 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 
 ---
 
+## BL-13 — Linked bUnit test hosts must register new injected shell services
+
+**Symptom:** A page or shell component renders fine in the app, but bUnit tests fail with `Cannot provide a value for property ... There is no registered service of type ...` as soon as a new `@inject` dependency is added.
+
+**Cause:** `tests/SwebKit.App.Tests` compiles linked app source files into the test project. When a component starts injecting a new shell service, the test DI container does not pick that up automatically. Existing test constructors keep building a stale service graph until they explicitly register the new dependency and any repositories it needs.
+
+**Fix:** Update the affected test setup in the same change that adds the new `@inject`. If the service depends on shared persistence state, register the same repository instance for all cooperating services in that test host.
+
+```csharp
+var uiState = new UiStateRepository();
+Services.AddSingleton(uiState);
+Services.AddSingleton(new OperatorWorkspaceService(appState, uiState, navigation, providers));
+```
+
+**Rule:** whenever a routed page or shared shell component gains a new injected service, patch the relevant bUnit/test host registrations in the same change set instead of waiting for the first broken test run.
+
+---
+
+## BL-14 — MAUI WebView resets textarea value on every Blazor re-render
+
+**Symptom:** Space, Enter, and other character keys appear to do nothing (or undo themselves) while typing in a textarea that is bound via `@oninput` + async JSInterop. The cursor jumps to the end after each keypress.
+
+**Cause (primary):** A parent div has `@onkeydown:preventDefault="@_preventGridKey"` where `_preventGridKey` is set to `true` whenever the user presses an action key (e.g. `Enter`, `y`, `n`). Blazor bakes the value of `_preventGridKey` from the last render into the JS event listener registration. When a textarea inside that div has focus, its `keydown` events bubble up to the parent, and `preventDefault()` is called on them — cancelling the textarea's default action (insert character) before any text reaches the textarea's value.
+
+**Cause (secondary):** `@oninput` on the textarea triggers async JSInterop + `StateHasChanged`. Blazor reconciles the textarea's `value` DOM property from its C# field on every render, resetting whatever the user typed during the async round-trip.
+
+**Fix:**
+
+1. In the textarea's JS initialisation, call `e.stopPropagation()` on every `keydown` event. This prevents bubbling to parent Blazor handlers entirely.
+2. Also remove `@oninput` from the textarea and let JS own the value to eliminate the secondary Blazor re-render reset.
+
+```javascript
+textareaEl.addEventListener('keydown', function (e) {
+  e.stopPropagation(); // block parent @onkeydown:preventDefault from firing
+  if (e.key === 'Tab') {
+    e.preventDefault(); /* insert spaces */
+  }
+});
+```
+
+**Rule:** any textarea overlay inside a Blazor component that lives under a parent element with `@onkeydown:preventDefault` must call `e.stopPropagation()` in JS before the event reaches the parent. Never rely on Blazor's dynamic `preventDefault` state being correct for input elements — the baked-in value from the last render can be stale.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

@@ -1,0 +1,888 @@
+@page "/incident-timeline"
+@using IncidentTimelineResultPage = SwebKit.Core.Models.IncidentTimelinePage
+@inject AppStateService AppState
+@inject IConnectionStateService ConnectionState
+@inject IIncidentTimelineService TimelineService
+@inject IAksClientBootstrapper AksBootstrapper
+@inject IAppEventBus Events
+@inject CommandRegistry Commands
+@inject NavigationManager Nav
+@inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject IIncidentInvestigationSeedResolver SeedResolver
+@inject IIncidentMappingProposalGenerator ProposalGenerator
+@implements IDisposable
+
+<div class="incident-timeline-page">
+    <RoutePageHeader Area="incident-timeline"
+                     Subtitle="Inspect workload-scoped evidence across AKS, App Insights, Service Bus, and recent release activity.">
+        <Meta>
+            @if (!string.IsNullOrWhiteSpace(_workloadName))
+            {
+                <span class="shell-pill shell-pill--accent">@ScopeWorkloadLabel</span>
+            }
+            @if (HasPendingScopeChanges)
+            {
+                <span class="shell-pill shell-pill--warning">Pending scope changes</span>
+            }
+        </Meta>
+        <Actions>
+            <a class="page-header-action-btn" href="/settings?section=incident-timeline">Settings</a>
+            <button class="page-header-action-btn" disabled="@(_page is null)" @onclick="HandleExportClicked">Export
+                Snapshot</button>
+            </Actions>
+        </RoutePageHeader>
+
+        <IncidentScopeToolbar Contexts="_contexts" NamespaceOptions="NamespaceOptions" ActiveContext="@_activeContext"
+                              CurrentNamespace="@_currentNamespace" WorkloadKind="@_workloadKind" WorkloadName="@_workloadName"
+                              Window="@_window" SuggestedWorkloads="SuggestedWorkloads" SelectedSources="_selectedSources"
+                              IsLoading="@_isLoading" CanRefresh="@CanRefresh" OnContextChanged="HandleContextChangedAsync"
+                              OnNamespaceChanged="HandleNamespaceChangedAsync" OnWorkloadKindChanged="HandleWorkloadKindChangedAsync"
+                              OnWorkloadNameChanged="HandleWorkloadNameChangedAsync" OnWindowChanged="HandleWindowChangedAsync"
+                              OnSourceToggled="HandleSourceToggledAsync" OnRefresh="RefreshAsync" />
+
+        <section class="incident-scope-summary" data-testid="incident-scope-summary" aria-live="polite">
+            <div class="incident-scope-summary__facts">
+                <span class="incident-scope-summary__fact">Context: @ScopeValueOrFallback(_activeContext)</span>
+                <span class="incident-scope-summary__fact">Namespace: @ScopeValueOrFallback(_currentNamespace)</span>
+                <span class="incident-scope-summary__fact">Workload: @ScopeWorkloadLabel</span>
+                <span class="incident-scope-summary__fact">Window:
+                    @IncidentTimelineDisplay.FormatWindowLabel(_window)</span>
+                </div>
+
+                <div class="incident-scope-summary__status">
+                    @if (_lastRefreshedAt is not null)
+                    {
+                        <span>Last refresh: @_lastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    }
+
+                    @if (_page is not null)
+                    {
+                        <span>@(_page.Items.Count == 1 ? "1 evidence item loaded" : $"{_page.Items.Count} evidence items loaded")</span>
+                    }
+
+                    @if (HasPendingScopeChanges)
+                    {
+                        <span class="incident-scope-summary__status--pending">Pending scope changes. Refresh to update
+                            evidence.</span>
+                        }
+            else if (_isLoading && _page is not null)
+                        {
+                            <span class="incident-scope-summary__status--loading">Refreshing evidence...</span>
+                        }
+                    </div>
+                </section>
+
+                @if (_requiresConfiguration)
+                {
+                    <IncidentTimelineEmptyState Title="No cluster context is configured"
+                                                Message="Configure AKS settings before loading workload-scoped incident evidence."
+                                                Hint="Incident timeline uses the current cluster context and namespace as the anchor for evidence collection." />
+                }
+                else if (!string.IsNullOrWhiteSpace(_bootstrapError))
+                {
+                    <ErrorCallout Title="Incident scope bootstrap failed" Message="@_bootstrapError" OnRetry="RetryBootstrapAsync" />
+                }
+                else
+                {
+                    @if (_investigationDraft is not null)
+                    {
+                        <InvestigationSeedBanner Draft="_investigationDraft" OnConfirmAndRefresh="HandleSeedConfirmAndRefreshAsync"
+                                                 OnDismiss="HandleSeedDismiss" />
+                    }
+
+                    @if (_mappingProposals.Count > 0)
+                    {
+                        <MappingProposalPanel Proposals="_mappingProposals" OnDismiss="HandleProposalsDismiss" />
+                    }
+
+                    <IncidentCoverageStrip Statuses="@(_page?.SourceStatuses ?? [])" WasTruncated="@(_page?.WasTruncated ?? false)"
+                                           HasPendingChanges="@HasPendingScopeChanges" IsRefreshing="@(_isLoading && _page is not null)" />
+
+                    @if (HasMappingGuidance)
+                    {
+                        <div class="incident-mapping-note" data-testid="incident-mapping-note" role="status">
+                            <div class="incident-mapping-note__copy">
+                                <div class="incident-mapping-note__eyebrow">Mapping guidance</div>
+                                <strong>Some selected sources still need mapping or setup.</strong>
+                                <p>@BuildMappingGuidanceMessage()</p>
+                            </div>
+
+                            <FluentButton Appearance="Appearance.Accent" data-testid="incident-mapping-settings-button"
+                                          @onclick="OpenIncidentTimelineSettingsAsync">
+                                Open Incident Timeline settings
+                            </FluentButton>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_loadError))
+                    {
+                        <ErrorCallout Title="Incident evidence could not be loaded" Message="@_loadError" OnRetry="RefreshAsync" />
+                    }
+                    else if (_isBootstrapping || (_isLoading && _page is null))
+                    {
+                        <LoadingSpinner Message="Loading incident evidence..." />
+                    }
+                    else if (string.IsNullOrWhiteSpace(_workloadName))
+                    {
+                        <IncidentTimelineEmptyState Title="Choose a workload"
+                                                    Message="Select a workload name and refresh to load incident evidence for this scope."
+                                                    Hint="Use a mapped workload suggestion or enter a deployment, stateful set, or pod name directly." />
+                    }
+                    else if (_page is null)
+                    {
+                        <IncidentTimelineEmptyState Title="Refresh to load evidence"
+                                                    Message="Incident evidence appears after the first refresh for the selected scope."
+                                                    Hint="Changing scope values does not trigger auto-refresh in v1. Use Refresh when the scope is ready." />
+                    }
+                    else if (HasGlobalFailure(_page))
+                    {
+                        <ErrorCallout Title="All selected evidence sources failed" Message="@BuildGlobalFailureMessage(_page)"
+                                      OnRetry="RefreshAsync" />
+                    }
+                    else if (_page.Items.Count == 0)
+                    {
+                        <IncidentTimelineEmptyState Title="No evidence found in this window"
+                                                    Message="The selected scope returned no evidence for the current investigation window."
+                                                    Hint="Expand the time window, adjust the workload scope, or review coverage for unmapped or unavailable sources." />
+                    }
+                    else
+                    {
+                        @if (_page.IsPartial)
+                        {
+                            <div class="incident-page-notice" role="status">
+                                Evidence is partial. Review source coverage before deciding what changed in this incident window.
+                            </div>
+                        }
+
+                        <div class="incident-timeline-workbench">
+                            <IncidentTimelineList Items="_page.Items" SelectedItemId="@_selectedItem?.ItemId"
+                                                  OnSelectItem="HandleItemSelectedAsync" />
+
+                            <IncidentTimelineDetailPanel Item="_selectedItem" OnClose="ClearSelectedItemAsync" />
+                        </div>
+                    }
+                }
+            </div>
+
+            @if (_showExportDialog && _page is not null)
+            {
+                <IncidentSnapshotExportDialog Page="_page" Seed="_investigationDraft?.Seed" OnClose="HandleExportDialogClosed" />
+            }
+
+@code {
+    private readonly CancellationTokenSource _disposeCts = new();
+    private CancellationTokenSource? _activeLoadCts;
+    private List<KubeContextInfo> _contexts = [];
+    private List<string> _namespaces = [];
+    private List<IncidentTimelineSource> _selectedSources =
+    [
+        IncidentTimelineSource.Aks,
+        IncidentTimelineSource.Observability,
+        IncidentTimelineSource.ServiceBus,
+        IncidentTimelineSource.Releases,
+    ];
+
+    private IncidentTimelineResultPage? _page;
+    private IncidentTimelineItem? _selectedItem;
+    private string _activeContext = string.Empty;
+    private string _currentNamespace = string.Empty;
+    private string _workloadName = string.Empty;
+    private IncidentWorkloadKind _workloadKind = IncidentWorkloadKind.Deployment;
+    private TimeRange _window = TimeRange.LastHour;
+    private bool _isBootstrapping;
+    private bool _isLoading;
+    private bool _requiresConfiguration;
+    private string? _bootstrapError;
+    private string? _loadError;
+    private DateTimeOffset? _lastRefreshedAt;
+    private string? _lastLoadedRequestKey;
+    private int _requestVersion;
+    private IncidentInvestigationDraft? _investigationDraft;
+    private bool _showExportDialog;
+    private IReadOnlyList<IncidentMappingProposal> _mappingProposals = [];
+
+    private IReadOnlyList<string> NamespaceOptions => _namespaces
+        .Concat(GetMappedNamespaces())
+        .Append(_currentNamespace)
+        .Where(static name => !string.IsNullOrWhiteSpace(name))
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(static name => name, StringComparer.Ordinal)
+        .ToList();
+
+    private IReadOnlyList<IncidentTimelineWorkloadMapping> SuggestedWorkloads =>
+        AppState.Config.IncidentTimeline.WorkloadMappings
+            .Where(mapping => string.Equals(mapping.Namespace, _currentNamespace, StringComparison.OrdinalIgnoreCase)
+                && mapping.WorkloadKind == _workloadKind)
+            .OrderBy(mapping => mapping.DisplayName ?? mapping.WorkloadName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private string ScopeWorkloadLabel => string.IsNullOrWhiteSpace(_workloadName)
+        ? "Not selected"
+        : GetCurrentWorkloadDisplayName();
+
+    private bool CanRefresh => !_requiresConfiguration
+        && !_isBootstrapping
+        && !string.IsNullOrWhiteSpace(_currentNamespace)
+        && !string.IsNullOrWhiteSpace(_workloadName)
+        && _selectedSources.Count > 0;
+
+    private bool HasPendingScopeChanges => _lastLoadedRequestKey is not null
+        && BuildRequestKey(BuildQueryOrNull()) is { } requestKey
+        && !string.Equals(requestKey, _lastLoadedRequestKey, StringComparison.Ordinal);
+
+    private IReadOnlyList<IncidentTimelineSourceStatus> MappingGuidanceStatuses => _page?.SourceStatuses
+        .Where(static status => status.CoverageState is IncidentTimelineSourceCoverageState.Unmapped or
+IncidentTimelineSourceCoverageState.NotConfigured)
+        .OrderBy(status => GetSourceOrder(status.Source))
+        .ToList()
+        ?? [];
+
+    private bool HasMappingGuidance => MappingGuidanceStatuses.Count > 0;
+
+    protected override void OnInitialized()
+    {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.RegisterRestoreHandler("incident-timeline", RestoreWorkspaceAsync);
+        RegisterCommands();
+        _ = BootstrapAndLoadAsync(setDefaults: true, autoLoad: true);
+    }
+
+    private async Task BootstrapAndLoadAsync(bool setDefaults, bool autoLoad)
+    {
+        _isBootstrapping = true;
+        _bootstrapError = null;
+        _loadError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (!AppState.IsInitialized)
+            {
+                await AppState.WhenInitializedAsync();
+            }
+
+            var result = await AksBootstrapper.BootstrapAsync(
+                new AksClientBootstrapRequest(
+                    ClientOverride: null,
+                    UseDemoData: AppState.UseDemoData,
+                    Config: AppState.Config.AksConfig,
+                    RequestedContext: _activeContext,
+                    RequestedNamespace: _currentNamespace),
+                _disposeCts.Token);
+
+            switch (result.Status)
+            {
+                case AksClientBootstrapStatus.NotConfigured:
+                    _requiresConfiguration = true;
+                    _contexts = [];
+                    _namespaces = [];
+                    _page = null;
+                    _selectedItem = null;
+                    ConnectionState.SetNotConfigured("incident-timeline");
+                    return;
+
+                case AksClientBootstrapStatus.Error:
+                    _requiresConfiguration = false;
+                    _bootstrapError = result.ErrorMessage ?? "Unable to resolve the current AKS context.";
+                    _contexts = [];
+                    _namespaces = [];
+                    _page = null;
+                    _selectedItem = null;
+                    ConnectionState.SetError("incident-timeline", _bootstrapError);
+                    return;
+
+                default:
+                    _requiresConfiguration = false;
+                    _contexts = result.Contexts.ToList();
+                    _namespaces = result.Namespaces.ToList();
+                    _activeContext = string.IsNullOrWhiteSpace(result.ActiveContext) ? _activeContext : result.ActiveContext;
+                    _currentNamespace = string.IsNullOrWhiteSpace(result.CurrentNamespace) ? _currentNamespace : result.CurrentNamespace;
+                    if (setDefaults)
+                    {
+                        ApplyDefaultScope();
+                    }
+                    else
+                    {
+                        SyncWorkloadSelectionToScope();
+                    }
+                    ConnectionState.SetConnected("incident-timeline");
+                    break;
+            }
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _bootstrapError = ex.Message;
+            _page = null;
+            _selectedItem = null;
+            ConnectionState.SetError("incident-timeline", ex.Message);
+            return;
+        }
+        finally
+        {
+            _isBootstrapping = false;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        // Consume any pending investigation seed before auto-loading.
+        // ApplyPendingSeed may prefill scope fields; do this after bootstrap so
+        // namespace/context lists are available for the banner to display correctly.
+        ApplyPendingSeedIfPresent();
+
+        if (autoLoad && CanRefresh)
+        {
+            await RefreshAsync();
+        }
+
+        await Workspaces.ApplyPendingRestoreAsync("incident-timeline");
+    }
+
+    private void ApplyDefaultScope()
+    {
+        var preferredMapping = AppState.Config.IncidentTimeline.WorkloadMappings
+            .FirstOrDefault(mapping => string.Equals(mapping.Namespace, _currentNamespace, StringComparison.OrdinalIgnoreCase))
+            ?? AppState.Config.IncidentTimeline.WorkloadMappings.FirstOrDefault();
+
+        if (preferredMapping is not null)
+        {
+            _currentNamespace = string.IsNullOrWhiteSpace(_currentNamespace)
+                ? preferredMapping.Namespace
+                : _currentNamespace;
+            _workloadKind = preferredMapping.WorkloadKind;
+            _workloadName = preferredMapping.WorkloadName;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(AppState.Config.AksConfig?.DefaultNamespace) &&
+string.IsNullOrWhiteSpace(_currentNamespace))
+        {
+            _currentNamespace = AppState.Config.AksConfig.DefaultNamespace;
+        }
+
+        if (!string.IsNullOrWhiteSpace(AppState.Config.AksConfig?.WatchedDeployments.FirstOrDefault()))
+        {
+            _workloadKind = IncidentWorkloadKind.Deployment;
+            _workloadName = AppState.Config.AksConfig.WatchedDeployments[0];
+        }
+    }
+
+    private void SyncWorkloadSelectionToScope()
+    {
+        if (string.IsNullOrWhiteSpace(_currentNamespace))
+        {
+            return;
+        }
+
+        var suggestions = SuggestedWorkloads;
+        if (suggestions.Count == 0)
+        {
+            return;
+        }
+
+        if (!suggestions.Any(mapping => string.Equals(mapping.WorkloadName, _workloadName, StringComparison.OrdinalIgnoreCase)))
+        {
+            _workloadName = suggestions[0].WorkloadName;
+        }
+    }
+
+    private async Task HandleContextChangedAsync(string context)
+    {
+        if (string.Equals(_activeContext, context, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _activeContext = context;
+        await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private async Task HandleNamespaceChangedAsync(string namespaceName)
+    {
+        _currentNamespace = namespaceName;
+        SyncWorkloadSelectionToScope();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleWorkloadKindChangedAsync(IncidentWorkloadKind workloadKind)
+    {
+        _workloadKind = workloadKind;
+        SyncWorkloadSelectionToScope();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleWorkloadNameChangedAsync(string workloadName)
+    {
+        _workloadName = workloadName.Trim();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleWindowChangedAsync(TimeRange window)
+    {
+        _window = window;
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleSourceToggledAsync(IncidentTimelineSource source)
+    {
+        if (_selectedSources.Contains(source))
+        {
+            if (_selectedSources.Count == 1)
+            {
+                return;
+            }
+
+            _selectedSources = _selectedSources.Where(selected => selected != source).ToList();
+        }
+        else
+        {
+            _selectedSources =
+            [
+                .._selectedSources,
+                source,
+            ];
+            _selectedSources = _selectedSources
+                .Distinct()
+                .OrderBy(GetSourceOrder)
+                .ToList();
+        }
+
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleItemSelectedAsync(IncidentTimelineItem item)
+    {
+        _selectedItem = item;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ClearSelectedItemAsync()
+    {
+        _selectedItem = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyPendingSeedIfPresent()
+    {
+        var seed = InvestigationLauncher.TakePendingSeed();
+        if (seed is null)
+        {
+            return;
+        }
+
+        var draft = SeedResolver.Resolve(seed, AppState.Config.IncidentTimeline);
+        _investigationDraft = draft;
+
+        // Prefill scope from draft if available and not already set by workspace restore.
+        if (draft.ResolvedScope is { } scope)
+        {
+            if (string.IsNullOrWhiteSpace(_currentNamespace))
+                _currentNamespace = scope.Namespace;
+            if (string.IsNullOrWhiteSpace(_workloadName))
+            {
+                _workloadKind = scope.WorkloadKind;
+                _workloadName = scope.WorkloadName;
+            }
+        }
+
+        // Pre-apply source selection from draft.
+        if (draft.PreselectedSources.Count > 0)
+        {
+            _selectedSources = draft.PreselectedSources
+                .Distinct()
+                .OrderBy(GetSourceOrder)
+                .ToList();
+        }
+
+        // Prefill time window from seed.
+        _window = seed.SelectedRange;
+    }
+
+    private async Task HandleSeedConfirmAndRefreshAsync()
+    {
+        _investigationDraft = null;
+        await RefreshAsync();
+    }
+
+    private void HandleSeedDismiss()
+    {
+        _investigationDraft = null;
+    }
+
+    private void HandleExportClicked() => _showExportDialog = true;
+
+    private void HandleExportDialogClosed() => _showExportDialog = false;
+
+    private void HandleProposalsDismiss() => _mappingProposals = [];
+
+    private async Task RetryBootstrapAsync() => await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
+
+    private Task OpenIncidentTimelineSettingsAsync()
+    {
+        Nav.NavigateTo(BuildIncidentTimelineSettingsUrl());
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAsync()
+    {
+        var query = BuildQueryOrNull();
+        if (query is null)
+        {
+            return;
+        }
+
+        _loadError = null;
+        _selectedItem = null;
+        _isLoading = true;
+        var requestVersion = Interlocked.Increment(ref _requestVersion);
+
+        _activeLoadCts?.Cancel();
+        _activeLoadCts?.Dispose();
+        _activeLoadCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var page = await TimelineService.GetTimelineAsync(query, _activeLoadCts.Token);
+            if (requestVersion != _requestVersion)
+            {
+                return;
+            }
+
+            _page = page;
+            _lastRefreshedAt = page.GeneratedAtUtc;
+            _lastLoadedRequestKey = BuildRequestKey(page.Query);
+            _mappingProposals = ProposalGenerator.Generate(page, AppState.Config.IncidentTimeline);
+
+            _selectedItem = _page.Items.Count == 0
+                ? null
+                : _page.Items[0];
+
+            if (HasGlobalFailure(page))
+            {
+                ConnectionState.SetError("incident-timeline", BuildGlobalFailureMessage(page));
+            }
+            else
+            {
+                ConnectionState.SetConnected("incident-timeline");
+            }
+
+            await PublishWorkspaceSnapshotAsync(recordRecent: true);
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (requestVersion != _requestVersion)
+            {
+                return;
+            }
+
+            _loadError = ex.Message;
+            ConnectionState.SetError("incident-timeline", ex.Message);
+        }
+        finally
+        {
+            if (requestVersion == _requestVersion)
+            {
+                _isLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private IncidentTimelineQuery? BuildQueryOrNull()
+    {
+        if (!CanRefresh)
+        {
+            return null;
+        }
+
+        return new IncidentTimelineQuery
+        {
+            Scope = new IncidentWorkloadScope(
+                string.IsNullOrWhiteSpace(_activeContext) ? null : _activeContext,
+                _currentNamespace,
+                _workloadKind,
+                _workloadName),
+            Window = _window,
+            SelectedSources = _selectedSources.ToList(),
+        };
+    }
+
+    private static string? BuildRequestKey(IncidentTimelineQuery? query)
+    {
+        if (query is null)
+        {
+            return null;
+        }
+
+        var normalizedWindow = query.GetUtcWindow();
+        return string.Join(
+            "|",
+            query.Scope.ToScopeKey(),
+            normalizedWindow.Start.ToString("O"),
+            normalizedWindow.End.ToString("O"),
+            string.Join(",", query.GetRequestedSources().Select(static source => source.ToString())));
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("incident-timeline");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        if (string.IsNullOrWhiteSpace(_currentNamespace) || string.IsNullOrWhiteSpace(_workloadName))
+        {
+            return null;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"incident-timeline:{_currentNamespace}:{_workloadKind}:{_workloadName}",
+                Area = "incident-timeline",
+                Kind = _workloadKind.ToString().ToLowerInvariant(),
+                DisplayName = GetCurrentWorkloadDisplayName(),
+                DisplayPath = $"{_currentNamespace}/{_workloadName}",
+                Summary = IncidentTimelineDisplay.FormatWindowLabel(_window),
+                Icon = "🕒",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["context"] = _activeContext,
+                    ["namespace"] = _currentNamespace,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["context"] = _activeContext,
+                ["namespace"] = _currentNamespace,
+                ["workloadKind"] = _workloadKind.ToString(),
+                ["workloadName"] = _workloadName,
+                ["windowStart"] = _window.Start.ToString("O"),
+                ["windowEnd"] = _window.End.ToString("O"),
+                ["sources"] = string.Join(',', _selectedSources.Select(static source => source.ToString())),
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("context", out var restoredContext))
+        {
+            _activeContext = restoredContext;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("namespace", out var restoredNamespace))
+        {
+            _currentNamespace = restoredNamespace;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("workloadKind", out var workloadKindText)
+            && Enum.TryParse<IncidentWorkloadKind>(workloadKindText, out var restoredKind))
+        {
+            _workloadKind = restoredKind;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("workloadName", out var restoredWorkloadName))
+        {
+            _workloadName = restoredWorkloadName;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("windowStart", out var windowStartText)
+            && snapshot.RestoreState.TryGetValue("windowEnd", out var windowEndText)
+            && DateTimeOffset.TryParse(windowStartText, out var restoredWindowStart)
+            && DateTimeOffset.TryParse(windowEndText, out var restoredWindowEnd))
+        {
+            _window = new TimeRange(restoredWindowStart, restoredWindowEnd);
+        }
+
+        if (snapshot.RestoreState.TryGetValue("sources", out var sourceText))
+        {
+            _selectedSources = sourceText
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(source => Enum.TryParse<IncidentTimelineSource>(source, out var restoredSource)
+                    ? restoredSource
+                    : (IncidentTimelineSource?)null)
+                .Where(static source => source is not null)
+                .Select(static source => source!.Value)
+                .Distinct()
+                .OrderBy(GetSourceOrder)
+                .ToList();
+        }
+
+        await BootstrapAndLoadAsync(setDefaults: false, autoLoad: false);
+        await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static bool HasGlobalFailure(IncidentTimelineResultPage page) => page.Items.Count == 0
+        && page.SourceStatuses.Count > 0
+        && page.SourceStatuses.All(static status => status.CoverageState is IncidentTimelineSourceCoverageState.Failed or
+IncidentTimelineSourceCoverageState.TimedOut);
+
+    private static string BuildGlobalFailureMessage(IncidentTimelineResultPage page)
+    {
+        var details = page.SourceStatuses
+            .Select(status => status.ErrorMessage ?? status.StatusMessage)
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return details.Count == 0
+            ? "None of the selected sources returned evidence. Review source coverage and refresh again."
+            : string.Join(" ", details);
+    }
+
+    private string GetCurrentWorkloadDisplayName()
+    {
+        var mapping = AppState.Config.IncidentTimeline.WorkloadMappings.FirstOrDefault(workload =>
+            string.Equals(workload.Namespace, _currentNamespace, StringComparison.OrdinalIgnoreCase)
+            && workload.WorkloadKind == _workloadKind
+            && string.Equals(workload.WorkloadName, _workloadName, StringComparison.OrdinalIgnoreCase));
+
+        return string.IsNullOrWhiteSpace(mapping?.DisplayName)
+            ? $"{_workloadKind} {_workloadName}"
+            : $"{mapping.DisplayName} ({_workloadKind} {_workloadName})";
+    }
+
+    private IEnumerable<string> GetMappedNamespaces() => AppState.Config.IncidentTimeline.WorkloadMappings
+        .Select(static mapping => mapping.Namespace)
+        .Where(static namespaceName => !string.IsNullOrWhiteSpace(namespaceName));
+
+    private string BuildMappingGuidanceMessage()
+    {
+        var unmappedSources = MappingGuidanceStatuses
+            .Where(static status => status.CoverageState == IncidentTimelineSourceCoverageState.Unmapped)
+            .Select(status => IncidentTimelineDisplay.GetSourceLabel(status.Source))
+            .ToList();
+        var notConfiguredSources = MappingGuidanceStatuses
+            .Where(static status => status.CoverageState == IncidentTimelineSourceCoverageState.NotConfigured)
+            .Select(status => IncidentTimelineDisplay.GetSourceLabel(status.Source))
+            .ToList();
+        var messages = new List<string>();
+
+        if (unmappedSources.Count > 0)
+        {
+            messages.Add($"{FormatSourceList(unmappedSources)} {(unmappedSources.Count == 1 ? "is" : "are")} unmapped for {ScopeWorkloadLabel}.");
+        }
+
+        if (notConfiguredSources.Count > 0)
+        {
+            messages.Add($"{FormatSourceList(notConfiguredSources)} {(notConfiguredSources.Count == 1 ? "is" : "are")} not configured for this scope.");
+        }
+
+        messages.Add("Open Settings > Incident Timeline to author workload mappings for this scope.");
+
+        if (notConfiguredSources.Count > 0)
+        {
+            messages.Add("Sources marked Not configured may also need their base Service Bus, DevOps, or Observability settings on the other tabs.");
+        }
+
+        return string.Join(" ", messages);
+    }
+
+    private string BuildIncidentTimelineSettingsUrl()
+    {
+        var query = new List<string>
+        {
+            "section=incident-timeline",
+        };
+
+        if (!string.IsNullOrWhiteSpace(_currentNamespace))
+        {
+            query.Add($"namespace={Uri.EscapeDataString(_currentNamespace)}");
+        }
+
+        query.Add($"workloadKind={Uri.EscapeDataString(_workloadKind.ToString())}");
+
+        if (!string.IsNullOrWhiteSpace(_workloadName))
+        {
+            query.Add($"workloadName={Uri.EscapeDataString(_workloadName)}");
+        }
+
+        return $"/settings?{string.Join("&", query)}";
+    }
+
+    private static string FormatSourceList(IReadOnlyList<string> labels)
+    {
+        return labels.Count switch
+        {
+            0 => string.Empty,
+            1 => labels[0],
+            2 => $"{labels[0]} and {labels[1]}",
+            _ => $"{string.Join(", ", labels.Take(labels.Count - 1))}, and {labels[^1]}",
+        };
+    }
+
+    private static int GetSourceOrder(IncidentTimelineSource source) => source switch
+    {
+        IncidentTimelineSource.Aks => 0,
+        IncidentTimelineSource.Observability => 1,
+        IncidentTimelineSource.ServiceBus => 2,
+        IncidentTimelineSource.Releases => 3,
+        _ => int.MaxValue,
+    };
+
+    private static string ScopeValueOrFallback(string? value) => string.IsNullOrWhiteSpace(value) ? "Not set" : value;
+
+    private void RegisterCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "incident-timeline-refresh",
+            Label = "Refresh Incident Timeline",
+            Category = "Incident Timeline",
+            AreaScope = "incident-timeline",
+            IsAvailable = () => CanRefresh,
+            Execute = RefreshAsync,
+        });
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent evt)
+    {
+        if (evt.Area != "incident-timeline")
+        {
+            return;
+        }
+
+        _ = InvokeAsync(RefreshAsync);
+    }
+
+    public void Dispose()
+    {
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("incident-timeline");
+        Commands.Unregister("incident-timeline-refresh");
+        _activeLoadCts?.Cancel();
+        _activeLoadCts?.Dispose();
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+    }
+}

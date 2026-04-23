@@ -19,11 +19,15 @@ namespace SwebKit.E2E.Tests;
 ///     Run SwebKit.App in Debug from Visual Studio / VS Code.
 /// </summary>
 [Trait("Category", "E2E")]
-public sealed class AppUiTests : IClassFixture<AppFixture>
+public sealed class AppUiTests : IClassFixture<AppFixture>, IAsyncLifetime
 {
     private readonly AppFixture _fixture;
 
     public AppUiTests(AppFixture fixture) => _fixture = fixture;
+
+    public Task InitializeAsync() => _fixture.ResetShellStateAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     // =========================================================================
     // AppShell_Renders — basic shell structure is present on startup
@@ -58,7 +62,7 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
         var areas = new[]
         {
             "dashboard", "service-bus", "aks", "redis",
-            "storage", "pipelines", "observability", "settings"
+            "storage", "pipelines", "observability", "incident-timeline", "settings"
         };
 
         foreach (var area in areas)
@@ -118,6 +122,15 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
     }
 
     [Fact]
+    public async Task Navigation_ToIncidentTimeline()
+    {
+        await NavigateToAsync("incident-timeline");
+
+        await Assertions.Expect(_fixture.Page.Locator(".incident-timeline-page"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
     public async Task Navigation_NavToggle_CollapsesAndExpands()
     {
         var appShell = _fixture.Page.Locator(".app-shell");
@@ -145,6 +158,30 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
         await Assertions.Expect(appShell).Not.ToHaveClassAsync(
             new Regex(@"\bnav-collapsed\b"),
             new LocatorAssertionsToHaveClassOptions { Timeout = 5_000 });
+    }
+
+    [Fact]
+    public async Task Navigation_DirectAliasRoute_UsesPipelinesNavAndHiddenRouteHeader()
+    {
+        await _fixture.HardNavigateAsync("/releases");
+
+        await Assertions.Expect(_fixture.Page.Locator(".pipelines-shell"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+        var pipelinesNav = _fixture.Page.Locator("[data-area=\"pipelines\"]");
+        await Assertions.Expect(pipelinesNav).ToHaveClassAsync(
+            new Regex(@"\bactive\b"),
+            new LocatorAssertionsToHaveClassOptions { Timeout = 10_000 });
+        await Assertions.Expect(pipelinesNav).ToHaveAttributeAsync("aria-current", "page");
+        await Assertions.Expect(_fixture.Page.Locator(".top-bar__context-title"))
+            .ToHaveTextAsync("Pipelines");
+        await Assertions.Expect(_fixture.Page.Locator(".page-shell-header .page-header-shell__copy")).ToHaveClassAsync(
+            new Regex(@"\bvisually-hidden\b"),
+            new LocatorAssertionsToHaveClassOptions { Timeout = 10_000 });
+        await Assertions.Expect(_fixture.Page.Locator(".page-shell-header h1.page-title"))
+            .ToHaveTextAsync("Pipelines");
+        await Assertions.Expect(_fixture.Page.Locator(".page-shell-header .page-header-shell__actions"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 
     // =========================================================================
@@ -204,6 +241,45 @@ public sealed class AppUiTests : IClassFixture<AppFixture>
         await _fixture.Page.Locator("button.demo-banner-disable").ClickAsync();
         await Assertions.Expect(banner)
             .ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task ThemePersistence_RestoresStoredThemeAcrossReloadAndReconnect()
+    {
+        await _fixture.SetThemeAsync("light-coral-studio");
+
+        await _fixture.ReloadAsync();
+
+        var appShell = _fixture.Page.Locator(".app-shell");
+        await Assertions.Expect(appShell).ToHaveAttributeAsync("data-theme", "light-coral-studio");
+
+        await _fixture.ReconnectAsync();
+
+        await Assertions.Expect(_fixture.Page.Locator(".app-shell"))
+            .ToHaveAttributeAsync("data-theme", "light-coral-studio");
+    }
+
+    [Fact]
+    public async Task FocusOnNavigate_FocusesSettingsHeadingAfterRouteChange()
+    {
+        await NavigateToAsync("settings");
+
+        await Assertions.Expect(_fixture.Page.Locator(".settings-shell"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+        await _fixture.Page.WaitForFunctionAsync(
+            """
+            expectedText => {
+                const active = document.activeElement;
+                return active?.tagName === 'H1' && active.textContent?.trim() === expectedText;
+            }
+            """,
+            "Settings",
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        var activeHeadingText = await _fixture.Page.EvaluateAsync<string>(
+            "() => document.activeElement?.textContent?.trim() ?? ''");
+        Assert.Equal("Settings", activeHeadingText);
     }
 
     [Fact]

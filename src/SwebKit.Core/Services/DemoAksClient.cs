@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
@@ -13,6 +14,9 @@ namespace SwebKit.Core.Services;
 public class DemoAksClient : IAksClient
 {
     private static readonly Random Rng = new(42);
+    private static readonly Regex LogTimestampPrefixRegex = new(
+        @"^(?<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly Lock _jobLock = new();
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
     private int _jobSequence;
@@ -115,6 +119,10 @@ public class DemoAksClient : IAksClient
                 ["app"] = d.Name,
                 ["version"] = $"1.{Rng.Next(0, 12)}.{Rng.Next(0, 50)}",
                 ["team"] = d.Name.Contains("order") || d.Name.Contains("cart") ? "commerce" : "platform"
+            },
+            SelectorLabels = new Dictionary<string, string>
+            {
+                ["app"] = d.Name
             }
         }).ToList();
     }
@@ -124,6 +132,11 @@ public class DemoAksClient : IAksClient
         await Task.Delay(200, ct);
 
         var tick = Interlocked.Increment(ref _demoTick);
+        return BuildDemoPods(ns, tick, labelSelector);
+    }
+
+    private static IReadOnlyList<PodInfo> BuildDemoPods(string ns, int tick, string? labelSelector = null)
+    {
         var pods = new List<PodInfo>();
         foreach (var d in DemoDeployments)
         {
@@ -302,6 +315,471 @@ public class DemoAksClient : IAksClient
         };
     }
 
+    public async Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+        return new List<ServiceInfo>
+        {
+            new()
+            {
+                Name = "order-api",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.10",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "order-api" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "order-api" }
+            },
+            new()
+            {
+                Name = "payment-gateway",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.24",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "payment-gateway" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "payment-gateway" }
+            },
+            new()
+            {
+                Name = "ingress-nginx-controller",
+                Namespace = ns,
+                Type = "LoadBalancer",
+                ClusterIp = "10.0.12.52",
+                ExternalAddresses = ["20.93.141.52"],
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "80" },
+                    new ServicePortInfo { Name = "https", Protocol = "TCP", Port = 443, TargetPort = "443" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app.kubernetes.io/name"] = "ingress-nginx" },
+                Labels = new Dictionary<string, string> { ["app.kubernetes.io/managed-by"] = "Helm" }
+            },
+            new()
+            {
+                Name = "prometheus-server",
+                Namespace = ns,
+                Type = "ClusterIP",
+                ClusterIp = "10.0.12.88",
+                Ports =
+                [
+                    new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 9090, TargetPort = "9090" }
+                ],
+                SelectorLabels = new Dictionary<string, string> { ["app"] = "prometheus-server" },
+                Labels = new Dictionary<string, string> { ["tier"] = "monitoring" }
+            }
+        };
+    }
+
+    public async Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var ingress = (await GetIngressesAsync(ns, ct)).FirstOrDefault(item =>
+            string.Equals(item.Name, ingressName, StringComparison.Ordinal));
+        if (ingress is null)
+        {
+            throw new InvalidOperationException($"Ingress '{ingressName}' was not found in namespace '{ns}'.");
+        }
+
+        var services = (await GetServicesAsync(ns, ct)).ToDictionary(service => service.Name, StringComparer.Ordinal);
+        var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
+        var backends = new List<IngressBackendAnalysis>();
+
+        foreach (var rule in ingress.Rules)
+        {
+            foreach (var path in rule.Paths)
+            {
+                services.TryGetValue(path.ServiceName ?? string.Empty, out var service);
+                var matchingPods = service?.SelectorLabels.Count > 0
+                    ? pods.Where(pod => service.SelectorLabels.All(selector =>
+                        pod.Labels.TryGetValue(selector.Key, out var value)
+                        && string.Equals(value, selector.Value, StringComparison.Ordinal))).ToList()
+                    : [];
+
+                var requestedPort = path.ServicePort?.ToString() ?? "unspecified";
+                var matchingPort = service?.Ports.FirstOrDefault(port => port.Port == path.ServicePort);
+                var backendFindings = new List<string>();
+
+                if (service is null)
+                {
+                    backendFindings.Add($"Service '{path.ServiceName ?? "(missing)"}' was not found.");
+                }
+                else
+                {
+                    if (matchingPort is null)
+                    {
+                        backendFindings.Add($"Requested port '{requestedPort}' does not exist on Service '{service.Name}'.");
+                    }
+
+                    if (service.SelectorLabels.Count == 0)
+                    {
+                        backendFindings.Add($"Service '{service.Name}' has no pod selector, so backend readiness could not be inferred from pods.");
+                    }
+                    else if (matchingPods.Count == 0)
+                    {
+                        backendFindings.Add($"Service '{service.Name}' selector matched no pods.");
+                    }
+                    else
+                    {
+                        var readyPods = matchingPods.Count(pod => pod.Ready);
+                        if (readyPods == 0)
+                        {
+                            backendFindings.Add($"Service '{service.Name}' matched {matchingPods.Count} pod(s), but none were Ready.");
+                        }
+                        else if (readyPods < matchingPods.Count)
+                        {
+                            backendFindings.Add($"Service '{service.Name}' matched {readyPods}/{matchingPods.Count} Ready pod(s).");
+                        }
+                    }
+                }
+
+                backends.Add(new IngressBackendAnalysis
+                {
+                    Host = rule.Host ?? "*",
+                    Path = path.Path,
+                    PathType = path.PathType,
+                    ServiceName = path.ServiceName,
+                    ServiceNamespace = ns,
+                    RequestedPort = requestedPort,
+                    ServiceExists = service is not null,
+                    ServiceType = service?.Type,
+                    ServicePortResolved = matchingPort is not null,
+                    ResolvedServicePort = matchingPort is null
+                        ? null
+                        : $"{matchingPort.Port}/{matchingPort.Protocol} → {(matchingPort.TargetPort ?? matchingPort.Port.ToString())}",
+                    HasSelector = service?.SelectorLabels.Count > 0,
+                    MatchingPodCount = matchingPods.Count,
+                    ReadyPodCount = matchingPods.Count(pod => pod.Ready),
+                    MatchingPods = matchingPods.Select(pod => pod.Name).Take(6).ToList(),
+                    Findings = backendFindings
+                });
+            }
+        }
+
+        var findings = backends.SelectMany(backend => backend.Findings).Distinct(StringComparer.Ordinal).ToList();
+        if (ingress.Addresses.Count == 0)
+        {
+            findings.Insert(0, "The ingress has no published load balancer address yet.");
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add("All inspected ingress backends resolved to Services with matching Ready pods.");
+        }
+
+        return new IngressAnalysis
+        {
+            Namespace = ns,
+            IngressName = ingress.Name,
+            IngressClass = ingress.IngressClass,
+            Summary = findings.Count == 1 && findings[0].StartsWith("All inspected", StringComparison.Ordinal)
+                ? $"All {backends.Count} inspected ingress backend(s) resolved to Services with matching Ready pods."
+                : $"{backends.Count(backend => backend.Findings.Count > 0)} of {backends.Count} inspected ingress backend(s) need attention.",
+            Addresses = ingress.Addresses.ToList(),
+            Findings = findings,
+            Backends = backends
+        };
+    }
+
+    public async Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var pods = BuildDemoPods(ns, Math.Max(Volatile.Read(ref _demoTick), 1)).ToList();
+        var selectedPods = workloadKind.Trim().ToLowerInvariant() switch
+        {
+            "deployment" or "statefulset" => pods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList(),
+            "pod" => pods.Where(pod => string.Equals(pod.Name, workloadName, StringComparison.Ordinal)).ToList(),
+            _ => throw new NotSupportedException($"Network policy analysis is not supported for workload kind '{workloadKind}'.")
+        };
+
+        var selectorLabels = workloadKind.Trim().Equals("pod", StringComparison.OrdinalIgnoreCase)
+            ? selectedPods.FirstOrDefault()?.Labels is { Count: > 0 } labels
+                ? new Dictionary<string, string>(labels)
+                : []
+            : new Dictionary<string, string> { ["app"] = workloadName };
+
+        var services = (await GetServicesAsync(ns, ct))
+            .Where(service => service.SelectorLabels.Count > 0 && selectedPods.Any(pod =>
+                service.SelectorLabels.All(selector =>
+                    pod.Labels.TryGetValue(selector.Key, out var value)
+                    && string.Equals(value, selector.Value, StringComparison.Ordinal))))
+            .Select(service => service.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var ingresses = (await GetIngressesAsync(ns, ct))
+            .Where(ingress => ingress.Rules.Any(rule => rule.Paths.Any(path =>
+                !string.IsNullOrWhiteSpace(path.ServiceName)
+                && services.Contains(path.ServiceName, StringComparer.Ordinal))))
+            .Select(ingress => ingress.Name)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var policies = BuildDemoNetworkPolicies(workloadName);
+        var ingressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Ingress", StringComparer.OrdinalIgnoreCase));
+        var egressIsolated = policies.Any(policy => policy.PolicyTypes.Contains("Egress", StringComparer.OrdinalIgnoreCase));
+
+        var findings = new List<string>();
+        if (selectedPods.Count == 0)
+        {
+            findings.Add("No live pods matched the workload selector while the analysis ran.");
+        }
+
+        if (policies.Count == 0)
+        {
+            findings.Add("No NetworkPolicy objects currently select this workload.");
+        }
+
+        if (services.Count == 0)
+        {
+            findings.Add("No Services in this namespace currently select the workload's pods.");
+        }
+
+        if (ingresses.Count > 0)
+        {
+            findings.Add($"Referenced by ingress resources: {string.Join(", ", ingresses)}.");
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add("The workload is selected by Services and NetworkPolicy objects with no immediate object-level gaps detected.");
+        }
+
+        var summary = selectedPods.Count == 0
+            ? "No live pods matched the workload during analysis, so policy impact could not be confirmed from pod evidence."
+            : policies.Count == 0
+                ? $"No network policies currently select the {selectedPods.Count} matched pod(s)."
+                : $"{policies.Count} network polic{(policies.Count == 1 ? "y" : "ies")} select {selectedPods.Count} pod(s). Ingress is {(ingressIsolated ? "isolated" : "open")}; egress is {(egressIsolated ? "isolated" : "open")}.";
+
+        return new NetworkPolicyAnalysis
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            Summary = summary,
+            MatchingPodCount = selectedPods.Count,
+            MatchingPods = selectedPods.Select(pod => pod.Name).Take(6).ToList(),
+            SelectorLabels = selectorLabels,
+            Services = services,
+            ExposedByIngresses = ingresses,
+            ExposedByHttpRoutes = [],
+            IngressIsolated = ingressIsolated,
+            EgressIsolated = egressIsolated,
+            Findings = findings,
+            Policies = policies
+        };
+    }
+
+    private static List<NetworkPolicyMatch> BuildDemoNetworkPolicies(string workloadName)
+    {
+        if (string.Equals(workloadName, "order-api", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "order-api-allow-from-ingress",
+                    PolicyTypes = ["Ingress"],
+                    IngressRules = ["Allows ingress from namespaces [app.kubernetes.io/name=ingress-nginx] on TCP/8080."]
+                },
+                new NetworkPolicyMatch
+                {
+                    Name = "order-api-egress-dependencies",
+                    PolicyTypes = ["Egress"],
+                    EgressRules = ["Allows egress to namespaces [team=platform] on TCP/443, TCP/5671."]
+                }
+            ];
+        }
+
+        if (string.Equals(workloadName, "payment-gateway", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "payment-gateway-restrict-egress",
+                    PolicyTypes = ["Egress"],
+                    EgressRules = ["Allows egress to CIDR 10.20.0.0/24 on TCP/443."]
+                }
+            ];
+        }
+
+        if (string.Equals(workloadName, "search-indexer", StringComparison.Ordinal))
+        {
+            return
+            [
+                new NetworkPolicyMatch
+                {
+                    Name = "search-indexer-default-deny",
+                    PolicyTypes = ["Ingress", "Egress"]
+                }
+            ];
+        }
+
+        return [];
+    }
+
+    public async Task<IReadOnlyList<GatewayClassInfo>> GetGatewayClassesAsync(CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+        return new List<GatewayClassInfo>
+        {
+            new()
+            {
+                Name = "envoy-gateway",
+                ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                Status = "Accepted",
+                Description = "Default Envoy Gateway class for internet-facing traffic.",
+                ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-gateway-config",
+                IsDefault = true,
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/managed-by"] = "Helm"
+                }
+            },
+            new()
+            {
+                Name = "envoy-internal",
+                ControllerName = "gateway.envoyproxy.io/gatewayclass-controller",
+                Status = "Accepted",
+                Description = "Internal Envoy Gateway class for private workloads.",
+                ParametersReference = "gateway.envoyproxy.io/EnvoyProxy infrastructure/envoy-internal-config",
+                Labels = new Dictionary<string, string>
+                {
+                    ["tier"] = "internal"
+                }
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<GatewayInfo>> GetGatewaysAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(180, ct);
+        return new List<GatewayInfo>
+        {
+            new()
+            {
+                Name = "public-gateway",
+                Namespace = ns,
+                GatewayClassName = "envoy-gateway",
+                Status = "Programmed",
+                AttachedRoutes = 2,
+                Addresses = ["20.93.141.52"],
+                Listeners =
+                [
+                    new GatewayListenerInfo
+                    {
+                        Name = "https-api",
+                        Port = 443,
+                        Protocol = "HTTPS",
+                        Hostname = "api.ecommerce.example.com",
+                        AttachedRoutes = 1
+                    },
+                    new GatewayListenerInfo
+                    {
+                        Name = "https-admin",
+                        Port = 443,
+                        Protocol = "HTTPS",
+                        Hostname = "admin.ecommerce.example.com",
+                        AttachedRoutes = 1
+                    }
+                ],
+                Labels = new Dictionary<string, string>
+                {
+                    ["gateway.envoyproxy.io/managed"] = "true",
+                    ["app.kubernetes.io/managed-by"] = "Helm"
+                }
+            },
+            new()
+            {
+                Name = "internal-gateway",
+                Namespace = ns,
+                GatewayClassName = "envoy-gateway",
+                Status = "Accepted",
+                AttachedRoutes = 1,
+                Addresses = ["10.0.12.24"],
+                Listeners =
+                [
+                    new GatewayListenerInfo
+                    {
+                        Name = "http-metrics",
+                        Port = 80,
+                        Protocol = "HTTP",
+                        Hostname = "metrics.internal.example.com",
+                        AttachedRoutes = 1
+                    }
+                ],
+                Labels = new Dictionary<string, string>
+                {
+                    ["gateway.envoyproxy.io/managed"] = "true",
+                    ["tier"] = "internal"
+                }
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<HttpRouteInfo>> GetHttpRoutesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(180, ct);
+        return new List<HttpRouteInfo>
+        {
+            new()
+            {
+                Name = "orders-api-route",
+                Namespace = ns,
+                Status = "Accepted",
+                Hostnames = ["api.ecommerce.example.com"],
+                ParentRefs = ["public-gateway#https-api"],
+                BackendRefs = ["order-api:80"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "order-api"
+                }
+            },
+            new()
+            {
+                Name = "admin-ui-route",
+                Namespace = ns,
+                Status = "Accepted",
+                Hostnames = ["admin.ecommerce.example.com"],
+                ParentRefs = ["public-gateway#https-admin"],
+                BackendRefs = ["admin-dashboard:8080"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "admin-dashboard"
+                }
+            },
+            new()
+            {
+                Name = "metrics-route",
+                Namespace = ns,
+                Status = "ResolvedRefs",
+                Hostnames = ["metrics.internal.example.com"],
+                ParentRefs = ["internal-gateway#http-metrics"],
+                BackendRefs = ["prometheus-server:9090"],
+                Labels = new Dictionary<string, string>
+                {
+                    ["app.kubernetes.io/name"] = "prometheus-server"
+                }
+            }
+        };
+    }
+
     public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<string>>(["default", "ecommerce", "payments", "infrastructure", "monitoring"]);
@@ -464,6 +942,93 @@ public class DemoAksClient : IAksClient
             return Task.FromResult(secretYaml);
         }
 
+        if (kind.Equals("Gateway", StringComparison.OrdinalIgnoreCase))
+        {
+            var gatewayYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: Gateway
+                                metadata:
+                                    name: {name}
+                                    namespace: {ns}
+                                    labels:
+                                        gateway.envoyproxy.io/managed: "true"
+                                spec:
+                                    gatewayClassName: envoy-gateway
+                                    listeners:
+                                    - name: https-api
+                                        hostname: api.ecommerce.example.com
+                                        port: 443
+                                        protocol: HTTPS
+                                        tls:
+                                            mode: Terminate
+                                            certificateRefs:
+                                            - kind: Secret
+                                                name: edge-tls
+                                status:
+                                    conditions:
+                                    - type: Programmed
+                                        status: "True"
+                                """;
+            return Task.FromResult(gatewayYaml);
+        }
+
+        if (kind.Equals("GatewayClass", StringComparison.OrdinalIgnoreCase))
+        {
+            var isInternal = name.Contains("internal", StringComparison.OrdinalIgnoreCase);
+            var gatewayClassYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: GatewayClass
+                                metadata:
+                                    name: {name}
+                                {(!isInternal ? "  annotations:\n    gateway.networking.k8s.io/default-gatewayclass: \"true\"\n" : string.Empty)}spec:
+                                    controllerName: gateway.envoyproxy.io/gatewayclass-controller
+                                    description: {(isInternal ? "Internal Envoy Gateway class for private workloads." : "Default Envoy Gateway class for internet-facing traffic.")}
+                                    parametersRef:
+                                        group: gateway.envoyproxy.io
+                                        kind: EnvoyProxy
+                                        namespace: infrastructure
+                                        name: {(isInternal ? "envoy-internal-config" : "envoy-gateway-config")}
+                                status:
+                                    conditions:
+                                    - type: Accepted
+                                        status: "True"
+                                """;
+            return Task.FromResult(gatewayClassYaml.ReplaceLineEndings("\n"));
+        }
+
+        if (kind.Equals("HTTPRoute", StringComparison.OrdinalIgnoreCase))
+        {
+            var routeYaml = $"""
+                                apiVersion: gateway.networking.k8s.io/v1
+                                kind: HTTPRoute
+                                metadata:
+                                    name: {name}
+                                    namespace: {ns}
+                                spec:
+                                    parentRefs:
+                                    - name: public-gateway
+                                        sectionName: https-api
+                                    hostnames:
+                                    - api.ecommerce.example.com
+                                    rules:
+                                    - matches:
+                                        - path:
+                                                type: PathPrefix
+                                                value: /
+                                        backendRefs:
+                                        - name: order-api
+                                            port: 80
+                                status:
+                                    parents:
+                                    - parentRef:
+                                            name: public-gateway
+                                        conditions:
+                                        - type: Accepted
+                                            status: "True"
+                                """;
+            return Task.FromResult(routeYaml);
+        }
+
         if (kind.Equals("HorizontalPodAutoscaler", StringComparison.OrdinalIgnoreCase) ||
             kind.Equals("HPA", StringComparison.OrdinalIgnoreCase))
         {
@@ -560,6 +1125,15 @@ public class DemoAksClient : IAksClient
             return Math.Max(0, LogLines.Length - tailLines);
 
         return 0;
+    }
+
+    private static DateTimeOffset? TryExtractLogTimestamp(string line)
+    {
+        var match = LogTimestampPrefixRegex.Match(line);
+        if (match.Success && DateTimeOffset.TryParse(match.Groups["timestamp"].Value, out var parsed))
+            return parsed;
+
+        return null;
     }
 
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
@@ -755,7 +1329,14 @@ public class DemoAksClient : IAksClient
                     payload = $"[PREVIOUS] {payload}";
                 var line = $"{ts}  {payload}";
                 if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
-                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+                {
+                    await channel.Writer.WriteAsync(new AggregatedLogLine
+                    {
+                        PodName = pod.Name,
+                        Line = line,
+                        Timestamp = TryExtractLogTimestamp(line)
+                    }, linkedCts.Token);
+                }
             }
 
             if (!opts.Follow || opts.PreviousContainer) return;
@@ -767,7 +1348,14 @@ public class DemoAksClient : IAksClient
                 var line = $"{ts}  {LogLines[lineIdx % LogLines.Length]}";
                 lineIdx++;
                 if (string.IsNullOrEmpty(opts.TextFilter) || line.Contains(opts.TextFilter, StringComparison.OrdinalIgnoreCase))
-                    await channel.Writer.WriteAsync(new AggregatedLogLine { PodName = pod.Name, Line = line }, linkedCts.Token);
+                {
+                    await channel.Writer.WriteAsync(new AggregatedLogLine
+                    {
+                        PodName = pod.Name,
+                        Line = line,
+                        Timestamp = TryExtractLogTimestamp(line)
+                    }, linkedCts.Token);
+                }
             }
         }, linkedCts.Token)).ToList();
 
@@ -796,7 +1384,11 @@ public class DemoAksClient : IAksClient
             ReadyReplicas = s.Ready,
             CurrentRevision = s.CurrentRevision,
             UpdateRevision = s.UpdateRevision,
-            Labels = new Dictionary<string, string> { ["app"] = s.Name, ["team"] = "platform" }
+            Labels = new Dictionary<string, string> { ["app"] = s.Name, ["team"] = "platform" },
+            SelectorLabels = new Dictionary<string, string>
+            {
+                ["app"] = s.Name
+            }
         }).ToList();
     }
 
@@ -1398,5 +1990,263 @@ public class DemoAksClient : IAksClient
         return requiresQuotes
             ? $"\"{value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
+    }
+
+    // ── Wave 1: namespace and workload constraint visibility ──────────────────
+
+    public async Task<IReadOnlyList<ResourceQuotaInfo>> GetResourceQuotasAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        return
+        [
+            new ResourceQuotaInfo
+            {
+                Name = "compute-quota",
+                Namespace = ns,
+                HardLimits =
+                [
+                    new ResourceQuotaUsage { Resource = "cpu", Hard = "8" },
+                    new ResourceQuotaUsage { Resource = "memory", Hard = "16Gi" },
+                    new ResourceQuotaUsage { Resource = "pods", Hard = "100" }
+                ],
+                Used =
+                [
+                    new ResourceQuotaUsage { Resource = "cpu", Used = "4" },
+                    new ResourceQuotaUsage { Resource = "memory", Used = "8Gi" },
+                    new ResourceQuotaUsage { Resource = "pods", Used = "12" }
+                ]
+            },
+            new ResourceQuotaInfo
+            {
+                Name = "storage-quota",
+                Namespace = ns,
+                HardLimits =
+                [
+                    new ResourceQuotaUsage { Resource = "persistentvolumeclaims", Hard = "10" },
+                    new ResourceQuotaUsage { Resource = "requests.storage", Hard = "50Gi" }
+                ],
+                Used =
+                [
+                    new ResourceQuotaUsage { Resource = "persistentvolumeclaims", Used = "9" },
+                    new ResourceQuotaUsage { Resource = "requests.storage", Used = "47Gi" }
+                ]
+            }
+        ];
+    }
+
+    public async Task<IReadOnlyList<LimitRangeInfo>> GetLimitRangesAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return
+        [
+            new LimitRangeInfo
+            {
+                Name = "default-limits",
+                Namespace = ns,
+                Limits =
+                [
+                    new LimitRangeItem
+                    {
+                        Type = "Container",
+                        DefaultRequests = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "100m",
+                            ["memory"] = "128Mi"
+                        },
+                        DefaultLimits = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "500m",
+                            ["memory"] = "512Mi"
+                        },
+                        Min = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "50m",
+                            ["memory"] = "64Mi"
+                        },
+                        Max = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["cpu"] = "2",
+                            ["memory"] = "2Gi"
+                        }
+                    }
+                ]
+            }
+        ];
+    }
+
+    public async Task<IReadOnlyList<PodDisruptionBudgetInfo>> GetPodDisruptionBudgetsAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return
+        [
+            new PodDisruptionBudgetInfo
+            {
+                Name = "order-api-pdb",
+                Namespace = ns,
+                MinAvailable = "1",
+                DesiredHealthy = 2,
+                CurrentHealthy = 3,
+                ExpectedPods = 3,
+                DisruptionsAllowed = true,
+                AllowedDisruptions = 1,
+                SelectorLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["app"] = "order-api"
+                }
+            },
+            new PodDisruptionBudgetInfo
+            {
+                Name = "payment-gateway-pdb",
+                Namespace = ns,
+                MinAvailable = "2",
+                DesiredHealthy = 3,
+                CurrentHealthy = 3,
+                ExpectedPods = 3,
+                DisruptionsAllowed = false,
+                AllowedDisruptions = 0,
+                SelectorLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["app"] = "payment-gateway"
+                }
+            }
+        ];
+    }
+
+    public async Task<ProbeFailureSummary> GetProbeFailureSummaryAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(120, ct);
+
+        var tick = Math.Max(Volatile.Read(ref _demoTick), 1);
+        var allPods = BuildDemoPods(ns, tick).ToList();
+
+        var selectedPods = workloadKind.Trim().ToLowerInvariant() switch
+        {
+            "deployment" or "statefulset" => allPods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList(),
+            "pod" => allPods.Where(pod =>
+                string.Equals(pod.Name, workloadName, StringComparison.Ordinal)).ToList(),
+            _ => allPods.Where(pod =>
+                pod.Labels.TryGetValue("app", out var app)
+                && string.Equals(app, workloadName, StringComparison.Ordinal)).ToList()
+        };
+
+        if (selectedPods.Count == 0)
+            selectedPods = allPods.Take(3).ToList();
+
+        var podStatuses = selectedPods.Select((pod, idx) => new PodProbeStatus
+        {
+            PodName = pod.Name,
+            RestartCount = idx < 2 ? idx + 1 : 0,
+            LivenessProbeConfigured = true,
+            ReadinessProbeConfigured = true,
+            Ready = pod.Ready,
+            LastTerminationReason = idx == 0 ? "OOMKilled" : null,
+            LastTerminationMessage = idx == 0 ? "Container exceeded memory limit" : null
+        }).ToList();
+
+        var podsWithRestarts = podStatuses.Count(p => p.RestartCount > 0);
+
+        var findings = new List<string>();
+        if (podsWithRestarts > 0)
+            findings.Add($"{podsWithRestarts} of {podStatuses.Count} pod(s) have restarted at least once in the current session.");
+
+        var notReady = podStatuses.Count(p => !p.Ready);
+        if (notReady > 0)
+            findings.Add($"{notReady} of {podStatuses.Count} pod(s) are not ready.");
+
+        findings.Add("Liveness and readiness probes are configured on all containers.");
+
+        return new ProbeFailureSummary
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            TotalPods = podStatuses.Count,
+            PodsWithRestarts = podsWithRestarts,
+            Pods = podStatuses,
+            RecentProbeEvents =
+            [
+                $"[Unhealthy] Readiness probe failed: HTTP probe failed with statuscode: 503 (pod: {selectedPods.FirstOrDefault()?.Name})",
+                $"[BackOff] Back-off restarting failed container (pod: {selectedPods.FirstOrDefault()?.Name})"
+            ],
+            Findings = findings
+        };
+    }
+
+    public async Task<PlacementAnalysis> GetPlacementAnalysisAsync(
+        string ns,
+        string workloadKind,
+        string workloadName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+
+        return new PlacementAnalysis
+        {
+            Namespace = ns,
+            WorkloadKind = workloadKind,
+            WorkloadName = workloadName,
+            HasNodeSelector = true,
+            NodeSelector = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["kubernetes.io/os"] = "linux"
+            },
+            HasNodeAffinity = false,
+            HasPodAffinity = false,
+            HasPodAntiAffinity = true,
+            HasTolerations = false,
+            Tolerations = [],
+            HasTopologySpreadConstraints = false,
+            TopologySpreadKeys = [],
+            RecentSchedulingFailureEvents = [],
+            Findings =
+            [
+                "Pod anti-affinity rule declared: pods prefer to spread across failure domains.",
+                "Node selector requires linux nodes."
+            ]
+        };
+    }
+
+    public async Task<HelmDiffPreview> PreviewHelmUpgradeAsync(
+        string ns,
+        string releaseName,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(50, ct);
+
+        return new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "Demo mode does not support Helm diff preview.",
+            Findings = ["Helm diff preview is not available in demo mode."]
+        };
+    }
+
+    public async Task<HelmDiffPreview> PreviewHelmRollbackAsync(
+        string ns,
+        string releaseName,
+        int revision,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(50, ct);
+
+        return new HelmDiffPreview
+        {
+            Namespace = ns,
+            ReleaseName = releaseName,
+            Capability = HelmPreviewCapability.Unsupported,
+            CapabilityNote = "Demo mode does not support Helm rollback diff preview.",
+            Findings = ["Helm rollback diff preview is not available in demo mode."]
+        };
     }
 }

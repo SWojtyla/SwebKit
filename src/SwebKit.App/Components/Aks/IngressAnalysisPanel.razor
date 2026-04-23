@@ -1,0 +1,194 @@
+@implements IDisposable
+
+<div class="ingress-analysis-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Analyzing ingress backends..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="ingress-analysis-error">@_error</div>
+    }
+    else if (_analysis is null)
+    {
+        <div class="ingress-analysis-empty">No ingress analysis is available.</div>
+    }
+    else
+    {
+        <div class="ingress-analysis-toolbar">
+            <div>
+                <div class="ingress-analysis-name">@_analysis.IngressName</div>
+                <div class="ingress-analysis-meta">
+                    Namespace @Namespace
+                    @if (!string.IsNullOrWhiteSpace(_analysis.IngressClass))
+                    {
+                        <span>| Class @_analysis.IngressClass</span>
+                    }
+                </div>
+            </div>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        <div class="ingress-analysis-summary">
+            <span class="ingress-analysis-summary-label">Summary</span>
+            <p>@_analysis.Summary</p>
+        </div>
+
+        @if (_analysis.Addresses.Count > 0)
+        {
+            <div class="ingress-analysis-section">
+                <div class="ingress-analysis-section-title">Published addresses</div>
+                <div class="ingress-analysis-badges">
+                    @foreach (var address in _analysis.Addresses)
+                    {
+                        <span class="ingress-analysis-badge">@address</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="ingress-analysis-section">
+            <div class="ingress-analysis-section-title">Findings</div>
+            <ul class="ingress-analysis-list">
+                @foreach (var finding in _analysis.Findings)
+                {
+                    <li>@finding</li>
+                }
+            </ul>
+        </div>
+
+        <div class="ingress-analysis-section">
+            <div class="ingress-analysis-section-title">Backend evidence</div>
+            <table class="ingress-analysis-table">
+                <thead>
+                    <tr>
+                        <th>Route</th>
+                        <th>Service</th>
+                        <th>Port</th>
+                        <th>Pods</th>
+                        <th>Evidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var backend in _analysis.Backends)
+                    {
+                        <tr>
+                            <td>
+                                <div class="ingress-analysis-route-host">@backend.Host</div>
+                                <div class="ingress-analysis-route-path">@backend.Path</div>
+                            </td>
+                            <td>
+                                <div>@(backend.ServiceName ?? "-")</div>
+                                <div class="ingress-analysis-muted">@(backend.ServiceType ?? "Unknown")</div>
+                            </td>
+                            <td>
+                                <div>Requested: @backend.RequestedPort</div>
+                                <div class="ingress-analysis-muted">@(backend.ResolvedServicePort ?? "No matching Service port")
+                                </div>
+                            </td>
+                            <td>
+                                <div>@backend.ReadyPodCount / @backend.MatchingPodCount ready</div>
+                                @if (backend.MatchingPods.Count > 0)
+                                {
+                                    <div class="ingress-analysis-muted">@string.Join(", ", backend.MatchingPods)</div>
+                                }
+                                else if (!backend.HasSelector)
+                                {
+                                    <div class="ingress-analysis-muted">Selectorless Service</div>
+                                }
+                            </td>
+                            <td>
+                                @if (backend.Findings.Count == 0)
+                                {
+                                    <span class="ingress-analysis-ok">No object-level issues detected</span>
+                                }
+                                else
+                                {
+                                    <ul class="ingress-analysis-inline-list">
+                                        @foreach (var finding in backend.Findings)
+                                        {
+                                            <li>@finding</li>
+                                        }
+                                    </ul>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="ingress-analysis-footnote">@_analysis.Limitation</div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+    [Parameter] public string? IngressName { get; set; }
+
+    private IngressAnalysis? _analysis;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Namespace}/{IngressName}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null || string.IsNullOrWhiteSpace(IngressName))
+        {
+            _analysis = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _analysis = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _analysis = await Client.AnalyzeIngressAsync(Namespace, IngressName, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

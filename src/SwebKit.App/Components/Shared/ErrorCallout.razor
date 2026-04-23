@@ -1,40 +1,40 @@
-<div class="error-callout">
-    @if (Title is not null)
-    {
-        <strong>@Title</strong>
-    }
-    else
-    {
-        <strong>Error:</strong>
-    }
-    @Message
-    @if (OnDismiss.HasDelegate)
-    {
-        <button class="error-callout-dismiss" aria-label="Dismiss error" @onclick="() => OnDismiss.InvokeAsync()">×</button>
-    }
-    @if (Details is not null)
-    {
-        <details>
-            <summary>Show details</summary>@Details
-        </details>
-    }
-    @if (OnRetry.HasDelegate)
-    {
-        <button class="error-callout-retry" disabled="@_retrying" @onclick="RetryAsync">
-            @if (_retrying)
-            {
-                <span>Retrying…</span>
-            }
-            else if (_attemptCount > 0)
-            {
-                <span>Retry #@(_attemptCount + 1)</span>
-            }
-            else
-            {
-                <span>Retry</span>
-            }
-        </button>
-    }
+<div class="error-callout" role="alert">
+    <div class="error-callout__copy">
+        <strong class="error-callout__title">@(Title ?? "Error")</strong>
+        <div class="error-callout__message">@Message</div>
+        @if (Details is not null)
+        {
+            <details class="error-callout__details">
+                <summary>Show details</summary>
+                <div>@Details</div>
+            </details>
+        }
+    </div>
+
+    <div class="error-callout__actions">
+        @if (OnRetry.HasDelegate)
+        {
+            <button class="error-callout-retry" disabled="@_retrying" @onclick="RetryAsync">
+                @if (_retrying)
+                {
+                    <span>Retrying…</span>
+                }
+                else if (_attemptCount > 0)
+                {
+                    <span>Retry #@(_attemptCount + 1)</span>
+                }
+                else
+                {
+                    <span>Retry</span>
+                }
+            </button>
+        }
+        @if (OnDismiss.HasDelegate)
+        {
+            <button class="error-callout-dismiss" aria-label="Dismiss error"
+                    @onclick="() => OnDismiss.InvokeAsync()">Dismiss</button>
+        }
+    </div>
 </div>
 
 @code {

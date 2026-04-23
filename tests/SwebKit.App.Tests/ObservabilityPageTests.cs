@@ -15,6 +15,7 @@ using SwebKit.Observability;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class ObservabilityPageTests : TestContext
 {
     private readonly FakeObservabilityProvider _provider = new();
@@ -24,6 +25,7 @@ public sealed class ObservabilityPageTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         JSInterop.Setup<int>("SwebKit.getBrowserTimezoneOffset").SetResult(0);
+        var uiState = new UiStateRepository();
 
         var libConfigType = Type.GetType(
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
@@ -35,7 +37,7 @@ public sealed class ObservabilityPageTests : TestContext
         Services.AddFluentUIComponents();
 
         var eventBus = new AppEventBus(NullLogger<AppEventBus>.Instance);
-        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), eventBus);
+        var appState = new AppStateService(new ProfileRepository(), uiState, eventBus);
         appState.Config.ObservabilityConfig = new ObservabilityConfig
         {
             SelectedResourceId = "/subscriptions/test/resourceGroups/ops/providers/microsoft.insights/components/checkout-api",
@@ -46,13 +48,18 @@ public sealed class ObservabilityPageTests : TestContext
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(appState);
+        Services.AddSingleton(uiState);
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<IObservabilityResourceDiscovery>(new EmptyObservabilityDiscovery());
         Services.AddSingleton<IObservabilityProviderFactory>(_providerFactory);
-        Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton<IObservabilityExplainerService>(new FakeObservabilityExplainerService());
+        Services.AddSingleton<INotificationService>(new NotificationService(uiState));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IGuidedKqlCompiler>(new GuidedKqlCompiler());
+        Services.AddScoped<OperatorWorkspaceService>();
+        Services.AddSingleton(new ReleaseRepository());
+        Services.AddSingleton<IncidentInvestigationLauncher>();
     }
 
     [Fact]
@@ -132,6 +139,12 @@ public sealed class ObservabilityPageTests : TestContext
             Task.FromResult<IReadOnlyList<LatencyDataPoint>>([]);
 
         public IReadOnlyList<QueryPreset> GetPresets() => [];
+
+        public Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default) =>
+            Task.FromResult(new DependencyHealthSummary([], false, maxDependencies));
+
+        public Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default) =>
+            Task.FromResult(new DimensionBreakdown(dimensionKey, [], false, topN));
     }
 
     private sealed class EmptyObservabilityDiscovery : IObservabilityResourceDiscovery
@@ -153,5 +166,39 @@ public sealed class ObservabilityPageTests : TestContext
         }
 
         public T? GetSelection<T>(string area) where T : class => null;
+    }
+
+    private sealed class FakeObservabilityExplainerService : IObservabilityExplainerService
+    {
+        public Task<ObservabilityExplainerSummary> GetExplainerSummaryAsync(
+            IObservabilityProvider provider,
+            TimeRange range,
+            IReadOnlyList<string> dimensionKeys,
+            CancellationToken ct = default) =>
+            Task.FromResult(new ObservabilityExplainerSummary(
+                new DependencyHealthSummary([], false, 20),
+                [],
+                null,
+                null,
+                false));
+
+        public Task<DeploymentComparisonSummary> GetDeploymentComparisonAsync(
+            IObservabilityProvider provider,
+            DeploymentAnchor anchor,
+            TimeSpan windowDuration,
+            CancellationToken ct = default) =>
+            Task.FromResult(new DeploymentComparisonSummary(
+                anchor,
+                new TimeRange(anchor.AnchorTime.Add(-windowDuration), anchor.AnchorTime),
+                new TimeRange(anchor.AnchorTime, anchor.AnchorTime.Add(windowDuration)),
+                [],
+                false));
+
+        public Task<SloStatusSummary> GetSloStatusAsync(
+            IObservabilityProvider provider,
+            IReadOnlyList<SloDefinition> definitions,
+            TimeRange range,
+            CancellationToken ct = default) =>
+            Task.FromResult(new SloStatusSummary([], false, false));
     }
 }

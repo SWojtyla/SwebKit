@@ -5,20 +5,32 @@
     <div class="aks-toolbar-row">
         <span class="connection-dot @(IsConnected ? "dot-ok" : "dot-unknown")"></span>
 
-        @* ── Context dropdown ── *@
+        @* ── Context custom picker ── *@
+        @if (_ctxDropOpen)
+        {
+            <div class="aks-ns-backdrop" @onclick="CloseCtxDrop"></div>
+        }
         <label class="aks-ns-label">Context</label>
-        <select class="aks-ns-select" value="@ActiveContext" @onchange="HandleContextChanged">
-            @if (Contexts.Count == 0)
+        <div class="aks-ns-picker">
+            <input class="aks-ns-select aks-ns-search app-native-control"
+                   value="@(_ctxDropOpen? _ctxSearchText : ActiveContext)"
+                   placeholder="@(_ctxDropOpen ? "Filter…" : (string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext))"
+                   @onfocus="OpenCtxDrop" @oninput="OnCtxSearchInput" readonly="@(!_ctxDropOpen)"
+                   @onkeydown="OnCtxKeyDown" />
+            @if (_ctxDropOpen)
             {
-                <option value="">@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</option>
+                <div class="aks-ns-dropdown">
+                    @foreach (var ctx in CtxFiltered)
+                    {
+                        var ctxLocal = ctx;
+                        <div class="aks-ns-option @(ctxLocal.Name == ActiveContext ? "current" : "")"
+                             @onclick="() => SelectCtx(ctxLocal.Name)">
+                            @ctxLocal.Name@(ctxLocal.IsCurrent ? " (current)" : "")
+                        </div>
+                    }
+                </div>
             }
-            @foreach (var ctx in Contexts)
-            {
-                <option value="@ctx.Name" selected="@(ctx.Name == ActiveContext)">
-                    @ctx.Name @(ctx.IsCurrent ? "(current)" : "")
-                </option>
-            }
-        </select>
+        </div>
 
         <span class="aks-toolbar-divider"></span>
 
@@ -28,8 +40,11 @@
             <div class="aks-ns-backdrop" @onclick="CloseNsDrop"></div>
         }
         <label class="aks-ns-label">Namespace</label>
+        <button class="aks-ns-all-chip @(CurrentNamespace == "*" ? "active" : "")" title="All namespaces"
+                @onclick="SelectAllNamespaces">*</button>
         <div class="aks-ns-picker">
-            <input class="aks-ns-select aks-ns-search" value="@(_nsDropOpen? _nsSearchText : CurrentNamespace)"
+            <input class="aks-ns-select aks-ns-search app-native-control"
+                   value="@(_nsDropOpen? _nsSearchText : CurrentNamespace)"
                    placeholder="@(_nsDropOpen ? "Filter…" : CurrentNamespace)" @onfocus="OpenNsDrop"
                    @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" />
             @if (_nsDropOpen)
@@ -62,29 +77,54 @@
             @(ActivePortForwardCount > 0 ? $" {ActivePortForwardCount} pf" : " Sessions")
         </button>
 
-        <AutoRefreshToggle OnRefresh="OnRefresh" Paused="@AutoRefreshPaused" />
+        <AutoRefreshToggle OnRefresh="OnRefresh" Paused="@AutoRefreshPaused" InitialInterval="10"
+                           InitialEnabled="true" />
 
         <FluentButton Appearance="Appearance.Stealth" Disabled="@IsLoading" @onclick="OnRefresh" Title="Refresh (F5)">
             @(IsLoading ? "Loading…" : "↻ Refresh")
         </FluentButton>
     </div>
 
-    @* ── Row 2: resource type tabs ── *@
+    @* ── Row 2: primary resource tabs ── *@
     <div class="aks-tab-bar">
-        @foreach (var rt in ResourceTypes)
+        @foreach (var rt in DirectResourceTypes)
         {
             <button class="aks-resource-tab @(rt == ActiveResourceType ? "active" : "")"
-                    @onclick="() => OnResourceTypeChanged.InvokeAsync(rt)">
+                    @onclick="() => SelectDirectResourceTypeAsync(rt)">
                 @rt
             </button>
         }
+
+        <button
+            class="aks-resource-tab aks-resource-tab--toggle @((IsNetworkResourceType(ActiveResourceType) || _networkMenuOpen) ? "active" : "")"
+            aria-expanded="@_networkMenuOpen" @onclick="ToggleNetworkMenu">
+            Network
+            <span class="aks-resource-tab-caret">▾</span>
+        </button>
     </div>
+
+    @* ── Row 3: expandable network submenu ── *@
+    @if (_networkMenuOpen)
+    {
+        <div class="aks-network-tab-bar">
+            <span class="aks-network-tab-label">Network</span>
+            @foreach (var rt in NetworkResourceTypes)
+            {
+                <button class="aks-resource-subtab @(rt == ActiveResourceType ? "active" : "")"
+                        @onclick="() => SelectNetworkResourceTypeAsync(rt)">
+                    @rt
+                </button>
+            }
+        </div>
+    }
 
 </div>
 
 @code {
-    private static readonly string[] ResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
-        "Ingresses", "Helm", "Jobs", "CronJobs"];
+    private static readonly string[] DirectResourceTypes = ["Deployments", "StatefulSets", "Pods", "ConfigMaps", "Secrets",
+        "Helm", "Jobs", "CronJobs"];
+    private static readonly string[] NetworkResourceTypes = ["Services", "Ingresses", "GatewayClasses", "Gateways",
+"HTTPRoutes"];
 
     [Parameter] public List<KubeContextInfo> Contexts { get; set; } = [];
     [Parameter] public string ActiveContext { get; set; } = "";
@@ -106,9 +146,66 @@
     [Parameter] public EventCallback<bool> OnToggleEvents { get; set; }
     [Parameter] public EventCallback<bool> OnTogglePortForwardSessions { get; set; }
 
+    // ── Context picker internal state ──
+    private bool _ctxDropOpen;
+    private string _ctxSearchText = string.Empty;
+
     // ── Namespace picker internal state ──
     private bool _nsDropOpen;
     private string _nsSearchText = string.Empty;
+    private bool _networkMenuOpen;
+    private string _lastActiveResourceType = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(_lastActiveResourceType, ActiveResourceType, StringComparison.Ordinal))
+        {
+            _networkMenuOpen = IsNetworkResourceType(ActiveResourceType);
+            _lastActiveResourceType = ActiveResourceType;
+        }
+    }
+
+    private IEnumerable<KubeContextInfo> CtxFiltered
+    {
+        get
+        {
+            return string.IsNullOrWhiteSpace(_ctxSearchText)
+                ? Contexts
+                : Contexts.Where(c => c.Name.Contains(_ctxSearchText, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void OpenCtxDrop()
+    {
+        _ctxSearchText = string.Empty;
+        _ctxDropOpen = true;
+        StateHasChanged();
+    }
+
+    private void CloseCtxDrop()
+    {
+        _ctxDropOpen = false;
+        _ctxSearchText = string.Empty;
+        StateHasChanged();
+    }
+
+    private void OnCtxSearchInput(ChangeEventArgs e)
+    {
+        _ctxSearchText = e.Value?.ToString() ?? string.Empty;
+        StateHasChanged();
+    }
+
+    private void OnCtxKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseCtxDrop();
+    }
+
+    private async Task SelectCtx(string name)
+    {
+        _ctxDropOpen = false;
+        _ctxSearchText = string.Empty;
+        await OnContextChanged.InvokeAsync(name);
+    }
 
     private IEnumerable<string> NsFiltered
     {
@@ -148,10 +245,26 @@
         await OnNamespaceChanged.InvokeAsync(ns);
     }
 
-    private async Task HandleContextChanged(ChangeEventArgs e)
+    private Task SelectAllNamespaces() => SelectNs("*");
+
+    private static bool IsNetworkResourceType(string resourceType)
+        => NetworkResourceTypes.Contains(resourceType, StringComparer.Ordinal);
+
+    private void ToggleNetworkMenu()
     {
-        var newContext = e.Value?.ToString() ?? "";
-        await OnContextChanged.InvokeAsync(newContext);
+        _networkMenuOpen = !_networkMenuOpen;
+    }
+
+    private async Task SelectDirectResourceTypeAsync(string resourceType)
+    {
+        _networkMenuOpen = false;
+        await OnResourceTypeChanged.InvokeAsync(resourceType);
+    }
+
+    private async Task SelectNetworkResourceTypeAsync(string resourceType)
+    {
+        _networkMenuOpen = true;
+        await OnResourceTypeChanged.InvokeAsync(resourceType);
     }
 
     private async Task HandleToggleEvents()

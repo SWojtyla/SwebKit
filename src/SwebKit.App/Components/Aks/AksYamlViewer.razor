@@ -36,19 +36,19 @@
             @if (_showSearch)
             {
                 <div class="aks-yaml-search-bar">
-                    <input type="text" class="aks-yaml-search-input" placeholder="Search in YAML…" value="@_search"
-                           @oninput="OnSearchInput" autofocus />
+                    <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Search in YAML…"
+                           value="@_search" @oninput="OnSearchInput" autofocus />
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
                         }
                         @if (_editMode && !string.IsNullOrEmpty(_search))
                         {
-                            <input type="text" class="aks-yaml-search-input" placeholder="Replace with…" @bind="_replace"
+                            <input type="text" class="aks-yaml-search-input app-native-control" placeholder="Replace with…" @bind="_replace"
                                    @bind:event="oninput" />
                             <button class="aks-yaml-replace-btn" @onclick="OnReplaceAll" title="Replace all">Replace
                                 all</button>
@@ -58,6 +58,19 @@
                     @if (_validationError is not null)
                     {
                         <div class="aks-yaml-validation-error">⚠ @_validationError</div>
+                    }
+                    @if (_validationWarning is not null && _validationError is null)
+                    {
+                        <div class="aks-yaml-validation-warning">
+                            <span>⚠ @_validationWarning</span>
+                            <div class="aks-yaml-warning-actions">
+                                <FluentButton Appearance="Appearance.Accent" Disabled="@_applying" @onclick="ApplyAnyway">Apply anyway
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth"
+                                              @onclick="() => { _validationWarning = null; _bypassValidation = false; StateHasChanged(); }">Fix first
+                                </FluentButton>
+                            </div>
+                        </div>
                     }
                     <div class="aks-yaml-content">
                         @if (_loading)
@@ -71,9 +84,8 @@
                         else if (_editMode)
                         {
                             <div class="aks-yaml-edit-wrap" @key="_editKey">
-                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre">@_editHighlighted</pre>
-                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"
-                                          @oninput="OnEditInput">@_editText</textarea>
+                                <pre class="aks-yaml-pre aks-yaml-edit-bg" @ref="_editPre"></pre>
+                                <textarea class="aks-yaml-edit" spellcheck="false" @ref="_editTextarea"></textarea>
                             </div>
                         }
                         else
@@ -106,7 +118,6 @@
 
     // Highlighted markup for YAML panels
     private MarkupString _highlighted;
-    private MarkupString _editHighlighted;
 
     // Edit overlay refs & lifecycle flags
     private ElementReference _editTextarea;
@@ -121,6 +132,8 @@
     private bool _showSearch;
     private string _replace = string.Empty;
     private string? _validationError;
+    private string? _validationWarning;
+    private bool _bypassValidation;
 
     /// <summary>Whether the YAML panel is currently showing.</summary>
     public bool IsOpen => _target is not null;
@@ -154,7 +167,6 @@
             {
                 _editMode = true;
                 _editText = _text ?? string.Empty;
-                _editHighlighted = _highlighted;
                 _editKey++;
                 _initEditOverlay = true;
             }
@@ -185,6 +197,8 @@
         _showSearch = false;
         _replace = string.Empty;
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         StateHasChanged();
         _ = OnClose.InvokeAsync();
     }
@@ -194,7 +208,7 @@
         if (_initEditOverlay)
         {
             _initEditOverlay = false;
-            await JS.InvokeVoidAsync("yamlHighlight.initEditOverlay", _editTextarea, _editPre);
+            await JS.InvokeVoidAsync("yamlHighlight.initEditor", _editTextarea, _editPre, _editText);
         }
     }
 
@@ -203,8 +217,9 @@
         _search = e.Value?.ToString() ?? string.Empty;
         if (_editMode)
         {
+            var currentText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
             _searchCount = string.IsNullOrEmpty(_search) ? 0
-                : CountOccurrences(_editText, _search);
+                : CountOccurrences(currentText, _search);
             StateHasChanged();
             return;
         }
@@ -226,7 +241,6 @@
     {
         _editMode = true;
         _editText = _text ?? string.Empty;
-        _editHighlighted = _highlighted;
         _editKey++;
         _initEditOverlay = true;
         StateHasChanged();
@@ -238,25 +252,26 @@
         _editMode = false;
         _editText = string.Empty;
         _validationError = null;
+        _validationWarning = null;
+        _bypassValidation = false;
         _replace = string.Empty;
         StateHasChanged();
-    }
-
-    private async Task OnEditInput(ChangeEventArgs e)
-    {
-        _editText = e.Value?.ToString() ?? string.Empty;
-        _validationError = null;
-        _editHighlighted = await HighlightAsync(_editText);
-        await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnSave()
     {
         if (_target is null || Client is null) return;
 
-        _validationError = ValidateYaml(_editText);
-        if (_validationError is not null) { StateHasChanged(); return; }
+        // JS owns the textarea value — read it back before validating or applying.
+        _editText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
 
+        _validationError = ValidateYaml(_editText);
+        if (_validationError is not null) { _validationWarning = null; _bypassValidation = false; StateHasChanged(); return; }
+
+        _validationWarning = _bypassValidation ? null : CheckYamlStructure(_editText);
+        if (_validationWarning is not null && !_bypassValidation) { StateHasChanged(); return; }
+
+        _bypassValidation = false;
         _applying = true;
         StateHasChanged();
 
@@ -293,11 +308,15 @@
     private async Task OnReplaceAll()
     {
         if (string.IsNullOrEmpty(_search) || !_editMode) return;
+        // Read the live value from JS before replacing.
+        _editText = await JS.InvokeAsync<string>("yamlHighlight.getEditorValue", _editTextarea);
         _editText = _editText.Replace(_search, _replace, StringComparison.Ordinal);
         _validationError = null;
-        _editHighlighted = await HighlightAsync(_editText);
+        _validationWarning = null;
+        _bypassValidation = false;
+        // Push the new value back to the textarea and highlight pre via JS — no Blazor re-key needed.
+        await JS.InvokeVoidAsync("yamlHighlight.setEditorValue", _editTextarea, _editPre, _editText);
         _searchCount = CountOccurrences(_editText, _search);
-        _editKey++;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -324,6 +343,37 @@
         {
             return $"YAML parse error at line {ex.Start.Line}: {ex.Message}";
         }
+    }
+
+    private static string? CheckYamlStructure(string yaml)
+    {
+        try
+        {
+            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder().Build();
+            var obj = deserializer.Deserialize<Dictionary<object, object>>(yaml);
+            if (obj is null) return null;
+
+            var missing = new List<string>();
+            if (!obj.ContainsKey("apiVersion")) missing.Add("apiVersion");
+            if (!obj.ContainsKey("kind")) missing.Add("kind");
+            if (!obj.TryGetValue("metadata", out var meta) ||
+                meta is not Dictionary<object, object> metaDict ||
+                !metaDict.ContainsKey("name"))
+                missing.Add("metadata.name");
+
+            return missing.Count == 0 ? null : $"Missing required fields: {string.Join(", ", missing)}";
+        }
+        catch
+        {
+            return null; // Parsing already handled by ValidateYaml
+        }
+    }
+
+    private async Task ApplyAnyway()
+    {
+        _bypassValidation = true;
+        _validationWarning = null;
+        await OnSave();
     }
 
     private static int CountOccurrences(string text, string search)

@@ -14,6 +14,7 @@
 - Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
 - Copy blob direct URL to clipboard (no SAS expiry).
 - Copy SAS URL with 24-hour expiry generated client-side via the SDK.
+- Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named favorites can reopen Storage context.
 - Storage config form in Settings page (Account Name, Use AAD, Connection String Ref, Test Connection).
 
 ## Core Runtime Flow
@@ -26,6 +27,7 @@
 6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently.
 7. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
 8. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
+9. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
 
 ## Credential Modes
 
@@ -55,6 +57,7 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 - Binary detection: `GetBlobContentAsync` checks content-type before issuing a byte-range read. Binary blobs return `IsBinary = true` without downloading content.
 - Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). Both calls are made concurrently via `Task.WhenAll`.
 - Download progress is local to the initiating surface; there is no background transfer manager or cross-page download queue.
+- Workspace restore is semantic and lightweight. Storage reopens the selected account/container/blob context rather than trying to preserve a live client object.
 
 ## Validation Pointers
 

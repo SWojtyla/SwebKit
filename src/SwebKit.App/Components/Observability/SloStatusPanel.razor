@@ -1,0 +1,106 @@
+@using SwebKit.Core.Models
+
+<div class="obs-slo-status-panel">
+    <details>
+        <summary class="obs-panel-header">
+            <span>SLO Status</span>
+            @if (Summary is not null)
+            {
+                <span class="obs-panel-badge @GetBadgeClass()">@GetHeaderBadge()</span>
+            }
+        </summary>
+        <div class="obs-panel-body">
+            @if (!HasDefinitions)
+            {
+                <p class="obs-empty-state">No SLO definitions configured. Add targets in Settings.</p>
+                <p class="obs-empty-state-note">SLOs are optional and can be added at any time.</p>
+            }
+            else if (Summary is null)
+            {
+                <div class="obs-explainer-loading">
+                    <FluentProgressRing aria-label="Loading SLO status" />
+                    <span>Evaluating SLOs…</span>
+                </div>
+            }
+            else
+            {
+                <div class="obs-slo-header-badge @GetBadgeClass()" role="status">
+                    @GetHeaderBadge()
+                </div>
+
+                <table class="obs-table" aria-label="SLO status">
+                    <thead>
+                        <tr>
+                            <th scope="col">SLO</th>
+                            <th scope="col">Metric</th>
+                            <th scope="col">Current</th>
+                            <th scope="col">Target</th>
+                            <th scope="col">State</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Summary.Entries)
+                        {
+                            <tr tabindex="0">
+                                <td>@entry.Definition.Name</td>
+                                <td>@entry.Definition.Metric</td>
+                                <td>@FormatValue(entry.CurrentValue, entry.Definition.Metric)</td>
+                                <td>@FormatValue(entry.Definition.Target, entry.Definition.Metric)</td>
+                                <td>
+                                    <span class="obs-slo-badge @GetStateBadgeClass(entry.State)">
+                                        @GetStateLabel(entry.State)
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter] public SloStatusSummary? Summary { get; set; }
+    [Parameter] public bool HasDefinitions { get; set; }
+
+    private string GetHeaderBadge()
+    {
+        if (Summary is null) return string.Empty;
+        if (Summary.AnyBreached) return "SLO breached";
+        if (Summary.AnyAtRisk) return "SLO at risk";
+        return "All SLOs met";
+    }
+
+    private string GetBadgeClass()
+    {
+        if (Summary is null) return string.Empty;
+        if (Summary.AnyBreached) return "obs-slo-badge--breached";
+        if (Summary.AnyAtRisk) return "obs-slo-badge--risk";
+        return "obs-slo-badge--ok";
+    }
+
+    private static string GetStateLabel(SloState state) => state switch
+    {
+        SloState.Met => "Met",
+        SloState.AtRisk => "At risk",
+        SloState.Breached => "Breached",
+        _ => state.ToString(),
+    };
+
+    private static string GetStateBadgeClass(SloState state) => state switch
+    {
+        SloState.Met => "obs-slo-state--met",
+        SloState.AtRisk => "obs-slo-state--risk",
+        SloState.Breached => "obs-slo-state--breached",
+        _ => string.Empty,
+    };
+
+    private static string FormatValue(double value, SloMetric metric) => metric switch
+    {
+        SloMetric.FailureRate => $"{value * 100:F2}%",
+        SloMetric.P95ResponseTimeMs => $"{value:F0} ms",
+        SloMetric.AvailabilityPct => $"{value:F2}%",
+        _ => $"{value:F2}",
+    };
+}

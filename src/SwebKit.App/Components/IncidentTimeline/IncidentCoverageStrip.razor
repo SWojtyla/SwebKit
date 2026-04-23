@@ -1,0 +1,79 @@
+@using SwebKit.Core.Models
+
+<div class="incident-coverage-strip" data-testid="incident-coverage-strip" aria-live="polite">
+    @if (Statuses.Count == 0)
+    {
+        <span class="incident-coverage-strip__note">Coverage details appear after the first refresh.</span>
+    }
+    else
+    {
+        @foreach (var status in Statuses)
+        {
+            <div class="incident-coverage-card @IncidentTimelineDisplay.GetCoverageClass(status.CoverageState)"
+                 title="@BuildTitle(status)">
+                <span class="incident-coverage-card__source">@IncidentTimelineDisplay.GetSourceLabel(status.Source)</span>
+                <span class="incident-coverage-card__state">@IncidentTimelineDisplay.GetCoverageLabel(status.CoverageState)</span>
+                <span class="incident-coverage-card__count">@BuildCountLabel(status)</span>
+            </div>
+        }
+    }
+
+    @if (WasTruncated)
+    {
+        <span class="incident-coverage-strip__note incident-coverage-strip__note--warning">
+            Results were capped for this window. Narrow the time window for deeper evidence.
+        </span>
+    }
+
+    @if (HasPendingChanges)
+    {
+        <span class="incident-coverage-strip__note incident-coverage-strip__note--pending">
+            Scope changes are pending. Refresh to update the evidence timeline.
+        </span>
+    }
+
+    @if (IsRefreshing)
+    {
+        <span class="incident-coverage-strip__note">Refreshing evidence...</span>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<IncidentTimelineSourceStatus> Statuses { get; set; } = [];
+    [Parameter] public bool WasTruncated { get; set; }
+    [Parameter] public bool HasPendingChanges { get; set; }
+    [Parameter] public bool IsRefreshing { get; set; }
+
+    private static string BuildCountLabel(IncidentTimelineSourceStatus status)
+    {
+        if (status.ItemCount <= 0)
+        {
+            return status.WasTruncated ? "capped" : "0 items";
+        }
+
+        var countLabel = status.ItemCount == 1 ? "1 item" : $"{status.ItemCount} items";
+        return status.WasTruncated ? $"{countLabel}, capped" : countLabel;
+    }
+
+    private static string BuildTitle(IncidentTimelineSourceStatus status)
+    {
+        var title = $"{IncidentTimelineDisplay.GetSourceLabel(status.Source)}: {IncidentTimelineDisplay.GetCoverageLabel(status.CoverageState)}";
+
+        if (status.ItemCount > 0)
+        {
+            title += $", {BuildCountLabel(status)}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(status.StatusMessage))
+        {
+            title += $". {status.StatusMessage}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(status.ErrorMessage))
+        {
+            title += $". {status.ErrorMessage}";
+        }
+
+        return title;
+    }
+}

@@ -1,4 +1,6 @@
 @inject INotificationService Notifications
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject PipelineFailureClassifier FailureClassifier
 
 <div class="pipeline-detail">
 
@@ -15,6 +17,9 @@
             }
             <FluentButton Appearance="Appearance.Lightweight" @onclick="ToggleTrigger">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Play())" Width="12px" /> Trigger Run
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="Investigate">
+                Investigate
             </FluentButton>
         </div>
     </div>
@@ -85,74 +90,116 @@
         {
             <div class="pipeline-section">
                 <h4 class="pipeline-section-title">Environments</h4>
-                <FluentDataGrid Items="@(_envStatus.AsQueryable())" TGridItem="PipelineEnvironmentStatus">
-                    <TemplateColumn Title="Environment"
-                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByAscending(e => e.EnvironmentName))">
-                        <span class="env-name">@context.EnvironmentName</span>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Status" Width="160px">
-                        @if (context.WaitingForApproval)
-                        {
-                            <span class="pipeline-status waiting">Awaiting Approval</span>
-                        }
-                        else
-                        {
-                            <span class="pipeline-status @EnvStatusCss(context)">@EnvStatusText(context)</span>
-                        }
-                    </TemplateColumn>
-                    <TemplateColumn Title="Run" Width="130px"
-                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByAscending(e => e.RunName ?? $"#{e.LatestRunId}"))">
-                        <span class="text-mono text-sm">@(context.RunName ?? $"#{context.LatestRunId}")</span>
-                    </TemplateColumn>
-                    <TemplateColumn Title="When" Width="110px"
-                                    SortBy="@(GridSort<PipelineEnvironmentStatus>.ByDescending(e => e.FinishedAt ?? DateTimeOffset.MinValue))">
-                        <span class="text-muted text-sm">@(context.FinishedAt.HasValue ? RelativeTime(context.FinishedAt.Value)
-                                            : "—")</span>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Triggered by" Width="140px">
-                            <span class="text-muted text-sm">@(context.TriggeredBy ?? "—")</span>
-                        </TemplateColumn>
-                    </FluentDataGrid>
-                </div>
-            }
 
-            @* ── Recent runs ── *@
-            <div class="pipeline-section">
-                <h4 class="pipeline-section-title">Recent Runs</h4>
-                @if (_recentRuns.Count == 0)
+                @* Approval callout — prominent banner when any environment needs sign-off *@
+                @if (AwaitingEnvs.Count > 0)
                 {
-                    <div class="text-muted text-sm">No runs yet.</div>
-                }
-                else
-                {
-                    <div class="pipeline-runs-list">
-                        @foreach (var run in _recentRuns)
-                        {
-                            <div class="pipeline-run-row">
-                                <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
-                                <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
-                                <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
-                                <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
-                                @if (run.TriggeredBy is not null)
-                                {
-                                    <span class="text-muted text-sm">by @run.TriggeredBy</span>
-                                }
-                                @if (run.FinishedDate.HasValue && run.State == "completed")
-                                {
-                                    var duration = run.FinishedDate.Value - run.CreatedDate;
-                                    <span class="text-muted text-sm">@FormatDuration(duration)</span>
-                                }
-                                @if (run.WebUrl is not null)
-                                {
-                                    <a href="@run.WebUrl" target="_blank" class="btn-link-sm" style="margin-left:auto;">↗</a>
-                                }
-                            </div>
-                        }
+                    <div class="env-approval-banner">
+                        <span class="env-approval-banner__icon">⏸</span>
+                        <div class="env-approval-banner__body">
+                            <strong>@AwaitingEnvs.Count environment@(AwaitingEnvs.Count == 1 ? "" : "s") awaiting approval</strong>
+                            <span class="text-muted"> — @string.Join(", ", AwaitingEnvs.Select(e => e.EnvironmentName))</span>
+                        </div>
                     </div>
                 }
-            </div>
-        }
-    </div>
+
+                <table class="env-table">
+                    <thead>
+                        <tr>
+                            <th class="env-table__th">Environment</th>
+                            <th class="env-table__th">Status</th>
+                            <th class="env-table__th">Run</th>
+                            <th class="env-table__th">When</th>
+                            <th class="env-table__th">Triggered by</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var env in _envStatus)
+                        {
+                            <tr class="env-table__row">
+                                <td class="env-table__td"><span class="env-name">@env.EnvironmentName</span></td>
+                                <td class="env-table__td">
+                                    @if (env.WaitingForApproval)
+                                    {
+                                        <span class="pipeline-status waiting env-status-approval">
+                                            ⏸ Awaiting Approval
+                                            @if (env.LatestRunId.HasValue && _runWebUrls.TryGetValue(env.LatestRunId.Value, out var
+                                                                        approvalRunUrl))
+                                            {
+                                                <a href="@approvalRunUrl" target="_blank" class="env-ado-link"
+                                                   title="Open run in ADO to approve">↗</a>
+                                            }
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pipeline-status @EnvStatusCss(env)">@EnvStatusText(env)</span>
+                                    }
+                                </td>
+                                <td class="env-table__td">
+                                    <span class="text-mono text-sm">@(env.RunName ?? (env.LatestRunId.HasValue ?
+                                                                    $"#{env.LatestRunId}" : "—"))</span>
+                                    </td>
+                                    <td class="env-table__td">
+                                        <span class="text-muted text-sm">@(env.FinishedAt.HasValue ? RelativeTime(env.FinishedAt.Value)
+                                                                    : "—")</span>
+                                        </td>
+                                        <td class="env-table__td">
+                                            <span class="text-muted text-sm">@(env.TriggeredBy ?? "—")</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @* ── Recent runs ── *@
+                <div class="pipeline-section">
+                    <h4 class="pipeline-section-title">Recent Runs</h4>
+                    @if (_recentRuns.Count == 0)
+                    {
+                        <div class="text-muted text-sm">No runs yet.</div>
+                    }
+                    else
+                    {
+                        <div class="pipeline-runs-list">
+                            @foreach (var run in _recentRuns)
+                            {
+                                <div class="pipeline-run-row">
+                                    <span class="run-dot @RunDotClass(run)" title="@RunTitle(run)"></span>
+                                    <span class="text-mono text-sm pipeline-run-name">@run.Name</span>
+                                    <span class="text-muted text-sm pipeline-run-branch">@FormatBranch(run.SourceBranch)</span>
+                                    @if (_failureResults.TryGetValue(run.Id, out var failResult) && failResult.Category !=
+                                                                                                                        PipelineFailureCategory.Unknown)
+                                    {
+                                        <span
+                                            class="failure-category-badge failure-category-badge--@failResult.Category.ToString().ToLowerInvariant()"
+                                            title="@failResult.Explanation" data-testid="failure-category-badge">
+                                            @FailureCategoryLabel(failResult.Category)
+                                        </span>
+                                    }
+                                    <span class="text-muted text-sm">@RelativeTime(run.CreatedDate)</span>
+                                    @if (run.TriggeredBy is not null)
+                                    {
+                                        <span class="text-muted text-sm">by @run.TriggeredBy</span>
+                                    }
+                                    @if (run.FinishedDate.HasValue && run.State == "completed")
+                                    {
+                                        var duration = run.FinishedDate.Value - run.CreatedDate;
+                                        <span class="text-muted text-sm">@FormatDuration(duration)</span>
+                                    }
+                                    @if (run.WebUrl is not null)
+                                    {
+                                        <a href="@run.WebUrl" target="_blank" class="btn-link-sm" style="margin-left:auto;">↗</a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
 
 @code {
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
@@ -163,6 +210,9 @@
     private string? _error;
     private List<PipelineEnvironmentStatus> _envStatus = [];
     private List<AdoPipelineRun> _recentRuns = [];
+    private Dictionary<int, PipelineFailureResult> _failureResults = [];
+    private Dictionary<int, string> _runWebUrls = [];
+    private List<PipelineEnvironmentStatus> AwaitingEnvs => _envStatus.Where(e => e.WaitingForApproval).ToList();
     // Trigger state
     private bool _showTrigger;
     private bool _showTriggerConfirm;
@@ -186,9 +236,37 @@
 
             _envStatus = await envTask;
             _recentRuns = await runsTask;
+            _failureResults = _recentRuns
+                .Where(r => r.State == "completed" && r.Result != "succeeded")
+                .ToDictionary(r => r.Id, r => FailureClassifier.Classify(r));
+            _runWebUrls = _recentRuns
+                .Where(r => r.WebUrl is not null)
+                .ToDictionary(r => r.Id, r => r.WebUrl!);
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _isLoading = false; }
+    }
+
+    private void Investigate()
+    {
+        var mostRecent = _recentRuns.Count > 0 ? _recentRuns[0] : null;
+        var range = mostRecent is not null
+            ? new TimeRange(mostRecent.CreatedDate, mostRecent.FinishedDate ?? DateTimeOffset.UtcNow)
+            : TimeRange.Last24Hours;
+
+        InvestigationLauncher.Launch(new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Pipelines,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = range,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                PipelineId = Pipeline.Id,
+                RunId = mostRecent?.Id,
+                ProjectName = Project.Name,
+                RunDisplayName = mostRecent?.Name
+            }
+        });
     }
 
     private void ToggleTrigger()
@@ -327,4 +405,16 @@
 
     private static string FormatBranch(string? branch) =>
         branch?.Replace("refs/heads/", "") ?? "";
+
+    private static string FailureCategoryLabel(PipelineFailureCategory category) =>
+        category switch
+        {
+            PipelineFailureCategory.QueuedOrAgent => "Queue / Agent",
+            PipelineFailureCategory.BuildOrTest => "Build / Test",
+            PipelineFailureCategory.ApprovalGate => "Approval Gate",
+            PipelineFailureCategory.Deploy => "Deploy",
+            PipelineFailureCategory.PostDeployHealth => "Post-Deploy Health",
+            PipelineFailureCategory.InfraOrAuth => "Infra / Auth",
+            _ => "Unknown"
+        };
 }

@@ -27,8 +27,8 @@
     else
         {
             <div style="flex:1; overflow-y:auto;">
-                <FluentDataGrid Items="@(_entries.AsQueryable())" TGridItem="ScheduledMessageEntry" Virtualize="true"
-                                ItemSize="32" RowClass="@(e => e.ScheduledEnqueueTime < DateTimeOffset.Now ? "past-entry" : "")">
+                <FluentDataGrid Items="@(_entries.AsQueryable())" TGridItem="ScheduledMessageEntry"
+                                RowClass="@(e => e.ScheduledEnqueueTime < DateTimeOffset.Now ? "past-entry" : "")">
                     <TemplateColumn Title="Enqueue At"
                                     SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.ScheduledEnqueueTime))">
                         <span
@@ -42,7 +42,7 @@
                     <TemplateColumn Title="Message ID"
                                     SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.MessageId ?? ""))">
                         <span style="font-family:monospace;" title="@context.MessageId">@(context.MessageId is { Length: > 0 }
-                                                mid ? (mid.Length > 16 ? mid[..16] + "…" : mid) : "—")</span>
+                                                                            mid ? (mid.Length > 16 ? mid[..16] + "…" : mid) : "—")</span>
                         </TemplateColumn>
                         <TemplateColumn Title="Subject"
                                         SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.Subject ?? ""))">

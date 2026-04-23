@@ -4,7 +4,7 @@
         <span class="confirm-message">@Message</span>
         @if (RequireTypedName)
         {
-            <input class="confirm-input" placeholder="Type resource name to confirm"
+                 <input class="confirm-input app-native-control" placeholder="Type resource name to confirm"
                    @bind="TypedName" @bind:event="oninput" />
         }
         <button class="confirm-btn confirm-yes @(CanConfirm ? "" : "disabled")"

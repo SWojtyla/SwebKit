@@ -1,0 +1,208 @@
+@inject INotificationService Notifications
+
+<div class="group-editor">
+    <div class="group-editor__header">
+        <h4 class="group-editor__title">Edit Group</h4>
+    </div>
+
+    @* ── Name ── *@
+    <div class="group-editor__section">
+        <label class="form-label">Name</label>
+        <input class="form-input" type="text" @bind="_name" @bind:event="oninput" placeholder="e.g. Release Train"
+               @onblur="SaveName" />
+    </div>
+
+    @* ── Current pipelines ── *@
+    <div class="group-editor__section">
+        <div class="group-editor__section-header">
+            <span class="form-label" style="margin:0;">Pipelines</span>
+            <span class="text-muted text-sm">@Group.Pipelines.Count selected</span>
+        </div>
+
+        @if (Group.Pipelines.Count == 0)
+        {
+            <div class="group-editor__empty text-muted text-sm">No pipelines added yet.</div>
+        }
+        else
+        {
+            <div class="group-editor__pipeline-list">
+                @foreach (var entry in Group.Pipelines)
+                {
+                    var isStale = _staleIds.Contains((entry.ProjectName, entry.PipelineId));
+                    <div class="group-entry-row @(isStale ? "group-entry-row--stale" : "")">
+                        <span class="group-entry-row__name" title="@entry.ProjectName">
+                            @entry.PipelineName
+                        </span>
+                        <span class="group-entry-row__project text-muted text-sm">@entry.ProjectName</span>
+                        @if (isStale)
+                        {
+                            <span class="group-entry-stale-badge"
+                                  title="This pipeline was not found in the project. It may have been renamed or deleted.">⚠ not
+                                found</span>
+                            }
+                            <button class="group-entry-remove-btn" @onclick="@(() => RemoveEntry(entry))" title="Remove from group">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* ── Add pipeline picker ── *@
+        <div class="group-editor__section">
+            <div class="group-editor__section-header">
+                <span class="form-label" style="margin:0;">Add Pipeline</span>
+            </div>
+
+            <div class="group-editor__picker">
+                @* Project selector *@
+                <select class="form-input" @bind="_pickerProject" @bind:after="OnPickerProjectChanged">
+                    <option value="">— select project —</option>
+                    @foreach (var proj in PinnedProjects)
+                    {
+                        <option value="@proj">@proj</option>
+                    }
+                </select>
+
+                @* Pipeline list for selected project *@
+                @if (!string.IsNullOrEmpty(_pickerProject))
+                {
+                    @if (_loadingPipelines)
+                    {
+                        <div class="text-muted text-sm" style="padding:8px 0;">Loading pipelines…</div>
+                    }
+                    else if (_pickerPipelines.Count == 0)
+                    {
+                        <div class="text-muted text-sm" style="padding:8px 0;">No pipelines found.</div>
+                    }
+                    else
+                    {
+                        <div class="group-editor__picker-list">
+                            @foreach (var p in _pickerPipelines)
+                            {
+                                var alreadyAdded = Group.Pipelines.Any(e => e.ProjectName == _pickerProject && e.PipelineId == p.Id);
+                                <button class="group-picker-row @(alreadyAdded ? "group-picker-row--added" : "")"
+                                        @onclick="@(() => AddEntry(p))" disabled="@alreadyAdded"
+                                        title="@(alreadyAdded ? "Already in group" : $"Add {p.Name}")">
+                                    <span class="group-picker-row__name">@p.Name</span>
+                                    @if (alreadyAdded)
+                                    {
+                                        <span class="group-picker-row__check">✓</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="group-picker-row__add">+</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+@code {
+    [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
+    [Parameter] public PipelineGroup Group { get; set; } = default!;
+    [Parameter] public List<string> PinnedProjects { get; set; } = [];
+    [Parameter] public EventCallback<PipelineGroup> OnGroupUpdated { get; set; }
+
+    private string _name = string.Empty;
+    private string _pickerProject = string.Empty;
+    private bool _loadingPipelines;
+    private List<AdoPipeline> _pickerPipelines = [];
+
+    // (ProjectName, PipelineId) pairs not found in ADO
+    private HashSet<(string, int)> _staleIds = [];
+
+    // Cache loaded pipelines per project
+    private Dictionary<string, List<AdoPipeline>> _projectPipelineCache = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_name != Group.Name)
+            _name = Group.Name;
+
+        await CheckForStaleEntriesAsync();
+    }
+
+    private async Task CheckForStaleEntriesAsync()
+    {
+        _staleIds.Clear();
+        var groups = Group.Pipelines.GroupBy(e => e.ProjectName);
+        foreach (var g in groups)
+        {
+            var pipelinesInProject = await GetPipelinesForProjectAsync(g.Key);
+            var knownIds = pipelinesInProject.Select(p => p.Id).ToHashSet();
+            foreach (var entry in g)
+            {
+                if (!knownIds.Contains(entry.PipelineId))
+                    _staleIds.Add((entry.ProjectName, entry.PipelineId));
+            }
+        }
+    }
+
+    private async Task OnPickerProjectChanged()
+    {
+        if (string.IsNullOrEmpty(_pickerProject)) return;
+        _pickerPipelines = await GetPipelinesForProjectAsync(_pickerProject);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<List<AdoPipeline>> GetPipelinesForProjectAsync(string project)
+    {
+        if (_projectPipelineCache.TryGetValue(project, out var cached))
+            return cached;
+
+        _loadingPipelines = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var list = await DevOpsClient.GetPipelinesAsync(project);
+            _projectPipelineCache[project] = list;
+            return list;
+        }
+        catch
+        {
+            return [];
+        }
+        finally
+        {
+            _loadingPipelines = false;
+        }
+    }
+
+    private async Task AddEntry(AdoPipeline pipeline)
+    {
+        if (Group.Pipelines.Any(e => e.ProjectName == _pickerProject && e.PipelineId == pipeline.Id))
+            return;
+
+        var updated = Group with
+        {
+            Pipelines = [.. Group.Pipelines, new PipelineGroupEntry(_pickerProject, pipeline.Id, pipeline.Name)]
+        };
+        await OnGroupUpdated.InvokeAsync(updated);
+    }
+
+    private async Task RemoveEntry(PipelineGroupEntry entry)
+    {
+        var updated = Group with
+        {
+            Pipelines = Group.Pipelines.Where(e => !(e.ProjectName == entry.ProjectName && e.PipelineId ==
+entry.PipelineId)).ToList()
+        };
+        _staleIds.Remove((entry.ProjectName, entry.PipelineId));
+        await OnGroupUpdated.InvokeAsync(updated);
+    }
+
+    private async Task SaveName()
+    {
+        var trimmed = _name.Trim();
+        if (string.IsNullOrEmpty(trimmed) || trimmed == Group.Name) return;
+
+        var updated = Group with { Name = trimmed };
+        await OnGroupUpdated.InvokeAsync(updated);
+    }
+}

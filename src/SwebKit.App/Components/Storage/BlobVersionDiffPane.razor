@@ -1,0 +1,97 @@
+@if (Comparison is null)
+{
+    <div class="blob-version-diff-pane__empty">Select a version to compare.</div>
+}
+else
+{
+    <div class="blob-version-diff-pane">
+        <div class="blob-version-diff-pane__meta">
+            <span>Base: <strong>@Comparison.BaseVersionId</strong></span>
+            @if (Comparison.CompareVersionId is not null)
+            {
+                <span> vs. <strong>@Comparison.CompareVersionId</strong></span>
+            }
+            else
+            {
+                <span> vs. <strong>current version</strong></span>
+            }
+        </div>
+
+        <table class="blob-version-diff-pane__size-table">
+            <tr>
+                <td class="blob-version-diff-pane__size-label">Base size</td>
+                <td class="blob-version-diff-pane__size-value">@(Comparison.BaseSizeBytes is long bsz ? FormatSize(bsz) :
+                              "—")</td>
+                </tr>
+                <tr>
+                    <td class="blob-version-diff-pane__size-label">Compare size</td>
+                    <td class="blob-version-diff-pane__size-value">@(Comparison.CompareSizeBytes is long csz ? FormatSize(csz) :
+                             "—")</td>
+                    </tr>
+                </table>
+
+                <div class="blob-version-diff-pane__section-title">Metadata differences</div>
+                @if (Comparison.MetadataDiff.AddedKeys.Count > 0
+                             || Comparison.MetadataDiff.RemovedKeys.Count > 0
+                             || Comparison.MetadataDiff.ChangedKeys.Count > 0)
+                {
+                    <table class="blob-version-diff-pane__diff-table">
+                        @foreach (var k in Comparison.MetadataDiff.AddedKeys)
+                        {
+                            <tr class="blob-version-diff-pane__diff-row blob-version-diff-pane__diff-row--added">
+                                <td class="blob-version-diff-pane__diff-label">Added</td>
+                                <td class="blob-version-diff-pane__diff-key">@k</td>
+                                <td class="blob-version-diff-pane__diff-value">@(Comparison.MetadataDiff.After.TryGetValue(k, out var av) ?
+                                                    av : "")</td>
+                                </tr>
+                            }
+                            @foreach (var k in Comparison.MetadataDiff.RemovedKeys)
+                            {
+                                <tr class="blob-version-diff-pane__diff-row blob-version-diff-pane__diff-row--removed">
+                                    <td class="blob-version-diff-pane__diff-label">Removed</td>
+                                    <td class="blob-version-diff-pane__diff-key">@k</td>
+                                    <td class="blob-version-diff-pane__diff-value">@(Comparison.MetadataDiff.Before.TryGetValue(k, out var rv) ?
+                                                        rv : "")</td>
+                                    </tr>
+                                }
+                                @foreach (var k in Comparison.MetadataDiff.ChangedKeys)
+                                {
+                                    <tr class="blob-version-diff-pane__diff-row blob-version-diff-pane__diff-row--changed">
+                                        <td class="blob-version-diff-pane__diff-label">Changed</td>
+                                        <td class="blob-version-diff-pane__diff-key">@k</td>
+                                        <td class="blob-version-diff-pane__diff-value">@(Comparison.MetadataDiff.Before.TryGetValue(k, out var bv) ?
+                                                            bv : "") → @(Comparison.MetadataDiff.After.TryGetValue(k, out var cv) ? cv : "")</td>
+                                        </tr>
+                                    }
+                                </table>
+                            }
+        else
+                            {
+                                <div class="blob-version-diff-pane__message">No metadata differences.</div>
+                            }
+
+                            <div class="blob-version-diff-pane__section-title">Content comparison</div>
+                            @if (Comparison.ContentComparePossible)
+                            {
+                                <pre class="blob-version-diff-pane__text-diff">@Comparison.TextDiff</pre>
+                            }
+                            else
+                            {
+                                <div class="blob-version-diff-pane__message blob-version-diff-pane__message--notice" role="note">
+                                    Content comparison is not available — one or both versions are binary or exceed the comparison size limit.
+                                </div>
+                            }
+                        </div>
+                    }
+
+@code {
+    [Parameter] public BlobVersionComparison? Comparison { get; set; }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1_048_576) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1_073_741_824) return $"{bytes / 1_048_576.0:F1} MB";
+        return $"{bytes / 1_073_741_824.0:F2} GB";
+    }
+}

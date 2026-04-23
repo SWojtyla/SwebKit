@@ -2,9 +2,11 @@
 
 ## What It Supports Today
 
+- Incident Timeline backend uses explicit workload mappings to run one bounded App Insights query across exceptions, failed requests, and failed dependencies, returning corroborating evidence only when a role or operation mapping exists for the selected workload.
 - Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
 - Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
+- Current resource, active tab, and time range participate in the shared operator workspace model, so recent/favorite reopen flows and named favorites can restore Observability context route-first from shell surfaces.
 - Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
 - Drill-to-Logs: clicking "View in Logs" from any tab now uses an explicit pending-query handoff from `ObservabilityPage` into `ObservabilityLogs`, so the focused KQL executes exactly once without a render-timing delay
 - Logs supports explicit mode switching:
@@ -61,6 +63,10 @@ User opens Observability page
   → Razor components render data; detail pane opens on row click
 ```
 
+For the incident cockpit backend, `AppInsightsTimelineSignalSource` resolves the selected workload's explicit `IncidentTimelineObservabilityMapping`, creates the current `IObservabilityProvider`, executes a bounded union query across exceptions/failed requests/failed dependencies, and emits corroborating evidence items with explicit "linked because" explanations. If no mapping exists, the backend returns `Unmapped` coverage instead of guessing.
+
+`ObservabilityPage` also publishes a semantic workspace snapshot after resource activation, tab changes, drill-to-logs handoff, and time-range changes. Restore reactivates the resource first, then reapplies the selected tab and time range before refresh.
+
 ## Key Code Locations
 
 | What                      | Where                                                                                                                        |
@@ -73,7 +79,8 @@ User opens Observability page
 | Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs`                  |
 | Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                     |
 | Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                      |
-| Log projection helper     | `src/SwebKit.Observability/LogQueryResultProjector.cs`                                                                        |
+| Incident timeline adapter | `src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs`                                              |
+| Log projection helper     | `src/SwebKit.Observability/LogQueryResultProjector.cs`                                                                       |
 | ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                                   |
 | Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                                    |
 | Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                                   |
@@ -101,6 +108,7 @@ User opens Observability page
 
 - `tests/SwebKit.Core.Tests/LogQueryResultProjectorTests.cs`
 - `tests/SwebKit.Core.Tests/DemoObservabilityProviderTests.cs`
+- `tests/SwebKit.App.Tests/ObservabilityPageTests.cs`
 
 ## Future Extension Points
 

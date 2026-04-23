@@ -80,3 +80,49 @@ public class SbNamespaceInfo
     public required string Name { get; set; }
     public required string Endpoint { get; set; }
 }
+
+/// <summary>
+/// Outcome of a batch DLQ replay or batch send operation.
+/// Reports per-item results so the UI can show partial-success summaries.
+/// </summary>
+public class BatchOperationResult
+{
+    public int Succeeded { get; set; }
+    public int Failed { get; set; }
+    public int Skipped { get; set; }
+    public List<BatchOperationItemError> Errors { get; } = [];
+
+    public bool IsPartialSuccess => Failed > 0 && Succeeded > 0;
+    public bool IsFullSuccess => Failed == 0 && Skipped == 0 && Succeeded > 0;
+    public bool IsFullFailure => Succeeded == 0 && Failed > 0;
+    public int Total => Succeeded + Failed + Skipped;
+
+    public string SummaryLine => IsFullSuccess
+        ? $"All {Succeeded} message(s) processed successfully."
+        : IsPartialSuccess
+            ? $"{Succeeded} succeeded, {Failed} failed, {Skipped} skipped of {Total}."
+            : IsFullFailure
+                ? $"All {Failed} message(s) failed."
+                : $"{Succeeded} succeeded, {Failed} failed, {Skipped} skipped.";
+}
+
+public class BatchOperationItemError
+{
+    public required string MessageId { get; set; }
+    public required string Reason { get; set; }
+}
+
+/// <summary>
+/// Parsed and validated entry from a JSON batch-send import.
+/// </summary>
+public class BatchSendEntry
+{
+    public string MessageId { get; set; } = Guid.NewGuid().ToString();
+    public string? CorrelationId { get; set; }
+    public string? Subject { get; set; }
+    public string? ContentType { get; set; }
+    public string Body { get; set; } = string.Empty;
+    public Dictionary<string, string> ApplicationProperties { get; set; } = [];
+    public string? ValidationError { get; set; }
+    public bool IsValid => ValidationError is null;
+}

@@ -25,4 +25,10 @@ public sealed class StorageConfig
     /// When false, authenticate with the connection string from ConnectionStringRef.
     /// </summary>
     public bool UseAad { get; set; }
+
+    /// <summary>
+    /// When true, mutation operations (upload, copy, metadata update, restore, undelete) are permitted.
+    /// Defaults to false so all existing environments remain read-only without configuration changes.
+    /// </summary>
+    public bool AllowMutations { get; set; } = false;
 }

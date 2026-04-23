@@ -130,6 +130,59 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task AnalyzeIngressAsync_ReturnsBackendEvidence()
+    {
+        var analysis = await _client.AnalyzeIngressAsync("default", "main-ingress");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.Equal("main-ingress", analysis.IngressName);
+        Assert.NotEmpty(analysis.Backends);
+        Assert.Contains(analysis.Backends, backend => backend.ServiceName == "order-api" && backend.MatchingPodCount > 0);
+        Assert.NotEmpty(analysis.Findings);
+    }
+
+    [Fact]
+    public async Task AnalyzeNetworkPoliciesAsync_ReturnsPolicyEvidenceForDeployment()
+    {
+        var analysis = await _client.AnalyzeNetworkPoliciesAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.Equal("Deployment", analysis.WorkloadKind);
+        Assert.Equal("order-api", analysis.WorkloadName);
+        Assert.True(analysis.MatchingPodCount > 0);
+        Assert.Contains(analysis.Services, service => service.Contains("order-api", StringComparison.Ordinal));
+        Assert.NotEmpty(analysis.Policies);
+    }
+
+    [Fact]
+    public async Task GetServicesAsync_ReturnsServicesWithPorts()
+    {
+        var services = await _client.GetServicesAsync("default");
+
+        Assert.NotEmpty(services);
+        Assert.Contains(services, service => service.Type == "LoadBalancer");
+        Assert.All(services, service =>
+        {
+            Assert.Equal("default", service.Namespace);
+            Assert.NotEmpty(service.Ports);
+        });
+    }
+
+    [Fact]
+    public async Task GetGatewayClassesAsync_ReturnsClusterScopedGatewayClasses()
+    {
+        var gatewayClasses = await _client.GetGatewayClassesAsync();
+
+        Assert.NotEmpty(gatewayClasses);
+        Assert.Contains(gatewayClasses, gatewayClass => gatewayClass.IsDefault);
+        Assert.All(gatewayClasses, gatewayClass =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(gatewayClass.Name));
+            Assert.False(string.IsNullOrWhiteSpace(gatewayClass.ControllerName));
+        });
+    }
+
+    [Fact]
     public async Task GetNamespacesAsync_ReturnsKnownNamespaces()
     {
         var namespaces = await _client.GetNamespacesAsync();
@@ -245,6 +298,32 @@ public class DemoAksClientTests
         Assert.Contains("apiVersion: batch/v1", yaml);
         Assert.Contains("kind: Job", yaml);
         Assert.Contains($"name: {job.Name}", yaml);
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_GatewayClass_ReturnsClusterScopedGatewayApiYaml()
+    {
+        var gatewayClass = (await _client.GetGatewayClassesAsync()).First();
+
+        var yaml = await _client.GetResourceYamlAsync(string.Empty, "GatewayClass", gatewayClass.Name);
+        var normalizedYaml = yaml.ReplaceLineEndings("\n");
+
+        Assert.Contains("apiVersion: gateway.networking.k8s.io/v1", yaml);
+        Assert.Contains("kind: GatewayClass", yaml);
+        Assert.Contains($"name: {gatewayClass.Name}", yaml);
+        Assert.DoesNotContain($"metadata:\n  name: {gatewayClass.Name}\n  namespace:", normalizedYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetResourceYamlAsync_Service_ReturnsServiceYaml()
+    {
+        var service = (await _client.GetServicesAsync("default")).First();
+
+        var yaml = await _client.GetResourceYamlAsync("default", "Service", service.Name);
+
+        Assert.Contains("apiVersion: v1", yaml);
+        Assert.Contains("kind: Service", yaml);
+        Assert.Contains($"name: {service.Name}", yaml);
     }
 
     [Fact]
@@ -492,5 +571,78 @@ public class DemoAksClientTests
     public async Task ScaleStatefulSetAsync_CompletesWithoutError()
     {
         await _client.ScaleStatefulSetAsync("default", "order-queue", 3);
+    }
+
+    [Fact]
+    public async Task GetResourceQuotasAsync_ReturnsQuotasWithUsage()
+    {
+        var quotas = await _client.GetResourceQuotasAsync("default");
+
+        Assert.NotEmpty(quotas);
+        Assert.All(quotas, q =>
+        {
+            Assert.Equal("default", q.Namespace);
+            Assert.NotEmpty(q.HardLimits);
+            Assert.NotEmpty(q.Used);
+        });
+    }
+
+    [Fact]
+    public async Task GetLimitRangesAsync_ReturnsLimitsForNamespace()
+    {
+        var ranges = await _client.GetLimitRangesAsync("default");
+
+        Assert.NotEmpty(ranges);
+        Assert.All(ranges, r =>
+        {
+            Assert.Equal("default", r.Namespace);
+            Assert.NotEmpty(r.Limits);
+        });
+    }
+
+    [Fact]
+    public async Task GetPodDisruptionBudgetsAsync_ReturnsPdbsWithStatus()
+    {
+        var pdbs = await _client.GetPodDisruptionBudgetsAsync("default");
+
+        Assert.NotEmpty(pdbs);
+        Assert.All(pdbs, pdb =>
+        {
+            Assert.Equal("default", pdb.Namespace);
+            Assert.True(pdb.ExpectedPods > 0);
+        });
+    }
+
+    [Fact]
+    public async Task GetProbeFailureSummaryAsync_ReturnsRestartEvidence()
+    {
+        var summary = await _client.GetProbeFailureSummaryAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", summary.Namespace);
+        Assert.True(summary.TotalPods > 0);
+        Assert.NotEmpty(summary.Findings);
+        Assert.Contains(summary.Pods, p => p.LivenessProbeConfigured || p.ReadinessProbeConfigured);
+    }
+
+    [Fact]
+    public async Task GetPlacementAnalysisAsync_ReturnsDeclaredConstraints()
+    {
+        var analysis = await _client.GetPlacementAnalysisAsync("default", "Deployment", "order-api");
+
+        Assert.Equal("default", analysis.Namespace);
+        Assert.NotEmpty(analysis.Findings);
+        Assert.True(analysis.HasNodeSelector || analysis.HasPodAntiAffinity || analysis.HasNodeAffinity);
+    }
+
+    [Fact]
+    public async Task PreviewHelmUpgradeAsync_ReturnsDegradedOrUnsupportedInDemoMode()
+    {
+        var preview = await _client.PreviewHelmUpgradeAsync("default", "order-api");
+
+        Assert.Equal("default", preview.Namespace);
+        Assert.Equal("order-api", preview.ReleaseName);
+        Assert.True(preview.Capability == HelmPreviewCapability.Unsupported
+            || preview.Capability == HelmPreviewCapability.Degraded);
+        Assert.False(string.IsNullOrWhiteSpace(preview.CapabilityNote));
     }
 }

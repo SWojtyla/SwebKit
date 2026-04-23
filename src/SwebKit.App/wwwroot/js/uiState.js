@@ -1,19 +1,16 @@
 window.SwebKitUi = {
-  getLocalStorage: function (key) {
-    try {
-      return window.localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setLocalStorage: function (key, value) {
-    try {
-      window.localStorage.setItem(key, value);
-    } catch {
-      // Ignore storage failures (private mode, quota).
-    }
-  },
   getWindowWidth: function () {
     return window.innerWidth || 0;
+  },
+  downloadTextFile: function (fileName, content, mimeType) {
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };

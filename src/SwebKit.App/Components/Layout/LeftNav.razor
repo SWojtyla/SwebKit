@@ -1,29 +1,32 @@
-<nav class="left-nav" aria-label="Main navigation">
-    <div class="nav-section">
-        <NavItem NavIcon="@(new Icons.Regular.Size24.Home())" Label="Dashboard" Area="dashboard" IsExpanded="IsExpanded"
-                 CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.ArrowSwap())" Label="Service Bus" Area="service-bus"
-                 IsExpanded="IsExpanded" CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.CloudCube())" Label="AKS" Area="aks" IsExpanded="IsExpanded"
-                 CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.Database())" Label="Redis" Area="redis" IsExpanded="IsExpanded"
-                 CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.FolderOpen())" Label="Storage" Area="storage"
-                 IsExpanded="IsExpanded" CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.Rocket())" Label="Pipelines" Area="pipelines"
-                 IsExpanded="IsExpanded" CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-        <NavItem NavIcon="@(new Icons.Regular.Size24.DataTrending())" Label="Observability" Area="observability"
-                 IsExpanded="IsExpanded" CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-    </div>
+<nav class="left-nav" aria-label="Primary navigation">
+    @foreach (var group in ShellNavigation.Groups)
+    {
+        <section class="nav-group @(group.StickToBottom ? "nav-group--footer" : string.Empty)"
+                 aria-labelledby="@GetGroupId(group.Label)">
+            <h2 id="@GetGroupId(group.Label)" class="nav-group-label @(IsExpanded ? string.Empty : "visually-hidden")">
+                @group.Label</h2>
 
-    <div class="nav-section" style="margin-top: auto; border-top: 1px solid var(--color-border);">
-        <NavItem NavIcon="@(new Icons.Regular.Size24.Settings())" Label="Settings" Area="settings"
-                 IsExpanded="IsExpanded" CurrentArea="CurrentArea" OnNavigate="OnNavigate" />
-    </div>
-</nav>
+                <ul class="nav-section" role="list">
+                    @foreach (var item in group.Items)
+                    {
+                        <li class="nav-section-item">
+                            <NavItem NavIcon="@item.Icon" Label="@item.Label" Area="@item.Area" GroupLabel="@group.Label"
+                                     IsExpanded="IsExpanded" CurrentArea="@CurrentArea" OnNavigate="OnNavigate" />
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </nav>
 
 @code {
     [Parameter] public bool IsExpanded { get; set; } = true;
     [Parameter] public string CurrentArea { get; set; } = "service-bus";
     [Parameter] public EventCallback<string> OnNavigate { get; set; }
+
+    private static string GetGroupId(string label)
+    {
+        var normalized = string.Concat(label.Where(char.IsLetterOrDigit));
+        return $"nav-group-{normalized.ToLowerInvariant()}";
+    }
 }

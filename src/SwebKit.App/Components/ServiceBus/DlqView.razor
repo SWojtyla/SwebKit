@@ -2,6 +2,7 @@
 @inject ITaskQueue TaskQueue
 @inject IJSRuntime JS
 @inject ILogger<DlqView> Logger
+@using SwebKit.Core.Models
 
 <div style="display:flex; flex-direction:column; height:100%;">
     <div
@@ -14,16 +15,27 @@
         <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
                              RefreshToken="@_refreshToken" MultiSelect="true" SelectedMessage="SelectedMessage"
+                             TracePivotFilter="@_dlqPivotFilter"
                              OnMessageSelected="msg => { SelectedMessage = msg; StateHasChanged(); }"
                              OnMultiSelectionChanged="OnBatchSelectionChanged" />
 
-            @if (_batchSelected.Count > 0)
+            @if (_showBatchReplayPanel)
+            {
+                <div
+                    style="border-top:1px solid var(--color-border); padding:12px; flex-shrink:0; overflow:auto; max-height:420px;">
+                    <BatchReplayPanel Client="Client" SourceEntityPath="@EntityPath" Messages="@_batchSelected"
+                                      AvailableNamespaces="@AvailableNamespaces" OnCancel="CloseBatchReplayPanel"
+                                      OnCompleted="OnBatchReplayCompleted" />
+                </div>
+            }
+            else if (_batchSelected.Count > 0)
             {
                 <div
                     style="padding:6px 12px; background:rgba(0,112,204,0.1); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:center; flex-shrink:0;">
                     <span style="font-size:12px; color:var(--color-text-muted);">@_batchSelected.Count selected</span>
-                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsWorking" @onclick="ResubmitBatch">
-                        Resubmit @_batchSelected.Count
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsWorking" @onclick="OpenBatchReplayPanel"
+                                  data-testid="batch-resubmit-btn">
+                        Resubmit @_batchSelected.Count…
                     </FluentButton>
                     <FluentButton Disabled="@IsWorking" @onclick="CompleteBatch">
                         Delete @_batchSelected.Count
@@ -54,7 +66,7 @@
 
         <div @ref="_dlqSplitterRef" class="pane-splitter"></div>
         <div @ref="_dlqDetailRef" class="details-pane">
-            <MessageDetailPane Message="SelectedMessage" />
+            <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
         </div>
     </div>
 </div>
@@ -66,6 +78,7 @@
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }
     [Parameter] public string? EntityPath { get; set; }
+    [Parameter] public IReadOnlyList<MessageComposer.NamespaceOption>? AvailableNamespaces { get; set; }
 
     private SbMessage? SelectedMessage;
     private bool IsWorking;
@@ -75,10 +88,12 @@
     private string ConfirmMessage = "";
     private Func<Task>? PendingAction;
     private List<SbMessage> _batchSelected = [];
+    private bool _showBatchReplayPanel;
     private ElementReference _dlqSplitterRef;
     private ElementReference _dlqDetailRef;
     private IJSObjectReference? _dlqSplitterHandle;
     private long _refreshToken;
+    private string? _dlqPivotFilter;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -97,6 +112,12 @@
     private void OnBatchSelectionChanged(List<SbMessage> messages)
     {
         _batchSelected = messages;
+        StateHasChanged();
+    }
+
+    private void ApplyDlqPivotFilter(string value)
+    {
+        _dlqPivotFilter = value;
         StateHasChanged();
     }
 
@@ -128,13 +149,29 @@
 
     // --- Batch actions ---
 
-    private void ResubmitBatch()
+    private void OpenBatchReplayPanel()
     {
         if (_batchSelected.Count == 0 || Client is null || EntityPath is null) return;
-        ConfirmTitle = $"Resubmit {_batchSelected.Count} Messages";
-        ConfirmMessage = $"Resubmit {_batchSelected.Count} message(s) from the DLQ to {EntityPath}?";
-        PendingAction = DoBatchResubmit;
-        ShowConfirm = true;
+        _showBatchReplayPanel = true;
+        StateHasChanged();
+    }
+
+    private void CloseBatchReplayPanel()
+    {
+        _showBatchReplayPanel = false;
+        StateHasChanged();
+    }
+
+    private async Task OnBatchReplayCompleted(BatchOperationResult result)
+    {
+        _showBatchReplayPanel = false;
+        if (result.Succeeded > 0)
+        {
+            _batchSelected.Clear();
+            SelectedMessage = null;
+            await RefreshDlqListAsync();
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private void CompleteBatch()
@@ -199,47 +236,7 @@
         finally { IsWorking = false; await InvokeAsync(StateHasChanged); }
     }
 
-    private async Task DoBatchResubmit()
-    {
-        if (Client is null || EntityPath is null) return;
-        var seqNumbers = _batchSelected
-            .Where(m => m.SequenceNumber is not null)
-            .Select(m => m.SequenceNumber!.Value.ToString())
-            .ToList();
-        if (seqNumbers.Count == 0) return;
 
-        IsWorking = true;
-        var task = TaskQueue.Enqueue($"Resubmitting {seqNumbers.Count} messages", EntityPath);
-        try
-        {
-            if (seqNumbers.Count > 5)
-            {
-                var chunks = seqNumbers.Chunk(10).ToList();
-                int done = 0;
-                foreach (var chunk in chunks)
-                {
-                    await Client.ResubmitDeadLetterAsync(EntityPath, chunk, null);
-                    done += chunk.Length;
-                    _batchProgressMessage = $"Resubmitting message {done} of {seqNumbers.Count}\u2026";
-                    await InvokeAsync(StateHasChanged);
-                }
-            }
-            else
-            {
-                await Client.ResubmitDeadLetterAsync(EntityPath, seqNumbers, null);
-            }
-            TaskQueue.Complete(task.Id);
-            _batchSelected.Clear();
-            SelectedMessage = null;
-            await RefreshDlqListAsync();
-        }
-        catch (Exception ex)
-        {
-            TaskQueue.Update(task.Id, t => t.Detail = ex.Message);
-            TaskQueue.Complete(task.Id, false);
-        }
-        finally { IsWorking = false; _batchProgressMessage = null; await InvokeAsync(StateHasChanged); }
-    }
 
     private async Task DoBatchComplete()
     {

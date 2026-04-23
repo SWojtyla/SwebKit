@@ -10,6 +10,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class ScheduledMessagesComponentTests : TestContext
 {
     public ScheduledMessagesComponentTests()

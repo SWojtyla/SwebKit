@@ -1,5 +1,9 @@
 namespace SwebKit.Core.Domain;
 
+public record PipelineGroupEntry(string ProjectName, int PipelineId, string PipelineName);
+
+public record PipelineGroup(string Id, string Name, List<PipelineGroupEntry> Pipelines);
+
 public class DevOpsConfig
 {
     public string Organization { get; set; } = string.Empty;
@@ -12,6 +16,9 @@ public class DevOpsConfig
     /// Empty list means not yet configured (project picker will be shown).
     /// </summary>
     public List<string> PinnedProjects { get; set; } = [];
+
+    /// <summary>Named groups of pipelines that can be triggered together.</summary>
+    public List<PipelineGroup> PipelineGroups { get; set; } = [];
 
     public void Validate()
     {

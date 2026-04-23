@@ -1,0 +1,224 @@
+.message-composer {
+    padding: 12px 16px;
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.message-composer__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-composer__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.message-composer__header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.message-composer__close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    padding: 2px 6px;
+}
+
+.message-composer__panel {
+    background: color-mix(in srgb, var(--color-accent-subtle) 72%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 38%, var(--color-border));
+    border-radius: 4px;
+    padding: 8px 10px;
+}
+
+.message-composer__panel-title,
+.message-composer__label,
+.message-composer__section-title {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.message-composer__panel-title {
+    margin-bottom: 6px;
+}
+
+.message-composer__two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.message-composer__field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.message-composer__input,
+.message-composer__textarea,
+.message-composer__prop-input {
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+}
+
+.message-composer__input--mono,
+.message-composer__textarea {
+    font-family: var(--font-family-mono);
+}
+
+.message-composer__details {
+    margin-top: 8px;
+}
+
+.message-composer__details-summary {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.message-composer__details-body {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.message-composer__secondary-btn,
+.message-composer__icon-btn,
+.message-composer__dialog-btn {
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.message-composer__secondary-btn,
+.message-composer__icon-btn,
+.message-composer__dialog-btn--secondary {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.message-composer__secondary-btn {
+    padding: 1px 8px;
+}
+
+.message-composer__icon-btn {
+    padding: 4px 8px;
+}
+
+.message-composer__prop-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.message-composer__prop-input {
+    background: inherit;
+}
+
+.message-composer__prop-input--key {
+    flex: 1;
+}
+
+.message-composer__prop-input--value {
+    flex: 2;
+}
+
+.message-composer__arrow {
+    align-self: center;
+    color: var(--color-text-muted);
+    font-size: 11px;
+}
+
+.message-composer__textarea {
+    font-size: 12px;
+    resize: vertical;
+    min-height: 80px;
+}
+
+.message-composer__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-composer__status {
+    font-size: 11px;
+}
+
+.message-composer__status--error {
+    color: var(--color-error);
+}
+
+.message-composer__status--success {
+    color: var(--color-success);
+}
+
+.message-composer__save-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-backdrop);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.message-composer__save-dialog {
+    background: var(--color-panel-raised, var(--color-surface-2));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 360px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+}
+
+.message-composer__dialog-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+}
+
+.message-composer__save-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+.message-composer__dialog-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    justify-content: flex-end;
+}
+
+.message-composer__dialog-btn {
+    padding: 5px 14px;
+}
+
+.message-composer__dialog-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border: none;
+}
+
+.message-composer__dialog-btn--primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

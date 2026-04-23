@@ -25,26 +25,30 @@
     else
     {
         <div class="project-picker__toolbar">
+            <input class="project-picker__search" type="search" placeholder="Filter projects…" aria-label="Filter projects"
+                   @bind="_filter" @bind:event="oninput" />
             <span class="project-picker__count">@_selected.Count of @_allProjects.Count selected</span>
             <button class="project-picker__action-btn" @onclick="SelectAll">Select all</button>
             <button class="project-picker__action-btn" @onclick="ClearAll">Clear all</button>
         </div>
 
         <div class="project-picker__list">
-            @foreach (var project in _allProjects)
+            @foreach (var project in _filtered)
             {
                 var isChecked = _selected.Contains(project.Name);
                 <label class="project-picker__item @(isChecked ? "project-picker__item--checked" : "")">
                     <input type="checkbox" checked="@isChecked"
                            @onchange="@(e => ToggleProject(project.Name, (bool)e.Value!))" />
-                    <div class="project-picker__item-body">
-                        <span class="project-picker__item-name">@project.Name</span>
-                        @if (!string.IsNullOrEmpty(project.Description))
-                        {
-                            <span class="project-picker__item-desc">@project.Description</span>
-                        }
-                    </div>
+                    <span class="project-picker__item-name">@project.Name</span>
+                    @if (!string.IsNullOrEmpty(project.Description))
+                    {
+                        <span class="project-picker__item-desc">@project.Description</span>
+                    }
                 </label>
+            }
+            @if (_filtered.Count == 0)
+            {
+                <p class="project-picker__empty">No projects match "@_filter".</p>
             }
         </div>
 
@@ -53,9 +57,7 @@
             {
                 <button class="approval-btn-cancel" @onclick="@(() => OnCancelled.InvokeAsync())">Cancel</button>
             }
-            <FluentButton Appearance="Appearance.Accent"
-                          @onclick="ConfirmAsync"
-                          Disabled="@(_selected.Count == 0)">
+            <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmAsync" Disabled="@(_selected.Count == 0)">
                 Confirm (@_selected.Count project@(_selected.Count == 1 ? "" : "s"))
             </FluentButton>
         </div>
@@ -74,6 +76,11 @@
     private string? _error;
     private List<AdoProject> _allProjects = [];
     private HashSet<string> _selected = [];
+    private string _filter = string.Empty;
+
+    private List<AdoProject> _filtered => string.IsNullOrWhiteSpace(_filter)
+        ? _allProjects
+        : _allProjects.Where(p => p.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
 
     protected override async Task OnInitializedAsync()
     {

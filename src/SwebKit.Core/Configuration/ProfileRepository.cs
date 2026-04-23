@@ -14,29 +14,18 @@ public class ProfileRepository
     private ProfileData _data = new();
     private ProfileLoadResult _lastLoadResult = ProfileLoadResult.NotStarted;
 
-    public AppConfig Config => ResolveActiveEnvironment();
+    public AppConfig Config => _data.Config;
     public IReadOnlyList<ServiceBusNamespace> ServiceBusNamespaces => _data.ServiceBusNamespaces;
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _data.MessageTemplates;
-    public IReadOnlyList<AppConfig> Environments => _data.Environments;
-    public string? ActiveEnvironmentName => _data.ActiveEnvironmentName;
     public ProfileLoadResult LastLoadResult => _lastLoadResult;
     public bool IsPersistenceBlocked => _lastLoadResult.IsFailure;
-
-    private AppConfig ResolveActiveEnvironment()
-    {
-        if (_data.Environments.Count == 0)
-            return _data.Config;
-
-        return _data.Environments.FirstOrDefault(e => e.Name == _data.ActiveEnvironmentName)
-            ?? _data.Environments[0];
-    }
 
     public async Task<ProfileLoadResult> LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        var filePath = File.Exists(AppDataPaths.ProfilesJson)
+        var filePath = AppDataFileStore.Exists(AppDataPaths.ProfilesJson)
             ? AppDataPaths.ProfilesJson
-            : (File.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
+            : (AppDataFileStore.Exists(AppDataPaths.LegacyProfilesJson) ? AppDataPaths.LegacyProfilesJson : null);
 
         if (filePath is null)
         {
@@ -46,19 +35,11 @@ public class ProfileRepository
 
         try
         {
-            var json = await File.ReadAllTextAsync(filePath);
-            var loaded = JsonSerializer.Deserialize<ProfileData>(json, Options) ?? new ProfileData();
-
-            // Migrate: if Environments is empty, seed from Config
-            if (loaded.Environments.Count == 0)
-            {
-                loaded.Config.Name ??= "Default";
-                loaded.Environments.Add(loaded.Config);
-                loaded.ActiveEnvironmentName = loaded.Config.Name;
-            }
-
-            _data = loaded;
-            _lastLoadResult = ProfileLoadResult.Loaded(filePath);
+            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeProfileData);
+            _data = loadResult.Value;
+            _lastLoadResult = loadResult.WasRecovered
+                ? ProfileLoadResult.Recovered(filePath, loadResult.SourcePath, loadResult.PrimaryErrorMessage)
+                : ProfileLoadResult.Loaded(filePath);
         }
         catch (Exception ex)
         {
@@ -77,7 +58,7 @@ public class ProfileRepository
 
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_data, Options);
-        await File.WriteAllTextAsync(AppDataPaths.ProfilesJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json);
         return true;
     }
 
@@ -119,45 +100,336 @@ public class ProfileRepository
     public void DeleteMessageTemplate(Guid id) =>
         _data.MessageTemplates.RemoveAll(t => t.Id == id);
 
-    /// <summary>Deep-clones the active environment config via JSON roundtrip.</summary>
-    public AppConfig CloneEnvironment(string newName)
-    {
-        var source = Config;
-        var json = JsonSerializer.Serialize(source, Options);
-        var clone = JsonSerializer.Deserialize<AppConfig>(json, Options)!;
-        clone.Name = newName;
-        _data.Environments.Add(clone);
-        return clone;
-    }
-
-    public void SwitchEnvironment(string name)
-    {
-        var target = _data.Environments.FirstOrDefault(e => e.Name == name);
-        if (target is not null)
-            _data.ActiveEnvironmentName = name;
-    }
-
-    public void RemoveEnvironment(string name)
-    {
-        _data.Environments.RemoveAll(e => e.Name == name);
-        if (_data.ActiveEnvironmentName == name)
-            _data.ActiveEnvironmentName = _data.Environments.FirstOrDefault()?.Name;
-    }
-
     /// <summary>Returns the full profile data for export purposes.</summary>
     public ProfileData GetProfileData() => _data;
 
     /// <summary>Replaces the full profile data (used by config import).</summary>
     public void ReplaceProfileData(ProfileData data)
     {
-        _data = data;
-        // Ensure migration
-        if (_data.Environments.Count == 0)
+        _data = NormalizeProfileData(data);
+    }
+
+    private static ProfileData DeserializeProfileData(string json)
+    {
+        var loaded = JsonSerializer.Deserialize<LegacyProfileData>(json, Options) ?? new LegacyProfileData();
+        return NormalizeLegacyProfileData(loaded);
+    }
+
+    private static ProfileData NormalizeLegacyProfileData(LegacyProfileData data)
+    {
+        var config = ResolveConfig(data);
+        NormalizeConfig(config, data.ServiceBusNamespaces ?? []);
+
+        return new ProfileData
         {
-            _data.Config.Name ??= "Default";
-            _data.Environments.Add(_data.Config);
-            _data.ActiveEnvironmentName = _data.Config.Name;
+            Config = config,
+            ServiceBusNamespaces = data.ServiceBusNamespaces ?? [],
+            MessageTemplates = data.MessageTemplates ?? [],
+            SchemaVersion = 3,
+        };
+    }
+
+    private static ProfileData NormalizeProfileData(ProfileData data)
+    {
+        data.Config ??= new AppConfig();
+        NormalizeConfig(data.Config, data.ServiceBusNamespaces ?? []);
+        data.ServiceBusNamespaces ??= [];
+        data.MessageTemplates ??= [];
+        data.SchemaVersion = Math.Max(data.SchemaVersion, 3);
+        return data;
+    }
+
+    private static void NormalizeConfig(AppConfig config, IReadOnlyList<ServiceBusNamespace> namespaces)
+    {
+        config.Name ??= "Default";
+        config.IncidentTimeline ??= new IncidentTimelineConfig();
+        config.ServiceBusEntityLinks ??= [];
+        config.StorageAccounts ??= [];
+        config.FavoriteEntities ??= [];
+        config.FavoriteResources ??= [];
+        config.SavedWorkspaces ??= [];
+        config.LastUsedFilters ??= [];
+
+        if (config.FavoriteResources.Count == 0)
+        {
+            MigrateLegacyFavorites(config, namespaces);
         }
+
+        if (config.SavedWorkspaces.Count > 0)
+        {
+            MigrateSavedWorkspacesToFavorites(config);
+            config.SavedWorkspaces.Clear();
+        }
+
+        foreach (var favorite in config.FavoriteResources)
+        {
+            favorite.Name = favorite.Name?.Trim() ?? string.Empty;
+            NormalizeSnapshot(favorite.Snapshot);
+        }
+
+        config.FavoriteResources = config.FavoriteResources
+            .OrderByDescending(static favorite => favorite.PinnedAt)
+            .ToList();
+    }
+
+    private static void NormalizeSnapshot(WorkspaceSnapshot snapshot)
+    {
+        snapshot.Resource ??= new OperatorResourceReference();
+        snapshot.Resource.Key ??= string.Empty;
+        snapshot.Resource.Area ??= string.Empty;
+        snapshot.Resource.Kind ??= string.Empty;
+        snapshot.Resource.DisplayName ??= string.Empty;
+        snapshot.Resource.Metadata ??= [];
+        snapshot.RestoreState ??= [];
+    }
+
+    private static void MigrateLegacyFavorites(AppConfig config, IReadOnlyList<ServiceBusNamespace> namespaces)
+    {
+        var migrated = new List<FavoriteResource>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var link in config.ServiceBusEntityLinks)
+        {
+            if (TryCreateServiceBusFavorite(link, namespaces, out var favorite) && seen.Add(favorite.Snapshot.Resource.Key))
+            {
+                migrated.Add(favorite);
+            }
+        }
+
+        foreach (var favoriteEntity in config.FavoriteEntities)
+        {
+            if (TryCreateLegacyFavorite(favoriteEntity, namespaces, out var favorite)
+                && seen.Add(favorite.Snapshot.Resource.Key))
+            {
+                migrated.Add(favorite);
+            }
+        }
+
+        config.FavoriteResources = migrated
+            .OrderByDescending(static favorite => favorite.PinnedAt)
+            .ToList();
+    }
+
+    private static void MigrateSavedWorkspacesToFavorites(AppConfig config)
+    {
+        foreach (var workspace in config.SavedWorkspaces.OrderByDescending(static workspace => workspace.SavedAt))
+        {
+            workspace.Name ??= string.Empty;
+            workspace.SchemaVersion = Math.Max(workspace.SchemaVersion, 1);
+            NormalizeSnapshot(workspace.Snapshot);
+
+            if (string.IsNullOrWhiteSpace(workspace.Snapshot.Resource.Key))
+            {
+                continue;
+            }
+
+            var pinnedAt = workspace.SavedAt == default
+                ? DateTimeOffset.UtcNow
+                : workspace.SavedAt;
+
+            var existing = config.FavoriteResources.FirstOrDefault(favorite =>
+                string.Equals(
+                    favorite.Snapshot.Resource.Key,
+                    workspace.Snapshot.Resource.Key,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null)
+            {
+                config.FavoriteResources.Add(new FavoriteResource
+                {
+                    Name = workspace.Name.Trim(),
+                    Snapshot = workspace.Snapshot.Clone(),
+                    PinnedAt = pinnedAt,
+                });
+
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(workspace.Name))
+            {
+                existing.Name = workspace.Name.Trim();
+            }
+
+            existing.Snapshot = workspace.Snapshot.Clone();
+            if (pinnedAt > existing.PinnedAt)
+            {
+                existing.PinnedAt = pinnedAt;
+            }
+        }
+    }
+
+    private static bool TryCreateServiceBusFavorite(
+        SbEntityLink link,
+        IReadOnlyList<ServiceBusNamespace> namespaces,
+        out FavoriteResource favorite)
+    {
+        favorite = new FavoriteResource();
+        if (link.NamespaceId == Guid.Empty || string.IsNullOrWhiteSpace(link.EntityPath))
+        {
+            return false;
+        }
+
+        var entityName = link.EntityPath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault();
+        if (string.IsNullOrWhiteSpace(entityName))
+        {
+            return false;
+        }
+
+        var ns = namespaces.FirstOrDefault(candidate => candidate.Id == link.NamespaceId);
+        var alias = ns?.Alias ?? link.Alias ?? "Service Bus";
+
+        favorite = new FavoriteResource
+        {
+            Snapshot = new WorkspaceSnapshot
+            {
+                Resource = new OperatorResourceReference
+                {
+                    Key = $"service-bus:{link.NamespaceId:N}:{link.EntityPath}",
+                    Area = "service-bus",
+                    Kind = "entity",
+                    DisplayName = entityName,
+                    DisplayPath = $"{alias}/{link.EntityPath}",
+                    Summary = alias,
+                    Icon = "📨",
+                    Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["namespaceId"] = link.NamespaceId.ToString("D"),
+                        ["entityPath"] = link.EntityPath,
+                    },
+                },
+                RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = link.NamespaceId.ToString("D"),
+                    ["entityPath"] = link.EntityPath,
+                    ["mode"] = "active",
+                    ["tabType"] = "entity",
+                },
+            },
+            PinnedAt = DateTimeOffset.UtcNow,
+        };
+
+        return true;
+    }
+
+    private static bool TryCreateLegacyFavorite(
+        FavoriteEntity favoriteEntity,
+        IReadOnlyList<ServiceBusNamespace> namespaces,
+        out FavoriteResource favorite)
+    {
+        favorite = new FavoriteResource();
+        if (string.IsNullOrWhiteSpace(favoriteEntity.Name))
+        {
+            return false;
+        }
+
+        switch (favoriteEntity.EntityType)
+        {
+            case EntityType.Deployment:
+                favorite = new FavoriteResource
+                {
+                    Snapshot = new WorkspaceSnapshot
+                    {
+                        Resource = new OperatorResourceReference
+                        {
+                            Key = $"aks:deployment:{favoriteEntity.ParentName}:{favoriteEntity.Name}",
+                            Area = "aks",
+                            Kind = "deployment",
+                            DisplayName = favoriteEntity.Name,
+                            DisplayPath = favoriteEntity.DisplayPath,
+                            Summary = favoriteEntity.ParentName,
+                            Icon = "☸",
+                        },
+                        RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["resourceType"] = "Deployments",
+                            ["resourceName"] = favoriteEntity.Name,
+                            ["namespace"] = favoriteEntity.ParentName ?? "default",
+                        },
+                    },
+                    PinnedAt = favoriteEntity.PinnedAt,
+                };
+                return true;
+
+            case EntityType.Queue:
+            case EntityType.Topic:
+            case EntityType.Subscription:
+                var namespaceMatch = namespaces.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Alias, favoriteEntity.ParentName, StringComparison.OrdinalIgnoreCase))
+                    ?? namespaces.FirstOrDefault();
+
+                if (namespaceMatch is null)
+                {
+                    return false;
+                }
+
+                var entityPath = favoriteEntity.EntityType == EntityType.Subscription
+                    ? favoriteEntity.DisplayPath
+                    : favoriteEntity.Name;
+
+                favorite = new FavoriteResource
+                {
+                    Snapshot = new WorkspaceSnapshot
+                    {
+                        Resource = new OperatorResourceReference
+                        {
+                            Key = $"service-bus:{namespaceMatch.Id:N}:{entityPath}",
+                            Area = "service-bus",
+                            Kind = favoriteEntity.EntityType.ToString().ToLowerInvariant(),
+                            DisplayName = favoriteEntity.Name,
+                            DisplayPath = $"{namespaceMatch.Alias}/{entityPath}",
+                            Summary = namespaceMatch.Alias,
+                            Icon = "📨",
+                            Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                ["namespaceId"] = namespaceMatch.Id.ToString("D"),
+                                ["entityPath"] = entityPath,
+                            },
+                        },
+                        RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["namespaceId"] = namespaceMatch.Id.ToString("D"),
+                            ["entityPath"] = entityPath,
+                            ["mode"] = "active",
+                            ["tabType"] = "entity",
+                        },
+                    },
+                    PinnedAt = favoriteEntity.PinnedAt,
+                };
+                return true;
+        }
+
+        return false;
+    }
+
+    private static AppConfig ResolveConfig(LegacyProfileData data)
+    {
+        if (data.Environments.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(data.ActiveEnvironmentName))
+            {
+                var active = data.Environments.FirstOrDefault(environment =>
+                    string.Equals(environment.Name, data.ActiveEnvironmentName, StringComparison.OrdinalIgnoreCase));
+                if (active is not null)
+                {
+                    return active;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(data.Config.Name))
+            {
+                var matchingConfig = data.Environments.FirstOrDefault(environment =>
+                    string.Equals(environment.Name, data.Config.Name, StringComparison.OrdinalIgnoreCase));
+                if (matchingConfig is not null)
+                {
+                    return matchingConfig;
+                }
+            }
+
+            return data.Environments[0];
+        }
+
+        return data.Config ?? new AppConfig();
     }
 }
 
@@ -166,6 +438,7 @@ public enum ProfileLoadStatus
     NotStarted,
     NotFound,
     Loaded,
+    Recovered,
     Failed
 }
 
@@ -174,15 +447,32 @@ public sealed record ProfileLoadResult(ProfileLoadStatus Status, string? FilePat
     public static ProfileLoadResult NotStarted { get; } = new(ProfileLoadStatus.NotStarted, null, null);
     public static ProfileLoadResult NotFound { get; } = new(ProfileLoadStatus.NotFound, null, null);
 
+    public string? RecoverySourcePath { get; init; }
+
     public bool IsFailure => Status == ProfileLoadStatus.Failed;
+    public bool IsRecovery => Status == ProfileLoadStatus.Recovered;
 
     public static ProfileLoadResult Loaded(string filePath) => new(ProfileLoadStatus.Loaded, filePath, null);
+
+    public static ProfileLoadResult Recovered(string filePath, string recoverySourcePath, string? primaryErrorMessage) =>
+        new(ProfileLoadStatus.Recovered, filePath, primaryErrorMessage)
+        {
+            RecoverySourcePath = recoverySourcePath
+        };
 
     public static ProfileLoadResult Failed(string filePath, string errorMessage) =>
         new(ProfileLoadStatus.Failed, filePath, errorMessage);
 }
 
 public class ProfileData
+{
+    public AppConfig Config { get; set; } = new();
+    public List<ServiceBusNamespace> ServiceBusNamespaces { get; set; } = [];
+    public List<SbMessageTemplate> MessageTemplates { get; set; } = [];
+    public int SchemaVersion { get; set; } = 2;
+}
+
+internal sealed class LegacyProfileData
 {
     public AppConfig Config { get; set; } = new();
     public List<AppConfig> Environments { get; set; } = [];

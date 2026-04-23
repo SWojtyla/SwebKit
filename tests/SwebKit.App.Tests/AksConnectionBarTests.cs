@@ -27,6 +27,33 @@ public class AksConnectionBarTests : TestContext
     }
 
     [Fact]
+    public void AksConnectionBar_AutoRefreshStartsEnabledAtTenSeconds()
+    {
+        var cut = RenderComponent<AksConnectionBar>();
+
+        Assert.Contains("active", cut.Find("button.auto-refresh-btn").ClassName, StringComparison.Ordinal);
+        Assert.Equal("10", cut.Find("select.auto-refresh-select").GetAttribute("value"));
+    }
+
+    [Fact]
+    public void AksConnectionBar_ContextAndNamespaceControls_UseSharedNativeControlClasses()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Contexts, [new KubeContextInfo { Name = "ctx-prod", IsCurrent = true }])
+            .Add(p => p.Namespaces, ["default", "payments"])
+            .Add(p => p.ActiveContext, "ctx-prod")
+            .Add(p => p.CurrentNamespace, "default"));
+
+        // Both context and namespace pickers are now searchable input dropdowns (not <select> elements)
+        var searchInputs = cut.FindAll("input.aks-ns-search");
+        Assert.True(searchInputs.Count >= 1);
+        foreach (var input in searchInputs)
+        {
+            Assert.Contains("app-native-control", input.ClassName, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void AksConnectionBar_NotConnected_ShowsDotUnknownClass()
     {
         var cut = RenderComponent<AksConnectionBar>(ps => ps
@@ -65,5 +92,20 @@ public class AksConnectionBarTests : TestContext
         var cut = RenderComponent<AksConnectionBar>();
 
         Assert.Contains(">Jobs<", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NetworkMenu_OpensWithServiceAndGatewayTabs()
+    {
+        var cut = RenderComponent<AksConnectionBar>();
+
+        cut.FindAll("button.aks-resource-tab--toggle")
+            .Single(button => button.TextContent.Contains("Network", StringComparison.Ordinal))
+            .Click();
+
+        Assert.Contains(">Services<", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(">GatewayClasses<", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(">Gateways<", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(">HTTPRoutes<", cut.Markup, StringComparison.Ordinal);
     }
 }

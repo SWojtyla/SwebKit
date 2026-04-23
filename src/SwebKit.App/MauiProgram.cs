@@ -3,11 +3,19 @@ using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Platforms.Windows;
 using SwebKit.App.Services;
+using SwebKit.Azure.ServiceBus;
+using SwebKit.Azure.Storage;
+using SwebKit.Azure.ServiceBus.IncidentTimeline;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
+using SwebKit.DevOps.IncidentTimeline;
+using SwebKit.Kubernetes.AksClient;
+using SwebKit.Kubernetes.IncidentTimeline;
 using SwebKit.Observability;
+using SwebKit.Observability.IncidentTimeline;
+using SwebKit.Redis;
 using SelectionContext = SwebKit.App.Services.SelectionContext;
 
 namespace SwebKit.App;
@@ -38,19 +46,34 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITaskQueue, TaskQueueService>();
         builder.Services.AddSingleton<ProfileRepository>();
         builder.Services.AddSingleton<UiStateRepository>();
+        builder.Services.AddSingleton<UserSettingsRepository>();
+        builder.Services.AddSingleton<PinnedPortForwardService>();
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
+        builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
+        builder.Services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
 
         // App UI services
         builder.Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         builder.Services.AddSingleton<TabService>();
         builder.Services.AddSingleton<CommandRegistry>();
+        builder.Services.AddScoped<OperatorWorkspaceService>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
         builder.Services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
         builder.Services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
+        builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
+        builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
+        builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
+        builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, AksResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, StorageResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, RedisResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, ObservabilityResourceSearchProvider>();
+        builder.Services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
         builder.Services.AddSingleton<TrayLifecycleState>();
 
         // Pod Health Monitor
@@ -64,15 +87,18 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
+        builder.Services.AddSingleton<DemoAksClient>();
+        builder.Services.AddSingleton(new DemoRedisClient(0));
         builder.Services.AddSingleton<DemoStorageClient>();
 
         // Observability — real resource discovery (singleton for caching); providers are created per-resource by the factory seam
         builder.Services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
         builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
         builder.Services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
+        builder.Services.AddSingleton<IObservabilityExplainerService, ObservabilityExplainerService>();
 
         // DevOps / Releases
-        builder.Services.AddSingleton<DevOpsAuthHandler>();
+        builder.Services.AddTransient<DevOpsAuthHandler>();
         builder.Services.AddHttpClient("AzureDevOps")
             .AddHttpMessageHandler<DevOpsAuthHandler>()
             .AddStandardResilienceHandler(options =>
@@ -84,6 +110,28 @@ public static class MauiProgram
         builder.Services.AddSingleton<DemoDevOpsClient>();
         builder.Services.AddSingleton<ReleaseRepository>();
         builder.Services.AddSingleton<PageDataCache>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AksTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, AppInsightsTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, ServiceBusEvidenceSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineSignalSource, DevOpsReleaseTimelineSignalSource>();
+        builder.Services.AddSingleton<IIncidentTimelineService, IncidentTimelineService>();
+        builder.Services.AddSingleton<IIncidentInvestigationSeedResolver, IncidentInvestigationSeedResolver>();
+        builder.Services.AddSingleton<IIncidentSnapshotExporter, IncidentSnapshotExporter>();
+        builder.Services.AddSingleton<IIncidentMappingProposalGenerator, IncidentMappingProposalGenerator>();
+        builder.Services.AddScoped<IncidentInvestigationLauncher>();
+
+        // Deployment assurance
+        builder.Services.AddSingleton<ApprovalAgingPolicy>();
+        builder.Services.AddSingleton<PipelineFailureClassifier>();
+        builder.Services.AddSingleton<RuntimeDriftService>();
+        builder.Services.AddSingleton<DeploymentValidationService>();
+
+        // Connection warmup
+        builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
+        builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
+        builder.Services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
+        builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
+        builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
 
         return builder.Build();
     }

@@ -14,17 +14,73 @@ window.yamlHighlight = {
   },
 
   /**
-   * Wires up scroll sync so the highlight-pre tracks the textarea.
-   * Called once after the edit overlay is mounted.
+   * Initialises the YAML editor overlay.
+   * Sets the initial value, wires scroll-sync, live highlighting, and Tab-to-indent.
+   * JS fully owns the textarea value from this point — Blazor does NOT re-render it on input.
    * @param {HTMLTextAreaElement} textareaEl
    * @param {HTMLElement} preEl
+   * @param {string} initialValue - The YAML text to pre-populate.
    */
-  initEditOverlay: function (textareaEl, preEl) {
+  initEditor: function (textareaEl, preEl, initialValue) {
     if (!textareaEl || !preEl) return;
+
+    // Seed both textarea and pre with the initial value from C#.
+    textareaEl.value = initialValue || '';
+    preEl.innerHTML = yamlToHtml(textareaEl.value);
+
+    function updateHighlight() {
+      preEl.innerHTML = yamlToHtml(textareaEl.value || '');
+      preEl.scrollTop = textareaEl.scrollTop;
+      preEl.scrollLeft = textareaEl.scrollLeft;
+    }
+
+    // Scroll sync
     textareaEl.addEventListener('scroll', function () {
       preEl.scrollTop = textareaEl.scrollTop;
       preEl.scrollLeft = textareaEl.scrollLeft;
     });
+
+    // Live highlighting — JS handles this; Blazor does not interfere on every keystroke.
+    textareaEl.addEventListener('input', updateHighlight);
+
+    // Stop ALL keydown events from bubbling to parent Blazor handlers (e.g. AksPage grid navigation).
+    // Without this, the parent div's @onkeydown:preventDefault fires on Enter/letter keys and cancels
+    // the textarea's default action before any character is inserted.
+    textareaEl.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var start = textareaEl.selectionStart;
+        var end = textareaEl.selectionEnd;
+        var v = textareaEl.value;
+        textareaEl.value = v.substring(0, start) + '  ' + v.substring(end);
+        textareaEl.selectionStart = textareaEl.selectionEnd = start + 2;
+        updateHighlight();
+      }
+    });
+  },
+
+  /**
+   * Returns the current value of the editor textarea.
+   * C# calls this on save instead of reading from a Blazor-bound field.
+   * @param {HTMLTextAreaElement} textareaEl
+   * @returns {string}
+   */
+  getEditorValue: function (textareaEl) {
+    return textareaEl ? textareaEl.value : '';
+  },
+
+  /**
+   * Programmatically sets a new value in the editor (e.g. after replace-all).
+   * Updates both the textarea and the highlighted pre.
+   * @param {HTMLTextAreaElement} textareaEl
+   * @param {HTMLElement} preEl
+   * @param {string} value
+   */
+  setEditorValue: function (textareaEl, preEl, value) {
+    if (!textareaEl) return;
+    textareaEl.value = value || '';
+    if (preEl) preEl.innerHTML = yamlToHtml(textareaEl.value);
   },
 
   /**

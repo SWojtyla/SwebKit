@@ -232,6 +232,60 @@ public sealed class DemoObservabilityProvider : IObservabilityProvider
         return Task.FromResult(points);
     }
 
+    // ── Dependency health ─────────────────────────────────────────────────────
+
+    public Task<DependencyHealthSummary> GetDependencyHealthAsync(TimeRange range, int maxDependencies = 20, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        IReadOnlyList<DependencyHealthEntry> entries =
+        [
+            new("payments-service",  "Http",   3_420, 0.034, 95,  480),
+            new("redis-cache",       "Redis",  9_100, 0.002, 3,   18),
+            new("cosmos-db-orders",  "Cosmos", 2_810, 0.005, 22,  110),
+            new("blob-storage",      "Azure",  1_200, 0.001, 14,  62),
+            new("email-service",     "Http",     340, 0.12,  410, 1_800),
+        ];
+
+        var capped = entries.Take(maxDependencies).ToList();
+        return Task.FromResult(new DependencyHealthSummary(capped, false, maxDependencies));
+    }
+
+    // ── Dimension breakdown ───────────────────────────────────────────────────
+
+    public Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        IReadOnlyList<DimensionBreakdownEntry> entries = dimensionKey switch
+        {
+            "tenant_id" =>
+            [
+                new("tenant-alpha",  2_400, 0.018),
+                new("tenant-beta",   1_830, 0.005),
+                new("tenant-gamma",    720, 0.24),
+                new("tenant-delta",    540, 0.003),
+                new("tenant-epsilon",  310, 0.0),
+            ],
+            "cloud_RoleName" =>
+            [
+                new("orders-api",    4_800, 0.022),
+                new("payments-svc",    340, 0.035),
+                new("user-svc",      8_200, 0.001),
+                new("gateway",       1_100, 0.008),
+            ],
+            _ =>
+            [
+                new("value-a", 1_200, 0.01),
+                new("value-b",   800, 0.03),
+                new("value-c",   400, 0.0),
+            ],
+        };
+
+        var capped = entries.Take(topN).ToList();
+        return Task.FromResult(new DimensionBreakdown(dimensionKey, capped, false, topN));
+    }
+
     // ── Presets ───────────────────────────────────────────────────────────────
 
     public IReadOnlyList<QueryPreset> GetPresets() =>

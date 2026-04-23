@@ -4,6 +4,18 @@
     gap: 0;
 }
 
+.env-ado-link {
+    color: inherit;
+    text-decoration: none;
+    opacity: 0.7;
+    margin-left: 4px;
+}
+
+    .env-ado-link:hover {
+        opacity: 1;
+        text-decoration: underline;
+    }
+
 .pipeline-detail__header {
     display: flex;
     justify-content: space-between;
@@ -110,6 +122,75 @@
 .env-name {
     font-weight: 600;
     font-family: Consolas, monospace;
+}
+
+/* ── Approval callout banner ── */
+
+.env-approval-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(251,140,0,0.1);
+    border: 1px solid rgba(251,140,0,0.35);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--color-warning);
+}
+
+.env-approval-banner__icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.env-approval-banner__body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: baseline;
+}
+
+/* ── Environment table ── */
+
+.env-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    font-size: 12px;
+}
+
+.env-table__th {
+    background: var(--color-surface-2);
+    padding: 7px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+}
+
+.env-table__td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.env-table__row:last-child .env-table__td {
+    border-bottom: none;
+}
+
+.env-table__row:hover {
+    background: var(--color-surface-2);
+}
+
+.env-status-approval {
+    font-weight: 500;
+    letter-spacing: 0;
 }
 
 /* ── Recent runs list ── */

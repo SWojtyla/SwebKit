@@ -1,4 +1,4 @@
-@inject IAppEventBus Events
+@using SwebKit.Core.Constants
 @inject IJSRuntime JS
 @inject INotificationService Notify
 @implements IAsyncDisposable
@@ -12,14 +12,16 @@
         </label>
         @if (Containers.Count > 1)
         {
-            <select class="log-container-select" value="@_selectedContainer" @onchange="OnContainerChanged">
+            <select class="log-container-select app-native-control app-native-select" value="@_selectedContainer"
+                    @onchange="OnContainerChanged">
                 @foreach (var c in Containers)
                 {
                     <option value="@c" selected="@(c == _selectedContainer)">@c</option>
                 }
             </select>
         }
-        <select class="log-range-select" @bind="_selectedRange" @bind:after="OnRangeChanged" aria-label="Log range">
+        <select class="log-range-select app-native-control app-native-select" @bind="_selectedRange"
+                @bind:after="OnRangeChanged" aria-label="Log range">
             <option value="@LogRange.Last5m">Last 5m</option>
             <option value="@LogRange.Last10m">Last 10m</option>
             <option value="@LogRange.Last1h">Last 1h</option>
@@ -27,46 +29,85 @@
             <option value="@LogRange.PreviousContainer">Previous container</option>
         </select>
         <input type="text" @bind="TextFilter" @bind:event="oninput" @bind:after="InvalidateFilter" placeholder="Filter…"
-               class="log-filter-input" />
-        <span class="log-line-count">@FilteredLines.Count lines</span>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="ExportLogsAsync" Disabled="@(FilteredLines.Count == 0)"
-                      Title="Export logs as text file">Export</FluentButton>
-        @if (IsLive && IsLoading)
+               class="log-filter-input app-native-control" />
+        <span class="log-line-count">@WindowSummaryText</span>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowOlder" Disabled="@(!CanShowOlder)"
+                      Title="Show older buffered lines">Older</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ShowNewer" Disabled="@(!CanShowNewer)"
+                      Title="Show newer buffered lines">Newer</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="JumpToLatest" Disabled="@(!CanJumpToLatest)"
+                      Title="Jump back to the newest buffered lines">@LatestButtonText</FluentButton>
+        @if (CanLoadOlderHistory)
         {
-            <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
-                          Title="@(_paused ? "Resume tailing" : "Pause tailing")">
-                @(_paused ? "▶ Resume" : "⏸ Pause")
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOlderHistoryAsync" Disabled="@_historyReloading"
+                          Title="Request more All-history lines from Kubernetes">
+                @(_historyReloading ? "Loading older…" : $"Load older +{HistoryExpansionLabel}")
             </FluentButton>
         }
-    </div>
-
-    <div class="log-output" @ref="_logContainer">
-        @if (FilteredLines.Count == 0 && !IsLoading)
-        {
-            <div class="log-empty">No log lines yet</div>
-        }
-        else
-        {
-            <Virtualize Items="@FilteredLines" Context="entry" ItemSize="22">
-                <div class="log-line @entry.CssClass">@entry.Line</div>
-            </Virtualize>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="ClearLogs" Title="Clear log buffer">Clear</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="CopyVisibleLogsAsync"
+                      Disabled="@(VisibleLines.Count == 0)" Title="Copy the currently visible log window to the clipboard">Copy
+            visible</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ExportAllLogsAsync"
+                          Disabled="@(Client is null || Namespace is null || PodName is null || _exportingAllLogs)"
+                          Title="Export the full pod log stream as text">
+                @(_exportingAllLogs ? "Exporting…" : "Export all")
+            </FluentButton>
             @if (IsLive && IsLoading)
             {
-                <div class="log-tailing">
-                    <FluentProgressRing Width="12px" /> Tailing…
-                </div>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="TogglePause"
+                              Title="@(_paused ? "Resume tailing" : "Pause tailing")">
+                    @(_paused ? "▶ Resume" : "⏸ Pause")
+                </FluentButton>
             }
-        }
+        </div>
+
+        <div class="log-status-bar">
+            <span>@BufferSummaryText</span>
+            @if (IsAllRangeSelected)
+            {
+                <span>Requested tail: @_requestedTailLines:N0 lines</span>
+            }
+            @if (_paused)
+            {
+                <span>Paused: new lines are buffered until you resume or jump latest</span>
+            }
+            else if (_pageIndexFromNewest > 0)
+            {
+                <span>Browsing history: latest lines are buffered in the background</span>
+            }
+            @if (_pendingNewLineCount > 0 && CanJumpToLatest)
+            {
+                <button type="button" class="log-jump-btn" @onclick="JumpToLatest">@PendingLinesSummary</button>
+            }
+        </div>
+
+        <div class="log-output" @ref="_logContainer">
+            @if (VisibleLines.Count == 0 && !IsLoading)
+            {
+                <div class="log-empty">@EmptyStateText</div>
+            }
+            else
+            {
+                <Virtualize Items="@VisibleLines" Context="entry" ItemSize="22">
+                    <div class="log-line @entry.CssClass">@entry.Line</div>
+                </Virtualize>
+                @if (IsLive && IsLoading && _pageIndexFromNewest == 0)
+                {
+                    <div class="log-tailing">
+                        <FluentProgressRing Width="12px" /> @(_paused ? "Live stream buffered" : "Tailing latest…")
+                    </div>
+                }
+            }
+        </div>
     </div>
-</div>
 
 @code {
     [Parameter] public IAksClient? Client { get; set; }
     [Parameter] public string? Namespace { get; set; }
     [Parameter] public string? PodName { get; set; }
     [Parameter] public IReadOnlyList<string> Containers { get; set; } = [];
-    [Parameter] public int BufferSize { get; set; } = 10_000;
+    [Parameter] public int BufferSize { get; set; } = Limits.LogBufferMaxLines;
 
     private readonly record struct LogEntry(string Line, string CssClass);
     private enum LogRange { Last5m, Last10m, Last1h, All, PreviousContainer }
@@ -81,35 +122,126 @@
     private LogRange _selectedRange = LogRange.Last5m;
     private string _selectedContainer = string.Empty;
     private bool _paused;
+    private bool _historyReloading;
+    private bool _exportingAllLogs;
+    private string? _activeStreamSignature;
+    private int _requestedTailLines = Limits.LogTailInitialLines;
+    private int _pageIndexFromNewest;
+    private int _pendingNewLineCount;
+    private int? _frozenFilteredLineCount;
+    private bool _frozenAnchorNeedsRefresh;
     private bool IsPreviousContainerSelected => _selectedRange == LogRange.PreviousContainer;
+    private bool IsAllRangeSelected => _selectedRange == LogRange.All;
+    private bool IsWindowFrozen => _paused || _pageIndexFromNewest > 0;
 
     // PERF2-3: Cached filtered lines — recomputed only when dirty
     private List<LogEntry> _filteredLinesCache = [];
     private bool _filterDirty = true;
     private int _lastFilteredLineCount;
     private string _lastFilterText = "";
+    private readonly Lock _linesLock = new();
 
     private List<LogEntry> FilteredLines
     {
         get
         {
-            if (_filterDirty || Lines.Count != _lastFilteredLineCount || TextFilter != _lastFilterText)
+            var filterText = TextFilter;
+            string[] snapshot;
+
+            lock (_linesLock)
             {
-                _lastFilteredLineCount = Lines.Count;
-                _lastFilterText = TextFilter;
+                if (!_filterDirty && Lines.Count == _lastFilteredLineCount && filterText == _lastFilterText)
+                {
+                    return _filteredLinesCache;
+                }
+
+                snapshot = [.. Lines];
+                _lastFilteredLineCount = snapshot.Length;
+                _lastFilterText = filterText;
                 _filterDirty = false;
-
-                var source = string.IsNullOrEmpty(TextFilter)
-                    ? Lines.TakeLast(500)
-                    : Lines.Where(l => l.Contains(TextFilter, StringComparison.OrdinalIgnoreCase)).TakeLast(500);
-
-                _filteredLinesCache = source.Select(l => new LogEntry(l, GetLineClass(l))).ToList();
             }
+
+            var source = string.IsNullOrEmpty(filterText)
+                ? snapshot.AsEnumerable()
+                : snapshot.Where(line => line.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+
+            _filteredLinesCache = source.Select(line => new LogEntry(line, GetLineClass(line))).ToList();
+            ClampPageIndex(_filteredLinesCache.Count);
             return _filteredLinesCache;
         }
     }
 
-    private void InvalidateFilter() => _filterDirty = true;
+    private List<LogEntry> VisibleLines
+    {
+        get
+        {
+            var filtered = FilteredLines;
+            if (filtered.Count == 0)
+                return [];
+
+            var (start, endExclusive) = GetVisibleBounds(filtered.Count);
+            return filtered.GetRange(start, endExclusive - start);
+        }
+    }
+
+    private string WindowSummaryText
+    {
+        get
+        {
+            var total = FilteredLines.Count;
+            if (total == 0)
+                return "0 lines";
+
+            var (start, endExclusive) = GetVisibleBounds(total);
+            return $"Showing {start + 1:N0}-{endExclusive:N0} of {total:N0}";
+        }
+    }
+
+    private string BufferSummaryText
+    {
+        get
+        {
+            var bufferedCount = GetBufferedLineCount();
+            if (bufferedCount >= EffectiveBufferSize)
+                return $"Buffer holding newest {bufferedCount:N0} lines";
+
+            return $"Buffer holding {bufferedCount:N0} lines";
+        }
+    }
+
+    private string PendingLinesSummary
+        => _pendingNewLineCount == 1
+            ? "1 newer line buffered"
+            : $"{_pendingNewLineCount:N0} newer lines buffered";
+
+    private string LatestButtonText
+        => _pendingNewLineCount > 0 ? $"Latest ({_pendingNewLineCount:N0})" : "Latest";
+
+    private string HistoryExpansionLabel => $"{Limits.LogHistoryExpansionLines:N0}";
+
+    private bool CanShowOlder => _pageIndexFromNewest < GetMaxPageIndex(FilteredLines.Count);
+    private bool CanShowNewer => _pageIndexFromNewest > 0;
+    private bool CanJumpToLatest => _pageIndexFromNewest > 0 || _pendingNewLineCount > 0;
+    private bool CanLoadOlderHistory =>
+        IsAllRangeSelected
+        && _requestedTailLines < Limits.LogHistoryHardCapLines
+        && Client is not null
+        && Namespace is not null
+        && PodName is not null;
+
+    private string EmptyStateText
+        => string.IsNullOrWhiteSpace(TextFilter)
+            ? "No log lines yet"
+            : "No log lines match the current filter";
+
+    private int EffectiveBufferSize =>
+        Math.Min(Math.Max(BufferSize, _requestedTailLines + Limits.LogVisibleWindowLines), Limits.LogHistoryHardCapLines);
+
+    private void InvalidateFilter()
+    {
+        _filterDirty = true;
+        RequestFrozenAnchorRefresh();
+    }
 
     // PERF2-2: Render-batching timer state
     private PeriodicTimer? _renderTimer;
@@ -118,12 +250,19 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Client is not null && PodName is not null && Namespace is not null && IsLive)
+        if (Containers.Count > 0 && (string.IsNullOrEmpty(_selectedContainer) || !Containers.Contains(_selectedContainer)))
+            _selectedContainer = Containers[0];
+
+        if (Client is null || PodName is null || Namespace is null)
         {
-            if (string.IsNullOrEmpty(_selectedContainer) && Containers.Count > 0)
-                _selectedContainer = Containers[0];
-            await StartTailingAsync();
+            _activeStreamSignature = null;
+            StopTailing();
+            return;
         }
+
+        var signature = BuildStreamSignature();
+        if (!string.Equals(_activeStreamSignature, signature, StringComparison.Ordinal))
+            await StartTailingAsync();
     }
 
     private async Task OnLiveToggle()
@@ -136,7 +275,14 @@
         }
 
         if (IsLive) await StartTailingAsync();
-        else { StopTailing(); IsLoading = false; _paused = false; }
+        else
+        {
+            StopTailing();
+            IsLoading = false;
+            _paused = false;
+            _activeStreamSignature = BuildStreamSignature();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task OnContainerChanged(ChangeEventArgs e)
@@ -155,6 +301,9 @@
             _paused = false;
         }
 
+        if (!IsAllRangeSelected)
+            _requestedTailLines = Limits.LogTailInitialLines;
+
         if (Client is null || Namespace is null || PodName is null)
             return;
         await StartTailingAsync();
@@ -163,12 +312,44 @@
     private void TogglePause()
     {
         _paused = !_paused;
-        if (!_paused)
-            InvokeAsync(StateHasChanged);
+        if (_paused)
+        {
+            CaptureVisibleWindowAnchor();
+        }
+        else if (_pageIndexFromNewest == 0)
+        {
+            _pendingNewLineCount = 0;
+            ReleaseVisibleWindowAnchor();
+        }
+
+        _ = InvokeAsync(StateHasChanged);
     }
 
-    private async Task StartTailingAsync()
+    private async Task LoadOlderHistoryAsync()
     {
+        if (!CanLoadOlderHistory || _historyReloading)
+            return;
+
+        _historyReloading = true;
+        _requestedTailLines = Math.Min(
+            Limits.LogHistoryHardCapLines,
+            _requestedTailLines + Limits.LogHistoryExpansionLines);
+
+        try
+        {
+            await StartTailingAsync(preserveView: true);
+        }
+        finally
+        {
+            _historyReloading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task StartTailingAsync(bool preserveView = false)
+    {
+        _activeStreamSignature = BuildStreamSignature();
+
         // PERF2-4: Interlocked swap for thread-safe CTS lifecycle
         var newCts = new CancellationTokenSource();
         var oldCts = Interlocked.Exchange(ref _cts, newCts);
@@ -178,7 +359,13 @@
 
         IsLoading = true;
         _paused = false;
-        Lines.Clear();
+        ReleaseVisibleWindowAnchor();
+        if (!preserveView)
+        {
+            _pageIndexFromNewest = 0;
+            _pendingNewLineCount = 0;
+        }
+        ClearLineBuffer();
         _linesDirty = false;
         _filterDirty = true;
         await InvokeAsync(StateHasChanged);
@@ -200,7 +387,7 @@
     // PERF2-2: Timer-driven render loop — caps at ~10 renders/sec
     private void StartRenderTimer(CancellationToken token)
     {
-        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Limits.LogRenderBatchIntervalMs));
         _renderTimer = timer;
         _renderTimerTask = Task.Run(async () =>
         {
@@ -208,11 +395,11 @@
             {
                 while (await timer.WaitForNextTickAsync(token))
                 {
-                    if (_paused || !_linesDirty) continue;
+                    if (!_linesDirty) continue;
                     _linesDirty = false;
                     _filterDirty = true;
                     await InvokeAsync(StateHasChanged);
-                    if (IsLive)
+                    if (IsLive && !_paused && _pageIndexFromNewest == 0)
                         await JS.InvokeVoidAsync("SwebKit.scrollToBottom", _logContainer);
                 }
             }
@@ -236,8 +423,7 @@
             await foreach (var line in Client!.StreamPodLogsAsync(Namespace!, PodName!, container, opts, token))
             {
                 if (!IsCurrentSession(token)) break;
-                Lines.Add(line);
-                if (Lines.Count > BufferSize) Lines.RemoveAt(0);
+                AppendLine(line);
                 _linesDirty = true;
             }
         }
@@ -252,6 +438,29 @@
                 StopRenderTimer();
                 await InvokeAsync(() => { IsLoading = false; _paused = false; StateHasChanged(); });
             }
+        }
+    }
+
+    private void AppendLine(string line)
+    {
+        lock (_linesLock)
+        {
+            Lines.Add(line);
+            while (Lines.Count > EffectiveBufferSize)
+            {
+                Lines.RemoveAt(0);
+            }
+        }
+
+        if (IsWindowFrozen)
+            Interlocked.Increment(ref _pendingNewLineCount);
+    }
+
+    private void ClearLineBuffer()
+    {
+        lock (_linesLock)
+        {
+            Lines.Clear();
         }
     }
 
@@ -274,6 +483,7 @@
                 opts.SinceSeconds = 60 * 60;
                 break;
             case LogRange.All:
+                opts.TailLines = _requestedTailLines;
                 break;
             case LogRange.PreviousContainer:
                 opts.PreviousContainer = true;
@@ -284,40 +494,232 @@
         return opts;
     }
 
-    private void ClearLogs() { Lines.Clear(); _filterDirty = true; StateHasChanged(); }
-
-    private async Task ExportLogsAsync()
+    private LogStreamOptions BuildExportOptions()
     {
-        var lines = FilteredLines;
-        if (lines.Count == 0) return;
+        if (IsPreviousContainerSelected)
+        {
+            return new LogStreamOptions
+            {
+                Follow = false,
+                PreviousContainer = true
+            };
+        }
 
-        var content = string.Join('\n', lines.Select(e => e.Line));
+        return new LogStreamOptions
+        {
+            Follow = false
+        };
+    }
+
+    private void ClearLogs()
+    {
+        ClearLineBuffer();
+        _filterDirty = true;
+        _pageIndexFromNewest = 0;
+        _pendingNewLineCount = 0;
+        ReleaseVisibleWindowAnchor();
+        StateHasChanged();
+    }
+
+    private void ShowOlder()
+    {
+        CaptureVisibleWindowAnchor();
+        var maxPageIndex = GetMaxPageIndex(FilteredLines.Count);
+        if (_pageIndexFromNewest >= maxPageIndex)
+            return;
+
+        _pageIndexFromNewest++;
+        StateHasChanged();
+    }
+
+    private void ShowNewer()
+    {
+        if (_pageIndexFromNewest == 0)
+            return;
+
+        _pageIndexFromNewest--;
+        if (_pageIndexFromNewest == 0 && !_paused)
+        {
+            _pendingNewLineCount = 0;
+            ReleaseVisibleWindowAnchor();
+        }
+
+        StateHasChanged();
+    }
+
+    private void JumpToLatest()
+    {
+        _pageIndexFromNewest = 0;
+        _pendingNewLineCount = 0;
+        if (_paused)
+            CaptureVisibleWindowAnchor();
+        else
+            ReleaseVisibleWindowAnchor();
+        StateHasChanged();
+    }
+
+    private async Task CopyVisibleLogsAsync()
+    {
+        if (VisibleLines.Count == 0)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", FormatVisibleLinesForClipboard());
+            Notify.ShowSuccess("Copied visible log window", $"{VisibleLines.Count:N0} lines");
+        }
+        catch (Exception ex)
+        {
+            Notify.ShowError("Copy failed", ex.Message);
+        }
+    }
+
+    private async Task ExportAllLogsAsync()
+    {
+        if (Client is null || Namespace is null || PodName is null || _exportingAllLogs)
+            return;
+
+        var ns = Namespace;
+        var podName = PodName;
+        _exportingAllLogs = true;
+        await InvokeAsync(StateHasChanged);
+
         var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        var podSlug = (PodName ?? "pod").Replace('/', '-');
+        var podSlug = podName.Replace('/', '-');
         var fileName = $"{podSlug}-{ts}.log";
 
         try
         {
-            await JS.InvokeVoidAsync("SwebKit.downloadText", fileName, "text/plain", content);
-            Notify.ShowSuccess($"Exported {lines.Count} lines to {fileName}");
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+            var filePath = Path.Combine(downloads, fileName);
+
+            var lineCount = 0;
+            var opts = BuildExportOptions();
+            var container = ResolveSelectedContainer();
+
+            await using (var writer = new StreamWriter(filePath, append: false, System.Text.Encoding.UTF8))
+            {
+                await foreach (var line in Client.StreamPodLogsAsync(ns, podName, container, opts))
+                {
+                    await writer.WriteLineAsync(line);
+                    lineCount++;
+                }
+            }
+
+            Notify.ShowSuccess($"Exported {lineCount:N0} lines to {filePath}");
+        }
+        catch (OperationCanceledException)
+        {
+            Notify.ShowWarning("Export cancelled");
         }
         catch (Exception ex)
         {
             Notify.ShowError("Export failed", ex.Message);
         }
+        finally
+        {
+            _exportingAllLogs = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
-    private static string GetLineClass(string line)
+    private string ResolveSelectedContainer()
+        => !string.IsNullOrWhiteSpace(_selectedContainer)
+            ? _selectedContainer
+            : Containers.FirstOrDefault() ?? string.Empty;
+
+    private string FormatVisibleLinesForClipboard()
+        => string.Join('\n', VisibleLines.Select(entry => entry.Line));
+
+    private string BuildStreamSignature()
+        => $"{Namespace}|{PodName}|{ResolveSelectedContainer()}|{_selectedRange}|{IsLive}|{_requestedTailLines}";
+
+    private static int GetMaxPageIndex(int totalLineCount)
+        => totalLineCount == 0 ? 0 : (totalLineCount - 1) / Limits.LogVisibleWindowLines;
+
+    private void ClampPageIndex(int totalLineCount)
     {
-        if (line.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) || line.Contains("ERROR",
-StringComparison.OrdinalIgnoreCase))
-            return "error";
-        if (line.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) || line.Contains("WARN",
-StringComparison.OrdinalIgnoreCase))
-            return "warn";
-        if (line.Contains("[DBG]", StringComparison.OrdinalIgnoreCase))
-            return "debug";
-        return "";
+        var maxPageIndex = GetMaxPageIndex(GetReferenceLineCount(totalLineCount));
+        if (_pageIndexFromNewest > maxPageIndex)
+            _pageIndexFromNewest = maxPageIndex;
+    }
+
+    private (int Start, int EndExclusive) GetVisibleBounds(int totalLineCount)
+    {
+        ClampPageIndex(totalLineCount);
+
+        var referenceCount = GetReferenceLineCount(totalLineCount);
+        var endExclusive = Math.Max(0, referenceCount - (_pageIndexFromNewest * Limits.LogVisibleWindowLines));
+        var start = Math.Max(0, endExclusive - Limits.LogVisibleWindowLines);
+        return (start, endExclusive);
+    }
+
+    private int GetReferenceLineCount(int totalLineCount)
+    {
+        if (!IsWindowFrozen)
+            return totalLineCount;
+
+        if (_frozenAnchorNeedsRefresh || _frozenFilteredLineCount is null)
+        {
+            _frozenFilteredLineCount = totalLineCount;
+            _frozenAnchorNeedsRefresh = false;
+        }
+
+        return Math.Min(_frozenFilteredLineCount.Value, totalLineCount);
+    }
+
+    private void CaptureVisibleWindowAnchor()
+    {
+        _frozenFilteredLineCount = FilteredLines.Count;
+        _frozenAnchorNeedsRefresh = false;
+    }
+
+    private void ReleaseVisibleWindowAnchor()
+    {
+        _frozenFilteredLineCount = null;
+        _frozenAnchorNeedsRefresh = false;
+    }
+
+    private void RequestFrozenAnchorRefresh()
+    {
+        if (IsWindowFrozen)
+            _frozenAnchorNeedsRefresh = true;
+    }
+
+    private int GetBufferedLineCount()
+    {
+        lock (_linesLock)
+        {
+            return Lines.Count;
+        }
+    }
+
+    internal static string GetLineClass(string line)
+    {
+        if (line.Length == 0 || line[0] == '{')
+            return "log-level-default";
+        var window = line.Length > 120 ? line[..120] : line;
+        if (window.Contains("[ERR]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[FATAL]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[CRIT]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("FATAL", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("CRITICAL", StringComparison.OrdinalIgnoreCase))
+            return "log-level-error";
+        if (window.Contains("[WRN]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[WARN]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("WARN", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("WARNING", StringComparison.OrdinalIgnoreCase))
+            return "log-level-warn";
+        if (window.Contains("[DBG]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[TRC]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("[VRB]", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("DEBUG", StringComparison.OrdinalIgnoreCase) ||
+            window.Contains("TRACE", StringComparison.OrdinalIgnoreCase))
+            return "log-level-debug";
+        return "log-level-default";
     }
 
     public async ValueTask DisposeAsync()
@@ -326,6 +728,7 @@ StringComparison.OrdinalIgnoreCase))
         var cts = Interlocked.Exchange(ref _cts, null);
         cts?.Cancel();
         cts?.Dispose();
+        _activeStreamSignature = null;
 
         StopRenderTimer();
 

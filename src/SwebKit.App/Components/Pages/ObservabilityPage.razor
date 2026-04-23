@@ -9,13 +9,46 @@
 @inject IConnectionStateService ConnectionState
 @inject IObservabilityResourceDiscovery RealDiscovery
 @inject IObservabilityProviderFactory ProviderFactory
+@inject IObservabilityExplainerService ExplainerService
 @inject INotificationService Notifications
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject IJSRuntime JS
+@inject IAppEventBus Events
+@inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
+@inject ReleaseRepository ReleaseRepo
 @implements IDisposable
 
 <div class="obs-page">
+    <div class="page-shell-header">
+        <RoutePageHeader Area="observability"
+                         Subtitle="Inspect overview, failures, performance, logs, and availability for Application Insights resources.">
+            <Meta>
+                @if (_selectedResource is not null)
+                {
+                    <span class="shell-pill shell-pill--muted">@_selectedResource.Name</span>
+                }
+                @if (_provider is not null)
+                {
+                    <span class="shell-pill shell-pill--accent">@_provider.ProviderType</span>
+                }
+                @if (_autoRefreshEnabled)
+                {
+                    <span class="shell-pill shell-pill--muted">Auto refresh every @_autoRefreshSeconds seconds</span>
+                }
+                @if (AppState.UseDemoData)
+                {
+                    <span class="shell-pill shell-pill--warning">Demo mode</span>
+                }
+            </Meta>
+            <Actions>
+                <button class="page-header-action-btn" disabled="@(_provider is null)"
+                        @onclick="LaunchInvestigationFromObservability">Investigate</button>
+            </Actions>
+        </RoutePageHeader>
+    </div>
+
     <!-- Top toolbar: resource selector + time range + refresh -->
     <PageToolbar>
         <LeadingContent>
@@ -77,75 +110,95 @@
 
     @if (_provider is null)
     {
-        <div class="obs-no-resource">
-            <div class="obs-no-resource-icon">📊</div>
-            <div class="obs-no-resource-title">No resource selected</div>
-            <div class="obs-no-resource-hint">
-                @if (AppState.UseDemoData)
-                {
-                    <span>Click <strong>Select resource…</strong> to pick a demo Application Insights instance.</span>
-                }
-                else
-                {
-                    <span>Click <strong>Select resource…</strong> to scan your subscriptions and pick an Application Insights
-                        resource.</span>
+        <div class="obs-empty-state-wrap">
+            <EmptyState Icon="📊" Title="No resource selected"
+                        Subtitle="@(AppState.UseDemoData
+                                                                                                                                                                                            ? "Pick a demo Application Insights resource to explore the observability workspace."
+                                                                                                                                                                                            : "Scan your subscriptions and choose an Application Insights resource to start querying telemetry.")">
+                <Actions>
+                    <button type="button" @onclick="ToggleResourceSelector">Select resource</button>
+                    @if (!AppState.UseDemoData)
+                    {
+                        <a href="/settings?section=observability">Review observability settings</a>
                     }
-                </div>
-            </div>
-        }
-    else
-        {
-            <!-- Tab bar -->
-            <div class="obs-tabs">
-                <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Overview)">Overview</button>
-                <button class="obs-tab @(_tab == Tab.Failures ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Failures)">Failures</button>
-                <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Performance)">Performance</button>
-                <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" data-testid="obs-tab-logs"
-                        @onclick="() => SetTab(Tab.Logs)">Logs</button>
-                <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
-                        @onclick="() => SetTab(Tab.Availability)">Availability</button>
-            </div>
-
-            <!-- Tab content -->
-            <div class="obs-tab-content @GetTabContentClass()">
-                @switch (_tab)
-                {
-                    case Tab.Overview:
-                        <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                        break;
-                    case Tab.Failures:
-                        <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
-                                               TzOffsetMinutes="_tzOffsetMinutes" OnDrillToLogs="DrillToLogsAsync" />
-                        break;
-                    case Tab.Performance:
-                        <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                        break;
-                    case Tab.Logs:
-                        <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
-                                           MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
-                                           SavedQueriesChanged="OnSavedQueriesChangedAsync"
-                                           PendingQuery="@_pendingLogsQuery" PendingQueryVersion="@_pendingLogsQueryVersion"
-                                           PendingQueryHandled="OnPendingLogsQueryHandledAsync"
-                                           Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
-                                           GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
-                        break;
-                    case Tab.Availability:
-                        <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
-                                                   TzOffsetMinutes="_tzOffsetMinutes" />
-                        break;
-                }
-            </div>
-        }
-    </div>
-
-    @* Click-outside to close resource selector *@
-    @if (_resourceSelectorOpen)
-    {
-        <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
+                </Actions>
+            </EmptyState>
+        </div>
     }
+    else
+    {
+        <!-- Explainer summary -->
+        <ObservabilityExplainerSummary Summary="_explainerSummary" OnInvestigate="LaunchInvestigationFromObservability" />
+
+        @if (_explainerSummary is not null)
+        {
+            <DependencyHealthPanel Summary="_explainerSummary.DependencyHealth" />
+            @foreach (var pivot in _explainerSummary.DimensionPivots)
+            {
+                <DimensionPivotPanel Breakdown="pivot" />
+            }
+        }
+
+        <!-- Wave 2: Deployment comparison -->
+        <DeploymentComparisonPanel Summary="_deploymentComparison"
+                                    AvailableAnchors="_anchors"
+                                    OnAnchorSelected="OnAnchorSelectedAsync" />
+
+        <!-- Wave 3: SLO status -->
+        <SloStatusPanel Summary="_sloStatus"
+                        HasDefinitions="@(CurrentConfig?.SloDefinitions.Count > 0)" />
+
+        <!-- Tab bar -->
+        <div class="obs-tabs">
+            <button class="obs-tab @(_tab == Tab.Overview ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Overview)">Overview</button>
+            <button class="obs-tab @(_tab == Tab.Failures ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Failures)">Failures</button>
+            <button class="obs-tab @(_tab == Tab.Performance ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Performance)">Performance</button>
+            <button class="obs-tab @(_tab == Tab.Logs ? "active" : "")" data-testid="obs-tab-logs"
+                    @onclick="() => SetTab(Tab.Logs)">Logs</button>
+            <button class="obs-tab @(_tab == Tab.Availability ? "active" : "")"
+                    @onclick="() => SetTab(Tab.Availability)">Availability</button>
+        </div>
+
+        <!-- Tab content -->
+        <div class="obs-tab-content @GetTabContentClass()">
+            @switch (_tab)
+            {
+                case Tab.Overview:
+                    <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                    break;
+                case Tab.Failures:
+                    <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
+                                           ResourceId="@_selectedResource?.ResourceId" TzOffsetMinutes="_tzOffsetMinutes"
+                                           OnDrillToLogs="DrillToLogsAsync" />
+                    break;
+                case Tab.Performance:
+                    <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
+                    break;
+                case Tab.Logs:
+                    <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
+                                       MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
+                                       SavedQueriesChanged="OnSavedQueriesChangedAsync" PendingQuery="@_pendingLogsQuery"
+                                       PendingQueryVersion="@_pendingLogsQueryVersion" PendingQueryHandled="OnPendingLogsQueryHandledAsync"
+                                       Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
+                                       GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
+                    break;
+                case Tab.Availability:
+                    <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
+                                               TzOffsetMinutes="_tzOffsetMinutes" />
+                    break;
+            }
+        </div>
+    }
+</div>
+
+@* Click-outside to close resource selector *@
+@if (_resourceSelectorOpen)
+{
+    <div class="obs-backdrop" @onclick="() => _resourceSelectorOpen = false"></div>
+}
 
 @code {
     private enum Tab { Overview, Failures, Performance, Logs, Availability }
@@ -156,6 +209,12 @@
     private ObservabilityResourceInfo? _selectedResource;
     private bool _resourceSelectorOpen;
     private CancellationTokenSource _cts = new();
+    private CancellationTokenSource _explainerCts = new();
+    private CancellationTokenSource _comparisonCts = new();
+    private SwebKit.Core.Models.ObservabilityExplainerSummary? _explainerSummary;
+    private IReadOnlyList<DeploymentAnchor> _anchors = [];
+    private DeploymentComparisonSummary? _deploymentComparison;
+    private SloStatusSummary? _sloStatus;
 
     // Auto-refresh (OBS-7)
     private bool _autoRefreshEnabled;
@@ -186,8 +245,11 @@
     protected override async Task OnInitializedAsync()
     {
         AppState.DemoModeChanged += OnDemoModeChanged;
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterObsCommands();
+        Workspaces.RegisterRestoreHandler("observability", RestoreWorkspaceAsync);
         await TryRestoreLastResourceAsync();
+        await Workspaces.ApplyPendingRestoreAsync("observability");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -283,6 +345,10 @@
         _selectedResource = resource;
         _provider = CreateProvider(resource.ResourceId);
         ConnectionState.SetConnected("observability");
+        _explainerSummary = null;
+        _anchors = ObservabilityExplainerService.GetDeploymentAnchors(ReleaseRepo);
+        _deploymentComparison = null;
+        _sloStatus = null;
 
         if (persist)
         {
@@ -293,6 +359,68 @@
         }
 
         await InvokeAsync(StateHasChanged);
+        await PublishWorkspaceSnapshotAsync(recordRecent: persist);
+        _ = LoadExplainerAsync();
+        _ = LoadSloStatusAsync();
+    }
+
+    private async Task LoadExplainerAsync()
+    {
+        if (_provider is null) return;
+
+        _explainerCts.Cancel();
+        _explainerCts.Dispose();
+        _explainerCts = new CancellationTokenSource();
+        var ct = _explainerCts.Token;
+
+        try
+        {
+            var summary = await ExplainerService.GetExplainerSummaryAsync(
+                _provider, _range, ["cloud/roleName", "operation/name"], ct);
+            _explainerSummary = summary;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _explainerSummary null; component handles null gracefully. */ }
+    }
+
+    private async Task LoadSloStatusAsync()
+    {
+        if (_provider is null) return;
+        var config = CurrentConfig;
+        if (config is null || config.SloDefinitions.Count == 0) return;
+
+        var ct = _explainerCts.Token;
+        try
+        {
+            var status = await ExplainerService.GetSloStatusAsync(_provider, config.SloDefinitions, _range, ct);
+            _sloStatus = status;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _sloStatus null; component handles null gracefully. */ }
+    }
+
+    private async Task OnAnchorSelectedAsync(DeploymentAnchor anchor)
+    {
+        if (_provider is null) return;
+
+        _comparisonCts.Cancel();
+        _comparisonCts.Dispose();
+        _comparisonCts = new CancellationTokenSource();
+        var ct = _comparisonCts.Token;
+
+        _deploymentComparison = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var result = await ExplainerService.GetDeploymentComparisonAsync(_provider, anchor, TimeSpan.FromHours(4), ct);
+            _deploymentComparison = result;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Leave _deploymentComparison null; component handles null gracefully. */ }
     }
 
     private IObservabilityProvider CreateProvider(string resourceId) =>
@@ -307,12 +435,16 @@
     private async Task OnRangeChangedAsync(TimeRange range)
     {
         _range = range;
+        _ = LoadExplainerAsync();
+        _ = LoadSloStatusAsync();
         await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private void SetTab(Tab tab)
     {
         _tab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }
 
@@ -340,6 +472,87 @@
         _pendingLogsQuery = kql;
         _pendingLogsQueryVersion++;
         _tab = Tab.Logs;
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("observability");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        if (_selectedResource is null)
+        {
+            return null;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"observability:{_selectedResource.ResourceId}",
+                Area = "observability",
+                Kind = "resource",
+                DisplayName = _selectedResource.Name,
+                DisplayPath = _selectedResource.Name,
+                Summary = _selectedResource.ResourceGroup,
+                Icon = "📈",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["resourceId"] = _selectedResource.ResourceId,
+                    ["resourceGroup"] = _selectedResource.ResourceGroup,
+                    ["location"] = _selectedResource.Location,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["resourceId"] = _selectedResource.ResourceId,
+                ["resourceName"] = _selectedResource.Name,
+                ["tab"] = _tab.ToString(),
+                ["rangeStart"] = _range.Start.ToString("O"),
+                ["rangeEnd"] = _range.End.ToString("O"),
+            },
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("resourceId", out var resourceId)
+            && snapshot.RestoreState.TryGetValue("resourceName", out var resourceName)
+            && !string.IsNullOrWhiteSpace(resourceId)
+            && !string.IsNullOrWhiteSpace(resourceName))
+        {
+            await ActivateResourceAsync(
+                new ObservabilityResourceInfo(resourceId, resourceName, string.Empty, string.Empty, snapshot.Resource.Summary ??
+string.Empty, string.Empty),
+                persist: false);
+        }
+
+        if (snapshot.RestoreState.TryGetValue("tab", out var tabText)
+            && Enum.TryParse<Tab>(tabText, out var restoredTab))
+        {
+            _tab = restoredTab;
+        }
+
+        if (snapshot.RestoreState.TryGetValue("rangeStart", out var startText)
+            && snapshot.RestoreState.TryGetValue("rangeEnd", out var endText)
+            && DateTimeOffset.TryParse(startText, out var rangeStart)
+            && DateTimeOffset.TryParse(endText, out var rangeEnd))
+        {
+            _range = new TimeRange(rangeStart, rangeEnd);
+        }
+
+        await RefreshAsync();
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -389,6 +602,16 @@
         await TryRestoreLastResourceAsync();
         StateHasChanged();
     });
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "observability", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(RefreshAsync);
+    }
 
     // OBS-7: Auto-refresh toggle
     private void ToggleAutoRefresh()
@@ -452,7 +675,32 @@
             Commands.Unregister(id);
         Selection.SetSelection("observability", null);
         AppState.DemoModeChanged -= OnDemoModeChanged;
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("observability");
         _cts.Cancel();
         _cts.Dispose();
+        _explainerCts.Cancel();
+        _explainerCts.Dispose();
+        _comparisonCts.Cancel();
+        _comparisonCts.Dispose();
+    }
+
+    private void LaunchInvestigationFromObservability()
+    {
+        if (_selectedResource is null) return;
+
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.Observability,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = _range,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                ResourceId = _selectedResource.ResourceId,
+            },
+            SuggestedSources = [IncidentTimelineSource.Observability],
+        };
+
+        InvestigationLauncher.Launch(seed);
     }
 }

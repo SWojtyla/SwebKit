@@ -373,7 +373,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         await sender.CancelScheduledMessageAsync(sequenceNumber, ct);
     }
 
-    public async Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, CancellationToken ct = default)
+    public async Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default)
     {
         if (sequenceNumbers.Count == 0)
         {
@@ -402,11 +402,38 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 var forwarded = new ServiceBusMessage(message) { MessageId = Guid.NewGuid().ToString() };
                 forwarded.ApplicationProperties.Remove("DeadLetterReason");
                 forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+                ApplyRemapRules(forwarded, remapRules);
                 await sender.SendMessageAsync(forwarded, token);
                 await receiver.CompleteMessageAsync(message, token);
             },
             (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
             ct);
+    }
+
+    private static void ApplyRemapRules(ServiceBusMessage message, RemapRules? rules)
+    {
+        if (rules is null || rules.IsEmpty) return;
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideSubject))
+            message.Subject = rules.OverrideSubject;
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideCorrelationId))
+            message.CorrelationId = rules.OverrideCorrelationId;
+
+        foreach (var (oldKey, newKey) in rules.PropertyRenames)
+        {
+            if (message.ApplicationProperties.TryGetValue(oldKey, out var value))
+            {
+                message.ApplicationProperties.Remove(oldKey);
+                if (!string.IsNullOrWhiteSpace(newKey))
+                    message.ApplicationProperties[newKey] = value;
+            }
+        }
+
+        foreach (var removeKey in rules.PropertyRemoves)
+        {
+            message.ApplicationProperties.Remove(removeKey);
+        }
     }
 
     public async Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)

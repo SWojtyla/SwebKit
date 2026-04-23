@@ -1,0 +1,172 @@
+@implements IDisposable
+
+<div class="ns-quota-panel">
+    @if (_isLoading)
+    {
+        <LoadingSpinner Message="Loading namespace quotas..." />
+    }
+    else if (_error is not null)
+    {
+        <div class="ns-quota-panel-error">@_error</div>
+    }
+    else if (_quotas is null && _limitRanges is null)
+    {
+        <div class="ns-quota-panel-empty">No quota data available.</div>
+    }
+    else
+    {
+        <div class="ns-quota-panel-toolbar">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ReloadAsync">Refresh</FluentButton>
+        </div>
+
+        <div class="ns-quota-panel-section">
+            <div class="ns-quota-panel-section-title">Resource Quotas</div>
+            @if (_quotas is null || _quotas.Count == 0)
+            {
+                <div class="ns-quota-panel-empty">No resource quotas defined.</div>
+            }
+            else
+            {
+                <table class="ns-quota-panel-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Resource</th>
+                            <th>Hard</th>
+                            <th>Used</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var quota in _quotas)
+                        {
+                            @foreach (var usage in quota.HardLimits)
+                            {
+                                var usedEntry = quota.Used.FirstOrDefault(u => u.Resource == usage.Resource);
+                                <tr>
+                                    <td>@quota.Name</td>
+                                    <td>@usage.Resource</td>
+                                    <td>@(usage.Hard ?? "—")</td>
+                                    <td>@(usedEntry?.Used ?? "—")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="ns-quota-panel-section">
+            <div class="ns-quota-panel-section-title">Limit Ranges</div>
+            @if (_limitRanges is null || _limitRanges.Count == 0)
+            {
+                <div class="ns-quota-panel-empty">No limit ranges defined.</div>
+            }
+            else
+            {
+                <table class="ns-quota-panel-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Default Request CPU</th>
+                            <th>Default Request Memory</th>
+                            <th>Default Limit CPU</th>
+                            <th>Default Limit Memory</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lr in _limitRanges)
+                        {
+                            @foreach (var item in lr.Limits)
+                            {
+                                <tr>
+                                    <td>@lr.Name</td>
+                                    <td>@item.Type</td>
+                                    <td>@(item.DefaultRequests.GetValueOrDefault("cpu", "—"))</td>
+                                    <td>@(item.DefaultRequests.GetValueOrDefault("memory", "—"))</td>
+                                    <td>@(item.DefaultLimits.GetValueOrDefault("cpu", "—"))</td>
+                                    <td>@(item.DefaultLimits.GetValueOrDefault("memory", "—"))</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IAksClient? Client { get; set; }
+    [Parameter] public string Namespace { get; set; } = "default";
+
+    private IReadOnlyList<ResourceQuotaInfo>? _quotas;
+    private IReadOnlyList<LimitRangeInfo>? _limitRanges;
+    private bool _isLoading;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Namespace;
+        if (_loadedKey == key) return;
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedKey = null;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Client is null)
+        {
+            _quotas = null;
+            _limitRanges = null;
+            _error = null;
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _isLoading = true;
+        _error = null;
+        _quotas = null;
+        _limitRanges = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var token = _cts.Token;
+            var quotasTask = Client.GetResourceQuotasAsync(Namespace, token);
+            var limitRangesTask = Client.GetLimitRangesAsync(Namespace, token);
+            await Task.WhenAll(quotasTask, limitRangesTask);
+            _quotas = quotasTask.Result;
+            _limitRanges = limitRangesTask.Result;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

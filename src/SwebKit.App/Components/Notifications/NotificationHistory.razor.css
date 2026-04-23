@@ -1,34 +1,59 @@
-/* FQ-20 – CSS isolation: structural and repeated inline styles extracted from NotificationHistory.razor */
-
 .nh-container {
-    background: #2D2D44;
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    width: 360px;
-    max-height: 480px;
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    width: min(380px, calc(100vw - 24px));
+    max-height: min(520px, calc(100vh - 140px));
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--color-border);
 }
 
 .nh-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    gap: var(--spacing-md);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+}
+
+.nh-heading {
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.nh-subtitle {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    margin-top: 2px;
+}
+
+.nh-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .nh-clear-btn {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
     font-size: 11px;
     cursor: pointer;
-    padding: 2px 8px;
+    padding: 3px 8px;
+}
+
+.nh-clear-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+    background: var(--color-accent-subtle);
 }
 
 .nh-scroll {
@@ -37,35 +62,68 @@
 }
 
 .nh-empty {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--color-text-muted);
     font-size: var(--font-size-sm);
     text-align: center;
-    padding: 24px 12px;
+    padding: 28px 16px;
 }
 
-/* Active notification row */
-.nh-row {
+.nh-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.nh-section + .nh-section {
+    border-top: 1px solid var(--color-border);
+}
+
+.nh-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 10px 12px 6px;
+}
+
+.nh-row,
+.nh-history-row {
     display: flex;
     gap: 8px;
     align-items: flex-start;
     padding: 8px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
-/* Shared icon sizing for active and history rows; color stays inline (dynamic) */
+.nh-history-row {
+    opacity: 0.82;
+}
+
 .nh-row-icon {
     font-size: 13px;
     flex-shrink: 0;
     padding-top: 1px;
 }
 
+.nh-row-icon--success { color: var(--color-success); }
+.nh-row-icon--warning { color: var(--color-warning); }
+.nh-row-icon--error { color: var(--color-error); }
+.nh-row-icon--info { color: var(--color-accent); }
+
 .nh-body {
     flex: 1;
     min-width: 0;
 }
 
-.nh-title {
-    color: white;
+.nh-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nh-title,
+.nh-history-title {
+    color: var(--color-text);
     font-size: var(--font-size-sm);
     font-weight: 600;
     white-space: nowrap;
@@ -73,59 +131,54 @@
     text-overflow: ellipsis;
 }
 
-.nh-detail {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.nh-timestamp {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: var(--font-size-xs);
-    flex-shrink: 0;
-    padding-top: 2px;
-}
-
-/* History section */
-.nh-history-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.nh-history-row {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    padding: 6px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    opacity: 0.7;
-}
-
 .nh-history-title {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: var(--font-size-sm);
     font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
+.nh-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    background: var(--color-surface-3);
+    border-radius: 999px;
+    padding: 1px 6px;
+}
+
+.nh-badge--success {
+    color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+
+.nh-badge--warning {
+    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.nh-badge--error {
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
+}
+
+.nh-badge--info {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.nh-detail,
 .nh-history-detail {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--color-text-muted);
     font-size: 11px;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
+.nh-timestamp,
 .nh-history-timestamp {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--color-text-faint);
     font-size: var(--font-size-xs);
     flex-shrink: 0;
     padding-top: 2px;

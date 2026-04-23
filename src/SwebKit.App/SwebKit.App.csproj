@@ -22,6 +22,15 @@
         <!-- Certificate not installed in this dev environment; suppress packaging-only warnings -->
         <NoWarn>$(NoWarn);APPX0102;APPX0107</NoWarn>
 
+        <!--
+            Suppress the Debugger.Break() that the WinUI XAML source generator injects into the
+            UnhandledException handler (App.g.i.cs, ~line 69). Without this define, the generated
+            handler fires for every exception that reaches WinUI's top-level dispatcher — including
+            the XamlControlsResources COMException that MAUI throws and catches internally during
+            Windows App SDK bootstrapping. The app starts fine; the break is a false alarm.
+        -->
+        <DefineConstants Condition="'$(Configuration)' == 'Debug'">$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
+
         <!-- Enable XAML source generation for faster build times and improved performance.
              This generates C# code from XAML at compile time instead of runtime inflation.
              To disable, remove this line.

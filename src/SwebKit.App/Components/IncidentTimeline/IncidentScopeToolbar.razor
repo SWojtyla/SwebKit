@@ -1,0 +1,177 @@
+@using SwebKit.App.Components.Observability
+@using SwebKit.Core.Domain
+@using SwebKit.Core.Models
+
+<PageToolbar>
+    <LeadingContent>
+        <div class="incident-scope-toolbar__group incident-scope-toolbar__group--scope">
+            <label class="incident-scope-toolbar__field">
+                <span>Context</span>
+                <select class="incident-scope-toolbar__select"
+                        value="@ActiveContext"
+                        @onchange="HandleContextChanged"
+                        data-testid="incident-context-select">
+                    @if (Contexts.Count == 0)
+                    {
+                        <option value="@ActiveContext">@(string.IsNullOrWhiteSpace(ActiveContext) ? "default" : ActiveContext)</option>
+                    }
+                    @foreach (var context in Contexts)
+                    {
+                        <option value="@context.Name">@context.Name</option>
+                    }
+                </select>
+            </label>
+
+            <label class="incident-scope-toolbar__field">
+                <span>Namespace</span>
+                <select class="incident-scope-toolbar__select"
+                        value="@CurrentNamespace"
+                        @onchange="HandleNamespaceChanged"
+                        data-testid="incident-namespace-select">
+                    @foreach (var name in NamespaceOptions)
+                    {
+                        <option value="@name">@name</option>
+                    }
+                </select>
+            </label>
+
+            <label class="incident-scope-toolbar__field">
+                <span>Workload kind</span>
+                <select class="incident-scope-toolbar__select"
+                        value="@WorkloadKind"
+                        @onchange="HandleWorkloadKindChanged"
+                        data-testid="incident-workload-kind-select">
+                    @foreach (var kind in _workloadKinds)
+                    {
+                        <option value="@kind">@kind</option>
+                    }
+                </select>
+            </label>
+
+            <label class="incident-scope-toolbar__field incident-scope-toolbar__field--workload">
+                <span>Workload name</span>
+                <input class="incident-scope-toolbar__input"
+                       type="text"
+                       value="@WorkloadName"
+                       list="incident-workload-options"
+                       placeholder="Enter workload name"
+                       @oninput="HandleWorkloadNameChanged"
+                       data-testid="incident-workload-input" />
+                <datalist id="incident-workload-options">
+                    @foreach (var suggestion in SuggestedWorkloads)
+                    {
+                        <option value="@suggestion.WorkloadName">@GetSuggestionLabel(suggestion)</option>
+                    }
+                </datalist>
+            </label>
+        </div>
+    </LeadingContent>
+
+    <CenterContent>
+        <div class="incident-scope-toolbar__group incident-scope-toolbar__group--window">
+            <label class="incident-scope-toolbar__field incident-scope-toolbar__field--window">
+                <span>Time window</span>
+                <TimeRangePicker Value="Window" ValueChanged="OnWindowChanged" />
+            </label>
+        </div>
+    </CenterContent>
+
+    <TrailingContent>
+        <div class="incident-scope-toolbar__group incident-scope-toolbar__group--actions">
+            <div class="incident-scope-toolbar__source-toggles" role="group" aria-label="Evidence sources">
+                @foreach (var source in _sources)
+                {
+                    var sourceLocal = source;
+                    var isSelected = SelectedSources.Contains(sourceLocal);
+                    <button type="button"
+                            class="incident-scope-toolbar__source-toggle @(isSelected ? "active" : "inactive")"
+                            aria-pressed="@(isSelected ? "true" : "false")"
+                            data-testid="@GetSourceTestId(sourceLocal)"
+                            @onclick="() => OnSourceToggled.InvokeAsync(sourceLocal)">
+                        <span class="incident-scope-toolbar__source-label">@IncidentTimelineDisplay.GetSourceLabel(sourceLocal)</span>
+                        <span class="incident-scope-toolbar__source-state">@(isSelected ? "On" : "Off")</span>
+                    </button>
+                }
+            </div>
+
+            <FluentButton Appearance="Appearance.Accent"
+                          Disabled="@(!CanRefresh)"
+                          Title="Refresh incident evidence"
+                          data-testid="incident-refresh-button"
+                          @onclick="OnRefresh">
+                @(IsLoading ? "Refresh again" : "Refresh")
+            </FluentButton>
+        </div>
+    </TrailingContent>
+</PageToolbar>
+
+@code {
+    private static readonly IncidentWorkloadKind[] _workloadKinds =
+    [
+        IncidentWorkloadKind.Deployment,
+        IncidentWorkloadKind.StatefulSet,
+        IncidentWorkloadKind.Pod,
+        IncidentWorkloadKind.DaemonSet,
+    ];
+
+    private static readonly IncidentTimelineSource[] _sources =
+    [
+        IncidentTimelineSource.Aks,
+        IncidentTimelineSource.Observability,
+        IncidentTimelineSource.ServiceBus,
+        IncidentTimelineSource.Releases,
+    ];
+
+    [Parameter] public IReadOnlyList<KubeContextInfo> Contexts { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> NamespaceOptions { get; set; } = [];
+    [Parameter] public IncidentWorkloadKind WorkloadKind { get; set; } = IncidentWorkloadKind.Deployment;
+    [Parameter] public string WorkloadName { get; set; } = string.Empty;
+    [Parameter] public string ActiveContext { get; set; } = string.Empty;
+    [Parameter] public string CurrentNamespace { get; set; } = string.Empty;
+    [Parameter] public TimeRange Window { get; set; } = TimeRange.LastHour;
+    [Parameter] public IReadOnlyList<IncidentTimelineWorkloadMapping> SuggestedWorkloads { get; set; } = [];
+    [Parameter] public IReadOnlyCollection<IncidentTimelineSource> SelectedSources { get; set; } = [];
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool CanRefresh { get; set; }
+
+    [Parameter] public EventCallback<string> OnContextChanged { get; set; }
+    [Parameter] public EventCallback<string> OnNamespaceChanged { get; set; }
+    [Parameter] public EventCallback<IncidentWorkloadKind> OnWorkloadKindChanged { get; set; }
+    [Parameter] public EventCallback<string> OnWorkloadNameChanged { get; set; }
+    [Parameter] public EventCallback<TimeRange> OnWindowChanged { get; set; }
+    [Parameter] public EventCallback<IncidentTimelineSource> OnSourceToggled { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+
+    private Task HandleContextChanged(ChangeEventArgs args) =>
+        OnContextChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task HandleNamespaceChanged(ChangeEventArgs args) =>
+        OnNamespaceChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task HandleWorkloadNameChanged(ChangeEventArgs args) =>
+        OnWorkloadNameChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task HandleWorkloadKindChanged(ChangeEventArgs args)
+    {
+        if (Enum.TryParse<IncidentWorkloadKind>(args.Value?.ToString(), out var workloadKind))
+        {
+            return OnWorkloadKindChanged.InvokeAsync(workloadKind);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static string GetSuggestionLabel(IncidentTimelineWorkloadMapping mapping) =>
+        string.IsNullOrWhiteSpace(mapping.DisplayName)
+            ? mapping.WorkloadName
+            : $"{mapping.DisplayName} ({mapping.WorkloadName})";
+
+    private static string GetSourceTestId(IncidentTimelineSource source) => source switch
+    {
+        IncidentTimelineSource.Aks => "incident-source-aks",
+        IncidentTimelineSource.Observability => "incident-source-observability",
+        IncidentTimelineSource.ServiceBus => "incident-source-service-bus",
+        IncidentTimelineSource.Releases => "incident-source-releases",
+        _ => $"incident-source-{source.ToString().ToLowerInvariant()}"
+    };
+}

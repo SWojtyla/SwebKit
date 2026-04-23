@@ -1,3 +1,4 @@
+using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Core.Tests;
@@ -207,5 +208,44 @@ public class DemoRedisClientTests
         Assert.False(string.IsNullOrWhiteSpace(info.RedisVersion));
         Assert.NotEmpty(info.Databases);
         Assert.True(info.Databases[0].Keys > 0);
+    }
+
+    [Fact]
+    public async Task GetSlowLogAsync_ReturnsDemoEntriesWithLoadedCapability()
+    {
+        using var client = new DemoRedisClient();
+
+        var result = await client.GetSlowLogAsync();
+
+        Assert.NotEmpty(result.Entries);
+        Assert.Equal(RedisInsightCapability.Loaded, result.Capability);
+        Assert.All(result.Entries, e =>
+        {
+            Assert.False(string.IsNullOrEmpty(e.Command));
+            Assert.True(e.Duration > TimeSpan.Zero);
+        });
+    }
+
+    [Fact]
+    public async Task GetPubSubSnapshotAsync_ReturnsDemoChannelsWithLoadedCapability()
+    {
+        using var client = new DemoRedisClient();
+
+        var result = await client.GetPubSubSnapshotAsync();
+
+        Assert.NotEmpty(result.Channels);
+        Assert.Equal(RedisInsightCapability.Loaded, result.Capability);
+        Assert.All(result.Channels, c => Assert.False(string.IsNullOrEmpty(c.Channel)));
+    }
+
+    [Fact]
+    public async Task GetPubSubSnapshotAsync_MaxChannelsSmall_TruncatesAndSetsTruncatedFlag()
+    {
+        using var client = new DemoRedisClient();
+
+        var result = await client.GetPubSubSnapshotAsync(maxChannels: 2);
+
+        Assert.True(result.Truncated);
+        Assert.Equal(2, result.Channels.Count);
     }
 }

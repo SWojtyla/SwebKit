@@ -4,110 +4,156 @@
 @inject IAppEventBus Events
 @inject IJSRuntime JS
 @inject ScheduledMessageRepository ScheduledRepo
+@inject UiStateRepository UiState
 @inject IConnectionStateService ConnectionState
 @implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
+@inject IServiceBusClientFactory SbClientFactory
+@inject IServiceBusWarmupCache ServiceBusWarmupCache
+@inject OperatorWorkspaceService Workspaces
+@inject IncidentInvestigationLauncher InvestigationLauncher
 
-<div class="service-bus-page-shell">
-    <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
-                              LinkedEntities="CurrentLinkedEntities" OnEntityTabOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
-                              OnScheduledTabOpen="ns => OpenScheduledTab(ns)" OnCollapsedChanged="SetNamespacePaneCollapsedAsync"
-                              OnRemoveNamespace="RemoveNamespaceAsync" OnAddNamespace="HandleAddNamespaceAsync"
-                              OnEntityLinkToggled="ToggleEntityLinkAsync" />
-
-    <!-- Right: tabbed content -->
-    <div class="service-bus-right-pane">
-        @if (!_openTabs.Any())
-        {
-            <div style="padding:40px; text-align:center; color:var(--color-text-muted);">
-                Select a queue or topic from a namespace to open it.
-            </div>
-        }
-        else
-        {
-            <!-- Tab bar -->
-            <div class="tab-bar sb-tab-bar">
-                @foreach (var tab in _openTabs)
+<div class="service-bus-page">
+    <div class="page-shell-header">
+        <RoutePageHeader Area="service-bus"
+                         Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
+            <Actions>
+                @if (_activeTab is not null && !_activeTab.IsDlq && !_activeTab.IsScheduled)
                 {
-                    <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
-                        @if (tab.IsDlq)
-                        {
-                            <span class="sb-status-error">
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
-                            </span>
-                        }
-                        <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
-                            <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias / </span>@tab.Title
-                        </span>
-                        <span class="close-btn" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab)">&#x2715;</span>
-                    </div>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="OpenBatchSendPanel"
+                                  data-testid="batch-send-open-btn" title="Send a batch of messages from JSON">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUpload())" Width="14px" />
+                        Batch Send
+                    </FluentButton>
                 }
-            </div>
-            <!-- Active tab content -->
-            @if (_activeTab is not null)
+                @if (_activeTab is not null && !_activeTab.IsScheduled)
+                {
+                    <button class="page-header-action-btn" data-testid="sb-investigate-btn"
+                            @onclick="LaunchInvestigationFromServiceBus">Investigate</button>
+                }
+            </Actions>
+        </RoutePageHeader>
+    </div>
+
+    <div class="service-bus-page-shell">
+        <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
+                                  LinkedEntities="CurrentLinkedEntities"
+                                  OnEntityTabOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
+                                  OnScheduledTabOpen="ns => OpenScheduledTab(ns)" OnCollapsedChanged="SetNamespacePaneCollapsedAsync"
+                                  OnRemoveNamespace="RemoveNamespaceAsync" OnAddNamespace="HandleAddNamespaceAsync"
+                                  OnEntityLinkToggled="ToggleEntityLinkAsync" />
+
+        <!-- Right: tabbed content -->
+        <div class="service-bus-right-pane">
+            @if (!_openTabs.Any())
             {
-                @if (_activeTab.IsScheduled)
+                @if (_namespaceStates.Count == 0)
                 {
-                    <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
-                                       EntityPath="@_activeTab.EntityPath" />
-                }
-                else if (_activeTab.IsDlq)
-                {
-                    <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath" />
+                    <EmptyState Icon="⇄" Title="No namespaces connected"
+                                Subtitle="Add a namespace from Settings to start peeking, replaying, and scheduling messages.">
+                        <Actions>
+                            <a href="/settings?section=servicebus">Open Service Bus settings</a>
+                        </Actions>
+                    </EmptyState>
                 }
                 else
                 {
-                    <div @key="_activeTab.Id" class="sb-active-workspace">
-                        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
-                            <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
-                                             NamespaceId="_activeTab.NamespaceId" ShowCompose="true" SelectedMessage="_activeTab.SelectedMessage"
-                                             IsDetailPaneOpen="IsDetailPaneOpen" OnMessageSelected="OnMessageSelectedAsync"
-                                             OnCloseDetails="CloseDetailPane" />
-                        </div>
-                        @if (IsDetailPaneOpen)
-                        {
-                            if (_isDetailDrawerOverlay)
+                    <EmptyState Icon="⇄" Title="Select a queue or topic"
+                                Subtitle="Choose an entity from the namespace pane to open its message workspace and tools." />
+                }
+            }
+            else
+            {
+                <!-- Tab bar -->
+                <div class="tab-bar sb-tab-bar">
+                    @foreach (var tab in _openTabs)
+                    {
+                        <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                            @if (tab.IsDlq)
                             {
-                                <div class="sb-detail-drawer overlay">
-                                    <div class="sb-detail-drawer-header">
-                                        <span>Message details</span>
-                                        <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                @onclick="CloseDetailPane">×</button>
-                                    </div>
-                                    <div style="flex:1; overflow:hidden;">
-                                        <MessageDetailPane Message="_activeTab.SelectedMessage"
-                                                           OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
-                                                           OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                           OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
-                                    </div>
-                                </div>
+                                <span class="sb-status-error">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
+                                </span>
                             }
-                            else
+                            <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
+                                <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias /
+                                </span>@tab.Title
+                            </span>
+                            <span class="close-btn" @onclick:stopPropagation="true"
+                                  @onclick="() => CloseTab(tab)">&#x2715;</span>
+                        </div>
+                    }
+                </div>
+                <!-- Active tab content -->
+                @if (_activeTab is not null)
+                {
+                    @if (_activeTab.IsScheduled)
+                    {
+                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
+                                           EntityPath="@_activeTab.EntityPath" />
+                    }
+                    else if (_activeTab.IsDlq)
+                    {
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                 AvailableNamespaces="@AvailableNamespaceOptions" />
+                    }
+                    else
+                    {
+                        <div @key="_activeTab.Id" class="sb-active-workspace">
+                            <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
+                                <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                                                 NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
+                                                 SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
+                                                 PinnedSessionId="@_activeTab.PinnedSessionId" TracePivotFilter="@_activeTab.PivotFilter"
+                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
+                            </div>
+                            @if (IsDetailPaneOpen)
                             {
-                                <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
-                                    <div class="sb-detail-drawer">
+                                if (_isDetailDrawerOverlay)
+                                {
+                                    <div class="sb-detail-drawer overlay">
                                         <div class="sb-detail-drawer-header">
                                             <span>Message details</span>
                                             <button type="button" class="sb-detail-close-btn" title="Close details"
                                                     @onclick="CloseDetailPane">×</button>
                                         </div>
                                         <div style="flex:1; overflow:hidden;">
-                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                            <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
                                                                OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
-                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)" />
+                                                               OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
+                                                               OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                         </div>
                                     </div>
-                                </ResizablePanel>
+                                }
+                                else
+                                {
+                                    <ResizablePanel DefaultWidth="380" MinWidth="240" MaxWidth="600">
+                                        <div class="sb-detail-drawer">
+                                            <div class="sb-detail-drawer-header">
+                                                <span>Message details</span>
+                                                <button type="button" class="sb-detail-close-btn" title="Close details"
+                                                        @onclick="CloseDetailPane">×</button>
+                                            </div>
+                                            <div style="flex:1; overflow:hidden;">
+                                                <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
+                                                                   OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
+                                                                   OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
+                                                                   OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
+                                                                   OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                            </div>
+                                        </div>
+                                    </ResizablePanel>
+                                }
                             }
-                        }
-                    </div>
+                        </div>
+                    }
                 }
             }
-        }
+        </div>
     </div>
 </div>
 
@@ -122,6 +168,15 @@
     }
 </Modal>
 
+<!-- Batch Send modal -->
+<Modal IsOpen="@(_showBatchSendPanel && _activeTab is not null)" OnClose="CloseBatchSendPanel">
+    @if (_activeTab is not null)
+    {
+        <BatchSendPanel Client="_activeTab.Client" DefaultEntityPath="@_activeTab.EntityPath" OnCancel="CloseBatchSendPanel"
+                        OnCompleted="OnBatchSendCompleted" />
+    }
+</Modal>
+
 @code {
     private List<NsState> _namespaceStates = [];
     private List<SbTab> _openTabs = [];
@@ -130,7 +185,7 @@
     private bool _isDetailDrawerOverlay;
     private CancellationTokenSource _cts = new();
 
-    private const string NamespacePaneStateKey = "sb:namespace-pane-collapsed";
+    private const string NamespacePaneStateKey = "service-bus:namespace-pane-collapsed";
     private const int DetailOverlayBreakpoint = 1400;
 
     private bool IsDetailPaneOpen => _activeTab?.SelectedMessage is not null;
@@ -138,6 +193,9 @@
     // Composer modal state
     private SbMessage? _composerMessage;
     private MessageComposer.ComposerMode _composerMode;
+
+    // Batch send modal state
+    private bool _showBatchSendPanel;
 
     private IReadOnlyList<MessageComposer.NamespaceOption> AvailableNamespaceOptions =>
     _namespaceStates
@@ -155,6 +213,24 @@
     private void CloseComposer()
     {
         _composerMessage = null;
+        StateHasChanged();
+    }
+
+    private void OpenBatchSendPanel()
+    {
+        _showBatchSendPanel = true;
+        StateHasChanged();
+    }
+
+    private void CloseBatchSendPanel()
+    {
+        _showBatchSendPanel = false;
+        StateHasChanged();
+    }
+
+    private void OnBatchSendCompleted(BatchOperationResult result)
+    {
+        _showBatchSendPanel = false;
         StateHasChanged();
     }
 
@@ -179,6 +255,20 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async Task PinSessionFilter(string sessionId)
+    {
+        if (_activeTab is null) return;
+        _activeTab.PinnedSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandlePivotFilterAsync(string value)
+    {
+        if (_activeTab is null) return;
+        _activeTab.PivotFilter = value;
+        await InvokeAsync(StateHasChanged);
+    }
+
     private Task OnComposerSent(ScheduledMessageEntry? _)
     {
         CloseComposer();
@@ -191,9 +281,12 @@
     protected override async Task OnInitializedAsync()
     {
         Events.Subscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterSbCommands();
         await ScheduledRepo.LoadAsync();
         await LoadNamespacesAsync();
+        Workspaces.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
+        await Workspaces.ApplyPendingRestoreAsync("service-bus");
     }
 
     private void RegisterSbCommands()
@@ -239,9 +332,7 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        var stored = await JS.InvokeAsync<string?>("SwebKitUi.getLocalStorage", NamespacePaneStateKey);
-        if (bool.TryParse(stored, out var collapsed))
-            _isNamespacePaneCollapsed = collapsed;
+        _isNamespacePaneCollapsed = UiState.GetViewState(NamespacePaneStateKey, defaultValue: false);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -285,7 +376,19 @@
             {
                 try
                 {
-                    var result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, ct);
+                    // Cache-first: use warm client from startup warmup if available
+                    var cachedClient = ServiceBusWarmupCache.TryGet(state.Namespace.Id);
+                    ServiceBusNamespaceConnectionResult result;
+                    if (cachedClient is not null)
+                    {
+                        ServiceBusWarmupCache.Invalidate();
+                        result = new ServiceBusNamespaceConnectionResult(cachedClient, null);
+                    }
+                    else
+                    {
+                        result = await NamespaceBootstrapper.ConnectAsync(state.Namespace, ct);
+                    }
+
                     if (ct.IsCancellationRequested)
                     {
                         return;
@@ -314,6 +417,11 @@
         Cache.Set("servicebus", new SbPageSnapshot(
             _namespaceStates.Select(s => new SbNamespaceSnapshot(
                 s.Namespace, s.Client is not null, s.ConnectionError)).ToList()));
+
+        if (_activeTab is not null)
+        {
+            await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
     }
 
     private void ReportConnectionState()
@@ -338,13 +446,13 @@
     private async Task SetNamespacePaneCollapsedAsync(bool isCollapsed)
     {
         _isNamespacePaneCollapsed = isCollapsed;
-        await JS.InvokeVoidAsync("SwebKitUi.setLocalStorage", NamespacePaneStateKey, isCollapsed.ToString().ToLowerInvariant());
+        await UiState.SaveViewStateAsync(NamespacePaneStateKey, isCollapsed);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     private async Task HandleAddNamespaceAsync(string raw)
     {
-        var props = global::Azure.Messaging.ServiceBus.ServiceBusConnectionStringProperties.Parse(raw);
-        var fqns = props.FullyQualifiedNamespace;
+        var fqns = SbClientFactory.ParseFullyQualifiedNamespace(raw);
 
         var credKey = $"sb:ns:{Guid.NewGuid()}";
         CredentialStore.Save(credKey, raw);
@@ -401,6 +509,15 @@
 
         _namespaceStates.Remove(state);
         await AppState.RemoveServiceBusNamespaceAsync(namespaceId);
+        if (_activeTab is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+        }
+        else
+        {
+            await PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -410,20 +527,22 @@
         var modeSuffix = isDlq ? "dlq" : "active";
         var id = $"{ns.Namespace.Id}:{entity.EntityPath}:{modeSuffix}";
         var existing = _openTabs.FirstOrDefault(t => t.Id == id);
-        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
-
-        var tab = new SbTab
+        if (existing is not null)
         {
-            Id = id,
-            NamespaceId = ns.Namespace.Id,
-            NamespaceAlias = ns.Namespace.Alias,
-            Title = isDlq ? $"{entity.Name} (DLQ)" : entity.Name,
-            EntityPath = entity.EntityPath,
-            Client = ns.Client,
-            IsDlq = isDlq
-        };
+            _activeTab = existing; _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
+            StateHasChanged(); return;
+        }
+
+        var tab = CreateTab(
+            ns.Namespace,
+            ns.Client,
+            entity.EntityPath,
+            isDlq ? $"{entity.Name} (DLQ)" : entity.Name,
+            isDlq ? "dlq" : "active",
+            "entity");
         _openTabs.Add(tab);
         _activeTab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
     }
 
@@ -432,49 +551,254 @@
         if (ns.Client is null) return;
         var id = $"{ns.Namespace.Id}:scheduled";
         var existing = _openTabs.FirstOrDefault(t => t.Id == id);
-        if (existing is not null) { _activeTab = existing; StateHasChanged(); return; }
-
-        var tab = new SbTab
+        if (existing is not null)
         {
-            Id = id,
-            NamespaceId = ns.Namespace.Id,
-            NamespaceAlias = ns.Namespace.Alias,
-            Title = "Scheduled",
-            EntityPath = string.Empty,
-            Client = ns.Client,
-            IsScheduled = true
-        };
+            _activeTab = existing; _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
+            StateHasChanged(); return;
+        }
+
+        var tab = CreateTab(
+            ns.Namespace,
+            ns.Client,
+            string.Empty,
+            "Scheduled",
+            "scheduled",
+            "scheduled");
         _openTabs.Add(tab);
         _activeTab = tab;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
     }
 
     private async Task ToggleEntityLinkAsync(SbEntityLink link)
     {
-        var existing = AppState.Config.ServiceBusEntityLinks
-        .FirstOrDefault(l => l.NamespaceId == link.NamespaceId && l.EntityPath == link.EntityPath);
+        var snapshot = BuildEntitySnapshot(link.NamespaceId, link.EntityPath, link.Alias, mode: "active");
+        if (snapshot is null)
+        {
+            return;
+        }
 
-        if (existing is not null)
-            AppState.Config.ServiceBusEntityLinks.Remove(existing);
-        else
-            AppState.Config.ServiceBusEntityLinks.Add(link);
-
-        await AppState.SaveConfigAsync();
+        await Workspaces.ToggleFavoriteAsync(snapshot);
         await InvokeAsync(StateHasChanged);
     }
 
-    private Task SetActive(SbTab tab)
+    private async Task SetActive(SbTab tab)
     {
         _activeTab = tab;
+        await PublishWorkspaceSnapshotAsync(recordRecent: true);
         StateHasChanged();
-        return Task.CompletedTask;
     }
 
     private void CloseTab(SbTab tab)
     {
         _openTabs.Remove(tab);
         if (_activeTab == tab) _activeTab = _openTabs.LastOrDefault();
+        if (_activeTab is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+        }
+        else
+        {
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+        }
+
         StateHasChanged();
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            Workspaces.ClearCurrentSnapshot("service-bus");
+            return;
+        }
+
+        await Workspaces.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot() => _activeTab is null
+        ? null
+        : new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"service-bus:{_activeTab.Id}",
+                Area = "service-bus",
+                Kind = _activeTab.IsScheduled ? "scheduled" : "entity",
+                DisplayName = _activeTab.Title,
+                DisplayPath = string.IsNullOrWhiteSpace(_activeTab.EntityPath)
+                    ? _activeTab.NamespaceAlias
+                    : $"{_activeTab.NamespaceAlias}/{_activeTab.EntityPath}",
+                Summary = _activeTab.NamespaceAlias,
+                Icon = "📨",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = _activeTab.NamespaceId.ToString("D"),
+                    ["entityPath"] = _activeTab.EntityPath,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["namespacePaneCollapsed"] = _isNamespacePaneCollapsed.ToString(),
+                ["activeTabId"] = _activeTab.Id,
+                ["namespaceId"] = _activeTab.NamespaceId.ToString("D"),
+                ["entityPath"] = _activeTab.EntityPath,
+                ["mode"] = _activeTab.IsScheduled ? "scheduled" : _activeTab.IsDlq ? "dlq" : "active",
+                ["tabType"] = _activeTab.IsScheduled ? "scheduled" : "entity",
+                ["tabs"] = System.Text.Json.JsonSerializer.Serialize(_openTabs.Select(CreateTabState).ToList()),
+            },
+        };
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        if (snapshot.RestoreState.TryGetValue("namespacePaneCollapsed", out var collapsedText)
+            && bool.TryParse(collapsedText, out var collapsed))
+        {
+            _isNamespacePaneCollapsed = collapsed;
+        }
+
+        _openTabs = [];
+        _activeTab = null;
+
+        if (snapshot.RestoreState.TryGetValue("tabs", out var tabsJson))
+        {
+            var tabStates = System.Text.Json.JsonSerializer.Deserialize<List<ServiceBusWorkspaceTabState>>(tabsJson) ?? [];
+            foreach (var tabState in tabStates)
+            {
+                var nsState = _namespaceStates.FirstOrDefault(state => state.Namespace.Id == tabState.NamespaceId);
+                if (nsState?.Client is null)
+                {
+                    continue;
+                }
+
+                _openTabs.Add(CreateTab(
+                    nsState.Namespace,
+                    nsState.Client,
+                    tabState.EntityPath,
+                    tabState.Title,
+                    tabState.Mode,
+                    tabState.TabType));
+            }
+
+            if (snapshot.RestoreState.TryGetValue("activeTabId", out var activeTabId))
+            {
+                _activeTab = _openTabs.FirstOrDefault(tab => string.Equals(tab.Id, activeTabId, StringComparison.Ordinal));
+            }
+        }
+
+        _activeTab ??= _openTabs.FirstOrDefault();
+
+        if (_activeTab is null
+            && snapshot.RestoreState.TryGetValue("namespaceId", out var namespaceText)
+            && Guid.TryParse(namespaceText, out var namespaceId))
+        {
+            var entityPath = snapshot.RestoreState.TryGetValue("entityPath", out var restoredEntityPath)
+                ? restoredEntityPath
+                : string.Empty;
+            var mode = snapshot.RestoreState.TryGetValue("mode", out var restoredMode)
+                ? restoredMode
+                : "active";
+            var nsState = _namespaceStates.FirstOrDefault(state => state.Namespace.Id == namespaceId);
+
+            if (nsState?.Client is not null)
+            {
+                var tab = CreateTab(
+                    nsState.Namespace,
+                    nsState.Client,
+                    entityPath,
+                    snapshot.Resource.DisplayName,
+                    mode,
+                    snapshot.RestoreState.TryGetValue("tabType", out var restoredTabType) ? restoredTabType : "entity");
+                _openTabs.Add(tab);
+                _activeTab = tab;
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private SbTab CreateTab(
+        ServiceBusNamespace @namespace,
+        IServiceBusClient client,
+        string entityPath,
+        string title,
+        string mode,
+        string tabType)
+    {
+        var isScheduled = string.Equals(tabType, "scheduled", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "scheduled", StringComparison.OrdinalIgnoreCase);
+        var isDlq = string.Equals(mode, "dlq", StringComparison.OrdinalIgnoreCase);
+        var id = isScheduled
+            ? $"{@namespace.Id}:scheduled"
+            : $"{@namespace.Id}:{entityPath}:{(isDlq ? "dlq" : "active")}";
+
+        return new SbTab
+        {
+            Id = id,
+            NamespaceId = @namespace.Id,
+            NamespaceAlias = @namespace.Alias,
+            Title = title,
+            EntityPath = entityPath,
+            Client = client,
+            IsDlq = isDlq,
+            IsScheduled = isScheduled,
+        };
+    }
+
+    private WorkspaceSnapshot? BuildEntitySnapshot(
+        Guid namespaceId,
+        string entityPath,
+        string? namespaceAlias,
+        string mode,
+        string? title = null)
+    {
+        var alias = namespaceAlias
+            ?? _namespaceStates.FirstOrDefault(state => state.Namespace.Id == namespaceId)?.Namespace.Alias
+            ?? AppState.ServiceBusNamespaces.FirstOrDefault(ns => ns.Id == namespaceId)?.Alias;
+        if (string.IsNullOrWhiteSpace(alias))
+        {
+            return null;
+        }
+
+        var isScheduled = string.Equals(mode, "scheduled", StringComparison.OrdinalIgnoreCase);
+        var displayTitle = title;
+        if (string.IsNullOrWhiteSpace(displayTitle))
+        {
+            displayTitle = isScheduled
+                ? "Scheduled"
+                : entityPath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ??
+entityPath;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = isScheduled
+                    ? $"service-bus:{namespaceId:N}:scheduled"
+                    : $"service-bus:{namespaceId:N}:{entityPath}:{mode}",
+                Area = "service-bus",
+                Kind = isScheduled ? "scheduled" : "entity",
+                DisplayName = displayTitle,
+                DisplayPath = string.IsNullOrWhiteSpace(entityPath) ? alias : $"{alias}/{entityPath}",
+                Summary = alias,
+                Icon = "📨",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = namespaceId.ToString("D"),
+                    ["entityPath"] = entityPath,
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["namespaceId"] = namespaceId.ToString("D"),
+                ["entityPath"] = entityPath,
+                ["mode"] = mode,
+                ["tabType"] = isScheduled ? "scheduled" : "entity",
+            },
+        };
     }
 
     private void OnServiceBusShortcut(ServiceBusShortcutEvent e) => InvokeAsync(() =>
@@ -499,16 +823,50 @@
         }
     });
 
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "service-bus", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(LoadNamespacesAsync);
+    }
+
     public void Dispose()
     {
         _cts.Cancel();
         _cts.Dispose();
         Events.Unsubscribe<ServiceBusShortcutEvent>(OnServiceBusShortcut);
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        Workspaces.UnregisterRestoreHandler("service-bus");
         foreach (var id in new[] { "sb-peek", "sb-resubmit", "sb-edit-resubmit" })
             Commands.Unregister(id);
         Selection.SetSelection("service-bus", null);
         foreach (var ns in _namespaceStates)
             if (ns.Client is IAsyncDisposable d) _ = d.DisposeAsync().AsTask();
+    }
+
+    private void LaunchInvestigationFromServiceBus()
+    {
+        if (_activeTab is null || _activeTab.IsScheduled) return;
+
+        var selectedMsg = _activeTab.SelectedMessage;
+        var seed = new IncidentInvestigationSeed
+        {
+            SourceArea = IncidentInvestigationSourceArea.ServiceBus,
+            LaunchedAtUtc = DateTimeOffset.UtcNow,
+            SelectedRange = TimeRange.LastHour,
+            EvidenceRef = new IncidentSeedEvidenceRef
+            {
+                EntityPath = _activeTab.EntityPath,
+                MessageId = selectedMsg?.MessageId,
+                CorrelationId = selectedMsg?.CorrelationId,
+            },
+            SuggestedSources = [IncidentTimelineSource.ServiceBus],
+        };
+
+        InvestigationLauncher.Launch(seed);
     }
 
     private class SbTab
@@ -522,7 +880,25 @@
         public bool IsDlq { get; set; }
         public bool IsScheduled { get; set; }
         public SbMessage? SelectedMessage { get; set; }
+        public string? PinnedSessionId { get; set; }
+        public string? PivotFilter { get; set; }
     }
+
+    private sealed record ServiceBusWorkspaceTabState(
+        Guid NamespaceId,
+        string NamespaceAlias,
+        string Title,
+        string EntityPath,
+        string Mode,
+        string TabType);
+
+    private static ServiceBusWorkspaceTabState CreateTabState(SbTab tab) => new(
+        tab.NamespaceId,
+        tab.NamespaceAlias,
+        tab.Title,
+        tab.EntityPath,
+        tab.IsScheduled ? "scheduled" : tab.IsDlq ? "dlq" : "active",
+        tab.IsScheduled ? "scheduled" : "entity");
 
     private sealed record SbPageSnapshot(
         List<SbNamespaceSnapshot> Namespaces);

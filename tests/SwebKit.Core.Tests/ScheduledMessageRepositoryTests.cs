@@ -106,6 +106,29 @@ public class ScheduledMessageRepositoryTests
     }
 
     [Fact]
+    public async Task LoadAsync_WithCorruptedPrimaryAndBackup_RecoversEntries()
+    {
+        using var _ = new AppDataSandbox();
+        var entry = MakeEntry(Guid.NewGuid(), "orders");
+        entry.MessageId = "msg-123";
+
+        var writer = new ScheduledMessageRepository();
+        await writer.AddAsync(entry);
+
+        var backupPath = $"{AppDataPaths.ScheduledMessagesJson}.bak";
+        Assert.True(File.Exists(backupPath));
+
+        await File.WriteAllTextAsync(AppDataPaths.ScheduledMessagesJson, "{ invalid json");
+
+        var reader = new ScheduledMessageRepository();
+        await reader.LoadAsync();
+
+        Assert.Single(reader.All);
+        Assert.Equal(entry.Id, reader.All[0].Id);
+        Assert.Equal("msg-123", reader.All[0].MessageId);
+    }
+
+    [Fact]
     public void NewInstance_StartsWithEmptyAll()
     {
         // Without calling LoadAsync, a new repository always starts with no entries.

@@ -1,0 +1,166 @@
+<section class="settings-readiness-card" data-testid="settings-readiness">
+    <div class="settings-readiness-card__header">
+        <div>
+            <p class="settings-readiness-card__eyebrow">Configuration readiness</p>
+            <h2 class="settings-readiness-card__title">@Report.Summary</h2>
+            <p class="settings-readiness-card__meta">
+                @if (Report.LastProbeCompletedAt is { } checkedAt)
+                {
+                    <span>Last live check @FormatTimestamp(checkedAt). </span>
+                }
+                Live checks are explicit and read-only for the current session.
+            </p>
+        </div>
+        <div class="settings-readiness-card__actions">
+            <span class="settings-readiness-status @GetReadinessStatusClass(Report.OverallStatus)">
+                @GetReadinessLabel(Report.OverallStatus)
+            </span>
+            @if (ShowLiveCheckAction)
+            {
+                <button class="settings-readiness-run" data-testid="settings-run-live-checks" @onclick="OnRunLiveChecks"
+                        disabled="@IsRunningLiveChecks">
+                    @(IsRunningLiveChecks ? "Running live checks..." : Report.LastProbeCompletedAt is null ? "Run live checks" : "Refresh live checks")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (IsProductionConfiguration)
+    {
+        <div class="settings-readiness-card__production" data-testid="settings-readiness-production">
+            This profile is marked as production. Destructive workflows keep additional confirmation barriers enabled.
+        </div>
+    }
+
+    @if (Area is null)
+    {
+        <p class="settings-readiness-card__detail">
+            The current section does not own a separate external readiness contract.
+        </p>
+    }
+    else
+    {
+        <div class="settings-readiness-card__area" data-testid="@($"settings-readiness-area-{Area.AreaKey}")">
+            <div class="settings-readiness-card__area-header">
+                <div>
+                    <h3>@Area.Title</h3>
+                    <p>@Area.Summary</p>
+                </div>
+                <span class="settings-readiness-status @GetReadinessStatusClass(Area.Status)">
+                    @GetReadinessLabel(Area.Status)
+                </span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Area.Detail))
+            {
+                <p class="settings-readiness-card__detail">@Area.Detail</p>
+            }
+
+            @if (Area.CanRunLiveProbe || Area.LiveProbe is not null)
+            {
+                <div class="settings-readiness-livecheck" data-testid="settings-live-checks">
+                    <div class="settings-readiness-livecheck__header">
+                        <strong>Live verification</strong>
+                        @if (Area.LiveProbe is not null)
+                        {
+                            <span class="settings-readiness-status @GetReadinessStatusClass(Area.LiveProbe.Status)">
+                                @GetReadinessLabel(Area.LiveProbe.Status)
+                            </span>
+                        }
+                    </div>
+
+                    <p class="settings-readiness-livecheck__summary">
+                        @(Area.LiveProbe?.Summary ?? "Live verification has not been run yet for this area in the current session.")
+                    </p>
+
+                    @if (!string.IsNullOrWhiteSpace(Area.LiveProbe?.Detail))
+                    {
+                        <p class="settings-readiness-card__detail">@Area.LiveProbe!.Detail</p>
+                    }
+
+                    @if (Area.LiveProbe is not null)
+                    {
+                        <p class="settings-readiness-livecheck__meta">
+                            Checked @FormatTimestamp(Area.LiveProbe.CheckedAt) in @FormatDuration(Area.LiveProbe.Duration).
+                        </p>
+                    }
+                </div>
+            }
+
+            @if (Area.CredentialReferences.Count > 0)
+            {
+                <div class="settings-readiness-credentials">
+                    @foreach (var credential in Area.CredentialReferences)
+                    {
+                        <div class="settings-readiness-credential">
+                            <div>
+                                <strong>@credential.Label</strong>
+                                @if (!string.IsNullOrWhiteSpace(credential.ReferenceKey))
+                                {
+                                    <span class="settings-readiness-credential__ref">@credential.ReferenceKey</span>
+                                }
+                            </div>
+                            <span
+                                class="settings-readiness-credential__status @GetReadinessStatusClass(credential.IsPresent ? ConfigurationCheckStatus.Ready : ConfigurationCheckStatus.Warning)">
+                                @(credential.IsPresent ? "Reference available" : "Reference missing")
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (Area.ActionItems.Count > 0)
+            {
+                <div class="settings-readiness-actions">
+                    @foreach (var actionItem in Area.ActionItems)
+                    {
+                        <div class="settings-readiness-action">
+                            <strong>@actionItem.Title</strong>
+                            <span>@actionItem.Summary</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ConfigurationHealthReport Report { get; set; } = default!;
+
+    [Parameter] public ConfigurationAreaHealth? Area { get; set; }
+
+    [Parameter] public bool IsProductionConfiguration { get; set; }
+
+    [Parameter] public bool IsRunningLiveChecks { get; set; }
+
+    [Parameter] public EventCallback OnRunLiveChecks { get; set; }
+
+    private bool ShowLiveCheckAction => Area?.CanRunLiveProbe == true || Area?.LiveProbe is not null;
+
+    private static string GetReadinessLabel(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "Not configured",
+        ConfigurationCheckStatus.Configured => "Configured",
+        ConfigurationCheckStatus.Ready => "Ready",
+        ConfigurationCheckStatus.Warning => "Needs attention",
+        ConfigurationCheckStatus.Error => "Error",
+        _ => "Skipped"
+    };
+
+    private static string GetReadinessStatusClass(ConfigurationCheckStatus status) => status switch
+    {
+        ConfigurationCheckStatus.NotConfigured => "readiness-status--muted",
+        ConfigurationCheckStatus.Configured => "readiness-status--info",
+        ConfigurationCheckStatus.Ready => "readiness-status--success",
+        ConfigurationCheckStatus.Warning => "readiness-status--warning",
+        ConfigurationCheckStatus.Error => "readiness-status--danger",
+        _ => "readiness-status--muted"
+    };
+
+    private static string FormatTimestamp(DateTimeOffset timestamp) => timestamp.ToLocalTime().ToString("g");
+
+    private static string FormatDuration(TimeSpan duration) => duration.TotalSeconds >= 1
+        ? $"{duration.TotalSeconds:F1}s"
+        : $"{duration.TotalMilliseconds:F0}ms";
+}

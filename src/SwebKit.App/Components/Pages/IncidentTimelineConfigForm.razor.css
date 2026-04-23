@@ -1,0 +1,246 @@
+.incident-timeline-config {
+    display: grid;
+    gap: 18px;
+    padding: 12px 0;
+}
+
+.incident-timeline-config__intro,
+.incident-timeline-config__suggestion,
+.incident-timeline-config__empty,
+.incident-timeline-config__card,
+.incident-timeline-config__footer {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+}
+
+.incident-timeline-config__intro,
+.incident-timeline-config__suggestion,
+.incident-timeline-config__footer {
+    padding: 16px;
+}
+
+.incident-timeline-config__intro,
+.incident-timeline-config__suggestion {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.incident-timeline-config__eyebrow {
+    margin: 0 0 6px;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    font-weight: 700;
+}
+
+.incident-timeline-config__lead,
+.incident-timeline-config__hint,
+.incident-timeline-config__suggestion-body,
+.incident-timeline-config__section-header p,
+.incident-timeline-config__section-empty,
+.incident-timeline-config__list-empty,
+.incident-timeline-config__empty p,
+.incident-timeline-config__card-header p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.incident-timeline-config__intro-copy {
+    display: grid;
+    gap: 10px;
+    max-width: 720px;
+}
+
+.incident-timeline-config__intro-actions,
+.incident-timeline-config__footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.incident-timeline-config__suggestion {
+    background: linear-gradient(135deg, rgba(0, 120, 212, 0.08), rgba(52, 180, 200, 0.04));
+}
+
+.incident-timeline-config__suggestion-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.incident-timeline-config__suggestion-status,
+.incident-timeline-config__scope-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--color-accent-subtle);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    border: 1px solid rgba(0, 120, 212, 0.25);
+}
+
+.incident-timeline-config__cards {
+    display: grid;
+    gap: 16px;
+}
+
+.incident-timeline-config__card {
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+}
+
+.incident-timeline-config__card--suggested {
+    border-color: rgba(0, 120, 212, 0.3);
+    box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.08);
+}
+
+.incident-timeline-config__card-header,
+.incident-timeline-config__section-header,
+.incident-timeline-config__list-header,
+.incident-timeline-config__list-row,
+.incident-timeline-config__compound-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.incident-timeline-config__card-header h4,
+.incident-timeline-config__section-header h5 {
+    margin: 0 0 4px;
+}
+
+.incident-timeline-config__field-grid,
+.incident-timeline-config__compound-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.incident-timeline-config__compound-grid {
+    flex: 1 1 640px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.incident-timeline-config__field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.incident-timeline-config__field--full {
+    grid-column: 1 / -1;
+}
+
+.incident-timeline-config__input {
+    min-height: 38px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    padding: 0 10px;
+    font: inherit;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.incident-timeline-config__section {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+}
+
+.incident-timeline-config__section-body,
+.incident-timeline-config__stack,
+.incident-timeline-config__list-group {
+    display: grid;
+    gap: 12px;
+}
+
+.incident-timeline-config__button {
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    padding: 0 12px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.incident-timeline-config__button:hover,
+.incident-timeline-config__button:focus-visible {
+    border-color: rgba(0, 120, 212, 0.35);
+    outline: none;
+}
+
+.incident-timeline-config__button--secondary {
+    background: var(--color-surface);
+}
+
+.incident-timeline-config__button--danger {
+    color: var(--color-error);
+}
+
+.incident-timeline-config__empty {
+    padding: 20px;
+    display: grid;
+    gap: 8px;
+}
+
+.incident-timeline-config__compound-card {
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+@media (max-width: 1100px) {
+    .incident-timeline-config__field-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .incident-timeline-config__compound-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .incident-timeline-config__field-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .incident-timeline-config__intro,
+    .incident-timeline-config__suggestion,
+    .incident-timeline-config__card-header,
+    .incident-timeline-config__section-header,
+    .incident-timeline-config__list-header,
+    .incident-timeline-config__list-row,
+    .incident-timeline-config__compound-card,
+    .incident-timeline-config__footer {
+        align-items: stretch;
+    }
+
+    .incident-timeline-config__intro-actions,
+    .incident-timeline-config__footer {
+        justify-content: stretch;
+    }
+
+    .incident-timeline-config__intro-actions ::deep fluent-button,
+    .incident-timeline-config__footer ::deep fluent-button {
+        width: 100%;
+    }
+}

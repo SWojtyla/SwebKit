@@ -3,21 +3,32 @@
 @inject AppStateService AppState
 @inject INotificationService Notifications
 @inject IConnectionStateService ConnectionState
+@inject IAppEventBus Events
+@inject IRedisWarmupCache RedisWarmupCache
 @implements IDisposable
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
+@inject RedisOpsInsightsAggregator OpsInsightsAggregator
 
 <div class="redis-page">
+    <RoutePageHeader Area="redis" Subtitle="Explore keyspaces, health, and value operations for the active cache.">
+        <Meta>
+        </Meta>
+    </RoutePageHeader>
+
     <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
                         SelectedCacheId="@SelectedCacheId" IsConnected="@(Client is not null)" ConnectionLabel="@ConnectionLabel"
                         OnCacheChanged="HandleCacheChanged" OnCacheNameChanged="HandleCacheNameChanged" />
 
     @if (!AppState.UseDemoData && !IsConfigured)
     {
-        <div class="not-configured">
-            Redis is not configured for this environment. Configure it in Settings.
-        </div>
+        <EmptyState Icon="🗄" Title="Redis is not configured"
+                    Subtitle="Configure the active cache in Settings before opening keyspace, health, and value operations.">
+            <Actions>
+                <a href="/settings?section=redis">Open Redis settings</a>
+            </Actions>
+        </EmptyState>
     }
     else
     {
@@ -51,7 +62,8 @@
                         @if (_hasMoreKeys)
                         {
                             <div class="load-more-bar">
-                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count loaded)
+                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count
+                                    loaded)
                                 </FluentButton>
                             </div>
                         }
@@ -76,6 +88,12 @@
 
                     <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
                                        TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
+
+                    <div class="panel insights-panel">
+                        <RedisOpsInsightsPanel SlowLog="@_slowLog" HotKeys="@_hotKeys" PubSub="@_pubSub"
+                                               OnRefreshSlowLog="LoadSlowLogAsync" OnRefreshPubSub="LoadPubSubAsync"
+                                               OnNavigateToKey="SelectKeyAsync" />
+                    </div>
                 </div>
             </div>
         }
@@ -141,6 +159,12 @@
     private RedisKeyspaceHealthReport? HealthReport;
     private bool IsAnalyzingHealth;
 
+    // Ops insights
+    private RedisSlowLogSummary? _slowLog;
+    private RedisHotKeySummary? _hotKeys;
+    private RedisPubSubSnapshot? _pubSub;
+    private CancellationTokenSource _insightsCts = new();
+
     // Confirm dialog
     private bool ConfirmVisible;
     private string ConfirmTitle = "Confirm";
@@ -184,7 +208,20 @@
 
     protected override void OnInitialized()
     {
+        Events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
         RegisterRedisCommands();
+    }
+
+    private void OnRefreshRequested(RefreshRequestedEvent refresh)
+    {
+        if (!string.Equals(refresh.Area, "redis", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = SelectedKey is not null
+            ? InvokeAsync(RefreshSelectedAsync)
+            : InvokeAsync(StartFreshScanAsync);
     }
 
     private void RegisterRedisCommands()
@@ -291,6 +328,11 @@
 
         _loadedCacheId = SelectedCacheId; // Set guard BEFORE await (BL-3)
 
+        // Reset insights when cache changes
+        _slowLog = null;
+        _hotKeys = null;
+        _pubSub = null;
+
         await StartReconnectAndScanAsync();
     }
 
@@ -367,6 +409,17 @@
             {
                 if (IsCurrentScanSession(scanSession))
                     ConnectionState.SetNotConfigured("redis");
+                return;
+            }
+
+            // Check warm-client cache first — TryGet removes the entry so ownership transfers here
+            var warm = RedisWarmupCache.TryGet(entry.Id);
+            if (warm is not null)
+            {
+                if (!IsCurrentScanSession(scanSession))
+                    return;
+                Client = warm;
+                ConnectionState.SetConnected("redis");
                 return;
             }
 
@@ -475,7 +528,8 @@
         }
     }
 
-    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys, long scanSession, CancellationToken ct = default)
+    private async Task LoadVisibleKeyTypesAsync(IReadOnlyList<string> targetKeys, long scanSession, CancellationToken ct =
+default)
     {
         if (Client is null || targetKeys.Count == 0 || !IsCurrentScanSession(scanSession))
             return;
@@ -1069,6 +1123,73 @@
         HealthReport = null;
     }
 
+    private async Task LoadSlowLogAsync()
+    {
+        if (Client is null)
+            return;
+
+        _insightsCts.Cancel();
+        _insightsCts.Dispose();
+        _insightsCts = new CancellationTokenSource();
+        var ct = _insightsCts.Token;
+
+        _slowLog = null;
+        _hotKeys = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var slowLog = await Client.GetSlowLogAsync(ct: ct);
+            ct.ThrowIfCancellationRequested();
+            var hotKeys = OpsInsightsAggregator.BuildHotKeySignals(slowLog, ScannedKeyInfos);
+            _slowLog = slowLog;
+            _hotKeys = hotKeys;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadPubSubAsync()
+    {
+        if (Client is null)
+            return;
+
+        _insightsCts.Cancel();
+        _insightsCts.Dispose();
+        _insightsCts = new CancellationTokenSource();
+        var ct = _insightsCts.Token;
+
+        _pubSub = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _pubSub = await Client.GetPubSubSnapshotAsync(ct: ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private async Task<IReadOnlyList<RedisKeyInfo>> LoadKeyInfosForLoadedKeysAsync(CancellationToken ct)
     {
         if (Client is null || Keys.Count == 0)
@@ -1238,7 +1359,10 @@
     {
         _cts.Cancel();
         _cts.Dispose();
+        _insightsCts.Cancel();
+        _insightsCts.Dispose();
         DisposeClient();
+        Events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         foreach (var id in new[] { "redis-scan", "redis-refresh-key", "redis-delete-key" })
             Commands.Unregister(id);
         Selection.SetSelection("redis", null);

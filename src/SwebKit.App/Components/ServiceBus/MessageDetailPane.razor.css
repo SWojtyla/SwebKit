@@ -1,5 +1,12 @@
 /* FQ-20 – CSS isolation: repeated inline styles extracted from MessageDetailPane.razor */
 
+.mdp-empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
 .mdp-host {
     height: 100%;
     display: flex;
@@ -16,6 +23,18 @@
     flex-wrap: wrap;
 }
 
+.mdp-message-id {
+    font-weight: 600;
+}
+
+.mdp-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 /* Repeated 6× across Edit/Replay/Schedule/Copy/Save buttons */
 .mdp-btn {
     padding: 2px 8px;
@@ -25,4 +44,141 @@
     border: 1px solid var(--color-border);
     border-radius: 3px;
     color: var(--color-text);
+}
+
+.mdp-btn:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+    background: color-mix(in srgb, var(--color-accent-subtle) 72%, var(--color-surface-2));
+}
+
+.mdp-tabs {
+    flex: 1;
+    overflow: hidden;
+}
+
+.mdp-tab-pane {
+    padding: 10px;
+    overflow: auto;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.mdp-tab-pane--body {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: var(--color-text);
+}
+
+.mdp-prop-row {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+}
+
+.mdp-prop-key {
+    color: var(--color-text-muted);
+    min-width: 140px;
+    flex-shrink: 0;
+    word-break: break-all;
+}
+
+.mdp-prop-value {
+    word-break: break-all;
+}
+
+.mdp-empty {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.mdp-dlq-callout {
+    background: color-mix(in srgb, var(--color-error) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 45%, var(--color-border));
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.mdp-dlq-reason {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-error);
+    margin-bottom: 4px;
+}
+
+.mdp-dlq-desc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.mdp-save-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-backdrop);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.mdp-save-dialog {
+    background: var(--color-panel-raised, var(--color-surface-2));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 360px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+}
+
+.mdp-save-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+}
+
+.mdp-save-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+.mdp-save-copy {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 8px;
+}
+
+.mdp-save-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    justify-content: flex-end;
+}
+
+.mdp-modal-btn {
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.mdp-modal-btn--secondary {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.mdp-modal-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border: none;
+}
+
+.mdp-modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

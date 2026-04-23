@@ -1,0 +1,57 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using SwebKit.Core.Models
+
+@inject NavigationManager Nav
+
+<div class="mapping-panel" data-testid="mapping-proposal-panel">
+    <div class="mapping-panel-header">
+        <div class="mapping-panel-title-row">
+            <span class="mapping-panel-icon" aria-hidden="true">💡</span>
+            <span class="mapping-panel-title">Mapping suggestions</span>
+            <button class="mapping-panel-dismiss-btn" @onclick="HandleDismiss"
+                    aria-label="Dismiss mapping suggestions">Dismiss</button>
+        </div>
+        <p class="mapping-panel-advisory">
+            These are candidate suggestions based on evidence from this investigation. They are not confirmed mappings
+            and have no effect until you accept them in Settings.
+        </p>
+    </div>
+
+    <ul class="mapping-panel-list">
+        @foreach (var proposal in Proposals)
+        {
+            <li class="mapping-panel-item" data-testid="mapping-proposal-item">
+                <div class="mapping-item-header">
+                    <span
+                        class="mapping-item-source-badge mapping-item-source-badge--@proposal.SourceArea.ToLowerInvariant()">
+                        @proposal.SourceArea
+                    </span>
+                    <span class="mapping-item-scope">@proposal.WorkloadKind/@proposal.WorkloadName</span>
+                    @if (proposal.EvidenceItemCount > 0)
+                    {
+                        <span class="mapping-item-evidence-count" title="Evidence items that triggered this suggestion">
+                            @proposal.EvidenceItemCount item(s)
+                        </span>
+                    }
+                </div>
+                <p class="mapping-item-rationale">@proposal.Rationale</p>
+            </li>
+        }
+    </ul>
+
+    <div class="mapping-panel-footer">
+        <button class="mapping-panel-settings-btn" @onclick="HandleAcceptInSettings">
+            Accept in Settings →
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<IncidentMappingProposal> Proposals { get; set; } = [];
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private async Task HandleDismiss() => await OnDismiss.InvokeAsync();
+
+    private void HandleAcceptInSettings() =>
+        Nav.NavigateTo("/settings?section=incident-timeline");
+}

@@ -13,7 +13,7 @@
     display: inline-flex;
     align-items: center;
     padding: 1px var(--spacing-sm);
-    border-radius: 10px;
+    border-radius: var(--aks-chip-radius);
     font-size: var(--font-size-sm);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -64,7 +64,7 @@
 
 .aks-metric-bar-track {
     height: 3px;
-    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--color-text-muted) 20%, transparent);
     border-radius: 2px;
     overflow: hidden;
     width: 100%;
@@ -132,4 +132,46 @@
 .aks-pod-ip {
     font-family: var(--font-family-mono, 'Cascadia Code', 'Consolas', monospace);
     font-size: var(--font-size-sm);
+}
+
+.aks-analysis-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px;
+    border-radius: var(--aks-chip-radius);
+    border: 1px solid var(--aks-cell-accent-border);
+    background: var(--aks-cell-accent-surface);
+    color: var(--color-accent);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.aks-analysis-btn:hover {
+    background: color-mix(in srgb, var(--aks-cell-accent-surface) 76%, var(--color-accent-subtle));
+    border-color: var(--color-accent);
+}
+
+/* ── Status row tinting ── */
+::deep .row-critical td,
+::deep .row-critical {
+    background-color: rgba(229, 57, 53, 0.07);
+}
+
+::deep .row-degraded td,
+::deep .row-degraded {
+    background-color: rgba(255, 152, 0, 0.07);
+}
+
+::deep .row-muted td,
+::deep .row-muted {
+    opacity: 0.6;
+}
+
+::deep .selected-row.row-critical,
+::deep .selected-row.row-degraded,
+::deep .selected-row.row-muted {
+    background-color: var(--aks-grid-selected-bg) !important;
 }

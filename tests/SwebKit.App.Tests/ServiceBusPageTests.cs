@@ -10,6 +10,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class ServiceBusPageTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -19,19 +20,24 @@ public sealed class ServiceBusPageTests : TestContext
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
+        var uiState = new UiStateRepository();
         var events = new AppEventBus(NullLogger<AppEventBus>.Instance);
         Services.AddSingleton<IAppEventBus>(events);
         _credentialStore = new FakeCredentialStore();
-        _appState = new AppStateService(new ProfileRepository(), new UiStateRepository(), events);
+        _appState = new AppStateService(new ProfileRepository(), uiState, events);
         Services.AddSingleton<ICredentialStore>(_credentialStore);
         Services.AddSingleton(_appState);
         Services.AddSingleton(new ScheduledMessageRepository());
-        Services.AddSingleton(new UiStateRepository());
+        Services.AddSingleton(uiState);
         Services.AddSingleton(new PageDataCache());
-        Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
+        Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
-        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore));
+        Services.AddSingleton<IServiceBusClientFactory>(new NullServiceBusClientFactory());
+        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore, new NullServiceBusClientFactory()));
+        Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
+        Services.AddScoped<OperatorWorkspaceService>();
+        Services.AddSingleton<IncidentInvestigationLauncher>();
     }
 
     [Fact]
@@ -66,6 +72,33 @@ public sealed class ServiceBusPageTests : TestContext
         });
     }
 
+    [Fact]
+    public async Task NamespacePanelToggle_RestoresPersistedCollapsedState()
+    {
+        var uiState = Services.GetRequiredService<UiStateRepository>();
+        await uiState.SaveViewStateAsync("service-bus:namespace-pane-collapsed", true);
+
+        var cut = RenderComponent<ServiceBusPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
+            Assert.Contains("collapsed", cut.Find(".sb-entity-panel").ClassName, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void RouteHeader_DoesNotRenderServiceBusSettingsActionButton()
+    {
+        var cut = RenderComponent<ServiceBusPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll(".page-shell-header .page-header-action-btn"));
+            Assert.NotEmpty(cut.FindAll("a[href='/settings?section=servicebus']"));
+        });
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
         private readonly Dictionary<string, string> _secrets = new(StringComparer.Ordinal);
@@ -89,6 +122,17 @@ public sealed class ServiceBusPageTests : TestContext
         public T? GetSelection<T>(string area) where T : class =>
             _selections.TryGetValue(area, out var value) ? value as T : null;
 
+#pragma warning disable CS0067
         public event Action? SelectionChanged;
+#pragma warning restore CS0067
+    }
+
+    private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Serialization;
 
 namespace SwebKit.Core.Configuration;
@@ -14,23 +15,16 @@ public class UiStateRepository
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
-        var filePath = File.Exists(AppDataPaths.UiStateJson)
+        var filePath = AppDataFileStore.Exists(AppDataPaths.UiStateJson)
             ? AppDataPaths.UiStateJson
-            : (File.Exists(AppDataPaths.LegacyUiStateJson) ? AppDataPaths.LegacyUiStateJson : null);
+            : (AppDataFileStore.Exists(AppDataPaths.LegacyUiStateJson) ? AppDataPaths.LegacyUiStateJson : null);
 
         if (filePath is null) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(filePath);
-            _state = JsonSerializer.Deserialize<UiState>(json, Options) ?? new();
-            _state.OpenTabs ??= [];
-            _state.ViewStates ??= [];
-            _state.SavedFilters ??= [];
-            _state.MessageListPreferences ??= [];
-            _state.RecentCommandIds ??= [];
-            _state.NotificationHistory ??= [];
-            _state.DemoMonitoredNamespaces ??= [];
+            var loadResult = await AppDataFileStore.LoadAsync(filePath, DeserializeUiState);
+            _state = loadResult.Value;
         }
         catch
         {
@@ -42,7 +36,7 @@ public class UiStateRepository
     {
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_state, Options);
-        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, json);
+        await AppDataFileStore.SaveAsync(AppDataPaths.UiStateJson, json);
     }
 
     public IReadOnlyList<SavedFilter> GetFilters(string scopeKey) =>
@@ -92,6 +86,61 @@ public class UiStateRepository
         await SaveAsync();
     }
 
+    public T GetViewState<T>(string scopeKey, T defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(scopeKey))
+        {
+            return defaultValue;
+        }
+
+        if (!_state.ViewStates.TryGetValue(scopeKey, out var value) || value is null)
+        {
+            return defaultValue;
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return defaultValue;
+            }
+
+            try
+            {
+                var deserialized = element.Deserialize<T>(Options);
+                return deserialized is null ? defaultValue : deserialized;
+            }
+            catch
+            {
+                return defaultValue;
+            }
+        }
+
+        if (value is T typed)
+        {
+            return typed;
+        }
+
+        try
+        {
+            var serialized = JsonSerializer.Serialize(value, Options);
+            var deserialized = JsonSerializer.Deserialize<T>(serialized, Options);
+            return deserialized is null ? defaultValue : deserialized;
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    public async Task SaveViewStateAsync<T>(string scopeKey, T value)
+    {
+        if (string.IsNullOrWhiteSpace(scopeKey)) return;
+
+        _state.ViewStates[scopeKey] = value!;
+        await SaveAsync();
+    }
+
     public async Task ResetMessageListPreferencesAsync(string scopeKey)
     {
         if (string.IsNullOrWhiteSpace(scopeKey)) return;
@@ -137,6 +186,22 @@ public class UiStateRepository
         };
     }
 
+    private static UiState DeserializeUiState(string json) =>
+        NormalizeState(JsonSerializer.Deserialize<UiState>(json, Options) ?? new UiState());
+
+    private static UiState NormalizeState(UiState state)
+    {
+        state.OpenTabs ??= [];
+        state.ViewStates ??= [];
+        state.SavedFilters ??= [];
+        state.MessageListPreferences ??= [];
+        state.RecentCommandIds ??= [];
+        state.RecentResources ??= [];
+        state.NotificationHistory ??= [];
+        state.DemoMonitoredNamespaces ??= [];
+        return state;
+    }
+
     private static string NormalizeDensity(string? density) => density is "compact" or "default" or "comfort"
         ? density
         : "default";
@@ -155,6 +220,8 @@ public class UiState
     public Dictionary<string, MessageListPreferences> MessageListPreferences { get; set; } = [];
     /// <summary>Most-recently-used command IDs (newest first, max 5).</summary>
     public List<string> RecentCommandIds { get; set; } = [];
+    /// <summary>Most-recently-used semantic resources (newest first, max 8).</summary>
+    public List<RecentResourceEntry> RecentResources { get; set; } = [];
     /// <summary>Persisted notification history (newest-first, max 50).</summary>
     public List<PersistedNotification> NotificationHistory { get; set; } = [];
     /// <summary>Demo-mode pod health monitoring preferences (no AksConfig to fall back on).</summary>

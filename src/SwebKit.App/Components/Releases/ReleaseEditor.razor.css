@@ -1,0 +1,107 @@
+.release-editor__dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--overlay-backdrop);
+    backdrop-filter: blur(2px);
+}
+
+.release-editor__dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    width: min(500px, 100%);
+    padding: 24px;
+    color-scheme: var(--control-color-scheme);
+    background: var(--color-panel-raised, var(--color-surface-2));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+}
+
+.release-editor__title {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    color: var(--color-text);
+}
+
+.release-editor__form {
+    display: grid;
+    gap: var(--spacing-md);
+}
+
+.release-editor__field {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.release-editor__field--grow {
+    flex: 1;
+}
+
+.release-editor__row {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.release-editor__input {
+    width: 100%;
+}
+
+.release-editor__textarea {
+    min-height: 88px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.release-editor__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+}
+
+.release-editor__cancel {
+    padding: 6px 16px;
+    cursor: pointer;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.release-editor__cancel:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-subtle);
+}
+
+.release-editor__actions ::deep fluent-button {
+    min-width: 96px;
+}
+
+@media (max-width: 640px) {
+    .release-editor__dialog {
+        padding: 20px;
+    }
+
+    .release-editor__row {
+        flex-direction: column;
+    }
+
+    .release-editor__actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .release-editor__cancel,
+    .release-editor__actions ::deep fluent-button {
+        width: 100%;
+    }
+}

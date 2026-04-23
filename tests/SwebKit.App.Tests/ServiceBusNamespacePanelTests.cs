@@ -33,7 +33,7 @@ public class ServiceBusNamespacePanelTests : TestContext
         var cut = RenderComponent<ServiceBusNamespacePanel>(ps => ps
             .Add(p => p.NamespaceStates, []));
 
-        cut.Find("button[style*='color:white']").Click();
+        cut.Find("button.sb-ns-header-btn-primary").Click();
 
         Assert.Contains("sb-add-form", cut.Markup);
     }
@@ -45,11 +45,11 @@ public class ServiceBusNamespacePanelTests : TestContext
             .Add(p => p.NamespaceStates, []));
 
         // Open the form
-        cut.Find("button[style*='color:white']").Click();
+        cut.Find("button.sb-ns-header-btn-primary").Click();
         Assert.Contains("sb-add-form", cut.Markup);
 
         // Cancel hides the form
-        cut.Find("button.sb-btn-secondary-sm:last-of-type").Click();
+        cut.Find("button.sb-add-form-btn-secondary:last-of-type").Click();
 
         Assert.DoesNotContain("sb-add-form", cut.Markup);
     }
