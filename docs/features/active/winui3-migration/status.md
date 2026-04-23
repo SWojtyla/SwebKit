@@ -14,23 +14,24 @@ last_updated: "2026-04-23"
 
 ## Quick summary
 
-Plan created. Not started. Next step: scaffold the blank `SwebKit.WinUI` project and add it to the solution.
+Phase 0 complete. WinUI 3 blank window boots clean from VS Code using VS MSBuild.
 
 **Jira:** not linked
 
-**Current focus:** Phase 0 — create the project scaffold, wire solution, verify cold boot.
+**Current focus:** Phase 1 — Shell (NavigationView + TabView, port TabService / CommandRegistry / OperatorWorkspaceService).
 
 ## Progress checklist
 
-### Phase 0 — Blank shell
+### Phase 0 — Blank shell ✅
 
-- [ ] Create `src/SwebKit.WinUI/SwebKit.WinUI.csproj` (WinUI 3, `net10.0-windows10.0.19041.0`)
-- [ ] Add to `SwebKit.slnx` under `/src/` folder
-- [ ] Wire `Microsoft.Extensions.Hosting` DI host (replaces `MauiApp.CreateBuilder`)
-- [ ] Reference all 6 integration projects + `SwebKit.Core`
-- [ ] Register all existing singletons/transients from `MauiProgram.cs`
-- [ ] Boot to a blank `MainWindow` — no crash, no missing services
-- [ ] One-line fix: replace `Microsoft.Maui.Controls.Application.Current` in `WindowsTrayLifecycleService.cs`
+- [x] Create `src/SwebKit.WinUI/SwebKit.WinUI.csproj` (WinUI 3, `net10.0-windows10.0.19041.0`)
+- [x] Add to `SwebKit.slnx` under `/src/` folder
+- [x] Wire `Microsoft.Extensions.Hosting` DI host (replaces `MauiApp.CreateBuilder`)
+- [x] Reference all 6 integration projects + `SwebKit.Core`
+- [x] Register all existing singletons/transients from `MauiProgram.cs`
+- [x] Boot to a blank `MainWindow` — no crash, no missing services
+- [x] One-line fix: replace `Microsoft.Maui.Controls.Application.Current` in `WindowsTrayLifecycleService.cs`
+- [x] Add `.vscode/launch.json` + `tasks.json` — build via VS MSBuild, debug via `coreclr`
 
 ### Phase 1 — Shell
 

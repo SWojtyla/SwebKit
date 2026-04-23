@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+        <RootNamespace>SwebKit.WinUI</RootNamespace>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UseWinUI>true</UseWinUI>
+        <WindowsPackageType>None</WindowsPackageType>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+        <Platform>x64</Platform>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+
+        <ApplicationTitle>SwebKit</ApplicationTitle>
+        <ApplicationId>com.companyname.swebkit.winui</ApplicationId>
+        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationVersion>1</ApplicationVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- WinUI 3 via Windows App SDK -->
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250401001" />
+
+        <!-- Generic host + DI (not pulled in by Windows App SDK) -->
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+
+        <!-- Community Toolkit — controls and MVVM -->
+        <!-- Note: DataGrid has no WinUI 3 port in v8 — use Windows App SDK built-in DataGrid or plan a custom solution -->
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.2.251219" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.251219" />
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+
+        <!-- Charts -->
+        <PackageReference Include="LiveChartsCore.SkiaSharpView.WinUI" Version="2.0.0-rc3" />
+
+        <!-- HTTP resilience — match SwebKit.DevOps version to avoid downgrade -->
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\SwebKit.Core\SwebKit.Core.csproj" />
+        <ProjectReference Include="..\SwebKit.Azure\SwebKit.Azure.csproj" />
+        <ProjectReference Include="..\SwebKit.Kubernetes\SwebKit.Kubernetes.csproj" />
+        <ProjectReference Include="..\SwebKit.Redis\SwebKit.Redis.csproj" />
+        <ProjectReference Include="..\SwebKit.DevOps\SwebKit.DevOps.csproj" />
+        <ProjectReference Include="..\SwebKit.Observability\SwebKit.Observability.csproj" />
+    </ItemGroup>
+
+</Project>

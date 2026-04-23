@@ -17,11 +17,17 @@ Library choices and rationale for the WinUI 3 host.
 **Packages:**
 
 ```
-Microsoft.WindowsAppSDK         (WinUI 3 SDK)
-CommunityToolkit.WinUI          (meta-package, or individual controls)
-CommunityToolkit.WinUI.Controls.DataGrid
-CommunityToolkit.WinUI.Controls.Segmented
+Microsoft.WindowsAppSDK                       (WinUI 3 SDK)
+Microsoft.Extensions.Hosting                  (generic host / DI — not bundled by Windows App SDK)
+CommunityToolkit.WinUI.Controls.Segmented     (8.2.251219)
+CommunityToolkit.WinUI.Controls.Sizers        (GridSplitter replacement — 8.2.251219)
 ```
+
+**Note — DataGrid:** `CommunityToolkit.WinUI.UI.Controls.DataGrid` (v7) targets UWP, not WinUI 3. There is no v8 WinUI 3 port of DataGrid in the toolkit as of April 2026. The WinUI 3 / Windows App SDK does not ship a built-in DataGrid control either. Options for Phase 2+:
+
+- Custom `ListView`/`ItemsView` with column headers (sufficient for most grids in this app)
+- Telerik or Syncfusion DataGrid (commercial)
+- Contribute to / wait for the CommunityToolkit v8 DataGrid — tracked at [github.com/CommunityToolkit/Windows](https://github.com/CommunityToolkit/Windows)
 
 **Rejected alternatives:**
 

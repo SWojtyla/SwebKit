@@ -1,0 +1,21 @@
+<Project>
+
+    <!--
+    When building via dotnet CLI, MSBuildExtensionsPath points to the .NET SDK directory,
+    which does NOT contain the PRI resource generation tools (Microsoft.Build.Packaging.Pri.Tasks.dll).
+    Those tools ship only with the VS "UWP development" workload.
+
+    MrtCore.PriGen.targets (Windows App SDK) sets AppxMSBuildToolsPath conditionally — only if
+    not already set. Because Directory.Build.props runs in the props phase (before NuGet .targets
+    files), setting it here prevents the targets from overriding it.
+
+    The condition detects the CLI case: the default path under the dotnet SDK does not exist,
+    but the VS 2025 path does.
+  -->
+    <PropertyGroup>
+        <AppxMSBuildToolsPath Condition="'$(AppxMSBuildToolsPath)' == ''
+              AND !Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\AppxPackage\')
+              AND  Exists('C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Microsoft\VisualStudio\v18.0\AppxPackage\')">C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Microsoft\VisualStudio\v18.0\AppxPackage\</AppxMSBuildToolsPath>
+    </PropertyGroup>
+
+</Project>
