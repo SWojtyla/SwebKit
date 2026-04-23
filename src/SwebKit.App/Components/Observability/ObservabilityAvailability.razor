@@ -1,6 +1,7 @@
 @using ApexCharts
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
+@implements IDisposable
 
 <div class="obs-availability">
     @if (_isLoading && !_results.Any())
@@ -109,6 +110,18 @@
     private string? _error;
     private bool _heatmapView;
     private CancellationTokenSource _cts = new();
+    private IObservabilityProvider? _loadedProvider;
+    private TimeRange? _loadedRange;
+    private bool _disposed;
+
+    // Cached aggregates — rebuilt once after each load, not recomputed on every render
+    private double _overallAvailability = 100;
+    private int _passCount;
+    private int _failCount;
+
+    private double OverallAvailability => _overallAvailability;
+    private int PassCount => _passCount;
+    private int FailCount => _failCount;
 
     // Heatmap data
     private List<HeatmapSeries> _heatmapData = [];
@@ -134,21 +147,14 @@
                     Ranges = new List<PlotOptionsHeatmapColorScaleRange>
                     {
                         new() { From = 0, To = 90, Color = "#c8002a", Name = "< 90%" },
-                        new() { From = 90, To = 99, Color = "#e08000", Name = "90–99%" },
-                        new() { From = 99, To = 100, Color = "#22c55e", Name = "≥ 99%" },
+                        new() { From = 90, To = 99, Color = "#e08000", Name = "90\u201399%" },
+                        new() { From = 99, To = 100, Color = "#22c55e", Name = "\u2265 99%" },
                     }
                 }
             }
         },
         Legend = new Legend { Show = false },
     };
-
-    private double OverallAvailability =>
-        _results.Count == 0 ? 100 :
-        _results.Count(r => r.Success) * 100.0 / _results.Count;
-
-    private int PassCount => _results.Count(r => r.Success);
-    private int FailCount => _results.Count(r => !r.Success);
 
     private string OverallClass()
     {
@@ -160,7 +166,16 @@
 
     private string OverallFmt() => $"{OverallAvailability:F1}%";
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Provider is null) return;
+
+        if (ReferenceEquals(_loadedProvider, Provider) &&
+            _loadedRange == Range)
+            return;
+
+        await LoadAsync();
+    }
 
     public async Task RefreshAsync() => await LoadAsync();
 
@@ -168,31 +183,56 @@
     {
         if (Provider is null) return;
 
-        _cts.Cancel();
-        _cts = new CancellationTokenSource();
+        _loadedProvider = Provider;
+        _loadedRange = Range;
+
+        var loadCts = BeginLoadCycle();
         _isLoading = true;
         _error = null;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            var data = await Provider.GetAvailabilityAsync(Range, _cts.Token);
+            var data = await Provider.GetAvailabilityAsync(Range, loadCts.Token);
             _results.Clear();
             _results.AddRange(data);
             _selected = null;
             RebuildHeatmapData();
         }
+        catch (OperationCanceledException) when (loadCts.IsCancellationRequested) { return; }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _isLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+                await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private CancellationTokenSource BeginLoadCycle()
+    {
+        var previous = _cts;
+        _cts = new CancellationTokenSource();
+        previous.Cancel();
+        previous.Dispose();
+        return _cts;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _cts.Cancel();
+        _cts.Dispose();
     }
 
     private void RebuildHeatmapData()
     {
+        // Recompute cached aggregates in one pass
+        _passCount = _results.Count(r => r.Success);
+        _failCount = _results.Count - _passCount;
+        _overallAvailability = _results.Count == 0 ? 100 : _passCount * 100.0 / _results.Count;
+
         // Group by test name, then bucket by hour
         _heatmapData = _results
             .GroupBy(r => r.TestName)

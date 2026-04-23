@@ -1,6 +1,7 @@
 @using ApexCharts
 @using SwebKit.Core.Abstractions
 @using SwebKit.Core.Models
+@implements IDisposable
 
 @if (_isLoading)
 {
@@ -72,11 +73,23 @@ else if (_metrics is not null)
     private bool _isLoading;
     private string? _error;
     private CancellationTokenSource _cts = new();
+    private IObservabilityProvider? _loadedProvider;
+    private TimeRange? _loadedRange;
+    private bool _disposed;
 
     private ApexChartOptions<TimeSeriesPoint> _requestChartOptions = MakeChartOptions("#0078d4");
     private ApexChartOptions<TimeSeriesPoint> _failureChartOptions = MakeChartOptions("#c8002a");
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Provider is null) return;
+
+        if (ReferenceEquals(_loadedProvider, Provider) &&
+            _loadedRange == Range)
+            return;
+
+        await LoadAsync();
+    }
 
     public async Task RefreshAsync() => await LoadAsync();
 
@@ -84,23 +97,43 @@ else if (_metrics is not null)
     {
         if (Provider is null) return;
 
-        _cts.Cancel();
-        _cts = new CancellationTokenSource();
+        _loadedProvider = Provider;
+        _loadedRange = Range;
+
+        var loadCts = BeginLoadCycle();
         _isLoading = true;
         _error = null;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            _metrics = await Provider.GetOverviewAsync(Range, _cts.Token);
+            _metrics = await Provider.GetOverviewAsync(Range, loadCts.Token);
         }
+        catch (OperationCanceledException) when (loadCts.IsCancellationRequested) { return; }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _isLoading = false;
-            await InvokeAsync(StateHasChanged);
+            if (!_disposed)
+                await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private CancellationTokenSource BeginLoadCycle()
+    {
+        var previous = _cts;
+        _cts = new CancellationTokenSource();
+        previous.Cancel();
+        previous.Dispose();
+        return _cts;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _cts.Cancel();
+        _cts.Dispose();
     }
 
     private string FailureRateClass()

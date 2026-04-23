@@ -162,33 +162,45 @@
                     @onclick="() => SetTab(Tab.Availability)">Availability</button>
         </div>
 
-        <!-- Tab content -->
+        <!-- Tab content — keep-alive: visited tabs stay mounted (display:none) so data survives navigation -->
         <div class="obs-tab-content @GetTabContentClass()">
-            @switch (_tab)
+            @if (_visitedTabs.Contains(Tab.Overview))
             {
-                case Tab.Overview:
+                <div style="@(_tab == Tab.Overview ? null : "display:none")">
                     <ObservabilityOverview @ref="_overviewRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                    break;
-                case Tab.Failures:
+                </div>
+            }
+            @if (_visitedTabs.Contains(Tab.Failures))
+            {
+                <div style="@(_tab == Tab.Failures ? null : "display:none")">
                     <ObservabilityFailures @ref="_failuresRef" Provider="_provider" Range="_range"
                                            ResourceId="@_selectedResource?.ResourceId" TzOffsetMinutes="_tzOffsetMinutes"
                                            OnDrillToLogs="DrillToLogsAsync" />
-                    break;
-                case Tab.Performance:
+                </div>
+            }
+            @if (_visitedTabs.Contains(Tab.Performance))
+            {
+                <div style="@(_tab == Tab.Performance ? null : "display:none")">
                     <ObservabilityPerformance @ref="_perfRef" Provider="_provider" Range="_range" Config="CurrentConfig" />
-                    break;
-                case Tab.Logs:
+                </div>
+            }
+            @if (_visitedTabs.Contains(Tab.Logs))
+            {
+                <div style="@(_tab == Tab.Logs ? null : "display:none")">
                     <ObservabilityLogs @ref="_logsRef" Provider="_provider" Range="_range"
                                        MaxRows="@(CurrentConfig?.MaxRowsPerQuery ?? 500)" SavedQueries="@(CurrentConfig?.SavedQueries ?? [])"
                                        SavedQueriesChanged="OnSavedQueriesChangedAsync" PendingQuery="@_pendingLogsQuery"
                                        PendingQueryVersion="@_pendingLogsQueryVersion" PendingQueryHandled="OnPendingLogsQueryHandledAsync"
                                        Mode="@(CurrentConfig?.LogsQueryMode ?? GuidedLogsQueryMode.Advanced)" ModeChanged="OnLogsModeChangedAsync"
                                        GuidedDraft="CurrentConfig?.GuidedLogsDraft" GuidedDraftChanged="OnGuidedDraftChangedAsync" />
-                    break;
-                case Tab.Availability:
+                </div>
+            }
+            @if (_visitedTabs.Contains(Tab.Availability))
+            {
+                <div style="@(_tab == Tab.Availability ? null : "display:none")">
                     <ObservabilityAvailability @ref="_availRef" Provider="_provider" Range="_range"
                                                TzOffsetMinutes="_tzOffsetMinutes" />
-                    break;
+                </div>
             }
         </div>
     }
@@ -204,6 +216,7 @@
     private enum Tab { Overview, Failures, Performance, Logs, Availability }
 
     private Tab _tab = Tab.Overview;
+    private readonly HashSet<Tab> _visitedTabs = [Tab.Overview];
     private TimeRange _range = TimeRange.Last24Hours;
     private IObservabilityProvider? _provider;
     private ObservabilityResourceInfo? _selectedResource;
@@ -444,6 +457,7 @@
     private void SetTab(Tab tab)
     {
         _tab = tab;
+        _visitedTabs.Add(tab);
         _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }
@@ -472,6 +486,7 @@
         _pendingLogsQuery = kql;
         _pendingLogsQueryVersion++;
         _tab = Tab.Logs;
+        _visitedTabs.Add(Tab.Logs);
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
         await InvokeAsync(StateHasChanged);
     }
@@ -541,6 +556,7 @@ string.Empty, string.Empty),
             && Enum.TryParse<Tab>(tabText, out var restoredTab))
         {
             _tab = restoredTab;
+            _visitedTabs.Add(restoredTab);
         }
 
         if (snapshot.RestoreState.TryGetValue("rangeStart", out var startText)

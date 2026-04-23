@@ -50,7 +50,7 @@
                         <div class="obs-panel-subtitle">@BuildOperationSummary(filteredOps.Count)</div>
                     </div>
                     <div class="obs-list-toolbar">
-                        <FluentSearch Placeholder="Filter operations…" @bind-Value="_filter" Immediate="true" />
+                        <FluentSearch Placeholder="Filter operations…" @bind-Value="Filter" Immediate="true" />
                         <FluentButton @onclick="RefreshAsync" Disabled="_isLoading" title="Refresh performance data">Refresh
                         </FluentButton>
                     </div>
@@ -201,6 +201,12 @@
     private bool _isLoading;
     private string? _error;
     private string _filter = string.Empty;
+
+    private string Filter
+    {
+        get => _filter;
+        set { _filter = value; RebuildFilteredOps(); }
+    }
     private CancellationTokenSource _cts = new();
     private IObservabilityProvider? _loadedProvider;
     private TimeRange? _loadedRange;
@@ -244,18 +250,22 @@
         Legend = new Legend { Position = LegendPosition.Bottom },
     };
 
-    private List<OperationPerformance> FilteredOperationList =>
-        (string.IsNullOrWhiteSpace(_filter)
-            ? _ops
-            : _ops.Where(op => op.OperationName.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
-        .OrderByDescending(op => op.RequestCount)
-        .ThenByDescending(op => op.P95Ms)
-        .ToList();
+    private List<OperationPerformance> FilteredOperationList { get; private set; } = [];
+    private int DegradedOperationCount { get; private set; }
+    private string BusiestOperation { get; private set; } = "n/a";
 
-    private int DegradedOperationCount => _ops.Count(IsDegraded);
-
-    private string BusiestOperation =>
-        _ops.OrderByDescending(op => op.RequestCount).FirstOrDefault()?.OperationName ?? "n/a";
+    private void RebuildFilteredOps()
+    {
+        FilteredOperationList =
+            (string.IsNullOrWhiteSpace(_filter)
+                ? _ops
+                : _ops.Where(op => op.OperationName.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(op => op.RequestCount)
+            .ThenByDescending(op => op.P95Ms)
+            .ToList();
+        DegradedOperationCount = _ops.Count(IsDegraded);
+        BusiestOperation = _ops.OrderByDescending(op => op.RequestCount).FirstOrDefault()?.OperationName ?? "n/a";
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -301,6 +311,7 @@
             _maxP95 = _ops.Count > 0 ? Math.Max(1, _ops.Max(op => op.P95Ms)) : 1;
             _selected = null;
             _trend = [];
+            RebuildFilteredOps();
         }
         catch (OperationCanceledException) when (loadCts.IsCancellationRequested)
         {

@@ -310,4 +310,76 @@ textareaEl.addEventListener('keydown', function (e) {
 
 ---
 
+## BL-15 — `@switch` on a tab enum destroys and recreates components on every switch
+
+**Symptom:** Switching away from a tab and returning triggers a full API reload. Load guards (`_loadedProvider`, `_loadedRange`) never suppress the reload because the component is a brand-new instance each time.
+
+**Cause:** `@switch` (and `@if`) fully dispose the component when the branch is no longer active and create a new instance when it becomes active again (BL-4). All local state, including guard fields, is lost.
+
+**Fix:** Render all tabs simultaneously but hide inactive ones with `display:none`. Track visited tabs lazily so only tabs the user has opened are mounted.
+
+```razor
+@* In @code *@
+private readonly HashSet<Tab> _visitedTabs = [Tab.Overview]; // seed the default tab
+
+private void SetTab(Tab tab)
+{
+    _tab = tab;
+    _visitedTabs.Add(tab); // mark visited so the @if renders it
+    StateHasChanged();
+}
+
+@* In markup *@
+@if (_visitedTabs.Contains(Tab.Overview))
+{
+    <div style="@(_tab == Tab.Overview ? null : "display:none")">
+        <ObservabilityOverview ... />
+    </div>
+}
+@if (_visitedTabs.Contains(Tab.Performance))
+{
+    <div style="@(_tab == Tab.Performance ? null : "display:none")">
+        <ObservabilityPerformance ... />
+    </div>
+}
+```
+
+**Rule:** use `display:none` keep-alive for any set of tabs where the child components make expensive async calls on first render. Always seed the default tab into `_visitedTabs` so it renders immediately.
+
+---
+
+## BL-16 — `OnParametersSetAsync` must guard against redundant loads (BL-5 extension)
+
+**Symptom:** A component fires a new API call every time a sibling component updates the parent, even though the component's own parameters (`Provider`, `Range`) are unchanged. This is especially visible in multi-tab layouts that keep all tab components mounted (see BL-15).
+
+**Cause:** `protected override async Task OnParametersSetAsync() => await LoadAsync();` — no guard — fires the load on every parent re-render regardless of whether parameters actually changed.
+
+**Fix:** Add reference and value guards before the load call. Align with the pattern used in `ObservabilityPerformance` and `ObservabilityFailures`.
+
+```csharp
+private IObservabilityProvider? _loadedProvider;
+private TimeRange? _loadedRange;
+
+protected override async Task OnParametersSetAsync()
+{
+    if (Provider is null) return;
+
+    if (ReferenceEquals(_loadedProvider, Provider) && _loadedRange == Range)
+        return; // parameters unchanged — skip load
+
+    await LoadAsync();
+}
+
+private async Task LoadAsync()
+{
+    _loadedProvider = Provider; // guard set before first await (BL-3)
+    _loadedRange = Range;
+    ...
+}
+```
+
+**Rule:** every component with an `OnParametersSetAsync` that triggers a network call must guard with a `_loaded*` field set **before** the first `await`. Components missing IDisposable must also add it to cancel in-flight requests on dispose.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_
