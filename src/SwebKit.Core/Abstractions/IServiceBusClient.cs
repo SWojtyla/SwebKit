@@ -30,3 +30,14 @@ public interface IServiceBusClient
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }
+
+public interface IServiceBusClientFactory
+{
+    /// <summary>Creates a new <see cref="IServiceBusClient"/> from a raw connection string.</summary>
+    IServiceBusClient Create(string connectionString);
+
+    /// <summary>
+    /// Parses the fully qualified namespace from a Service Bus connection string without creating a client.
+    /// </summary>
+    string ParseFullyQualifiedNamespace(string connectionString);
+}

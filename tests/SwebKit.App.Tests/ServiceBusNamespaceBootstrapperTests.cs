@@ -1,6 +1,7 @@
 using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Models;
 
 namespace SwebKit.App.Tests;
 
@@ -33,7 +34,7 @@ public sealed class ServiceBusNamespaceBootstrapperTests
             [configuredNamespaces[1].Id] = new(false, "Access denied")
         };
 
-        var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore());
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore(), new NullServiceBusClientFactory());
 
         var states = bootstrapper.BuildInitialStates(configuredNamespaces, snapshots, useDemoData: true);
 
@@ -50,7 +51,7 @@ public sealed class ServiceBusNamespaceBootstrapperTests
     [Fact]
     public async Task ConnectAsync_MissingCredential_ReturnsFriendlyError()
     {
-        var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore());
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore(), new NullServiceBusClientFactory());
 
         var result = await bootstrapper.ConnectAsync(new ServiceBusNamespace
         {
@@ -63,18 +64,85 @@ public sealed class ServiceBusNamespaceBootstrapperTests
         Assert.Equal("Connection string not found in credential store.", result.ConnectionError);
     }
 
+    [Fact]
+    public async Task ConnectAsync_ValidCredential_UsesFactoryToCreateClient()
+    {
+        var store = new FakeCredentialStore { CredentialValue = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc=" };
+        var fakeClient = new FakeServiceBusClient();
+        var factory = new CapturingServiceBusClientFactory(fakeClient);
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(store, factory);
+
+        var result = await bootstrapper.ConnectAsync(new ServiceBusNamespace
+        {
+            Alias = "orders-live",
+            FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+            CredentialKey = "orders-key"
+        });
+
+        Assert.Same(fakeClient, result.Client);
+        Assert.Null(result.ConnectionError);
+        Assert.Equal(store.CredentialValue, factory.LastConnectionString);
+    }
+
     private sealed class FakeCredentialStore : ICredentialStore
     {
-        public void Save(string key, string secret)
-        {
-        }
+        public string? CredentialValue { get; set; }
 
-        public string? Get(string key) => null;
+        public void Save(string key, string secret) { }
 
-        public void Delete(string key)
-        {
-        }
+        public string? Get(string key) => CredentialValue;
+
+        public void Delete(string key) { }
 
         public IReadOnlyList<string> ListKeys(string prefix = "") => [];
+    }
+
+    private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString) =>
+            throw new InvalidOperationException("Factory.Create should not be called in this test.");
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            throw new InvalidOperationException("Factory.ParseFullyQualifiedNamespace should not be called in this test.");
+    }
+
+    private sealed class CapturingServiceBusClientFactory : IServiceBusClientFactory
+    {
+        private readonly IServiceBusClient _client;
+        public string? LastConnectionString { get; private set; }
+
+        public CapturingServiceBusClientFactory(IServiceBusClient client) => _client = client;
+
+        public IServiceBusClient Create(string connectionString)
+        {
+            LastConnectionString = connectionString;
+            return _client;
+        }
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            connectionString.Split(';')[0].Replace("Endpoint=sb://", string.Empty);
+    }
+
+    private sealed class FakeServiceBusClient : IServiceBusClient
+    {
+        public Task<SbNamespaceInfo> GetNamespaceInfoAsync(CancellationToken ct = default) => Task.FromResult(new SbNamespaceInfo { Name = "test", Endpoint = "test.servicebus.windows.net" });
+        public Task<IReadOnlyList<SbEntityInfo>> ListQueuesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task<IReadOnlyList<SbEntityInfo>> ListTopicsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task<IReadOnlyList<SbEntityInfo>> ListSubscriptionsAsync(string topicName, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbEntityInfo>>([]);
+        public Task SetQueueEnabledAsync(string queueName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetTopicEnabledAsync(string topicName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetSubscriptionEnabledAsync(string topicName, string subscriptionName, bool enabled, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<SbEntityStats> GetEntityStatsAsync(string entityPath, CancellationToken ct = default) => Task.FromResult(new SbEntityStats());
+        public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbMessage>>([]);
+        public Task<IReadOnlyList<SbMessage>> PeekDeadLetterAsync(string entityPath, int count, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SbMessage>>([]);
+        public Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> PurgeMessagesAsync(string entityPath, bool deadLetter, CancellationToken ct = default) => Task.FromResult(0);
+        public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) => Task.FromResult(0L);
+        public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) => Task.CompletedTask;
+        public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
     }
 }

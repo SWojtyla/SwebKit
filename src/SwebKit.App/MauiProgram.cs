@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
 using SwebKit.App.Platforms.Windows;
 using SwebKit.App.Services;
+using SwebKit.Azure.ServiceBus;
 using SwebKit.Azure.Storage;
 using SwebKit.Azure.ServiceBus.IncidentTimeline;
 using SwebKit.Core.Abstractions;
@@ -10,6 +11,7 @@ using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.DevOps;
 using SwebKit.DevOps.IncidentTimeline;
+using SwebKit.Kubernetes.AksClient;
 using SwebKit.Kubernetes.IncidentTimeline;
 using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
@@ -62,6 +64,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
         builder.Services.AddSingleton<ISelectionContext, SelectionContext>();
         builder.Services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
+        builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
+        builder.Services.AddSingleton<IAksClientFactory, AksClientFactory>();
         builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
         builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
         builder.Services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
@@ -83,6 +87,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
+        builder.Services.AddSingleton<DemoAksClient>();
+        builder.Services.AddSingleton(new DemoRedisClient(0));
         builder.Services.AddSingleton<DemoStorageClient>();
 
         // Observability — real resource discovery (singleton for caching); providers are created per-resource by the factory seam

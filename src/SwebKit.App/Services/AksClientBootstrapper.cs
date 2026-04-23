@@ -3,16 +3,22 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
-using SwebKit.Kubernetes.AksClient;
 
 namespace SwebKit.App.Services;
 
 public sealed class AksClientBootstrapper : IAksClientBootstrapper
 {
+    private readonly IAksClientFactory _factory;
+    private readonly DemoAksClient _demoAksClient;
     private readonly ILogger<AksClientBootstrapper> _logger;
 
-    public AksClientBootstrapper(ILogger<AksClientBootstrapper> logger)
+    public AksClientBootstrapper(
+        IAksClientFactory factory,
+        DemoAksClient demoAksClient,
+        ILogger<AksClientBootstrapper> logger)
     {
+        _factory = factory;
+        _demoAksClient = demoAksClient;
         _logger = logger;
     }
 
@@ -25,7 +31,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         if (request.UseDemoData)
         {
-            return await BuildConnectedResultAsync(new DemoAksClient(), request.RequestedContext, request.RequestedNamespace, request.Config, ct);
+            return await BuildConnectedResultAsync(_demoAksClient, request.RequestedContext, request.RequestedNamespace, request.Config, ct);
         }
 
         if (request.Config is null)
@@ -42,7 +48,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         try
         {
-            var client = new KubernetesAksClient(
+            var client = _factory.Create(
                 string.IsNullOrWhiteSpace(request.RequestedContext) ? null : request.RequestedContext,
                 string.IsNullOrWhiteSpace(request.Config.KubeconfigPath) ? null : request.Config.KubeconfigPath);
 

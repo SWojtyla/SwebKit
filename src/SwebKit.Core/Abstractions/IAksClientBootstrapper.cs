@@ -30,3 +30,9 @@ public sealed record AksClientBootstrapResult(
     string ActiveContext,
     string CurrentNamespace,
     string? ErrorMessage);
+
+public interface IAksClientFactory
+{
+    /// <summary>Creates a real AKS client for the given kubeconfig context and path.</summary>
+    IAksClient Create(string? context, string? kubeconfigPath);
+}

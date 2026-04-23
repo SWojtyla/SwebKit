@@ -11,6 +11,7 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject IServiceBusNamespaceBootstrapper NamespaceBootstrapper
+@inject IServiceBusClientFactory SbClientFactory
 @inject IServiceBusWarmupCache ServiceBusWarmupCache
 @inject OperatorWorkspaceService Workspaces
 @inject IncidentInvestigationLauncher InvestigationLauncher
@@ -451,8 +452,7 @@
 
     private async Task HandleAddNamespaceAsync(string raw)
     {
-        var props = global::Azure.Messaging.ServiceBus.ServiceBusConnectionStringProperties.Parse(raw);
-        var fqns = props.FullyQualifiedNamespace;
+        var fqns = SbClientFactory.ParseFullyQualifiedNamespace(raw);
 
         var credKey = $"sb:ns:{Guid.NewGuid()}";
         CredentialStore.Save(credKey, raw);

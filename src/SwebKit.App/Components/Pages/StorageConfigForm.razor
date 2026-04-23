@@ -1,5 +1,3 @@
-@using SwebKit.Azure.Storage
-
 <div style="display:grid; gap:12px; padding:12px 0;">
 
     @* ── List of configured accounts ── *@
@@ -96,6 +94,7 @@
     [Parameter, EditorRequired] public AppConfig Environment { get; set; } = default!;
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public ICredentialStore CredentialStore { get; set; } = default!;
+    [Inject] private IStorageClientFactory StorageFactory { get; set; } = default!;
 
     private string _displayName = string.Empty;
     private string _accountName = string.Empty;
@@ -165,7 +164,7 @@
         try
         {
             var config = BuildConfig();
-            var client = new AzureStorageClient(config, CredentialStore);
+            var client = StorageFactory.Create(config);
             _connOk = await client.TestConnectionAsync();
             _connStatus = _connOk ? "Connected." : "Connection failed.";
         }

@@ -1,10 +1,10 @@
 @page "/storage"
-@using SwebKit.Azure.Storage
 @inject AppStateService AppState
 @inject ICredentialStore CredentialStore
 @inject IAppEventBus Events
 @inject IConnectionStateService ConnectionState
 @inject SwebKit.Core.Services.DemoStorageClient DemoStorage
+@inject IStorageClientFactory StorageFactory
 @inject CommandRegistry Commands
 @inject ISelectionContext Selection
 @inject INotificationService Notifications
@@ -259,7 +259,7 @@
 
         try
         {
-            _storageClient = new AzureStorageClient(selected, CredentialStore);
+            _storageClient = StorageFactory.Create(selected);
             ConnectionState.SetConnected("storage");
         }
         catch (Exception ex)

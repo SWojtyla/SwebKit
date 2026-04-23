@@ -1,7 +1,6 @@
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
-using SwebKit.Azure.ServiceBus;
 
 namespace SwebKit.App.Services;
 
@@ -11,10 +10,12 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
     private static readonly Guid DemoNamespaceId2 = new("00000000-0000-0000-0000-000000000002");
 
     private readonly ICredentialStore _credentialStore;
+    private readonly IServiceBusClientFactory _clientFactory;
 
-    public ServiceBusNamespaceBootstrapper(ICredentialStore credentialStore)
+    public ServiceBusNamespaceBootstrapper(ICredentialStore credentialStore, IServiceBusClientFactory clientFactory)
     {
         _credentialStore = credentialStore;
+        _clientFactory = clientFactory;
     }
 
     public IReadOnlyList<ServiceBusNamespaceBootstrapState> BuildInitialStates(
@@ -78,7 +79,7 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
 
     public async Task<ServiceBusNamespaceConnectionResult> ConnectAsync(ServiceBusNamespace ns, CancellationToken ct = default)
     {
-        AzureServiceBusClient? client = null;
+        IServiceBusClient? client = null;
 
         try
         {
@@ -90,11 +91,11 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
                     ConnectionError: "Connection string not found in credential store.");
             }
 
-            client = new AzureServiceBusClient(connectionString);
+            client = _clientFactory.Create(connectionString);
             var ok = await client.TestConnectionAsync(ct);
             if (!ok)
             {
-                await client.DisposeAsync();
+                if (client is IAsyncDisposable d) await d.DisposeAsync();
                 return new ServiceBusNamespaceConnectionResult(
                     Client: null,
                     ConnectionError: "Connection test failed. Check the connection string.");
@@ -104,19 +105,13 @@ public sealed class ServiceBusNamespaceBootstrapper : IServiceBusNamespaceBootst
         }
         catch (OperationCanceledException)
         {
-            if (client is not null)
-            {
-                await client.DisposeAsync();
-            }
+            if (client is IAsyncDisposable d2) await d2.DisposeAsync();
 
             throw;
         }
         catch (Exception ex)
         {
-            if (client is not null)
-            {
-                await client.DisposeAsync();
-            }
+            if (client is IAsyncDisposable d3) await d3.DisposeAsync();
 
             return new ServiceBusNamespaceConnectionResult(Client: null, ConnectionError: ex.Message);
         }

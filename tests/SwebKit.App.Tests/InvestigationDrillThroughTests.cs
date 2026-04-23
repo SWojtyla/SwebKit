@@ -148,7 +148,8 @@ public sealed class InvestigationDrillThroughTests : TestContext
         Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new NoopSelectionContext());
-        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(credStore));
+        Services.AddSingleton<IServiceBusClientFactory>(new NullServiceBusClientFactory());
+        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(credStore, new NullServiceBusClientFactory()));
         Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddSingleton<IncidentInvestigationLauncher>();
         Services.AddScoped<OperatorWorkspaceService>();
@@ -338,5 +339,14 @@ public sealed class InvestigationDrillThroughTests : TestContext
         public void Delete(string key) => _store.Remove(key);
         public IReadOnlyList<string> ListKeys(string prefix = "") =>
             _store.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+    }
+
+    private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
     }
 }

@@ -33,7 +33,8 @@ public sealed class ServiceBusPageTests : TestContext
         Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
-        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore));
+        Services.AddSingleton<IServiceBusClientFactory>(new NullServiceBusClientFactory());
+        Services.AddSingleton<IServiceBusNamespaceBootstrapper>(new ServiceBusNamespaceBootstrapper(_credentialStore, new NullServiceBusClientFactory()));
         Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
         Services.AddSingleton<IncidentInvestigationLauncher>();
@@ -124,5 +125,14 @@ public sealed class ServiceBusPageTests : TestContext
 #pragma warning disable CS0067
         public event Action? SelectionChanged;
 #pragma warning restore CS0067
+    }
+
+    private sealed class NullServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
+
+        public string ParseFullyQualifiedNamespace(string connectionString) =>
+            throw new InvalidOperationException("Factory should not be called in this test.");
     }
 }

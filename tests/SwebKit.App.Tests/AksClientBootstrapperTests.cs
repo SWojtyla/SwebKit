@@ -3,6 +3,7 @@ using SwebKit.App.Services;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
@@ -14,7 +15,7 @@ public sealed class AksClientBootstrapperTests
         var client = new RecordingAksClient(
             contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
             namespaces: ["default", "orders"]);
-        var bootstrapper = new AksClientBootstrapper(NullLogger<AksClientBootstrapper>.Instance);
+        var bootstrapper = MakeBootstrapper();
 
         var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
             client,
@@ -34,7 +35,7 @@ public sealed class AksClientBootstrapperTests
     [Fact]
     public async Task BootstrapAsync_WithoutConfig_ReturnsNotConfigured()
     {
-        var bootstrapper = new AksClientBootstrapper(NullLogger<AksClientBootstrapper>.Instance);
+        var bootstrapper = MakeBootstrapper();
 
         var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
             ClientOverride: null,
@@ -46,6 +47,69 @@ public sealed class AksClientBootstrapperTests
         Assert.Equal(AksClientBootstrapStatus.NotConfigured, result.Status);
         Assert.Null(result.Client);
         Assert.Equal("default", result.CurrentNamespace);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_UseDemoData_ReturnsDemoClientWithoutCallingFactory()
+    {
+        var factory = new RecordingFactory();
+        var demo = new DemoAksClient();
+        var bootstrapper = new AksClientBootstrapper(factory, demo, NullLogger<AksClientBootstrapper>.Instance);
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            ClientOverride: null,
+            UseDemoData: true,
+            Config: new AksConfig { DefaultNamespace = "default" },
+            RequestedContext: null,
+            RequestedNamespace: null));
+
+        Assert.Equal(AksClientBootstrapStatus.Connected, result.Status);
+        Assert.Same(demo, result.Client);
+        Assert.Empty(factory.CreatedContexts); // factory.Create must NOT have been called
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_WithRealConfig_DelegatesToFactory()
+    {
+        var expectedClient = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "prod", IsCurrent = true }],
+            namespaces: ["default"]);
+        var factory = new RecordingFactory(expectedClient);
+        var bootstrapper = new AksClientBootstrapper(
+            factory,
+            new DemoAksClient(),
+            NullLogger<AksClientBootstrapper>.Instance);
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            ClientOverride: null,
+            UseDemoData: false,
+            Config: new AksConfig { KubeconfigContext = "prod", KubeconfigPath = "/kube/config" },
+            RequestedContext: "prod",
+            RequestedNamespace: "default"));
+
+        Assert.Equal(AksClientBootstrapStatus.Connected, result.Status);
+        Assert.Same(expectedClient, result.Client);
+        Assert.Equal("prod", factory.CreatedContexts.Single());
+        Assert.Equal("/kube/config", factory.CreatedPaths.Single());
+    }
+
+    private static AksClientBootstrapper MakeBootstrapper() =>
+        new(new RecordingFactory(), new DemoAksClient(), NullLogger<AksClientBootstrapper>.Instance);
+
+    private sealed class RecordingFactory : IAksClientFactory
+    {
+        private readonly IAksClient? _client;
+        public List<string?> CreatedContexts { get; } = [];
+        public List<string?> CreatedPaths { get; } = [];
+
+        public RecordingFactory(IAksClient? client = null) => _client = client;
+
+        public IAksClient Create(string? context, string? kubeconfigPath)
+        {
+            CreatedContexts.Add(context);
+            CreatedPaths.Add(kubeconfigPath);
+            return _client ?? new RecordingAksClient([], []);
+        }
     }
 
     private sealed class RecordingAksClient : IAksClient
