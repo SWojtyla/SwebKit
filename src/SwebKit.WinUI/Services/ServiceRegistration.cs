@@ -14,6 +14,7 @@ using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
+using SwebKit.WinUI.ViewModels.ServiceBus;
 using SwebKit.WinUI.ViewModels.Settings;
 using SwebKit.WinUI.ViewModels.Shell;
 
@@ -50,6 +51,7 @@ internal static class ServiceRegistration
         services.AddSingleton<DemoDevOpsClient>();
 
         // ── Azure integration ─────────────────────────────────────────────────────
+        services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
         services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
         services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
 
@@ -114,6 +116,7 @@ internal static class ServiceRegistration
 
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();
+        services.AddTransient<ServiceBusPageViewModel>();
         services.AddTransient<SettingsViewModel>();
 
         // ── Shell window ──────────────────────────────────────────────────────────

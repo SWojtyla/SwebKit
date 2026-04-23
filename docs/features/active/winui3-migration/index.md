@@ -4,7 +4,7 @@
 
 title: "Feature Overview - winui3-migration"
 owner: ""
-status: "Planned"
+status: "In Progress"
 jira: "not linked"
 created: "2026-04-23"
 updated: "2026-04-23"

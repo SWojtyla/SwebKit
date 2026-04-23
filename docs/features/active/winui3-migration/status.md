@@ -4,10 +4,10 @@
 
 title: "Status - winui3-migration"
 owner: ""
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: "winui-rewrite"
-started: ""
+started: "2026-04-23"
 last_updated: "2026-04-23"
 
 ---
@@ -18,7 +18,7 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 
 **Jira:** not linked
 
-**Current focus:** Phase 2 — ServiceBus domain.
+**Current focus:** Phase 3 — AKS domain.
 
 ## Progress checklist
 
@@ -53,9 +53,9 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 
 ### Phase 2 — ServiceBus
 
-- [ ] Namespace connect page/ViewModel
-- [ ] Queue/topic entity tree
-- [ ] Message browse, peek, DLQ, send, abandon
+- [x] Namespace connect page/ViewModel
+- [x] Queue/topic entity tree
+- [x] Message browse, peek, DLQ, send, and selected-message DLQ actions
 
 ### Phase 3 — AKS
 
@@ -106,11 +106,13 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 
 ## Completed
 
-_(nothing yet)_
+- Phase 2 Service Bus surface implemented in `SwebKit.WinUI`.
+- WinUI app startup now initializes `AppStateService` before feature pages load persisted config.
+- Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
 
 ## Remaining
 
-All of the above.
+- Phase 3-9 work listed above.
 
 ## Blockers
 
@@ -118,4 +120,4 @@ None currently identified.
 
 ## Validation status
 
-Not started.
+- `build-winui` succeeded on 2026-04-23 after the Phase 2 Service Bus implementation.

@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.Views.ServiceBus;
 using SwebKit.WinUI.ViewModels.Shell;
 using SwebKit.WinUI.Views.Settings;
 using SwebKit.WinUI.Views.Shell;
@@ -66,6 +67,7 @@ public sealed partial class MainWindow : Window
 
         var pageType = area switch
         {
+            "service-bus" => typeof(ServiceBusPage),
             "settings" => typeof(SettingsPage),
             _ => typeof(PlaceholderPage),
         };
