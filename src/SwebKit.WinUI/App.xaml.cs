@@ -11,6 +11,8 @@ public partial class App : Application
 {
     public IHost Host { get; }
 
+    public IServiceProvider Services => Host.Services;
+
     public static new App Current => (App)Application.Current;
 
     public App()

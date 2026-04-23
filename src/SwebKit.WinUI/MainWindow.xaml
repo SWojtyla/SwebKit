@@ -5,12 +5,75 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="SwebKit">
 
-    <Grid>
-        <TextBlock
-            Text="SwebKit — Phase 0 shell placeholder"
-            VerticalAlignment="Center"
-            HorizontalAlignment="Center"
-            Style="{StaticResource TitleTextBlockStyle}"/>
+    <Grid x:Name="RootGrid">
+
+        <NavigationView
+            x:Name="NavView"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            IsPaneOpen="{x:Bind ViewModel.IsNavExpanded, Mode=TwoWay}"
+            SelectionChanged="NavView_SelectionChanged">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Tag="service-bus"
+                        Content="Service Bus">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8AB;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="aks"
+                        Content="AKS">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE753;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="redis"
+                        Content="Redis">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xF1C7;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="storage"
+                        Content="Storage">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xED43;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="pipelines"
+                        Content="Pipelines">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE768;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="observability"
+                        Content="Observability">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="incident-timeline"
+                        Content="Incident Timeline">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE823;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Tag="settings"
+                        Content="Settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <!-- Main content frame -->
+            <Frame x:Name="ContentFrame"/>
+
+        </NavigationView>
+
     </Grid>
 
 </Window>

@@ -14,13 +14,14 @@ using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
+using SwebKit.WinUI.ViewModels.Settings;
+using SwebKit.WinUI.ViewModels.Shell;
 
 namespace SwebKit.WinUI.Services;
 
 /// <summary>
 /// Registers all DI services for the WinUI host.
 /// Mirrors MauiProgram.cs — MAUI and Blazor-specific registrations are omitted.
-/// App-layer services marked TODO will be ported from SwebKit.App.Services in Phase 1.
 /// </summary>
 internal static class ServiceRegistration
 {
@@ -91,39 +92,31 @@ internal static class ServiceRegistration
         services.AddSingleton<RuntimeDriftService>();
         services.AddSingleton<DeploymentValidationService>();
 
-        // ── Connection warmup ─────────────────────────────────────────────────────
-        // TODO Phase 1: port warmup caches from SwebKit.App.Services
-        // services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
-        // services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();
-        // services.AddSingleton<IServiceBusWarmupCache, ServiceBusWarmupCache>();
-        // services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
+        // ── Phase 1: Shell services ───────────────────────────────────────────────
+        services.AddSingleton<INotificationService, NotificationService>();
+        services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
+        services.AddSingleton<TabService>();
+        services.AddSingleton<CommandRegistry>();
+
+        // Resource search providers for command palette / workspace search
+        services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
+        services.AddSingleton<IOperatorResourceSearchProvider, AksResourceSearchProvider>();
+        services.AddSingleton<IOperatorResourceSearchProvider, StorageResourceSearchProvider>();
+        services.AddSingleton<IOperatorResourceSearchProvider, RedisResourceSearchProvider>();
+        services.AddSingleton<IOperatorResourceSearchProvider, ObservabilityResourceSearchProvider>();
+        services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
+
+        // MainWindowViewModel implements IShellNavigationService — register as both
+        services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<MainWindowViewModel>());
+
+        services.AddSingleton<OperatorWorkspaceService>();
+
+        // ── Phase 1: ViewModels ───────────────────────────────────────────────────
+        services.AddSingleton<CommandPaletteViewModel>();
+        services.AddTransient<SettingsViewModel>();
 
         // ── Shell window ──────────────────────────────────────────────────────────
         services.AddSingleton<MainWindow>();
-
-        // ── TODO: Phase 1 — port from SwebKit.App.Services ───────────────────────
-        // services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
-        // services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
-        // services.AddSingleton<TabService>();
-        // services.AddSingleton<CommandRegistry>();
-        // services.AddSingleton<OperatorWorkspaceService>();
-        // services.AddSingleton<INotificationService, NotificationService>();
-        // services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
-        // services.AddSingleton<IShellErrorPresenter, ShellErrorPresenter>();
-        // services.AddSingleton<ISelectionContext, SelectionContext>();
-        // services.AddSingleton<IServiceBusNamespaceBootstrapper, ServiceBusNamespaceBootstrapper>();
-        // services.AddSingleton<PinnedPortForwardService>();
-        // services.AddSingleton<TrayLifecycleState>();
-        // services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
-        // services.AddSingleton<PageDataCache>();
-        // services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
-        // services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
-        // services.AddSingleton<RedisOpsInsightsAggregator>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, ServiceBusResourceSearchProvider>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, AksResourceSearchProvider>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, StorageResourceSearchProvider>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, RedisResourceSearchProvider>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, ObservabilityResourceSearchProvider>();
-        // services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
     }
 }

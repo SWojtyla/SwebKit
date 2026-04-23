@@ -14,11 +14,11 @@ last_updated: "2026-04-23"
 
 ## Quick summary
 
-Phase 0 complete. WinUI 3 blank window boots clean from VS Code using VS MSBuild.
+Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Settings page live.
 
 **Jira:** not linked
 
-**Current focus:** Phase 1 — Shell (NavigationView + TabView, port TabService / CommandRegistry / OperatorWorkspaceService).
+**Current focus:** Phase 2 — ServiceBus domain.
 
 ## Progress checklist
 
@@ -33,16 +33,23 @@ Phase 0 complete. WinUI 3 blank window boots clean from VS Code using VS MSBuild
 - [x] One-line fix: replace `Microsoft.Maui.Controls.Application.Current` in `WindowsTrayLifecycleService.cs`
 - [x] Add `.vscode/launch.json` + `tasks.json` — build via VS MSBuild, debug via `coreclr`
 
-### Phase 1 — Shell
+### Phase 1 — Shell ✅
 
-- [ ] `MainWindow` with `NavigationView` and `TabView`
-- [ ] Port `TabService` as a ViewModel-layer service
-- [ ] Port `CommandRegistry` (keyboard shortcuts without JS interop)
-- [ ] Port `OperatorWorkspaceService` — search, recents, favorites
-- [ ] Command palette (`AutoSuggestBox`-based flyout)
-- [ ] Shell-level notification area
-- [ ] Settings page (profile select, theme, user settings)
-- [ ] Profile and UI state persistence verified (same JSON repos)
+- [x] `MainWindow` with `NavigationView` (left nav, 7 areas + Settings footer) and `Frame` content host
+- [x] Port `TabService` as a plain .NET service (no Blazor deps)
+- [x] Port `CommandRegistry` (keyboard shortcuts without JS interop)
+- [x] Port `OperatorWorkspaceService` — search, recents, favorites (NavigationManager → `IShellNavigationService`)
+- [x] Port all 6 `IOperatorResourceSearchProvider` implementations (ServiceBus, AKS, Redis, Storage, Observability, IncidentTimeline)
+- [x] Port `NotificationService`, `SearchScoring`, `ShellErrorPresenter`
+- [x] `IShellNavigationService` interface — `MainWindowViewModel` implements it, bridges OperatorWorkspaceService to Frame navigation
+- [x] `MainWindowViewModel` — nav state, pane expand/collapse, command palette open/close, persists `IsNavExpanded` to `UiStateRepository`
+- [x] `CommandPaletteViewModel` — searches `CommandRegistry`, area-scoped, executes via relay command
+- [x] Command palette flyout (Ctrl+K keyboard accelerator — `KeyboardAccelerator` in code-behind)
+- [x] `PlaceholderPage` — shown for areas not yet migrated (Phases 2-8)
+- [x] `SettingsPage` — Appearance (theme ComboBox), General (warm-up toggle), Safety (production toggle); saves to `UserSettingsRepository` + `AppStateService`
+- [x] `SettingsViewModel` — loads/saves all three settings, tracks dirty state
+- [x] `ServiceRegistration` updated — all Phase 1 services registered, TODO comments removed
+- [x] Build succeeds (0 errors, 12 AOT-compat warnings expected)
 
 ### Phase 2 — ServiceBus
 

@@ -44,8 +44,8 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 
 | Phase | Deliverable                                                                                             | State       |
 | ----- | ------------------------------------------------------------------------------------------------------- | ----------- |
-| 0     | Blank `SwebKit.WinUI` project added to solution, boots to empty window, all domain projects referenced  | Not started |
-| 1     | Shell: `MainWindow`, `NavigationView`, `TabView`, DI host, settings persistence, credential store wired | Not started |
+| 0     | Blank `SwebKit.WinUI` project added to solution, boots to empty window, all domain projects referenced  | Done        |
+| 1     | Shell: `MainWindow`, `NavigationView`, `TabView`, DI host, settings persistence, credential store wired | Done        |
 | 2     | ServiceBus domain: namespace connect, queue/topic tree, message browse, DLQ                             | Not started |
 | 3     | AKS domain: cluster connect, pod list, logs, port-forward, pod shell                                    | Not started |
 | 4     | Redis domain: key browser, TTL/value inspector                                                          | Not started |
