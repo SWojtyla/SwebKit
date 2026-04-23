@@ -20,20 +20,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellNaviga
     public event Action? NavigationChanged;
 
     [ObservableProperty]
-    private string? _currentArea;
+    public partial string? CurrentArea { get; set; }
 
     [ObservableProperty]
-    private bool _isNavExpanded = true;
+    public partial bool IsNavExpanded { get; set; }
 
     [ObservableProperty]
-    private bool _isCommandPaletteOpen;
+    public partial bool IsCommandPaletteOpen { get; set; }
 
     [ObservableProperty]
-    private bool _isNotificationPanelOpen;
+    public partial bool IsNotificationPanelOpen { get; set; }
 
     public MainWindowViewModel(UiStateRepository uiState)
     {
         _uiState = uiState;
+        IsNavExpanded = true;
     }
 
     /// <summary>

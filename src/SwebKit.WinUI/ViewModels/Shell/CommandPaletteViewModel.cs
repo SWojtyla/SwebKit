@@ -15,18 +15,20 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
     private readonly IShellNavigationService _shellNav;
 
     [ObservableProperty]
-    private string _searchQuery = string.Empty;
+    public partial string SearchQuery { get; set; }
 
     [ObservableProperty]
-    private ObservableCollection<AppCommand> _suggestions = [];
+    public partial ObservableCollection<AppCommand> Suggestions { get; set; }
 
     [ObservableProperty]
-    private AppCommand? _selectedCommand;
+    public partial AppCommand? SelectedCommand { get; set; }
 
     public CommandPaletteViewModel(CommandRegistry registry, IShellNavigationService shellNav)
     {
         _registry = registry;
         _shellNav = shellNav;
+        SearchQuery = string.Empty;
+        Suggestions = [];
         Refresh(string.Empty);
     }
 

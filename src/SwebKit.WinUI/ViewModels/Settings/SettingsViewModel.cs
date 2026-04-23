@@ -15,19 +15,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly AppStateService _appState;
 
     [ObservableProperty]
-    private string _selectedTheme = string.Empty;
+    public partial string SelectedTheme { get; set; }
 
     [ObservableProperty]
-    private bool _isProduction;
+    public partial bool IsProduction { get; set; }
 
     [ObservableProperty]
-    private bool _warmupConnectionsOnStartup;
+    public partial bool WarmupConnectionsOnStartup { get; set; }
 
     [ObservableProperty]
-    private bool _isSaving;
+    public partial bool IsSaving { get; set; }
 
     [ObservableProperty]
-    private bool _isDirty;
+    public partial bool IsDirty { get; set; }
 
     public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
     [
@@ -40,6 +40,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         _userSettings = userSettings;
         _appState = appState;
+        SelectedTheme = string.Empty;
     }
 
     public void Load()
