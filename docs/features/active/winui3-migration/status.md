@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS slice 1 is now live with cluster bootstrap, context/namespace selection, and a pod health grid. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, and the first reusable shell header/banner/status/workspace primitives are now in place.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now spans slice 1 plus the first slice-2 diagnostics seam: cluster bootstrap, context/namespace selection, pod health browse, and a native per-pod log panel are live in `SwebKit.WinUI`. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, and the first reusable shell header/banner/status/workspace primitives are now in place.
 
 **Jira:** not linked
 
-**Current focus:** push the new semantic shell/page primitives deeper into the proving-ground workspaces and continue Phase 3 AKS slice 2, now that the first shell-chrome pass is live and validated.
+**Current focus:** push the new semantic shell/page primitives deeper into the proving-ground workspaces and finish the rest of Phase 3 AKS slice 2, now that pod logs and the same-family theme-refresh bug fix are in place.
 
 ## Progress checklist
 
@@ -69,7 +69,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 - [x] Cluster connect and namespace selector
 - [x] Pod list grid with health column
-- [ ] Pod logs panel
+- [x] Pod logs panel
 - [ ] Port-forward session management
 - [ ] Pod shell (terminal via WebView2 or Windows Terminal integration)
 
@@ -119,7 +119,9 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
 - VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
 - Phase 3 AKS slice 1 is now live in `SwebKit.WinUI`: route wiring, cluster bootstrap, context/namespace selection, and pod browse with a native health/status grid.
+- Phase 3 AKS now includes a bounded slice-2 logs seam in `SwebKit.WinUI`: each pod row exposes a native "Logs" entry point, plus container/range/live/filter controls backed by `IAksClient.StreamPodLogsAsync`.
 - WinUI startup now loads `UserSettingsRepository` before shell activation and applies the persisted theme globally through `ThemeCoordinator`.
+- `ThemeCoordinator` now forces a WinUI resource refresh when switching between curated themes that stay within the same dark/light family, fixing no-op visual updates for dark-to-dark and light-to-light theme swaps.
 - `App.xaml` now carries semantic token, shared-style, and curated-theme resource dictionaries instead of relying only on the default WinUI resource merge.
 - `Settings`, `ServiceBus`, and `AKS` now share a `PageScaffold` header/layout primitive and the first semantic surface-card styles, providing the initial proving ground for the broader UI architecture pass.
 - `MainWindow` now hosts reusable shell chrome in `SwebKit.WinUI`: a context header, banner strip, status strip, workspace hub, and notification-history surface backed by a dedicated `ShellChromeViewModel` and existing shell/core services.
@@ -159,3 +161,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the AKS slice 1 WinUI changes.
 - `build-winui` succeeded on 2026-04-24 after the theme/resource foundation and shared page-scaffold slice.
 - `build-winui` succeeded on 2026-04-24 after the reusable shell-chrome/workspace-hub/notification-history slice.
+- `build-winui` succeeded on 2026-04-24 after the same-family theme refresh fix and the AKS pod-log slice.

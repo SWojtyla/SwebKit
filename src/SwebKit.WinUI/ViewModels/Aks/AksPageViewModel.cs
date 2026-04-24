@@ -105,12 +105,17 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             ContextOptions.Clear();
             NamespaceOptions.Clear();
             Pods.Clear();
+            SelectedPod = null;
             SelectedContext = string.Empty;
             SelectedNamespace = string.Empty;
             OnPropertyChanged(nameof(IsConnected));
             return;
         }
 
+        await SuspendSelectedPodLogsForReloadAsync("Reloading AKS scope...");
+        Pods.Clear();
+        OnPropertyChanged(nameof(PodCountLabel));
+        OnPropertyChanged(nameof(ShowPodEmptyState));
         await ResetLoadTokenAsync();
         IsLoading = true;
         ErrorMessage = null;
@@ -134,6 +139,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             }
             else if (result.Status == AksClientBootstrapStatus.Error)
             {
+                SelectedPod = null;
                 ErrorMessage = result.ErrorMessage;
             }
         }
@@ -142,6 +148,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
         catch (Exception ex)
         {
+            SelectedPod = null;
             ErrorMessage = ex.Message;
             ConnectionSummary = "AKS bootstrap failed.";
             _logger.LogError(ex, "WinUI AKS page reload failed.");
@@ -163,7 +170,9 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     public async ValueTask DisposeAsync()
     {
         await ResetLoadTokenAsync();
+        await ResetLogsTokenAsync();
         _loadCts.Dispose();
+        _logsCts.Dispose();
     }
 
     partial void OnSelectedContextChanged(string value)
@@ -190,6 +199,11 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     {
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(ShowPodEmptyState));
+
+        if (value is null && SelectedPod is not null)
+        {
+            SelectedPod = null;
+        }
     }
 
     private void ApplyBootstrapResult(AksClientBootstrapResult result)
@@ -260,6 +274,10 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
                 await _appState.SaveConfigAsync();
             }
 
+            await SuspendSelectedPodLogsForReloadAsync("Loading pods for the new namespace...");
+            Pods.Clear();
+            OnPropertyChanged(nameof(PodCountLabel));
+            OnPropertyChanged(nameof(ShowPodEmptyState));
             await ResetLoadTokenAsync();
             IsLoading = true;
             ErrorMessage = null;
@@ -270,6 +288,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
         catch (Exception ex)
         {
+            SelectedPod = null;
             ErrorMessage = ex.Message;
             _logger.LogError(ex, "AKS namespace switch failed.");
         }
@@ -286,6 +305,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
         if (Client is null)
         {
+            SelectedPod = null;
             return;
         }
 
@@ -308,6 +328,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         {
             Pods.Add(new AksPodItemViewModel(pod));
         }
+
+        ReconcileSelectedPodAfterLoad();
 
         OnPropertyChanged(nameof(PodCountLabel));
         OnPropertyChanged(nameof(ShowPodEmptyState));
@@ -350,6 +372,7 @@ public sealed class AksPodItemViewModel
     {
         Name = pod.Name;
         Namespace = pod.Namespace;
+        Containers = [.. pod.Containers];
         Status = string.IsNullOrWhiteSpace(pod.Status) ? pod.Phase : pod.Status;
         Ready = pod.ReadyDisplay;
         Restarts = pod.RestartCount.ToString();
@@ -360,6 +383,10 @@ public sealed class AksPodItemViewModel
     public string Name { get; }
 
     public string Namespace { get; }
+
+    public IReadOnlyList<string> Containers { get; }
+
+    public bool HasContainers => Containers.Count > 0;
 
     public string Health { get; }
 

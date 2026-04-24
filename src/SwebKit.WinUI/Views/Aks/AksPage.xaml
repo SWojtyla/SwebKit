@@ -112,6 +112,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Grid ColumnSpacing="12">
@@ -164,6 +165,7 @@
                                         <ColumnDefinition Width="90"/>
                                         <ColumnDefinition Width="90"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="110"/>
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0"
@@ -186,6 +188,9 @@
                                                Style="{StaticResource CaptionTextBlockStyle}"/>
                                     <TextBlock Grid.Column="6"
                                                Text="Node"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock Grid.Column="7"
+                                               Text="Diagnostics"
                                                Style="{StaticResource CaptionTextBlockStyle}"/>
                                 </Grid>
                             </Border>
@@ -214,6 +219,7 @@
                                                     <ColumnDefinition Width="90"/>
                                                     <ColumnDefinition Width="90"/>
                                                     <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="110"/>
                                                 </Grid.ColumnDefinitions>
 
                                                 <TextBlock Grid.Column="0"
@@ -235,12 +241,124 @@
                                                 <TextBlock Grid.Column="6"
                                                            Text="{x:Bind Node}"
                                                            TextWrapping="WrapWholeWords"/>
+                                                <Button Grid.Column="7"
+                                                        Content="Logs"
+                                                        Command="{Binding ViewModel.SelectPodCommand, ElementName=PageRoot}"
+                                                        CommandParameter="{x:Bind}"
+                                                        IsEnabled="{x:Bind HasContainers}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
                         </Grid>
+
+                        <Border Grid.Row="3"
+                                Margin="0,12,0,0"
+                                Style="{StaticResource SwebKitInsetCardStyle}">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock Text="Pod logs"
+                                                   Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                        <TextBlock Text="{Binding SelectedPodLogsStatus}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="WrapWholeWords"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="12"
+                                                VerticalAlignment="Top">
+                                        <ProgressRing Width="20"
+                                                      Height="20"
+                                                      IsActive="{Binding IsSelectedPodLogsLoading}"/>
+                                        <Button Content="Reload"
+                                                Command="{Binding ReloadSelectedPodLogsCommand}"
+                                                IsEnabled="{Binding CanReloadSelectedPodLogs}"/>
+                                        <Button Content="Clear"
+                                                Command="{Binding ClearSelectedPodSelectionCommand}"
+                                                IsEnabled="{Binding CanClearSelectedPodSelection}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding SelectedPodLogsErrorMessage}"
+                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                           TextWrapping="WrapWholeWords"/>
+
+                                <Grid Grid.Row="2"
+                                      ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="6">
+                                        <TextBlock Text="Container"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                        <ComboBox ItemsSource="{Binding SelectedPodContainerOptions}"
+                                                  SelectedItem="{Binding SelectedPodLogContainer, Mode=TwoWay}"
+                                                  IsEnabled="{Binding HasMultipleSelectedPodContainers}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1"
+                                                Spacing="6">
+                                        <TextBlock Text="Range"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                        <ComboBox ItemsSource="{Binding LogRangeOptions}"
+                                                  SelectedValuePath="Key"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedValue="{Binding SelectedPodLogRange, Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanInspectSelectedPodLogs}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2"
+                                                Spacing="6">
+                                        <TextBlock Text="Live"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                        <ToggleSwitch OnContent=""
+                                                      OffContent=""
+                                                      IsOn="{Binding FollowSelectedPodLogs, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanToggleSelectedPodLogsLive}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="3"
+                                                Spacing="6">
+                                        <TextBlock Text="Filter"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                        <TextBox Text="{Binding LogFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 PlaceholderText="Filter log output"
+                                                 IsEnabled="{Binding CanInspectSelectedPodLogs}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBox Grid.Row="3"
+                                         MinHeight="220"
+                                         MaxHeight="360"
+                                         Text="{Binding SelectedPodLogsText}"
+                                         IsReadOnly="True"
+                                         AcceptsReturn="True"
+                                         TextWrapping="NoWrap"
+                                         FontFamily="Cascadia Mono"/>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </Border>
             </Grid>

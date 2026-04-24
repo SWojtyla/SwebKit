@@ -118,6 +118,15 @@ public sealed class ThemeCoordinator
         }
 
         var definition = ResolveThemeDefinition(NormalizeThemeKey(CurrentThemeKey));
+
+        // ThemeResource bindings do not reliably refresh when only the curated
+        // resource dictionary changes inside the same light/dark family.
+        // Bounce through Default so same-family theme swaps invalidate cleanly.
+        if (_shellRoot.RequestedTheme == definition.RequestedTheme)
+        {
+            _shellRoot.RequestedTheme = ElementTheme.Default;
+        }
+
         _shellRoot.RequestedTheme = definition.RequestedTheme;
     }
 

@@ -23,7 +23,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Main scenarios (priority)
 
 1. Scenario: shared shell foundation is applied across the host — Expected result: dashboard, settings, and migrated workspaces render through a consistent scaffold, state treatment, and shell chrome.
-2. Scenario: theme changes apply globally — Expected result: changing the selected theme updates shell chrome, shared cards, banners, and migrated pages without page-specific breakage or a restart requirement.
+2. Scenario: theme changes apply globally — Expected result: changing the selected theme updates shell chrome, shared cards, banners, and migrated pages without page-specific breakage or a restart requirement, including curated swaps that stay within the same dark/light family.
 3. Scenario: migrated workspaces adopt reusable primitives instead of bespoke layouts — Expected result: Service Bus, AKS, and subsequent pages use shared section/state/detail patterns and keep feature behavior intact.
 4. Scenario: production, demo, warning, and recovery cues stay consistent — Expected result: destructive and stateful operator cues are recognizable across shell and workspace contexts.
 5. Scenario: cutover-critical feature parity remains intact — Expected result: each migrated domain preserves its documented workflows while fitting the shared WinUI architecture.
@@ -44,10 +44,11 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Manual checks
 
 - Check: shared shell coherence — steps: open Dashboard, Settings, Service Bus, and AKS; confirm title/meta/action areas, banners, cards, and status cues follow one consistent structure.
-- Check: global theme application — steps: switch between curated themes, navigate across migrated pages, and confirm shell chrome and page surfaces update consistently.
+- Check: global theme application — steps: switch between curated themes, including dark-to-dark and light-to-light swaps, navigate across migrated pages, and confirm shell chrome and page surfaces update consistently.
 - Check: resize and density behavior — steps: test narrow and wide window states, verify primary/detail panes and toolbar regions remain usable and intentional.
 - Check: state treatment consistency — steps: validate loading, empty, error, not-configured, demo, and production-warning states on at least two workspaces.
 - Check: proving-ground page adoption — steps: confirm `Settings`, `ServiceBus`, and `AKS` use the shared primitives before Redis/Storage/Pipelines/Observability work begins.
+- Check: AKS pod-log slice — steps: open AKS, launch logs from a pod row, switch container/range/live settings, apply a text filter, and confirm the native log panel follows the selected pod without reopening the page.
 
 ## Regression risks & mitigations
 
@@ -65,7 +66,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: In progress
+- Automated: `build-winui` green after the same-family theme refresh fix and the AKS pod-log slice
 - Manual: Not started
 
 ## Sign-off
