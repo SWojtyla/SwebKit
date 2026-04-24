@@ -1,5 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using SwebKit.Core.Domain;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using SwebKit.Core.Models;
 
 namespace SwebKit.WinUI.ViewModels.Observability;
@@ -105,6 +108,40 @@ public sealed class ObservabilityQueryPresetItemViewModel
     public string Query => Preset.Query;
 }
 
+public sealed class ObservabilitySavedQueryItemViewModel
+{
+    public ObservabilitySavedQueryItemViewModel(SavedQuery savedQuery)
+    {
+        SavedQuery = savedQuery;
+    }
+
+    public SavedQuery SavedQuery { get; }
+
+    public string Id => SavedQuery.Id;
+
+    public string Name => string.IsNullOrWhiteSpace(SavedQuery.Name)
+        ? "Untitled query"
+        : SavedQuery.Name;
+
+    public string Query => SavedQuery.Query;
+
+    public string Summary
+    {
+        get
+        {
+            var text = SavedQuery.Query.ReplaceLineEndings(" ").Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "No query text saved.";
+            }
+
+            return text.Length > 96 ? $"{text[..96]}..." : text;
+        }
+    }
+
+    public string CreatedAtText => $"Saved {SavedQuery.CreatedAt.LocalDateTime:g}";
+}
+
 public sealed class ObservabilityFailureItemViewModel
 {
     public ObservabilityFailureItemViewModel(ExceptionGroup group)
@@ -133,6 +170,14 @@ public sealed class ObservabilityFailureItemViewModel
     public string StackTrace => string.IsNullOrWhiteSpace(Group.SampleStackTrace)
         ? "No stack trace returned for this exception group."
         : Group.SampleStackTrace!;
+
+    public string? SampleOperationId => string.IsNullOrWhiteSpace(Group.SampleOperationId)
+        ? null
+        : Group.SampleOperationId;
+
+    public string SampleOperationLabel => string.IsNullOrWhiteSpace(SampleOperationId)
+        ? "No sample trace available"
+        : $"Sample trace {SampleOperationId[..Math.Min(8, SampleOperationId.Length)]}";
 }
 
 public sealed class ObservabilityPerformanceItemViewModel
@@ -191,6 +236,68 @@ public sealed class ObservabilityAvailabilityItemViewModel
         : string.IsNullOrWhiteSpace(Result.FailureMessage)
             ? "Failed"
             : Result.FailureMessage!;
+}
+
+public sealed class ObservabilityAvailabilityHeatmapCellViewModel
+{
+    private static readonly SolidColorBrush EmptyBackgroundBrush = new(ColorHelper.FromArgb(255, 38, 40, 43));
+    private static readonly SolidColorBrush EmptyForegroundBrush = new(Colors.White);
+    private static readonly SolidColorBrush CriticalBackgroundBrush = new(ColorHelper.FromArgb(255, 161, 43, 59));
+    private static readonly SolidColorBrush CriticalForegroundBrush = new(Colors.White);
+    private static readonly SolidColorBrush WarningBackgroundBrush = new(ColorHelper.FromArgb(255, 190, 127, 42));
+    private static readonly SolidColorBrush WarningForegroundBrush = new(Colors.Black);
+    private static readonly SolidColorBrush HealthyBackgroundBrush = new(ColorHelper.FromArgb(255, 49, 120, 78));
+    private static readonly SolidColorBrush HealthyForegroundBrush = new(Colors.White);
+
+    public ObservabilityAvailabilityHeatmapCellViewModel(string hourLabel, int passCount, int totalCount)
+    {
+        HourLabel = hourLabel;
+        PassCount = passCount;
+        TotalCount = totalCount;
+    }
+
+    public string HourLabel { get; }
+
+    public int PassCount { get; }
+
+    public int TotalCount { get; }
+
+    public double AvailabilityPercent => TotalCount == 0 ? 0 : PassCount * 100d / TotalCount;
+
+    public string ValueText => TotalCount == 0 ? "-" : $"{AvailabilityPercent:F0}%";
+
+    public string CountText => TotalCount == 0 ? "No samples" : $"{PassCount}/{TotalCount} pass";
+
+    public string TooltipText => TotalCount == 0
+        ? $"{HourLabel}: no availability samples returned for this hour."
+        : $"{HourLabel}: {PassCount}/{TotalCount} pass ({AvailabilityPercent:F1}%).";
+
+    public Brush BackgroundBrush => TotalCount == 0
+        ? EmptyBackgroundBrush
+        : AvailabilityPercent < 90
+            ? CriticalBackgroundBrush
+            : AvailabilityPercent < 99
+                ? WarningBackgroundBrush
+                : HealthyBackgroundBrush;
+
+    public Brush ForegroundBrush => TotalCount == 0
+        ? EmptyForegroundBrush
+        : AvailabilityPercent < 99
+            ? WarningForegroundBrush
+            : HealthyForegroundBrush;
+}
+
+public sealed class ObservabilityAvailabilityHeatmapRowViewModel
+{
+    public ObservabilityAvailabilityHeatmapRowViewModel(string testName, IReadOnlyList<ObservabilityAvailabilityHeatmapCellViewModel> cells)
+    {
+        TestName = testName;
+        Cells = cells;
+    }
+
+    public string TestName { get; }
+
+    public IReadOnlyList<ObservabilityAvailabilityHeatmapCellViewModel> Cells { get; }
 }
 
 public sealed class ObservabilityLogRowItemViewModel

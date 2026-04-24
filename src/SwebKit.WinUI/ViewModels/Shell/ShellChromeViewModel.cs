@@ -23,6 +23,7 @@ public sealed partial class ShellChromeViewModel : ObservableObject
     private static readonly IReadOnlyDictionary<string, ShellAreaDescriptor> AreaDescriptors =
         new Dictionary<string, ShellAreaDescriptor>(StringComparer.OrdinalIgnoreCase)
         {
+            ["dashboard"] = new("dashboard", "Overview", "Dashboard", "See readiness, health, recents, and favorites at a glance."),
             ["service-bus"] = new("service-bus", "Workspaces", "Service Bus", "Browse queues, dead letters, and scheduled messages."),
             ["aks"] = new("aks", "Workspaces", "AKS", "Inspect clusters, workloads, and live pod operations."),
             ["redis"] = new("redis", "Workspaces", "Redis", "Explore keyspaces, health, and value operations."),
@@ -157,6 +158,7 @@ public sealed partial class ShellChromeViewModel : ObservableObject
     public Visibility NotificationListVisibility => ShowNoNotifications ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility CurrentConnectionVisibility => string.IsNullOrWhiteSpace(_navigation.CurrentArea)
+        || string.Equals(_navigation.CurrentArea, "dashboard", StringComparison.OrdinalIgnoreCase)
         ? Visibility.Collapsed
         : Visibility.Visible;
 
@@ -357,7 +359,12 @@ public sealed partial class ShellChromeViewModel : ObservableObject
 
     private void RefreshConnectionState()
     {
-        if (!string.IsNullOrWhiteSpace(_navigation.CurrentArea)
+        if (string.Equals(_navigation.CurrentArea, "dashboard", StringComparison.OrdinalIgnoreCase))
+        {
+            CurrentConnectionLabel = "Overview";
+            CurrentConnectionDetail = "Dashboard surfaces configuration readiness and recent operator context instead of a single live connection badge.";
+        }
+        else if (!string.IsNullOrWhiteSpace(_navigation.CurrentArea)
             && _connectionState.States.TryGetValue(_navigation.CurrentArea, out var state))
         {
             CurrentConnectionLabel = state.State switch

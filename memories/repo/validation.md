@@ -1,0 +1,1 @@
+- Use `build-winui` as the focused validation command for `src/SwebKit.WinUI` changes; it is the narrow, trusted build check for WinUI migration slices.

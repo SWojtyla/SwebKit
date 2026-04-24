@@ -64,6 +64,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         HookCollectionNotifications(Resources, nameof(HasResources), nameof(ShowNoResourcesState));
         HookCollectionNotifications(QueryPresets, nameof(SelectedPresetDescription));
+        HookCollectionNotifications(SavedQueries, nameof(HasSavedQueries), nameof(ShowSavedQueriesEmptyState), nameof(SavedQueriesSummary));
         HookCollectionNotifications(Failures, nameof(HasFailures), nameof(ShowFailuresEmptyState));
         HookCollectionNotifications(
             OverviewRequestTrend,
@@ -134,6 +135,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public ObservableCollection<ObservabilityQueryPresetItemViewModel> QueryPresets { get; } = [];
 
+    public ObservableCollection<ObservabilitySavedQueryItemViewModel> SavedQueries { get; } = [];
+
     public ObservableCollection<ObservabilityFailureItemViewModel> Failures { get; } = [];
 
     public ObservableCollection<TimeSeriesPoint> OverviewRequestTrend { get; } = [];
@@ -145,6 +148,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public ObservableCollection<ObservabilityLatencyPointItemViewModel> PerformanceTrend { get; } = [];
 
     public ObservableCollection<ObservabilityAvailabilityItemViewModel> AvailabilityResults { get; } = [];
+
+    public ObservableCollection<string> AvailabilityHeatmapHourLabels { get; } = [];
+
+    public ObservableCollection<ObservabilityAvailabilityHeatmapRowViewModel> AvailabilityHeatmapRows { get; } = [];
 
     public ObservableCollection<ObservabilityLogRowItemViewModel> LogRows { get; } = [];
 
@@ -213,7 +220,16 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public partial ObservabilityLogsModeOptionViewModel? SelectedLogsMode { get; set; }
 
     [ObservableProperty]
+    public partial ObservabilityAvailabilityItemViewModel? SelectedAvailabilityResult { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowAvailabilityHeatmap { get; set; }
+
+    [ObservableProperty]
     public partial ObservabilityGuidedOperatorOptionViewModel? SelectedGuidedOperator { get; set; }
+
+    [ObservableProperty]
+    public partial string SaveQueryName { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string AdvancedQueryText { get; set; } = DefaultAdvancedQuery;
@@ -271,6 +287,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool HasFailures => Failures.Count > 0;
 
+    public bool HasSavedQueries => SavedQueries.Count > 0;
+
     public bool HasOverviewRequestTrend => OverviewRequestTrend.Count > 0;
 
     public bool HasOverviewFailureTrend => OverviewFailureTrend.Count > 0;
@@ -289,7 +307,11 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool HasSelectedFailure => SelectedFailure is not null;
 
+    public bool HasSelectedFailureSampleTrace => !string.IsNullOrWhiteSpace(SelectedFailure?.SampleOperationId);
+
     public bool HasSelectedPerformanceEntry => SelectedPerformanceEntry is not null;
+
+    public bool CanSaveQuery => HasActiveResource && !string.IsNullOrWhiteSpace(SaveQueryName);
 
     public bool UseGuidedLogsMode => string.Equals(SelectedLogsMode?.Key, "guided", StringComparison.OrdinalIgnoreCase);
 
@@ -310,6 +332,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public string SelectedFailureMessage => SelectedFailure?.Message ?? "Sample exception messages will appear here after a failure group is selected.";
 
     public string SelectedFailureStackTrace => SelectedFailure?.StackTrace ?? "Stack traces will appear here for the selected exception group.";
+
+    public string SelectedFailureSampleTraceLabel => SelectedFailure?.SampleOperationLabel ?? "No sample trace available";
 
     public string SelectedPerformanceTitle => SelectedPerformanceEntry?.OperationName ?? "Select an operation";
 
@@ -415,6 +439,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public string SelectedPresetDescription => SelectedQueryPreset?.Description ?? "Select a preset to load a starting query into the native logs baseline.";
 
+    public string SavedQueriesSummary => !HasSavedQueries
+        ? "Saved queries are persisted in the Observability profile and can be loaded back into the advanced editor baseline."
+        : $"{SavedQueries.Count:N0} saved quer{(SavedQueries.Count == 1 ? "y" : "ies")} available in this profile.";
+
     public string LogsModeDescription => UseGuidedLogsMode
         ? "Guided mode compiles a bounded query draft with the shared KQL compiler seam."
         : "Advanced mode runs raw KQL in the native text editor baseline; Monaco is deferred to a later shared editor wave.";
@@ -424,6 +452,48 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public string AvailabilityChartSummary => !HasAvailabilityResults
         ? "Availability summary appears after the latest returned checks load."
         : $"{AvailabilityResults.Count(result => result.Result.Success):N0} pass · {AvailabilityResults.Count(result => !result.Result.Success):N0} fail across {AvailabilityResults.Select(result => result.TestName).Distinct(StringComparer.OrdinalIgnoreCase).Count():N0} test(s) in the latest returned checks.";
+
+    public string OverallAvailabilityText => !HasAvailabilityResults
+        ? "100.0%"
+        : $"{AvailabilityResults.Count(result => result.Result.Success) * 100d / AvailabilityResults.Count:F1}%";
+
+    public string AvailabilityPassFailSummary => !HasAvailabilityResults
+        ? "No checks loaded yet."
+        : $"{AvailabilityResults.Count(result => result.Result.Success):N0} pass · {AvailabilityResults.Count(result => !result.Result.Success):N0} fail";
+
+    public bool HasAvailabilityHeatmap => AvailabilityHeatmapRows.Count > 0 && AvailabilityHeatmapHourLabels.Count > 0;
+
+    public string AvailabilityViewToggleLabel => ShowAvailabilityHeatmap ? "Show list" : "Show heatmap";
+
+    public string SelectedAvailabilityTitle => SelectedAvailabilityResult?.TestName ?? "Select an availability check";
+
+    public string SelectedAvailabilitySubtitle => SelectedAvailabilityResult is null
+        ? "Choose a result to inspect location, timestamp, and failure context."
+        : $"{SelectedAvailabilityResult.Result.Location} · {SelectedAvailabilityResult.Result.Timestamp.LocalDateTime:g}";
+
+    public string SelectedAvailabilityStatusLabel => SelectedAvailabilityResult is null
+        ? "-"
+        : SelectedAvailabilityResult.Result.Success
+            ? "Pass"
+            : "Fail";
+
+    public string SelectedAvailabilityStatusSummary => SelectedAvailabilityResult is null
+        ? "Select a result from the list to inspect individual availability details."
+        : SelectedAvailabilityResult.Result.Success
+            ? "This availability check passed for the selected location and timestamp."
+            : "This availability check failed. Review the failure message below.";
+
+    public string SelectedAvailabilityDurationLabel => SelectedAvailabilityResult is null
+        ? "-"
+        : SelectedAvailabilityResult.Result.DurationMs == 0
+            ? "-"
+            : $"{SelectedAvailabilityResult.Result.DurationMs:N0} ms";
+
+    public string SelectedAvailabilityFailureMessage => SelectedAvailabilityResult is null
+        ? string.Empty
+        : string.IsNullOrWhiteSpace(SelectedAvailabilityResult.Result.FailureMessage)
+            ? "No failure message returned for this availability check."
+            : SelectedAvailabilityResult.Result.FailureMessage!;
 
     public IEnumerable<ISeries> AvailabilityChartSeries => HasAvailabilityResults
         ?
@@ -472,6 +542,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool ShowLogsEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasLogRows && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
+    public bool ShowSavedQueriesEmptyState => !HasSavedQueries;
+
     public bool ShowDependencyEmptyState => !IsRefreshingActiveTab && !HasDependencyHealth;
 
     public bool ShowDimensionEmptyState => !IsRefreshingActiveTab && !HasDimensionBreakdowns;
@@ -499,6 +571,18 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public Visibility PerformanceTrendChartVisibility => HasPerformanceTrend ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility AvailabilityChartVisibility => HasAvailabilityResults ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AvailabilityHeatmapVisibility => ShowAvailabilityHeatmap && HasAvailabilityResults ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AvailabilityListVisibility => !ShowAvailabilityHeatmap && HasAvailabilityResults ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AvailabilityDetailPlaceholderVisibility => SelectedAvailabilityResult is null ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AvailabilityDetailContentVisibility => SelectedAvailabilityResult is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility SelectedAvailabilityFailureVisibility => SelectedAvailabilityResult is { Result.Success: false } && !string.IsNullOrWhiteSpace(SelectedAvailabilityResult.Result.FailureMessage)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public async Task LoadAsync()
     {
@@ -568,6 +652,123 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     }
 
     [RelayCommand]
+    private async Task SaveCurrentQueryAsync()
+    {
+        if (!HasActiveResource)
+        {
+            return;
+        }
+
+        var queryName = SaveQueryName.Trim();
+        if (string.IsNullOrWhiteSpace(queryName))
+        {
+            _notifications.ShowWarning("Saved query name required", "Enter a name before saving the current query.");
+            return;
+        }
+
+        string queryText;
+        if (UseGuidedLogsMode)
+        {
+            var compileResult = BuildGuidedCompileResult();
+            GuidedCompiledQuery = compileResult.Result.Query;
+            GuidedCompileSummary = BuildCompileSummary(compileResult.ValidationMessage, compileResult.Result);
+            OnPropertyChanged(nameof(GuidedCompileSummaryVisibility));
+            OnPropertyChanged(nameof(GuidedCompiledQueryVisibility));
+
+            if (!compileResult.Result.CanExecute || string.IsNullOrWhiteSpace(compileResult.Result.Query))
+            {
+                _notifications.ShowWarning("Saved query unavailable", "Fix the guided query validation issues before saving it.");
+                return;
+            }
+
+            queryText = compileResult.Result.Query;
+        }
+        else
+        {
+            queryText = AdvancedQueryText.Trim();
+            if (string.IsNullOrWhiteSpace(queryText))
+            {
+                _notifications.ShowWarning("Saved query unavailable", "Enter a query before saving it.");
+                return;
+            }
+        }
+
+        var config = EnsureConfig();
+        config.SavedQueries ??= [];
+
+        var savedQuery = new SavedQuery
+        {
+            Name = queryName,
+            Query = queryText,
+        };
+
+        config.SavedQueries.Add(savedQuery);
+        LoadSavedQueries(savedQuery.Id);
+        SaveQueryName = string.Empty;
+        ActiveTabStatusText = $"Saved query '{savedQuery.Name}' in the Observability profile baseline.";
+
+        var persisted = await _appState.SaveConfigAsync();
+        if (!persisted && !string.IsNullOrWhiteSpace(_appState.ProfilePersistenceBlockedMessage))
+        {
+            _notifications.ShowWarning("Saved query was not persisted", _appState.ProfilePersistenceBlockedMessage);
+            return;
+        }
+
+        _notifications.ShowSuccess("Saved query added", savedQuery.Name);
+    }
+
+    [RelayCommand]
+    private Task LoadSavedQueryAsync(ObservabilitySavedQueryItemViewModel? savedQuery)
+    {
+        if (savedQuery is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        AdvancedQueryText = savedQuery.Query;
+        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
+        ActiveTabStatusText = $"Running saved query '{savedQuery.Name}' from the Observability profile baseline.";
+        SelectedTabIndex = 3;
+        return RefreshCurrentTabAsync(force: true);
+    }
+
+    [RelayCommand]
+    private async Task DeleteSavedQueryAsync(ObservabilitySavedQueryItemViewModel? savedQuery)
+    {
+        if (savedQuery is null)
+        {
+            return;
+        }
+
+        var config = EnsureConfig();
+        config.SavedQueries ??= [];
+
+        var removed = config.SavedQueries.RemoveAll(candidate => string.Equals(candidate.Id, savedQuery.Id, StringComparison.OrdinalIgnoreCase));
+        if (removed == 0)
+        {
+            return;
+        }
+
+        LoadSavedQueries();
+        ActiveTabStatusText = $"Deleted saved query '{savedQuery.Name}' from the Observability profile baseline.";
+
+        var persisted = await _appState.SaveConfigAsync();
+        if (!persisted && !string.IsNullOrWhiteSpace(_appState.ProfilePersistenceBlockedMessage))
+        {
+            _notifications.ShowWarning("Saved query deletion was not persisted", _appState.ProfilePersistenceBlockedMessage);
+            return;
+        }
+
+        _notifications.ShowSuccess("Saved query deleted", savedQuery.Name);
+    }
+
+    [RelayCommand]
+    private void ToggleAvailabilityView()
+    {
+        ShowAvailabilityHeatmap = !ShowAvailabilityHeatmap;
+    }
+
+    [RelayCommand]
     private Task DrillFailureToLogsAsync()
     {
         if (SelectedFailure is null)
@@ -579,6 +780,21 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         AdvancedQueryText = $"exceptions\n| where type == '{escapedExceptionType}'\n| project timestamp, type, operationId=operation_Id, operationName=operation_Name, cloud_RoleName, innermostMessage\n| order by timestamp desc\n| take 100";
         SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
         SelectedTabIndex = 3;
+        return RefreshCurrentTabAsync(force: true);
+    }
+
+    [RelayCommand]
+    private Task DrillFailureTraceToLogsAsync()
+    {
+        if (SelectedFailure is null || string.IsNullOrWhiteSpace(SelectedFailure.SampleOperationId))
+        {
+            return Task.CompletedTask;
+        }
+
+        AdvancedQueryText = KqlPresets.TraceByOperationId(SelectedFailure.SampleOperationId);
+        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
+        SelectedTabIndex = 3;
+        ActiveTabStatusText = $"Running a focused trace query for exception '{SelectedFailure.ExceptionType}'.";
         return RefreshCurrentTabAsync(force: true);
     }
 
@@ -609,6 +825,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     partial void OnActiveResourceChanged(ObservabilityResourceItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasActiveResource));
+        OnPropertyChanged(nameof(CanSaveQuery));
         OnPropertyChanged(nameof(ResourceWorkspaceVisibility));
         OnPropertyChanged(nameof(EmptyStateVisibility));
         OnPropertyChanged(nameof(ActiveResourceTitle));
@@ -655,10 +872,12 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     partial void OnSelectedFailureChanged(ObservabilityFailureItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedFailure));
+        OnPropertyChanged(nameof(HasSelectedFailureSampleTrace));
         OnPropertyChanged(nameof(SelectedFailureTitle));
         OnPropertyChanged(nameof(SelectedFailureSubtitle));
         OnPropertyChanged(nameof(SelectedFailureMessage));
         OnPropertyChanged(nameof(SelectedFailureStackTrace));
+        OnPropertyChanged(nameof(SelectedFailureSampleTraceLabel));
     }
 
     partial void OnSelectedPerformanceEntryChanged(ObservabilityPerformanceItemViewModel? value)
@@ -683,9 +902,27 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         _ = LoadSelectedPerformanceTrendAsync(value, requestVersion);
     }
 
+    partial void OnSelectedAvailabilityResultChanged(ObservabilityAvailabilityItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(SelectedAvailabilityTitle));
+        OnPropertyChanged(nameof(SelectedAvailabilitySubtitle));
+        OnPropertyChanged(nameof(SelectedAvailabilityStatusLabel));
+        OnPropertyChanged(nameof(SelectedAvailabilityStatusSummary));
+        OnPropertyChanged(nameof(SelectedAvailabilityDurationLabel));
+        OnPropertyChanged(nameof(SelectedAvailabilityFailureMessage));
+        OnPropertyChanged(nameof(AvailabilityDetailPlaceholderVisibility));
+        OnPropertyChanged(nameof(AvailabilityDetailContentVisibility));
+        OnPropertyChanged(nameof(SelectedAvailabilityFailureVisibility));
+    }
+
     partial void OnSelectedQueryPresetChanged(ObservabilityQueryPresetItemViewModel? value)
     {
         OnPropertyChanged(nameof(SelectedPresetDescription));
+    }
+
+    partial void OnSaveQueryNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanSaveQuery));
     }
 
     partial void OnSelectedLogsModeChanged(ObservabilityLogsModeOptionViewModel? value)
@@ -709,6 +946,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         _ = PersistLogsConfigAsync();
         _ = PublishSnapshotAsync(recordRecent: false);
+    }
+
+    partial void OnShowAvailabilityHeatmapChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AvailabilityViewToggleLabel));
+        OnPropertyChanged(nameof(AvailabilityHeatmapVisibility));
+        OnPropertyChanged(nameof(AvailabilityListVisibility));
     }
 
     partial void OnSelectedGuidedOperatorChanged(ObservabilityGuidedOperatorOptionViewModel? value)
@@ -1073,6 +1317,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             AvailabilityResults.Add(new ObservabilityAvailabilityItemViewModel(result));
         }
 
+        RebuildAvailabilityHeatmap();
+        SelectedAvailabilityResult = AvailabilityResults.FirstOrDefault();
+
         ActiveTabStatusText = AvailabilityResults.Count == 0
             ? "Availability returned no recent checks for this window."
             : $"Loaded {AvailabilityResults.Count:N0} recent availability checks for this window.";
@@ -1256,6 +1503,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             _suppressStateChangeSideEffects = false;
         }
 
+        LoadSavedQueries();
         UpdateGuidedPreview();
     }
 
@@ -1284,6 +1532,25 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         config.GuidedLogsDraft = BuildGuidedDefinition();
 
         await _appState.SaveConfigAsync();
+    }
+
+    private void LoadSavedQueries(string? preferredId = null)
+    {
+        SavedQueries.Clear();
+
+        var config = EnsureConfig();
+        config.SavedQueries ??= [];
+
+        foreach (var savedQuery in config.SavedQueries
+                     .OrderByDescending(query => query.CreatedAt)
+                     .ThenBy(query => query.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            SavedQueries.Add(new ObservabilitySavedQueryItemViewModel(savedQuery));
+        }
+
+        OnPropertyChanged(nameof(HasSavedQueries));
+        OnPropertyChanged(nameof(ShowSavedQueriesEmptyState));
+        OnPropertyChanged(nameof(SavedQueriesSummary));
     }
 
     private void LoadQueryPresets()
@@ -1329,12 +1596,15 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         PerformanceEntries.Clear();
         PerformanceTrend.Clear();
         AvailabilityResults.Clear();
+        AvailabilityHeatmapHourLabels.Clear();
+        AvailabilityHeatmapRows.Clear();
         LogRows.Clear();
         DependencyHealthEntries.Clear();
         DimensionBreakdowns.Clear();
 
         SelectedFailure = null;
         SelectedPerformanceEntry = null;
+        SelectedAvailabilityResult = null;
         ActiveTabErrorMessage = null;
         LogsResultSummary = "Run a query to preview logs in the native baseline.";
 
@@ -1346,6 +1616,59 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         AvailabilityText = "0.0%";
         DependencyHeadline = "Dependency health will appear after the first overview refresh.";
         BreakdownHeadline = "Custom dimension pivots are intentionally deferred in this baseline.";
+
+        OnPropertyChanged(nameof(OverallAvailabilityText));
+        OnPropertyChanged(nameof(AvailabilityPassFailSummary));
+        OnPropertyChanged(nameof(HasAvailabilityHeatmap));
+        OnPropertyChanged(nameof(AvailabilityHeatmapVisibility));
+        OnPropertyChanged(nameof(AvailabilityListVisibility));
+    }
+
+    private void RebuildAvailabilityHeatmap()
+    {
+        AvailabilityHeatmapHourLabels.Clear();
+        AvailabilityHeatmapRows.Clear();
+
+        var hourBuckets = AvailabilityResults
+            .Select(result => result.Result.Timestamp.LocalDateTime)
+            .Select(timestamp => new DateTime(timestamp.Year, timestamp.Month, timestamp.Day, timestamp.Hour, 0, 0, DateTimeKind.Local))
+            .Distinct()
+            .OrderBy(timestamp => timestamp)
+            .ToArray();
+
+        foreach (var bucket in hourBuckets)
+        {
+            AvailabilityHeatmapHourLabels.Add(bucket.ToString("M/d HH:00"));
+        }
+
+        foreach (var group in AvailabilityResults
+                     .GroupBy(result => result.TestName, StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var buckets = group
+                .GroupBy(result =>
+                {
+                    var timestamp = result.Result.Timestamp.LocalDateTime;
+                    return new DateTime(timestamp.Year, timestamp.Month, timestamp.Day, timestamp.Hour, 0, 0, DateTimeKind.Local);
+                })
+                .ToDictionary(
+                    bucket => bucket.Key,
+                    bucket => (PassCount: bucket.Count(result => result.Result.Success), TotalCount: bucket.Count()));
+
+            var cells = hourBuckets
+                .Select(bucket => buckets.TryGetValue(bucket, out var counts)
+                    ? new ObservabilityAvailabilityHeatmapCellViewModel(bucket.ToString("M/d HH:00"), counts.PassCount, counts.TotalCount)
+                    : new ObservabilityAvailabilityHeatmapCellViewModel(bucket.ToString("M/d HH:00"), 0, 0))
+                .ToArray();
+
+            AvailabilityHeatmapRows.Add(new ObservabilityAvailabilityHeatmapRowViewModel(group.Key, cells));
+        }
+
+        OnPropertyChanged(nameof(OverallAvailabilityText));
+        OnPropertyChanged(nameof(AvailabilityPassFailSummary));
+        OnPropertyChanged(nameof(HasAvailabilityHeatmap));
+        OnPropertyChanged(nameof(AvailabilityHeatmapVisibility));
+        OnPropertyChanged(nameof(AvailabilityListVisibility));
     }
 
     private void UpdateGuidedPreview()

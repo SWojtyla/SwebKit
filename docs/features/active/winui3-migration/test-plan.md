@@ -23,11 +23,12 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Main scenarios (priority)
 
 1. Scenario: shared shell foundation is applied across the host — Expected result: dashboard, settings, and migrated workspaces render through a consistent scaffold, state treatment, and shell chrome.
-2. Scenario: theme changes apply globally — Expected result: changing the selected theme updates shell chrome, shared cards, banners, and migrated pages without page-specific breakage or a restart requirement, including curated swaps that stay within the same dark/light family.
-3. Scenario: migrated workspaces adopt reusable primitives instead of bespoke layouts — Expected result: Service Bus, AKS, and subsequent pages use shared section/state/detail patterns and keep feature behavior intact.
-4. Scenario: production, demo, warning, and recovery cues stay consistent — Expected result: destructive and stateful operator cues are recognizable across shell and workspace contexts.
-5. Scenario: cutover-critical feature parity remains intact — Expected result: each migrated domain preserves its documented workflows while fitting the shared WinUI architecture.
-6. Scenario: AKS route remains responsive during bootstrap — Expected result: the page paints immediately, shows loading state promptly, and remains visibly responsive while contexts, namespaces, and pods load.
+2. Scenario: dashboard landing route provides a native operator overview — Expected result: readiness attention, cross-workspace health tiles, favorites, recent activity, and pod-health alerts refresh from shared WinUI services without falling back to the MAUI dashboard.
+3. Scenario: theme changes apply globally — Expected result: changing the selected theme updates shell chrome, shared cards, banners, and migrated pages without page-specific breakage or a restart requirement, including curated swaps that stay within the same dark/light family.
+4. Scenario: migrated workspaces adopt reusable primitives instead of bespoke layouts — Expected result: Service Bus, AKS, and subsequent pages use shared section/state/detail patterns and keep feature behavior intact.
+5. Scenario: production, demo, warning, and recovery cues stay consistent — Expected result: destructive and stateful operator cues are recognizable across shell and workspace contexts.
+6. Scenario: cutover-critical feature parity remains intact — Expected result: each migrated domain preserves its documented workflows while fitting the shared WinUI architecture.
+7. Scenario: AKS route remains responsive during bootstrap — Expected result: the page paints immediately, shows loading state promptly, and remains visibly responsive while contexts, namespaces, and pods load.
 
 ## Automated coverage
 
@@ -45,6 +46,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Manual checks
 
 - Check: shared shell coherence — steps: open Dashboard, Settings, Service Bus, and AKS; confirm title/meta/action areas, banners, cards, and status cues follow one consistent structure.
+- Check: dashboard baseline route — steps: start the WinUI host and confirm it opens to Dashboard by default; verify readiness summary, four health tiles, favorites, recent activity, and pod-health sections all render natively; trigger Refresh in both demo and live-configured modes and confirm the route stays responsive without falling back to placeholder or MAUI content.
 - Check: global theme application — steps: switch between curated themes, including dark-to-dark and light-to-light swaps, navigate across migrated pages, and confirm shell chrome and page surfaces update consistently.
 - Check: resize and density behavior — steps: test narrow and wide window states, verify primary/detail panes and toolbar regions remain usable and intentional.
 - Check: state treatment consistency — steps: validate loading, empty, error, not-configured, demo, and production-warning states on at least two workspaces.
@@ -70,6 +72,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Acceptance criteria
 
 - The shared WinUI UI foundation exists: semantic resource dictionaries, curated theme application, reusable shell primitives, and a page/workspace scaffold.
+- Dashboard has a native WinUI route with readiness summary, health tiles, favorites, recent activity, and pod-health alerts backed by shared services.
 - `Settings`, `ServiceBus`, and `AKS` adopt the shared primitives without losing documented behavior.
 - `Pipelines` and `Observability` have native WinUI baseline routes wired into the shell and validated against their baseline scenarios.
 - Theme switching and shell state cues work consistently across migrated pages.
@@ -77,7 +80,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the Pipelines WinUI approvals tab adopted inline approve/reject actions, production CONFIRM gating, and resilient cross-project refresh behavior
+- Automated: `build-winui` green after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page
 - Manual: Not started
 
 ## Sign-off

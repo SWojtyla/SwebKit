@@ -18,7 +18,8 @@
 - Inline save feedback, including explicit in-memory-only messaging when profile persistence is blocked after a failed load.
 - Non-fatal startup warning banner when `profiles.json` fails to load.
 - Non-fatal startup recovery banner when `profiles.json` is restored from the last known good backup.
-- Dashboard readiness summary and setup checklist that deep-link into the owning Settings sections when setup or repair work is still needed, limited to actionable capability areas instead of already-healthy ones.
+- Dashboard readiness summary and setup checklist on both the MAUI dashboard and the native WinUI dashboard route, opening the owning workspace or current settings surface when setup or repair work is still needed and limited to actionable capability areas instead of already-healthy ones.
+- Native WinUI dashboard landing route that combines readiness summary, cross-workspace health tiles, favorites, recent activity, and pod-health alerts on the default shell entry point.
 - Settings page readiness summary for the current section, including safe credential-reference presence, explicit read-only live-check refresh, and per-area probe detail for the current session.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
 - Query-driven preselection of the Incident Timeline settings section when the incident page links into `/settings?section=incident-timeline`.
@@ -42,10 +43,15 @@
 
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Pages/DashboardPage.razor`
+- `src/SwebKit.WinUI/Views/Dashboard/DashboardPage.xaml`
+- `src/SwebKit.WinUI/ViewModels/Dashboard/DashboardPageViewModel.cs`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
+- `src/SwebKit.WinUI/Views/Settings/SettingsPage.xaml`
 - `src/SwebKit.App/Components/Shared/ConfigurationReadinessDashboard.razor`
 - `src/SwebKit.App/Components/Shared/ConfigurationReadinessAreaCard.razor`
 - `src/SwebKit.App/Services/ConfigurationProbeService.cs`
+- `src/SwebKit.WinUI/Services/ConfigurationProbeService.cs`
+- `src/SwebKit.WinUI/Services/PodHealthMonitorService.cs`
 - `src/SwebKit.App/Components/Pages/DevOpsConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/IncidentTimelineConfigForm.razor`
 - `src/SwebKit.App/Components/Pages/ServiceBusConfigForm.razor`
@@ -76,6 +82,7 @@
 - `ProfileRepository`, `UiStateRepository`, and `UserSettingsRepository` all keep a sibling `.bak` file for the last known good payload and refresh it after successful saves.
 - DevOps settings accept organization slug input or supported Azure DevOps URL forms. Saving or testing settings creates new live-client snapshots; it does not mutate an existing shared live client.
 - Legacy Service Bus pin data remains compatibility-only. `OperatorWorkspaceService` keeps it synchronized with the canonical favorite-resource model used by shell surfaces and the dashboard.
+- The in-progress WinUI host now owns its dashboard readiness refresh and pod-health aggregation through `DashboardPageViewModel`, `ConfigurationProbeService`, and `PodHealthMonitorService`; the cutover validation path no longer depends on the MAUI dashboard implementation for those surfaces.
 - AKS monitoring persistence (`MonitoringEnabled`, `MonitoredNamespaces`) remains in existing AKS config and is not altered by window hide/restore transitions.
 - On Windows, Minimize and Close now route to system tray by default; explicit Exit from tray menu is required for full app termination. This behavior is currently fixed (not user-toggleable in Settings).
 

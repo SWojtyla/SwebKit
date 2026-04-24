@@ -14,6 +14,7 @@ using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
+using SwebKit.WinUI.ViewModels.Dashboard;
 using SwebKit.WinUI.ViewModels.Aks;
 using SwebKit.WinUI.ViewModels.Observability;
 using SwebKit.WinUI.ViewModels.Pipelines;
@@ -47,8 +48,11 @@ internal static class ServiceRegistration
         services.AddSingleton<ThemeCoordinator>();
         services.AddSingleton<ScheduledMessageRepository>();
         services.AddSingleton<AppStateService>();
+        services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
+        services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
         services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         services.AddSingleton<IPortForwardSessionService, PortForwardSessionService>();
+        services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
 
         // ── Demo clients ──────────────────────────────────────────────────────────
         services.AddSingleton<DemoAksClient>();
@@ -126,6 +130,7 @@ internal static class ServiceRegistration
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();
         services.AddTransient<AksPageViewModel>();
+        services.AddTransient<DashboardPageViewModel>();
         services.AddTransient<ObservabilityPageViewModel>();
         services.AddTransient<PipelinesPageViewModel>();
         services.AddTransient<RedisPageViewModel>();

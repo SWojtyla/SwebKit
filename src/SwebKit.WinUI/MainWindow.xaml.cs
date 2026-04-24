@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using SwebKit.WinUI.Services;
 using SwebKit.WinUI.Views.Aks;
+using SwebKit.WinUI.Views.Dashboard;
 using SwebKit.WinUI.Views.Observability;
 using SwebKit.WinUI.Views.Pipelines;
 using SwebKit.WinUI.Views.Redis;
@@ -49,7 +50,7 @@ public sealed partial class MainWindow : Window
         // Ctrl+K — command palette
         RegisterCommandPaletteAccelerator();
 
-        var initialArea = string.IsNullOrWhiteSpace(ViewModel.CurrentArea) ? "service-bus" : ViewModel.CurrentArea;
+        var initialArea = string.IsNullOrWhiteSpace(ViewModel.CurrentArea) ? "dashboard" : ViewModel.CurrentArea;
         ViewModel.OnAreaSelected(initialArea);
         NavigateToArea(initialArea);
     }
@@ -106,6 +107,7 @@ public sealed partial class MainWindow : Window
 
         var pageType = area switch
         {
+            "dashboard" => typeof(DashboardPage),
             "aks" => typeof(AksPage),
             "observability" => typeof(ObservabilityPage),
             "pipelines" => typeof(PipelinesPage),

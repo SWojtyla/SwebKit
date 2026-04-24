@@ -19,6 +19,12 @@
             SelectionChanged="NavView_SelectionChanged">
 
             <NavigationView.MenuItems>
+                <NavigationViewItem Tag="dashboard"
+                                    Content="Dashboard">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Tag="service-bus"
                                     Content="Service Bus">
                     <NavigationViewItem.Icon>

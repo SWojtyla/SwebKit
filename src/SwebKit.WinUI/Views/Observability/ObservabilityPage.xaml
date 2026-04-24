@@ -627,9 +627,18 @@
                                                         Spacing="8">
                                                 <TextBlock Text="{Binding SelectedFailureMessage}"
                                                            TextWrapping="WrapWholeWords"/>
-                                                <Button Content="Drill to logs"
+                                                <StackPanel Orientation="Horizontal"
+                                                        Spacing="8">
+                                                    <Button Content="Drill to logs"
                                                         Command="{Binding DrillFailureToLogsCommand}"
                                                         IsEnabled="{Binding HasSelectedFailure}"/>
+                                                    <Button Content="Trace sample"
+                                                        Command="{Binding DrillFailureTraceToLogsCommand}"
+                                                        IsEnabled="{Binding HasSelectedFailureSampleTrace}"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding SelectedFailureSampleTraceLabel}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
                                             </StackPanel>
 
                                             <ScrollViewer Grid.Row="2"
@@ -780,6 +789,77 @@
                                                 <TextBlock Text="{Binding SelectedPresetDescription}"
                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                            TextWrapping="WrapWholeWords"/>
+
+                                                <Border CornerRadius="8"
+                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                        BorderThickness="1"
+                                                        Padding="12">
+                                                    <StackPanel Spacing="10">
+                                                        <TextBlock Text="Saved queries"
+                                                                   Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                        <TextBlock Text="{Binding SavedQueriesSummary}"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                   TextWrapping="WrapWholeWords"/>
+
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBox Grid.Column="0"
+                                                                     Text="{Binding SaveQueryName, Mode=TwoWay}"
+                                                                     PlaceholderText="Name the current query before saving it"/>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Save current query"
+                                                                    Command="{Binding SaveCurrentQueryCommand}"
+                                                                    IsEnabled="{Binding CanSaveQuery}"/>
+                                                        </Grid>
+
+                                                        <InfoBar IsOpen="{Binding ShowSavedQueriesEmptyState}"
+                                                                 Severity="Informational"
+                                                                 Title="No saved queries yet"
+                                                                 Message="Name the current query and save it to persist it in the Observability profile."/>
+
+                                                        <ItemsControl ItemsSource="{Binding SavedQueries}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="viewModels:ObservabilitySavedQueryItemViewModel">
+                                                                    <Border Margin="0,0,0,8"
+                                                                            CornerRadius="6"
+                                                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                            BorderThickness="1"
+                                                                            Padding="10">
+                                                                        <StackPanel Spacing="8">
+                                                                            <StackPanel Spacing="4">
+                                                                                <TextBlock Text="{x:Bind Name}"
+                                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind Summary}"
+                                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind CreatedAtText}"
+                                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            </StackPanel>
+
+                                                                            <StackPanel Orientation="Horizontal"
+                                                                                        Spacing="8">
+                                                                                <Button Content="Run"
+                                                                                        Command="{Binding ViewModel.LoadSavedQueryCommand, ElementName=PageRoot}"
+                                                                                        CommandParameter="{x:Bind}"/>
+                                                                                <Button Content="Delete"
+                                                                                        Command="{Binding ViewModel.DeleteSavedQueryCommand, ElementName=PageRoot}"
+                                                                                        CommandParameter="{x:Bind}"/>
+                                                                            </StackPanel>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <StackPanel Visibility="{Binding AdvancedModeVisibility}"
                                                             Spacing="8">
@@ -959,9 +1039,29 @@
                                                          Severity="Informational"
                                                          Title="No availability rows returned"
                                                          Message="The active resource returned no availability results for the current window."/>
-                                                <TextBlock Text="{Binding AvailabilityChartSummary}"
-                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                           TextWrapping="WrapWholeWords"/>
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0"
+                                                                Spacing="4">
+                                                        <TextBlock Text="{Binding AvailabilityChartSummary}"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                   TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock Text="{Binding OverallAvailabilityText}"
+                                                                   Style="{StaticResource TitleTextBlockStyle}"/>
+                                                        <TextBlock Text="{Binding AvailabilityPassFailSummary}"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                    </StackPanel>
+
+                                                    <Button Grid.Column="1"
+                                                            Content="{Binding AvailabilityViewToggleLabel}"
+                                                            Command="{Binding ToggleAvailabilityViewCommand}"
+                                                            VerticalAlignment="Top"
+                                                            IsEnabled="{Binding HasAvailabilityResults}"/>
+                                                </Grid>
                                                 <Border Visibility="{Binding AvailabilityChartVisibility}"
                                                         MinHeight="240"
                                                         CornerRadius="8"
@@ -973,30 +1073,201 @@
                                                                         XAxes="{Binding AvailabilityChartXAxes}"
                                                                         YAxes="{Binding AvailabilityChartYAxes}"/>
                                                 </Border>
-                                                <ItemsControl ItemsSource="{Binding AvailabilityResults}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityItemViewModel">
-                                                            <Border Margin="0,0,0,8"
-                                                                    CornerRadius="6"
-                                                                    Background="{ThemeResource LayerFillColorAltBrush}"
-                                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                                    BorderThickness="1"
-                                                                    Padding="10">
-                                                                <StackPanel Spacing="4">
-                                                                    <TextBlock Text="{x:Bind TestName}"
-                                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                                    <TextBlock Text="{x:Bind SummaryText}"
-                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                                    <TextBlock Text="{x:Bind StatusText}"
-                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                                    <TextBlock Text="{x:Bind DurationText}"
-                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                                               TextWrapping="WrapWholeWords"/>
-                                                                </StackPanel>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+
+                                                <StackPanel Visibility="{Binding AvailabilityHeatmapVisibility}"
+                                                            Spacing="8">
+                                                    <TextBlock Text="Hourly heatmap"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <TextBlock Text="The WinUI host now mirrors the existing availability heatmap by grouping pass rate per test and hour over the current window."
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                                  VerticalScrollBarVisibility="Disabled">
+                                                        <StackPanel Spacing="6">
+                                                            <Grid ColumnSpacing="8">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="160"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Text="Test"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <ItemsControl Grid.Column="1"
+                                                                              ItemsSource="{Binding AvailabilityHeatmapHourLabels}">
+                                                                    <ItemsControl.ItemsPanel>
+                                                                        <ItemsPanelTemplate>
+                                                                            <StackPanel Orientation="Horizontal"/>
+                                                                        </ItemsPanelTemplate>
+                                                                    </ItemsControl.ItemsPanel>
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border Width="88"
+                                                                                    Margin="0,0,6,0"
+                                                                                    Padding="6,0"
+                                                                                    Background="Transparent">
+                                                                                <TextBlock Text="{Binding}"
+                                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                                           TextAlignment="Center"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </Grid>
+
+                                                            <ItemsControl ItemsSource="{Binding AvailabilityHeatmapRows}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityHeatmapRowViewModel">
+                                                                        <Grid ColumnSpacing="8"
+                                                                              Margin="0,0,0,6">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="160"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <TextBlock Text="{x:Bind TestName}"
+                                                                                       VerticalAlignment="Center"
+                                                                                       TextWrapping="WrapWholeWords"/>
+
+                                                                            <ItemsControl Grid.Column="1"
+                                                                                          ItemsSource="{x:Bind Cells}">
+                                                                                <ItemsControl.ItemsPanel>
+                                                                                    <ItemsPanelTemplate>
+                                                                                        <StackPanel Orientation="Horizontal"/>
+                                                                                    </ItemsPanelTemplate>
+                                                                                </ItemsControl.ItemsPanel>
+                                                                                <ItemsControl.ItemTemplate>
+                                                                                    <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityHeatmapCellViewModel">
+                                                                                        <Border Width="88"
+                                                                                                Height="52"
+                                                                                                Margin="0,0,6,0"
+                                                                                                CornerRadius="6"
+                                                                                                Background="{x:Bind BackgroundBrush}"
+                                                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                                                BorderThickness="1"
+                                                                                                Padding="6">
+                                                                                            <ToolTipService.ToolTip>
+                                                                                                <ToolTip Content="{x:Bind TooltipText}"/>
+                                                                                            </ToolTipService.ToolTip>
+                                                                                            <StackPanel VerticalAlignment="Center"
+                                                                                                        Spacing="2">
+                                                                                                <TextBlock Text="{x:Bind ValueText}"
+                                                                                                           Foreground="{x:Bind ForegroundBrush}"
+                                                                                                           FontFamily="Cascadia Mono"
+                                                                                                           HorizontalAlignment="Center"/>
+                                                                                                <TextBlock Text="{x:Bind CountText}"
+                                                                                                           Foreground="{x:Bind ForegroundBrush}"
+                                                                                                           FontSize="11"
+                                                                                                           HorizontalAlignment="Center"
+                                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                            </StackPanel>
+                                                                                        </Border>
+                                                                                    </DataTemplate>
+                                                                                </ItemsControl.ItemTemplate>
+                                                                            </ItemsControl>
+                                                                        </Grid>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </StackPanel>
+
+                                                <Grid Visibility="{Binding AvailabilityListVisibility}"
+                                                      ColumnSpacing="16">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="2*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <ListView Grid.Column="0"
+                                                              ItemsSource="{Binding AvailabilityResults}"
+                                                              SelectedItem="{Binding SelectedAvailabilityResult, Mode=TwoWay}">
+                                                        <ListView.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBlock Text="{x:Bind TestName}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                        <TextBlock Text="{x:Bind SummaryText}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        <TextBlock Text="{x:Bind StatusText}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        <TextBlock Text="{x:Bind DurationText}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ListView.ItemTemplate>
+                                                    </ListView>
+
+                                                    <Border Grid.Column="1"
+                                                            CornerRadius="8"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="12">
+                                                        <Grid>
+                                                            <StackPanel Visibility="{Binding AvailabilityDetailPlaceholderVisibility}"
+                                                                        Spacing="8">
+                                                                <TextBlock Text="Select an availability check"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                <TextBlock Text="Choose a row from the list to inspect the selected test result without leaving the current tab."
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Visibility="{Binding AvailabilityDetailContentVisibility}"
+                                                                        Spacing="8">
+                                                                <TextBlock Text="{Binding SelectedAvailabilityTitle}"
+                                                                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                                <TextBlock Text="{Binding SelectedAvailabilitySubtitle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="WrapWholeWords"/>
+
+                                                                <Grid ColumnSpacing="12">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <StackPanel Grid.Column="0"
+                                                                                Spacing="4">
+                                                                        <TextBlock Text="Result"
+                                                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                        <TextBlock Text="{Binding SelectedAvailabilityStatusLabel}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                    </StackPanel>
+
+                                                                    <StackPanel Grid.Column="1"
+                                                                                Spacing="4">
+                                                                        <TextBlock Text="Duration"
+                                                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                        <TextBlock Text="{Binding SelectedAvailabilityDurationLabel}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                    </StackPanel>
+                                                                </Grid>
+
+                                                                <TextBlock Text="{Binding SelectedAvailabilityStatusSummary}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                                <TextBlock Text="{Binding SelectedAvailabilityFailureMessage}"
+                                                                           Visibility="{Binding SelectedAvailabilityFailureVisibility}"
+                                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>

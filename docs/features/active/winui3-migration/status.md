@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now has a broader native diagnostics slice: the WinUI host has cluster bootstrap, pod browse, selected-pod log diagnostics, tracked port-forward session management, and selected-pod shell launch. Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has a broader native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders overview request and failure trends, the selected-operation latency trend, and an availability-by-test summary with LiveCharts2. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, workspace restore, and the first chart-hosting slices. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell cutover path now also has a native WinUI dashboard landing route: the app opens to a dashboard view that owns readiness summary/probe refresh, cross-workspace health tiles, operator favorites, recent activity, and pod-health alerts without falling back to the MAUI dashboard. Phase 3 AKS now has a broader native diagnostics slice: the WinUI host has cluster bootstrap, pod browse, selected-pod log diagnostics, tracked port-forward session management, selected-pod shell launch, and the shared pod-health monitor now feeds the dashboard route directly. Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has a broader native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders overview request and failure trends, the selected-operation latency trend, an availability-by-test summary with LiveCharts2, a native availability heatmap/list toggle over the existing result set, a native saved-query baseline in the logs tab, and a focused failure-sample trace drill from the failures pane. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, saved query persistence, workspace restore, and the first chart-hosting slices. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
 
 **Jira:** not linked
 
-**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, expand Observability beyond the current overview/performance/availability chart seams into the remaining editor and exact heatmap parity gaps, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
+**Current focus:** harden the new native dashboard/shell cutover path alongside the Pipelines and Observability baseline routes, expand Observability through the remaining editor and drill-through gaps now that the availability heatmap and saved-query slices are native, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
 
 ## Progress checklist
 
@@ -35,7 +35,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 ### Phase 1 — Shell ✅
 
-- [x] `MainWindow` with `NavigationView` (left nav, 7 areas + Settings footer) and `Frame` content host
+- [x] `MainWindow` with `NavigationView` (left nav, 8 areas + Settings footer) and `Frame` content host
 - [x] Port `TabService` as a plain .NET service (no Blazor deps)
 - [x] Port `CommandRegistry` (keyboard shortcuts without JS interop)
 - [x] Port `OperatorWorkspaceService` — search, recents, favorites (NavigationManager → `IShellNavigationService`)
@@ -45,6 +45,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - [x] `MainWindowViewModel` — nav state, pane expand/collapse, command palette open/close, persists `IsNavExpanded` to `UiStateRepository`
 - [x] `CommandPaletteViewModel` — searches `CommandRegistry`, area-scoped, executes via relay command
 - [x] Command palette flyout (Ctrl+K keyboard accelerator — `KeyboardAccelerator` in code-behind)
+- [x] Native Dashboard route — readiness summary, cross-workspace health tiles, favorites, recent activity, and pod-health alerts wired as the default landing page
 - [x] `PlaceholderPage` — shown for areas not yet migrated (Phases 2-8)
 - [x] `SettingsPage` — Appearance (theme ComboBox), General (warm-up toggle), Safety (production toggle); saves to `UserSettingsRepository` + `AppStateService`
 - [x] `SettingsViewModel` — loads/saves all three settings, tracks dirty state
@@ -94,7 +95,9 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 - [x] Resource picker (App Insights discovery)
 - [x] Overview / Failures / Performance / Logs / Availability tabs
-- [ ] LiveCharts2 charts replacing ApexCharts (overview request/failure charts, selected-operation performance trend, and availability summary landed; exact availability heatmap parity still pending)
+- [x] Native availability heatmap/list toggle parity over the existing availability result set
+- [x] Saved-query run/save/delete baseline over `ObservabilityConfig`
+- [ ] LiveCharts2 charts replacing ApexCharts (overview request/failure charts, selected-operation performance trend, and availability summary landed; broader chart parity still remains)
 - [ ] Monaco editor in WebView2 for KQL / log output
 
 ### Phase 8 — Cutover
@@ -134,22 +137,26 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - The Observability Overview tab now renders native request-volume and failure-rate charts from the existing overview trend payload, extending the WinUI chart seam without changing provider contracts.
 - The Observability Performance tab now renders the selected-operation latency trend with LiveCharts2, establishing the first native chart-hosting seam in `SwebKit.WinUI` without changing domain or integration projects.
 - The Observability Availability tab now renders an availability-by-test LiveCharts summary above the native results list, extending the chart seam without adding new provider APIs or changing persisted workspace state.
+- The Observability Availability tab now also supports a native hourly heatmap/list toggle in `SwebKit.WinUI`, deriving pass-rate buckets from the existing availability result set without changing provider contracts.
+- The Observability Logs tab now supports native saved-query run/save/delete flows in `SwebKit.WinUI`, persisting directly through the shared `ObservabilityConfig` without changing provider contracts.
+- The Observability Failures tab now supports a focused sample-trace drill in `SwebKit.WinUI`, reusing the provider's sample operation id and the shared `KqlPresets.TraceByOperationId(...)` helper instead of adding a new query contract.
 - The shared shell route map now activates the new Pipelines and Observability pages directly instead of sending those areas to `PlaceholderPage`.
 - `SwebKit.WinUI` now provides a native `IObservabilityProviderFactory` implementation so the WinUI host no longer depends on the MAUI-only registration path for observability provider creation.
+- `SwebKit.WinUI` now has a native dashboard route wired as the default landing page, backed by a WinUI-owned `DashboardPageViewModel`, `ConfigurationProbeService`, and `PodHealthMonitorService` so readiness, favorites, recents, and pod-health alerts no longer depend on the MAUI dashboard during cutover validation.
 
 ## Remaining
 
 - Phase 3-8 work listed above.
 - Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
-- Dashboard parity and deeper page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
+- The dashboard baseline route is now native, but deeper shell/settings/theme polish and page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
 - Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
 - Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
 - Pipelines parity still needs deeper tree/detail behavior, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
-- Observability parity still needs Monaco, exact availability heatmap parity, saved-query polish, drill-through depth, and the richer explainer/investigation flows called out in `frontend.md`.
+- Observability parity still needs Monaco, deeper drill-through/investigation flows, and the richer explainer surfaces called out in `frontend.md`.
 
 ## Recommended next sequence
 
-- Next: harden Pipelines/Observability on the shared scaffold and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before cutover hardening starts.
+- Next: harden the new dashboard plus Pipelines/Observability on the shared scaffold and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before cutover hardening starts.
 - After that: close the remaining Monaco and chart-hosting seams for Observability and push deeper approval/release parity in Pipelines.
 - Last: hardening, docs updates, test migration, and cutover.
 
@@ -183,3 +190,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the AKS WinUI diagnostics surface adopted native port-forward start/stop session management backed by the shared session service.
 - `build-winui` succeeded on 2026-04-24 after the AKS WinUI diagnostics surface adopted native selected-pod shell launch backed by `IAksClient.OpenShellAsync`.
 - `build-winui` succeeded on 2026-04-24 after the Pipelines WinUI approvals tab adopted inline approve/reject actions, production CONFIRM gating, and resilient cross-project refresh behavior.
+- `build-winui` succeeded on 2026-04-24 after the Observability Availability tab adopted a native hourly heatmap/list toggle over the existing result set.
+- `build-winui` succeeded on 2026-04-24 after the Observability Logs tab adopted native saved-query run/save/delete flows over the shared Observability profile state.
+- `build-winui` succeeded on 2026-04-24 after the Observability Failures tab adopted a focused sample-trace drill over the existing exception-group payload.
+- `build-winui` succeeded on 2026-04-24 after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page.

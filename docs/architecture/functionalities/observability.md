@@ -4,11 +4,12 @@
 
 - Incident Timeline backend uses explicit workload mappings to run one bounded App Insights query across exceptions, failed requests, and failed dependencies, returning corroborating evidence only when a role or operation mapping exists for the selected workload.
 - Enumerate Application Insights resources across all Azure subscriptions the user's credential has access to
-- Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results)
+- Five views: **Overview** (summary cards + trend charts), **Failures** (grouped exceptions + stack trace), **Performance** (operation latency table with P50/P95/P99), **Logs** (Guided builder and Advanced KQL editor + presets + saved queries), **Availability** (test results plus an hourly pass-rate heatmap/list toggle in the WinUI migration host)
 - Time range picker: Last 1h / 6h / 24h / 7d / 30d or custom
 - Current resource, active tab, and time range participate in the shared operator workspace model, so recent/favorite reopen flows and named favorites can restore Observability context route-first from shell surfaces.
 - Failures and Performance guard against redundant `OnParametersSetAsync` reloads by treating equivalent relative preset windows as the same effective range (for example repeated Last 24h parameter snapshots)
 - Drill-to-Logs: clicking "View in Logs" from any tab now uses an explicit pending-query handoff from `ObservabilityPage` into `ObservabilityLogs`, so the focused KQL executes exactly once without a render-timing delay
+- The WinUI migration host now also exposes a focused failure-sample trace drill from the selected exception detail pane when the provider returns a sample operation id, reusing the shared `KqlPresets.TraceByOperationId(...)` helper instead of introducing a new provider seam
 - Logs supports explicit mode switching:
   - Guided mode compiles `GuidedKqlQueryDefinition` via `IGuidedKqlCompiler` and blocks execution on compile validation errors
   - Guided mode surfaces inline field-level validation (`aria-invalid`) and keeps warning-only issues non-blocking
@@ -16,6 +17,7 @@
   - Advanced -> Guided keeps the existing guided draft (no reverse KQL parsing)
 - Saved queries persisted to `profiles.json`
 - Logs mode preference and guided draft are persisted under `ObservabilityConfig`
+- The WinUI migration host now keeps the Logs experience native and text-first while supporting preset plus saved-query run/save/delete flows over the shared `ObservabilityConfig`; the failures detail pane can also launch a focused trace query from the selected exception sample. Monaco remains deferred to the shared editor host wave
 - Full demo mode with realistic in-memory data (no Azure connection required)
 
 ## Authentication
@@ -69,24 +71,25 @@ For the incident cockpit backend, `AppInsightsTimelineSignalSource` resolves the
 
 ## Key Code Locations
 
-| What                      | Where                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                    |
-| Provider factory seam     | `src/SwebKit.Core/Abstractions/IObservabilityProviderFactory.cs`, `src/SwebKit.App/Services/ObservabilityProviderFactory.cs` |
-| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                    |
-| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                                                                             |
-| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                                                                             |
-| Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs`                  |
-| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                     |
-| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                      |
-| Incident timeline adapter | `src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs`                                              |
-| Log projection helper     | `src/SwebKit.Observability/LogQueryResultProjector.cs`                                                                       |
-| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                                   |
-| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                                    |
-| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                                   |
-| Sub-components            | `src/SwebKit.App/Components/Observability/`                                                                                  |
-| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page")                                                            |
-| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                                                                             |
+| What                      | Where                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Provider interface        | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                                  |
+| Provider factory seam     | `src/SwebKit.Core/Abstractions/IObservabilityProviderFactory.cs`, `src/SwebKit.App/Services/ObservabilityProviderFactory.cs`               |
+| Discovery interface       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`                                                                                  |
+| Domain models             | `src/SwebKit.Core/Models/ObservabilityModels.cs`                                                                                           |
+| Config model              | `src/SwebKit.Core/Domain/ObservabilityConfig.cs`                                                                                           |
+| Guided KQL compiler       | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/GuidedKqlCompiler.cs`                                |
+| Demo provider + discovery | `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                                   |
+| Azure implementation      | `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                                                    |
+| Incident timeline adapter | `src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs`                                                            |
+| Log projection helper     | `src/SwebKit.Observability/LogQueryResultProjector.cs`                                                                                     |
+| ARM discovery             | `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                                                 |
+| Built-in KQL presets      | `src/SwebKit.Observability/KqlPresets.cs`                                                                                                  |
+| Page + sub-components     | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`                                                                                 |
+| Sub-components            | `src/SwebKit.App/Components/Observability/`                                                                                                |
+| CSS                       | `src/SwebKit.App/wwwroot/app.css` (section: "Observability Page")                                                                          |
+| DI registration           | `src/SwebKit.App/MauiProgram.cs`                                                                                                           |
+| WinUI migration slice     | `src/SwebKit.WinUI/Views/Observability/ObservabilityPage.xaml`, `src/SwebKit.WinUI/ViewModels/Observability/ObservabilityPageViewModel.cs` |
 
 ## NuGet Packages (SwebKit.Observability)
 
