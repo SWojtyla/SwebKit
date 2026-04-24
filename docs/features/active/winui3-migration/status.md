@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Settings page live.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS slice 1 is now live with cluster bootstrap, context/namespace selection, and a pod health grid. The next planning pass now makes the reusable WinUI UI foundation explicit so the remaining workspaces are not built as bespoke XAML screens.
 
 **Jira:** not linked
 
-**Current focus:** Phase 3 — AKS domain.
+**Current focus:** UI foundation and shared shell/dashboard/settings/theme completion plus Phase 3 AKS slice 2, using the execution order in `frontend.md` as the cutover source of truth.
 
 ## Progress checklist
 
@@ -51,6 +51,14 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 - [x] `ServiceRegistration` updated — all Phase 1 services registered, TODO comments removed
 - [x] Build succeeds (0 errors, 12 AOT-compat warnings expected)
 
+### Foundation pass — UI architecture and reusable shell primitives
+
+- [ ] Add app-level resource dictionaries for semantic tokens, curated theme dictionaries, and shared styles
+- [ ] Add a global theme coordinator and expand the current `system` / `dark` / `light` baseline to the curated theme set
+- [ ] Add reusable shell primitives for title/status chrome, notifications, workspace hub, and banners
+- [ ] Add reusable page/workspace primitives for scaffold, section cards, metric cards, state views, and detail-pane layouts
+- [ ] Refactor `Settings`, `ServiceBus`, and `AKS` onto the shared primitives as the proving ground before broader page expansion
+
 ### Phase 2 — ServiceBus
 
 - [x] Namespace connect page/ViewModel
@@ -59,8 +67,8 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 
 ### Phase 3 — AKS
 
-- [ ] Cluster connect and namespace selector
-- [ ] Pod list grid with health column
+- [x] Cluster connect and namespace selector
+- [x] Pod list grid with health column
 - [ ] Pod logs panel
 - [ ] Port-forward session management
 - [ ] Pod shell (terminal via WebView2 or Windows Terminal integration)
@@ -110,15 +118,37 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 - WinUI app startup now initializes `AppStateService` before feature pages load persisted config.
 - Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
 - VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
+- Phase 3 AKS slice 1 is now live in `SwebKit.WinUI`: route wiring, cluster bootstrap, context/namespace selection, and pod browse with a native health/status grid.
 
 ## Remaining
 
 - Phase 3-9 work listed above.
+- Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
+- The current WinUI host still relies on default `App.xaml` resources plus inline page composition for most surfaces; the reusable UI foundation remains planned work.
+
+## Recommended next sequence
+
+- Next: build the shared UI foundation and finish the shared shell pass while continuing AKS slice 2 in parallel. This is the highest-value path because it closes cross-cutting host gaps before more pages are added.
+- After that: Redis and Storage in parallel, once the shared shell surfaces are stable enough to avoid rework.
+- Then: Pipelines/Releases and Observability in parallel, after Monaco and chart-hosting seams are fixed for WinUI.
+- Then: Incident Timeline, after its upstream workspace dependencies are credible.
+- Last: hardening, docs updates, test migration, and cutover.
+
+## Planning updates
+
+- The migration plan now treats Dashboard, shell workspace surfaces, full Settings/readiness flows, and curated theme/look-and-feel parity as cutover scope rather than optional polish.
+- The migration plan now also treats reusable UI architecture as first-class scope: resource dictionaries, semantic theming, shell primitives, and page/workspace scaffolds.
+- `frontend.md` now carries the detailed per-domain parity checklist for Service Bus, AKS, Redis, Storage, Pipelines, Observability, and Incident Timeline.
+- `frontend.md` now also defines the execution order and the cutover-gate versus parallelization rules for the remaining work.
+- `decisions.md` now records the UI foundation-first and semantic-theming decisions so page work does not drift back to ad hoc XAML.
+- `test-plan.md` now defines validation for the shared UI foundation, theme behavior, shell consistency, and downstream workspace adoption.
+- Round 2 is reserved for extra WinUI-only personalization or post-parity visual polish. Existing MAUI capabilities stay in the current plan.
 
 ## Blockers
 
-None currently identified.
+- No delivery blocker is currently identified, but the original feature docs had under-scoped MAUI parity. Phase completion should now be judged against `frontend.md`, not the shorter phase headlines alone.
 
 ## Validation status
 
 - `build-winui` succeeded on 2026-04-23 after the Phase 2 Service Bus implementation.
+- `build-winui` succeeded on 2026-04-24 after the AKS slice 1 WinUI changes.

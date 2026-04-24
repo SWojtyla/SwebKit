@@ -236,16 +236,53 @@ Both `using` and the call site change. No other MAUI references in these files.
 
 ---
 
+## D-10: UI architecture foundation before page proliferation
+
+**Decision:** Add an explicit shared UI layer in `SwebKit.WinUI` before the remaining workspaces are migrated broadly.
+
+**Rationale:**
+
+- The current WinUI host proves MVVM and navigation, but `App.xaml` still only merges the default WinUI resources and current pages compose most cards/layout inline.
+- If Redis, Storage, Pipelines, Observability, and Incident Timeline are added on top of that baseline, the app will accumulate one-off XAML structures that are expensive to unify later.
+- The MAUI app already behaves like one product; the WinUI host needs the same shared shell and page language from the start.
+
+**Implication:**
+
+- Add app-level resource dictionaries, shell primitives, and shared page/workspace scaffolds before opening too many additional page migrations.
+- `Settings`, `ServiceBus`, and `AKS` become the proving grounds for these shared primitives.
+
+---
+
+## D-11: Theming via semantic tokens and curated dictionaries
+
+**Decision:** Theme the WinUI host through semantic SwebKit resource tokens plus curated theme dictionaries, not through page-local brush choices or a permanent `system/dark/light` abstraction.
+
+**Rationale:**
+
+- The existing MAUI shell already defines a curated theme identity that is richer than a generic dark/light toggle.
+- WinUI's built-in theme resources are a strong base, but they are not by themselves a product design system.
+- Semantic tokens let curated themes change shell mood and brand cues while keeping page composition and interaction patterns stable.
+
+**Implication:**
+
+- Persist a theme key that maps to curated theme dictionaries.
+- Apply themes centrally through a shell-level coordinator.
+- Prefer semantic resource names in pages and shared controls; direct brush selection should remain rare.
+
+---
+
 ## Summary table
 
-| Concern          | Current (MAUI Blazor)          | WinUI 3 replacement                     | Effort                |
-| ---------------- | ------------------------------ | --------------------------------------- | --------------------- |
-| UI controls      | FluentUI.AspNetCore.Components | Native WinUI 3 + CommunityToolkit.WinUI | High (150 components) |
-| MVVM             | Blazor @code blocks            | CommunityToolkit.Mvvm                   | High (new pattern)    |
-| Charts           | Blazor-ApexCharts (JS)         | LiveChartsCore.SkiaSharpView.WinUI      | Medium                |
-| Code editor      | BlazorMonaco (JS interop)      | WebView2 direct (same Monaco JS)        | Low                   |
-| DI host          | MauiApp.CreateBuilder          | Microsoft.Extensions.Hosting            | Low                   |
-| HTTP resilience  | Unchanged                      | Unchanged                               | None                  |
-| YAML parsing     | Unchanged                      | Unchanged                               | None                  |
-| Credential store | WindowsCredentialStore         | WindowsCredentialStore (copy)           | None                  |
-| Toast / Tray     | Windows APIs                   | Windows APIs (1-line patch)             | Trivial               |
+| Concern          | Current (MAUI Blazor)                     | WinUI 3 replacement                                          | Effort                |
+| ---------------- | ----------------------------------------- | ------------------------------------------------------------ | --------------------- |
+| UI controls      | FluentUI.AspNetCore.Components            | Native WinUI 3 + CommunityToolkit.WinUI                      | High (150 components) |
+| MVVM             | Blazor @code blocks                       | CommunityToolkit.Mvvm                                        | High (new pattern)    |
+| Charts           | Blazor-ApexCharts (JS)                    | LiveChartsCore.SkiaSharpView.WinUI                           | Medium                |
+| Code editor      | BlazorMonaco (JS interop)                 | WebView2 direct (same Monaco JS)                             | Low                   |
+| DI host          | MauiApp.CreateBuilder                     | Microsoft.Extensions.Hosting                                 | Low                   |
+| HTTP resilience  | Unchanged                                 | Unchanged                                                    | None                  |
+| YAML parsing     | Unchanged                                 | Unchanged                                                    | None                  |
+| Credential store | WindowsCredentialStore                    | WindowsCredentialStore (copy)                                | None                  |
+| Toast / Tray     | Windows APIs                              | Windows APIs (1-line patch)                                  | Trivial               |
+| UI architecture  | CSS-driven shell + shared Blazor patterns | WinUI resource dictionaries + reusable shell/page primitives | Medium                |
+| Theme system     | Curated MAUI theme keys                   | Curated WinUI theme dictionaries + semantic tokens           | Medium                |

@@ -14,6 +14,7 @@ using SwebKit.Observability;
 using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
+using SwebKit.WinUI.ViewModels.Aks;
 using SwebKit.WinUI.ViewModels.ServiceBus;
 using SwebKit.WinUI.ViewModels.Settings;
 using SwebKit.WinUI.ViewModels.Shell;
@@ -57,6 +58,7 @@ internal static class ServiceRegistration
 
         // ── Kubernetes ────────────────────────────────────────────────────────────
         services.AddSingleton<IAksClientFactory, AksClientFactory>();
+        services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
 
         // ── Redis ─────────────────────────────────────────────────────────────────
         services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
@@ -116,6 +118,7 @@ internal static class ServiceRegistration
 
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();
+        services.AddTransient<AksPageViewModel>();
         services.AddTransient<ServiceBusPageViewModel>();
         services.AddTransient<SettingsViewModel>();
 

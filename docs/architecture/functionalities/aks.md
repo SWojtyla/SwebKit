@@ -2,6 +2,7 @@
 
 ## What Is Supported
 
+- `SwebKit.WinUI` migration slice 1 now includes a native AKS route with cluster bootstrap, context and namespace selection, and a pod browse grid with health/status summary while later AKS diagnostics remain in the MAUI host.
 - Incident Timeline backend uses `IAksClientBootstrapper` plus selector-label workload resolution to gather workload-scoped pod lifecycle and event evidence for `Deployment`, `StatefulSet`, and `Pod` scopes.
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
@@ -93,6 +94,10 @@
 
 ## Main Code Locations
 
+- `src/SwebKit.WinUI/Views/Aks/AksPage.xaml`
+- `src/SwebKit.WinUI/Views/Aks/AksPage.xaml.cs`
+- `src/SwebKit.WinUI/ViewModels/Aks/AksPageViewModel.cs`
+- `src/SwebKit.WinUI/Services/AksClientBootstrapper.cs`
 - `src/SwebKit.App/Components/Pages/AksPage.razor`
 - `src/SwebKit.App/Services/AksClientBootstrapper.cs`
 - `src/SwebKit.App/Components/Pages/AksConfigForm.razor`
