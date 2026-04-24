@@ -8,7 +8,7 @@ state: "In Progress"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-23"
-last_updated: "2026-04-23"
+last_updated: "2026-04-24"
 
 ---
 
@@ -109,6 +109,7 @@ Phase 1 complete. Shell: NavigationView + Frame, all phase 1 services ported, Se
 - Phase 2 Service Bus surface implemented in `SwebKit.WinUI`.
 - WinUI app startup now initializes `AppStateService` before feature pages load persisted config.
 - Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
+- VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
 
 ## Remaining
 
