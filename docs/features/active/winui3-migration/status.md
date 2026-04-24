@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has a broader native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders overview request and failure trends, the selected-operation latency trend, and an availability-by-test summary with LiveCharts2. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, workspace restore, and the first chart-hosting slices. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now has a broader native diagnostics slice: the WinUI host has cluster bootstrap, pod browse, selected-pod log diagnostics, tracked port-forward session management, and selected-pod shell launch. Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has a broader native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders overview request and failure trends, the selected-operation latency trend, and an availability-by-test summary with LiveCharts2. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, workspace restore, and the first chart-hosting slices. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
 
 **Jira:** not linked
 
-**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, expand Observability beyond the current overview/performance/availability chart seams into the remaining editor and exact heatmap parity gaps, finish the rest of Phase 3 AKS slice 2, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
+**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, expand Observability beyond the current overview/performance/availability chart seams into the remaining editor and exact heatmap parity gaps, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
 
 ## Progress checklist
 
@@ -70,8 +70,8 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - [x] Cluster connect and namespace selector
 - [x] Pod list grid with health column
 - [x] Pod logs panel
-- [ ] Port-forward session management
-- [ ] Pod shell (terminal via WebView2 or Windows Terminal integration)
+- [x] Port-forward session management
+- [x] Pod shell (Windows Terminal or command-shell launch through `IAksClient.OpenShellAsync`)
 
 ### Phase 4 — Redis
 
@@ -87,7 +87,8 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 - [x] Pipeline/project scope baseline and tab shell
 - [x] Release records and approval summary baseline
-- [ ] Approval mutations, tag manager, and deeper parity
+- [x] Approval mutations with production confirm gating
+- [ ] Tag manager and deeper parity
 
 ### Phase 7 — Observability
 
@@ -96,14 +97,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - [ ] LiveCharts2 charts replacing ApexCharts (overview request/failure charts, selected-operation performance trend, and availability summary landed; exact availability heatmap parity still pending)
 - [ ] Monaco editor in WebView2 for KQL / log output
 
-### Phase 8 — Incident Timeline
-
-- [ ] Workbench toolbar and time window selector
-- [ ] Timeline event list
-- [ ] Evidence detail panel
-- [ ] Snapshot export
-
-### Phase 9 — Cutover
+### Phase 8 — Cutover
 
 - [ ] All feature domains verified working in `SwebKit.WinUI`
 - [ ] E2E tests updated for WinUI host
@@ -120,6 +114,8 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
 - Phase 3 AKS slice 1 is now live in `SwebKit.WinUI`: route wiring, cluster bootstrap, context/namespace selection, and pod browse with a native health/status grid.
 - Phase 3 AKS now includes a bounded slice-2 logs seam in `SwebKit.WinUI`: each pod row exposes a native diagnostics entry point, plus container/range/live/filter controls backed by `IAksClient.StreamPodLogsAsync`.
+- Phase 3 AKS now also includes native port-forward start/stop session management in `SwebKit.WinUI`: the selected-pod diagnostics surface exposes a bounded start form plus a tracked session list backed by the shared `IPortForwardSessionService`.
+- Phase 3 AKS now also includes native selected-pod shell launch in `SwebKit.WinUI`, reusing `IAksClient.OpenShellAsync` and the same non-sidecar container selection heuristic as the MAUI host.
 - The AKS WinUI page now schedules its initial bootstrap after the page is loaded and yields once after loading-state transitions so the route can paint before cluster work begins.
 - The AKS diagnostics surface now stays compact until a pod is selected, instead of rendering the full empty log viewer all the time.
 - WinUI startup now loads `UserSettingsRepository` before shell activation and applies the persisted theme globally through `ThemeCoordinator`.
@@ -132,6 +128,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Phase 5 Storage now has a native WinUI baseline route in `SwebKit.WinUI`: account and container browse, hierarchical blob listing with breadcrumbs, blob detail/metadata/tags, text-friendly preview, download, and URL/SAS copy flows.
 - The shared shell route map now activates the new Redis and Storage pages directly instead of sending those areas to `PlaceholderPage`.
 - Phase 6 Pipelines/Releases/Approvals now has a native WinUI baseline route in `SwebKit.WinUI`: project scope selection, delivery metrics, and a tabbed baseline for pipelines, activity, releases, and approvals.
+- The Pipelines approvals tab now supports inline approve/reject actions in `SwebKit.WinUI`, including production CONFIRM gating, per-approval SLA context, and resilient post-submit refresh even when one project approval feed fails.
 - Phase 7 Observability now has a native WinUI baseline route in `SwebKit.WinUI`: Application Insights resource discovery, provider activation, five-tab workspace state, guided and advanced logs execution, and workspace restore.
 - The Observability Overview tab now renders native request-volume and failure-rate charts from the existing overview trend payload, extending the WinUI chart seam without changing provider contracts.
 - The Observability Performance tab now renders the selected-operation latency trend with LiveCharts2, establishing the first native chart-hosting seam in `SwebKit.WinUI` without changing domain or integration projects.
@@ -141,26 +138,25 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 ## Remaining
 
-- Phase 3-9 work listed above.
+- Phase 3-8 work listed above.
 - Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
 - Dashboard parity and deeper page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
 - Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
 - Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
-- Pipelines parity still needs deeper tree/detail behavior, inline mutations, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
+- Pipelines parity still needs deeper tree/detail behavior, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
 - Observability parity still needs Monaco, exact availability heatmap parity, saved-query polish, drill-through depth, and the richer explainer/investigation flows called out in `frontend.md`.
 
 ## Recommended next sequence
 
-- Next: harden Pipelines/Observability on the shared scaffold while finishing AKS slice 2 and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before the later parity wave and before Incident Timeline starts depending on these routes.
+- Next: harden Pipelines/Observability on the shared scaffold and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before cutover hardening starts.
 - After that: close the remaining Monaco and chart-hosting seams for Observability and push deeper approval/release parity in Pipelines.
-- Then: Incident Timeline, after its upstream workspace dependencies are credible.
 - Last: hardening, docs updates, test migration, and cutover.
 
 ## Planning updates
 
 - The migration plan now treats Dashboard, shell workspace surfaces, full Settings/readiness flows, and curated theme/look-and-feel parity as cutover scope rather than optional polish.
 - The migration plan now also treats reusable UI architecture as first-class scope: resource dictionaries, semantic theming, shell primitives, and page/workspace scaffolds.
-- `frontend.md` now carries the detailed per-domain parity checklist for Service Bus, AKS, Redis, Storage, Pipelines, Observability, and Incident Timeline.
+- `frontend.md` now carries the detailed per-domain parity checklist for Service Bus, AKS, Redis, Storage, Pipelines, and Observability.
 - `frontend.md` now also defines the execution order and the cutover-gate versus parallelization rules for the remaining work.
 - `decisions.md` now records the UI foundation-first and semantic-theming decisions so page work does not drift back to ad hoc XAML.
 - `test-plan.md` now defines validation for the shared UI foundation, theme behavior, shell consistency, and downstream workspace adoption.
@@ -183,3 +179,6 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the Observability Performance tab adopted the first LiveCharts2 trend view in the WinUI host.
 - `build-winui` succeeded on 2026-04-24 after the Observability Availability tab adopted a native LiveCharts summary chart over the existing result set.
 - `build-winui` succeeded on 2026-04-24 after the Observability Overview tab adopted native request-volume and failure-rate charts over the existing overview trend payload.
+- `build-winui` succeeded on 2026-04-24 after the AKS WinUI diagnostics surface adopted native port-forward start/stop session management backed by the shared session service.
+- `build-winui` succeeded on 2026-04-24 after the AKS WinUI diagnostics surface adopted native selected-pod shell launch backed by `IAksClient.OpenShellAsync`.
+- `build-winui` succeeded on 2026-04-24 after the Pipelines WinUI approvals tab adopted inline approve/reject actions, production CONFIRM gating, and resilient cross-project refresh behavior.

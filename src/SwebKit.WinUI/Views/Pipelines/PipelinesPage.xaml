@@ -50,7 +50,8 @@
                                     IsActive="{Binding IsRefreshing}"/>
                                 <Button
                                     Content="Refresh"
-                                    Command="{Binding RefreshCommand}"/>
+                                    Command="{Binding RefreshCommand}"
+                                    IsEnabled="{Binding CanChangeApprovalAction}"/>
                             </StackPanel>
                         </Grid>
 
@@ -101,7 +102,7 @@
                                     SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
                                     DisplayMemberPath="DisplayLabel"
                                     PlaceholderText="No project loaded"
-                                    IsEnabled="{Binding HasProjects}"/>
+                                    IsEnabled="{Binding CanChangeApprovalAction}"/>
                                 <TextBlock
                                     Text="{Binding SelectedProjectSummary}"
                                     Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
@@ -208,6 +209,7 @@
                 <TabView
                     Grid.Row="1"
                     Visibility="{Binding WorkspaceVisibility}"
+                    IsEnabled="{Binding CanChangeApprovalAction}"
                     IsAddTabButtonVisible="False"
                     SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
                     <TabViewItem Header="Pipelines">
@@ -605,6 +607,8 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
@@ -634,34 +638,184 @@
 
                                 <InfoBar
                                     Grid.Row="1"
+                                    IsOpen="{Binding ShowApprovalRefreshWarningState}"
+                                    Severity="Warning"
+                                    Title="Approvals partially refreshed"
+                                    Message="{Binding ApprovalRefreshWarning}"/>
+
+                                <InfoBar
+                                    Grid.Row="2"
                                     IsOpen="{Binding ShowApprovalsEmptyState}"
                                     Severity="Informational"
                                     Title="No pending approvals"
                                     Message="The current delivery scope has no pending approvals in this baseline."/>
 
-                                <ListView Grid.Row="2"
-                                          ItemsSource="{Binding Approvals}">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:PipelinesApprovalItemViewModel">
-                                            <StackPanel Padding="0,8"
-                                                        Spacing="2">
+                                <Border Grid.Row="3"
+                                        Visibility="{Binding ApprovalActionVisibility}"
+                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                        CornerRadius="8"
+                                        Padding="16">
+                                    <StackPanel Spacing="12">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0"
+                                                        Spacing="4">
                                                 <TextBlock
-                                                    Text="{x:Bind PipelineName}"
+                                                    Text="{Binding ApprovalActionTitle}"
                                                     Style="{StaticResource BodyStrongTextBlockStyle}"
                                                     TextWrapping="WrapWholeWords"/>
                                                 <TextBlock
-                                                    Text="{x:Bind ProjectLabel}"
-                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                <TextBlock
-                                                    Text="{x:Bind StageLabel}"
-                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                <TextBlock
-                                                    Text="{x:Bind PendingSinceLabel}"
-                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                <TextBlock
-                                                    Text="{x:Bind RequestedByLabel}"
-                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                    Text="{Binding ApprovalActionSubtitle}"
+                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                    TextWrapping="WrapWholeWords"/>
                                             </StackPanel>
+
+                                            <ProgressRing
+                                                Grid.Column="1"
+                                                Width="20"
+                                                Height="20"
+                                                IsActive="{Binding IsSubmittingApprovalAction}"/>
+                                        </Grid>
+
+                                        <InfoBar
+                                            IsOpen="{Binding ApprovalActionRequiresConfirm}"
+                                            Visibility="{Binding ApprovalActionProdWarningVisibility}"
+                                            Severity="Warning"
+                                            Title="{Binding ApprovalActionConfirmationTitle}"
+                                            Message="{Binding ApprovalActionConfirmationMessage}"/>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock
+                                                Text="Comment"
+                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                            <TextBox
+                                                Text="{Binding ApprovalActionComment, Mode=TwoWay}"
+                                                IsEnabled="{Binding CanChangeApprovalAction}"
+                                                PlaceholderText="Optional operator note"
+                                                AcceptsReturn="True"
+                                                TextWrapping="Wrap"
+                                                MinHeight="72"/>
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6"
+                                                    Visibility="{Binding ApprovalActionProdWarningVisibility}">
+                                            <TextBlock
+                                                Text="Confirmation"
+                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                            <TextBox
+                                                Text="{Binding ApprovalActionConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                IsEnabled="{Binding CanChangeApprovalAction}"
+                                                PlaceholderText="Type CONFIRM"/>
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Text="{Binding ApprovalActionError}"
+                                            Visibility="{Binding ApprovalActionErrorVisibility}"
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            TextWrapping="WrapWholeWords"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="12">
+                                            <Button
+                                                Content="Cancel"
+                                                Command="{Binding CancelApprovalActionCommand}"
+                                                IsEnabled="{Binding CanChangeApprovalAction}"/>
+                                            <Button
+                                                Content="{Binding ApprovalActionVerb}"
+                                                Command="{Binding SubmitApprovalActionCommand}"
+                                                IsEnabled="{Binding CanSubmitApprovalAction}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <ListView Grid.Row="4"
+                                          ItemsSource="{Binding Approvals}"
+                                          IsEnabled="{Binding CanChangeApprovalAction}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:PipelinesApprovalItemViewModel">
+                                            <Border Padding="0,10">
+                                                <StackPanel Spacing="8">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0"
+                                                                    Spacing="4">
+                                                            <TextBlock
+                                                                Text="{x:Bind PipelineName}"
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                TextWrapping="WrapWholeWords"/>
+
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Spacing="8">
+                                                                <TextBlock
+                                                                    Text="{x:Bind ProjectLabel}"
+                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <Border
+                                                                    Visibility="{x:Bind ProductionBadgeVisibility}"
+                                                                    Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                                                    CornerRadius="999"
+                                                                    Padding="8,2">
+                                                                    <TextBlock
+                                                                        Text="PROD"
+                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                </Border>
+                                                                <Border
+                                                                    Visibility="{x:Bind UnverifiedBadgeVisibility}"
+                                                                    Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                                                                    CornerRadius="999"
+                                                                    Padding="8,2">
+                                                                    <TextBlock
+                                                                        Text="UNVERIFIED"
+                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="8"
+                                                                    VerticalAlignment="Top">
+                                                            <Button
+                                                                Content="Approve"
+                                                                Command="{Binding DataContext.StartApproveApprovalCommand, ElementName=PageRoot}"
+                                                                CommandParameter="{Binding}"/>
+                                                            <Button
+                                                                Content="Reject"
+                                                                Command="{Binding DataContext.StartRejectApprovalCommand, ElementName=PageRoot}"
+                                                                CommandParameter="{Binding}"/>
+                                                            <HyperlinkButton
+                                                                Content="ADO"
+                                                                NavigateUri="{x:Bind WebUri}"
+                                                                Visibility="{x:Bind WebLinkVisibility}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <TextBlock
+                                                        Text="{x:Bind StageLabel}"
+                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                        TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock
+                                                        Text="{x:Bind RequestedByLabel}"
+                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                        TextWrapping="WrapWholeWords"/>
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="12">
+                                                        <TextBlock
+                                                            Text="{x:Bind PendingSinceLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind AgeStatusLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>

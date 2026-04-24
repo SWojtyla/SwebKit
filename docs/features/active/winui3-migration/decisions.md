@@ -243,7 +243,7 @@ Both `using` and the call site change. No other MAUI references in these files.
 **Rationale:**
 
 - The current WinUI host proves MVVM and navigation, but `App.xaml` still only merges the default WinUI resources and current pages compose most cards/layout inline.
-- If Redis, Storage, Pipelines, Observability, and Incident Timeline are added on top of that baseline, the app will accumulate one-off XAML structures that are expensive to unify later.
+- If Redis, Storage, Pipelines, and Observability are added on top of that baseline, the app will accumulate one-off XAML structures that are expensive to unify later.
 - The MAUI app already behaves like one product; the WinUI host needs the same shared shell and page language from the start.
 
 **Implication:**

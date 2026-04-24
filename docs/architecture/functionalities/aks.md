@@ -2,7 +2,7 @@
 
 ## What Is Supported
 
-- `SwebKit.WinUI` migration slice 1 now includes a native AKS route with cluster bootstrap, context and namespace selection, and a pod browse grid with health/status summary while later AKS diagnostics remain in the MAUI host.
+- `SwebKit.WinUI` now includes a native AKS route with cluster bootstrap, context and namespace selection, a pod browse grid with health/status summary, selected-pod log diagnostics, bounded native port-forward session management, and selected-pod shell launch while the broader side-panel parity still remains in the MAUI host.
 - Incident Timeline backend uses `IAksClientBootstrapper` plus selector-label workload resolution to gather workload-scoped pod lifecycle and event evidence for `Deployment`, `StatefulSet`, and `Pod` scopes.
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
@@ -25,6 +25,8 @@
 - Success notifications for batch actions include the created Job name and trigger a background Jobs refresh.
 - View Kubernetes events with warning highlighting.
 - Stream pod logs with filtering.
+- `SwebKit.WinUI` exposes a native pod diagnostics surface that can start and stop tracked port-forward sessions for the selected pod through the shared `IPortForwardSessionService`; pinned presets and shell-level port-forward badges remain on the MAUI side for now.
+- `SwebKit.WinUI` can launch an external pod shell for the selected running pod through `IAksClient.OpenShellAsync`, using the first non-sidecar container when one is available.
 - Pod and multi-pod log viewers include a range selector (`Last 5m`, `Last 10m`, `Last 1h`, `All`, `Previous container`). `Live` maps directly to follow mode; selecting `Previous container` forces `Live` off and disables it until another range is selected.
 - Pod logs expose the actual container list for multi-container pods so operators can switch tails without leaving the panel.
 - Log viewers render a buffered history window with `Older`, `Newer`, and `Latest` navigation instead of trimming the UI to the last 500 rendered lines.
@@ -90,13 +92,15 @@
 - **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
 - `KubernetesAksClient` includes Azure token fallback logic when kubeconfig exec auth is not enough.
 - Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
-- **Port-forward session management** is handled by `IPortForwardSessionService` (singleton). It holds a list of `PortForwardSession` objects, each with a `Status` enum (`Starting, Active, Stopping, Stopped, Error`) and an `OnStatusChanged` callback wired by the service. `KubernetesAksClient` sets `EnableRaisingEvents = true` and fires the callback on stdout/stderr/process-exit events. `StopAllAsync` is called from `AppDomain.CurrentDomain.ProcessExit` in `App.xaml.cs`. Sessions panel is rendered as a sticky-bottom strip in `AksPage.razor`; the status bar shows an active count button that navigates to AKS and opens the panel via `OpenPortForwardPanelEvent`.
+- **Port-forward session management** is handled by `IPortForwardSessionService` (singleton). It holds a list of `PortForwardSession` objects, each with a `Status` enum (`Starting, Active, Stopping, Stopped, Error`) and an `OnStatusChanged` callback wired by the service. `KubernetesAksClient` sets `EnableRaisingEvents = true` and fires the callback on stdout/stderr/process-exit events. `StopAllAsync` is called from `AppDomain.CurrentDomain.ProcessExit` in `App.xaml.cs`. The MAUI host renders these sessions as a sticky-bottom strip with a status-bar badge, while the WinUI host currently projects the same service into the selected-pod diagnostics card with an inline start form and tracked session list.
 
 ## Main Code Locations
 
 - `src/SwebKit.WinUI/Views/Aks/AksPage.xaml`
 - `src/SwebKit.WinUI/Views/Aks/AksPage.xaml.cs`
 - `src/SwebKit.WinUI/ViewModels/Aks/AksPageViewModel.cs`
+- `src/SwebKit.WinUI/ViewModels/Aks/AksPageViewModel.PortForwards.cs`
+- `src/SwebKit.WinUI/ViewModels/Aks/AksPageViewModel.PodShell.cs`
 - `src/SwebKit.WinUI/Services/AksClientBootstrapper.cs`
 - `src/SwebKit.App/Components/Pages/AksPage.razor`
 - `src/SwebKit.App/Services/AksClientBootstrapper.cs`

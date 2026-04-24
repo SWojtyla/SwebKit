@@ -49,7 +49,7 @@ Add to the `/src/` folder:
 <Project Path="src/SwebKit.WinUI/SwebKit.WinUI.csproj" />
 ```
 
-Do NOT remove `SwebKit.App` until Phase 9. Both projects coexist in the solution.
+Do NOT remove `SwebKit.App` until Phase 8. Both projects coexist in the solution.
 
 ---
 
@@ -136,7 +136,6 @@ MainWindow
     ├── NavigationViewItem: Storage
     ├── NavigationViewItem: Pipelines
     ├── NavigationViewItem: Observability
-    ├── NavigationViewItem: Incident Timeline
     └── NavigationViewItem (footer): Settings
         Content:
         └── Frame (host for tab-based or single-page content)
@@ -181,7 +180,7 @@ This is enough for bootstrap work, but it is not yet a durable UI architecture.
 - New workspaces should be assembled from shared primitives rather than inventing new card, header, and pane layouts per page.
 - Theme selection should be a global shell concern with semantic tokens, not page-local brush choices.
 - The app should feel sleek and intentional from the first real feature passes, not after a cleanup round.
-- Service Bus, AKS, Redis, Storage, Pipelines, Observability, and Incident Timeline should all inherit one visual and interaction system.
+- Service Bus, AKS, Redis, Storage, Pipelines, and Observability should all inherit one visual and interaction system.
 
 ### Proposed shared layer
 
@@ -242,7 +241,7 @@ src/SwebKit.WinUI/
 
 The original migration plan was too page-oriented and understated the current MAUI app surface. For this feature, parity means matching the operator workflows that exist today, not just recreating route shells.
 
-### Included in this plan before Phase 9
+### Included in this plan before Phase 8
 
 #### Shell, dashboard, and look-and-feel
 
@@ -301,13 +300,6 @@ The original migration plan was too page-oriented and understated the current MA
 - Threshold-aware indicators and query row-cap settings parity.
 - Shared workspace restore for resource, tab, and time-range context.
 
-#### Incident Timeline
-
-- Workbench parity for scope toolbar, source coverage strip, evidence timeline, and detail panel.
-- Mapping guidance and deep-link behavior into Settings.
-- Investigation-seed flows from Observability, Service Bus, and Pipelines.
-- Snapshot export and advisory mapping-proposal flows.
-
 ### Round 2 candidate backlog
 
 - Additional WinUI-only personalization beyond the current six curated theme presets.
@@ -359,15 +351,7 @@ Start these after the shared shell is stable and the WinUI equivalents for Monac
 - Pipelines/Releases: browser, activity feed, release records, approvals, tag manager.
 - Observability: discovery, five-tab experience, guided/advanced logs, saved queries, charts.
 
-#### Track 5 — Incident Timeline
-
-Schedule this after AKS, Pipelines, and Observability baseline parity is credible. It is a dependent integration surface, not an isolated page migration.
-
-- Scope toolbar and evidence views.
-- Investigation-seed flows.
-- Snapshot export and mapping guidance/proposals.
-
-#### Track 6 — Cutover hardening
+#### Track 5 — Cutover hardening
 
 - End-to-end validation and regression sweep.
 - Architecture/codebase-guide updates.
@@ -386,7 +370,6 @@ The table below makes the two dimensions explicit: whether work is required befo
 | Storage baseline parity                                                           | Yes                      | After the shared shell pass stabilizes; can run alongside Redis         |
 | Pipelines/Releases baseline parity                                                | Yes                      | After the shared shell pass stabilizes; can run alongside Observability |
 | Observability baseline parity                                                     | Yes                      | After the shared shell pass stabilizes and editor/chart seams are fixed |
-| Incident Timeline baseline parity                                                 | Yes                      | After AKS, Pipelines, and Observability are credible enough to feed it  |
 | Extra personalization and pixel-match polish                                      | No                       | Round 2 only                                                            |
 
 Parallelizable does not mean optional. Everything in the table marked `Yes` still belongs in the current migration plan.
@@ -505,7 +488,7 @@ The first WinUI AKS slice should replace the placeholder route with a real `View
 | `FluentSplitter`     | `GridSplitter` (CommunityToolkit)           |
 | Custom CSS layouts   | WinUI `Grid`, `StackPanel`, `RelativePanel` |
 
-### 3. Monaco editor (used in: Observability KQL, AKS YAML, Incident Timeline)
+### 3. Monaco editor (used in: Observability KQL, AKS YAML)
 
 No JS rewrite. Host Monaco in a `WebView2` control:
 
@@ -541,7 +524,7 @@ LiveCharts2 covers: line charts (latency/trends), bar charts (request counts), a
 
 ---
 
-## Phase 9 — Cutover checklist
+## Phase 8 — Cutover checklist
 
 1. Remove `SwebKit.App` from `SwebKit.slnx`
 2. Delete `src/SwebKit.App/` folder (after branch merge)

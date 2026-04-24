@@ -20,12 +20,14 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private readonly IDevOpsClientFactory _devOpsClientFactory;
     private readonly DemoDevOpsClient _demoDevOpsClient;
     private readonly ReleaseRepository _releaseRepository;
+    private readonly ApprovalAgingPolicy _approvalAgingPolicy;
     private readonly IConnectionStateService _connectionState;
     private readonly OperatorWorkspaceService _workspaceService;
     private readonly INotificationService _notifications;
     private readonly ILogger<PipelinesPageViewModel> _logger;
 
     private CancellationTokenSource _workCts = new();
+    private CancellationTokenSource _approvalActionCts = new();
     private IDevOpsClient? _realClient;
     private bool _loaded;
     private bool _isDisposed;
@@ -36,6 +38,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         IDevOpsClientFactory devOpsClientFactory,
         DemoDevOpsClient demoDevOpsClient,
         ReleaseRepository releaseRepository,
+        ApprovalAgingPolicy approvalAgingPolicy,
         IConnectionStateService connectionState,
         OperatorWorkspaceService workspaceService,
         INotificationService notifications,
@@ -45,6 +48,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _devOpsClientFactory = devOpsClientFactory;
         _demoDevOpsClient = demoDevOpsClient;
         _releaseRepository = releaseRepository;
+        _approvalAgingPolicy = approvalAgingPolicy;
         _connectionState = connectionState;
         _workspaceService = workspaceService;
         _notifications = notifications;
@@ -93,6 +97,9 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public partial string? ErrorMessage { get; set; }
 
     [ObservableProperty]
+    public partial string? ApprovalRefreshWarning { get; set; }
+
+    [ObservableProperty]
     public partial string ConnectionStateLabel { get; set; } = "Unknown";
 
     [ObservableProperty]
@@ -118,6 +125,24 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     [ObservableProperty]
     public partial int SelectedTabIndex { get; set; }
+
+    [ObservableProperty]
+    public partial PipelinesApprovalItemViewModel? ApprovalActionTarget { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsApprovingApprovalAction { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool IsSubmittingApprovalAction { get; set; }
+
+    [ObservableProperty]
+    public partial string ApprovalActionComment { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string ApprovalActionConfirmText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string? ApprovalActionError { get; set; }
 
     private IDevOpsClient ActiveClient => _appState.UseDemoData ? _demoDevOpsClient : _realClient ?? _demoDevOpsClient;
 
@@ -148,7 +173,12 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public bool ShowReleasesEmptyState => IsConfigured && Releases.Count == 0;
 
-    public bool ShowApprovalsEmptyState => IsConfigured && !IsLoadingApprovals && Approvals.Count == 0;
+    public bool ShowApprovalsEmptyState => IsConfigured
+        && !IsLoadingApprovals
+        && Approvals.Count == 0
+        && string.IsNullOrWhiteSpace(ApprovalRefreshWarning);
+
+    public bool ShowApprovalRefreshWarningState => !IsLoadingApprovals && !string.IsNullOrWhiteSpace(ApprovalRefreshWarning);
 
     public string ProjectCountText => Projects.Count.ToString();
 
@@ -176,9 +206,13 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ? "No release records intersect the current delivery scope."
         : $"{Releases.Count} scoped release record{(Releases.Count == 1 ? string.Empty : "s")} loaded from the release repository.";
 
-    public string ApprovalsSummary => Approvals.Count == 0
-        ? "No pending approvals were returned for the current scope."
-        : $"{Approvals.Count} pending approval{(Approvals.Count == 1 ? string.Empty : "s")} across {Projects.Count} loaded project{(Projects.Count == 1 ? string.Empty : "s")}.";
+    public string ApprovalsSummary => !string.IsNullOrWhiteSpace(ApprovalRefreshWarning)
+        ? Approvals.Count == 0
+            ? "Approvals could not be fully refreshed for the current scope."
+            : $"{Approvals.Count} pending approval{(Approvals.Count == 1 ? string.Empty : "s")} loaded with partial project refresh failures."
+        : Approvals.Count == 0
+            ? "No pending approvals were returned for the current scope."
+            : $"{Approvals.Count} pending approval{(Approvals.Count == 1 ? string.Empty : "s")} across {Projects.Count} loaded project{(Projects.Count == 1 ? string.Empty : "s")}.";
 
     public string SelectedPipelineTitle => SelectedPipeline?.Name ?? "Select a pipeline";
 
@@ -226,6 +260,44 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public Visibility SelectedReleasePlaceholderVisibility => SelectedRelease is null ? Visibility.Visible : Visibility.Collapsed;
 
+    public bool HasApprovalActionTarget => ApprovalActionTarget is not null;
+
+    public string ApprovalActionTitle => ApprovalActionTarget is null
+        ? "Select an approval action"
+        : $"{(IsApprovingApprovalAction ? "Approve" : "Reject")} {ApprovalActionTarget.PipelineName}";
+
+    public string ApprovalActionSubtitle => ApprovalActionTarget is null
+        ? string.Empty
+        : $"{ApprovalActionTarget.ProjectName} · {ApprovalActionTarget.StageLabel}";
+
+    public bool ApprovalActionRequiresConfirm => ApprovalActionTarget?.RequiresExplicitConfirmation == true;
+
+    public string ApprovalActionVerb => IsApprovingApprovalAction ? "Approve" : "Reject";
+
+    public bool CanChangeApprovalAction => !IsRefreshing
+        && !IsLoadingPipelines
+        && !IsLoadingActivity
+        && !IsLoadingApprovals
+        && !IsSubmittingApprovalAction;
+
+    public string ApprovalActionConfirmationTitle => ApprovalActionTarget?.IsProduction == true
+        ? "Production approval"
+        : "Unverified approval context";
+
+    public string ApprovalActionConfirmationMessage => ApprovalActionTarget?.IsProduction == true
+        ? "Type CONFIRM before submitting this production approval action."
+        : "The approval environment could not be verified from Azure DevOps. Type CONFIRM before submitting this action.";
+
+    public bool CanSubmitApprovalAction => ApprovalActionTarget is not null
+        && CanChangeApprovalAction
+        && (!ApprovalActionRequiresConfirm || string.Equals(ApprovalActionConfirmText, "CONFIRM", StringComparison.Ordinal));
+
+    public Visibility ApprovalActionVisibility => HasApprovalActionTarget ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ApprovalActionProdWarningVisibility => ApprovalActionRequiresConfirm ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ApprovalActionErrorVisibility => string.IsNullOrWhiteSpace(ApprovalActionError) ? Visibility.Collapsed : Visibility.Visible;
+
     public async Task LoadAsync()
     {
         if (_isDisposed || _loaded)
@@ -241,6 +313,77 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync(notifySuccess: true);
 
+    [RelayCommand]
+    private void StartApproveApproval(PipelinesApprovalItemViewModel? approval) => BeginApprovalAction(approval, isApproving: true);
+
+    [RelayCommand]
+    private void StartRejectApproval(PipelinesApprovalItemViewModel? approval) => BeginApprovalAction(approval, isApproving: false);
+
+    [RelayCommand]
+    private void CancelApprovalAction() => DismissApprovalAction();
+
+    [RelayCommand]
+    private async Task SubmitApprovalActionAsync()
+    {
+        if (ApprovalActionTarget is null)
+        {
+            return;
+        }
+
+        if (!CanSubmitApprovalAction)
+        {
+            ApprovalActionError = ApprovalActionRequiresConfirm
+                ? "Type CONFIRM before submitting a production approval action."
+                : ApprovalActionError;
+            return;
+        }
+
+        var actionTarget = ApprovalActionTarget;
+        var actionVerb = ApprovalActionVerb;
+        var comment = string.IsNullOrWhiteSpace(ApprovalActionComment) ? null : ApprovalActionComment.Trim();
+        var token = ResetWorkToken();
+
+        IsSubmittingApprovalAction = true;
+        IsLoadingApprovals = true;
+        ApprovalActionError = null;
+
+        try
+        {
+            if (IsApprovingApprovalAction)
+            {
+                await ActiveClient.ApproveAsync(actionTarget.ProjectName, actionTarget.Id, comment, token);
+            }
+            else
+            {
+                await ActiveClient.RejectAsync(actionTarget.ProjectName, actionTarget.Id, comment, token);
+            }
+
+            _notifications.ShowSuccess(
+                IsApprovingApprovalAction ? "Approval submitted" : "Approval rejected",
+                $"{actionTarget.PipelineName} · {actionTarget.StageLabel}");
+
+            DismissApprovalAction();
+            await LoadApprovalsAsync(token);
+            MetricsSummary = BuildMetricsSummary();
+            LastRefreshLabel = $"Updated {FormatTimestamp(DateTimeOffset.Now)} after {actionVerb.ToLowerInvariant()} action.";
+            await PublishSnapshotAsync(recordRecent: false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ApprovalActionError = ex.Message;
+            _notifications.ShowError("Approval action failed", ex.Message, ex);
+        }
+        finally
+        {
+            IsSubmittingApprovalAction = false;
+            IsLoadingApprovals = false;
+            NotifyDerivedStateChanged();
+        }
+    }
+
     public ValueTask DisposeAsync()
     {
         if (_isDisposed)
@@ -255,12 +398,14 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         try
         {
             _workCts.Cancel();
+            _approvalActionCts.Cancel();
         }
         catch
         {
         }
 
         _workCts.Dispose();
+        _approvalActionCts.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -313,6 +458,29 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _ = PublishSnapshotAsync(recordRecent: false);
     }
 
+    partial void OnApprovalActionTargetChanged(PipelinesApprovalItemViewModel? value)
+    {
+        if (value is null)
+        {
+            ApprovalActionComment = string.Empty;
+            ApprovalActionConfirmText = string.Empty;
+            ApprovalActionError = null;
+            IsSubmittingApprovalAction = false;
+        }
+
+        NotifyDerivedStateChanged();
+    }
+
+    partial void OnIsApprovingApprovalActionChanged(bool value) => NotifyDerivedStateChanged();
+
+    partial void OnIsSubmittingApprovalActionChanged(bool value) => NotifyDerivedStateChanged();
+
+    partial void OnApprovalActionConfirmTextChanged(string value) => NotifyDerivedStateChanged();
+
+    partial void OnApprovalActionErrorChanged(string? value) => NotifyDerivedStateChanged();
+
+    partial void OnApprovalRefreshWarningChanged(string? value) => NotifyDerivedStateChanged();
+
     private async Task RefreshCoreAsync(bool notifySuccess)
     {
         if (_isDisposed)
@@ -323,7 +491,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         var preservedProjectName = SelectedProject?.Name;
         var preservedPipelineId = SelectedPipeline?.Id;
         var preservedReleaseId = SelectedRelease?.Id;
-        var token = ResetWorkToken();
+        var token = ResetApprovalActionToken();
 
         IsRefreshing = true;
         IsLoadingPipelines = true;
@@ -510,6 +678,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private async Task LoadApprovalsAsync(CancellationToken cancellationToken)
     {
         Approvals.Clear();
+        ApprovalRefreshWarning = null;
 
         if (Projects.Count == 0)
         {
@@ -517,18 +686,41 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
             return;
         }
 
-        var approvalTasks = Projects
-            .Select(project => LoadApprovalsForProjectAsync(project.Name, cancellationToken))
-            .ToArray();
+        var approvals = new List<PipelinesApprovalItemViewModel>();
+        var failedProjects = new List<string>();
 
-        var approvals = await Task.WhenAll(approvalTasks);
-        foreach (var item in approvals
-                     .SelectMany(static items => items)
-                     .OrderByDescending(static approval => approval.CreatedOn))
+        foreach (var project in Projects)
+        {
+            try
+            {
+                approvals.AddRange(await LoadApprovalsForProjectAsync(project.Name, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Approvals refresh failed for Azure DevOps project {ProjectName}.", project.Name);
+                failedProjects.Add(project.Name);
+            }
+        }
+
+        foreach (var item in approvals.OrderByDescending(static approval => approval.CreatedOn))
         {
             Approvals.Add(item);
         }
 
+        if (failedProjects.Count > 0)
+        {
+            var detail = failedProjects.Count == 1
+                ? failedProjects[0]
+                : string.Join(", ", failedProjects.Take(3)) + (failedProjects.Count > 3 ? ", ..." : string.Empty);
+            ApprovalRefreshWarning = $"Approvals for {detail} could not be refreshed.";
+            _notifications.ShowWarning("Some approvals could not be refreshed.", detail);
+        }
+
+        ReconcileApprovalActionTarget();
         NotifyDerivedStateChanged();
     }
 
@@ -538,8 +730,42 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     {
         var approvals = await ActiveClient.GetPendingApprovalsAsync(projectName, cancellationToken);
         return approvals
-            .Select(approval => PipelinesApprovalItemViewModel.FromModel(projectName, approval))
+            .Select(approval => PipelinesApprovalItemViewModel.FromModel(
+                projectName,
+                approval,
+                _approvalAgingPolicy.Evaluate(approval, DateTimeOffset.UtcNow)))
             .ToList();
+    }
+
+    private void BeginApprovalAction(PipelinesApprovalItemViewModel? approval, bool isApproving)
+    {
+        if (approval is null)
+        {
+            return;
+        }
+
+        IsApprovingApprovalAction = isApproving;
+        ApprovalActionComment = string.Empty;
+        ApprovalActionConfirmText = string.Empty;
+        ApprovalActionError = null;
+        ApprovalActionTarget = approval;
+    }
+
+    private void DismissApprovalAction()
+    {
+        ApprovalActionTarget = null;
+        IsApprovingApprovalAction = true;
+    }
+
+    private void ReconcileApprovalActionTarget()
+    {
+        if (ApprovalActionTarget is null)
+        {
+            return;
+        }
+
+        var refreshedTarget = Approvals.FirstOrDefault(candidate => candidate.Id == ApprovalActionTarget.Id);
+        ApprovalActionTarget = refreshedTarget;
     }
 
     private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
@@ -716,6 +942,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         Pipelines.Clear();
         ActivityRuns.Clear();
         Approvals.Clear();
+        ApprovalRefreshWarning = null;
     }
 
     private IReadOnlyList<AdoProject> FilterProjects(IEnumerable<AdoProject> allProjects)
@@ -880,6 +1107,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(ShowActivityEmptyState));
         OnPropertyChanged(nameof(ShowReleasesEmptyState));
         OnPropertyChanged(nameof(ShowApprovalsEmptyState));
+        OnPropertyChanged(nameof(ShowApprovalRefreshWarningState));
         OnPropertyChanged(nameof(ProjectCountText));
         OnPropertyChanged(nameof(PipelineCountText));
         OnPropertyChanged(nameof(ReleaseCountText));
@@ -904,6 +1132,18 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(SelectedPipelinePlaceholderVisibility));
         OnPropertyChanged(nameof(SelectedReleaseDetailVisibility));
         OnPropertyChanged(nameof(SelectedReleasePlaceholderVisibility));
+        OnPropertyChanged(nameof(HasApprovalActionTarget));
+        OnPropertyChanged(nameof(ApprovalActionTitle));
+        OnPropertyChanged(nameof(ApprovalActionSubtitle));
+        OnPropertyChanged(nameof(ApprovalActionRequiresConfirm));
+        OnPropertyChanged(nameof(ApprovalActionVerb));
+        OnPropertyChanged(nameof(CanChangeApprovalAction));
+        OnPropertyChanged(nameof(ApprovalActionConfirmationTitle));
+        OnPropertyChanged(nameof(ApprovalActionConfirmationMessage));
+        OnPropertyChanged(nameof(CanSubmitApprovalAction));
+        OnPropertyChanged(nameof(ApprovalActionVisibility));
+        OnPropertyChanged(nameof(ApprovalActionProdWarningVisibility));
+        OnPropertyChanged(nameof(ApprovalActionErrorVisibility));
     }
 
     private string BuildScopeSummary()
@@ -946,6 +1186,21 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _workCts.Dispose();
         _workCts = new CancellationTokenSource();
         return _workCts.Token;
+    }
+
+    private CancellationToken ResetApprovalActionToken()
+    {
+        try
+        {
+            _approvalActionCts.Cancel();
+        }
+        catch
+        {
+        }
+
+        _approvalActionCts.Dispose();
+        _approvalActionCts = new CancellationTokenSource();
+        return _approvalActionCts.Token;
     }
 
     private static string FormatTimestamp(DateTimeOffset value) => value.ToString("g");
@@ -1177,24 +1432,36 @@ public sealed class PipelinesApprovalItemViewModel
     private PipelinesApprovalItemViewModel(
         string id,
         string pipelineName,
+        string projectName,
         string projectLabel,
         string stageLabel,
         string pendingSinceLabel,
         string requestedByLabel,
+        string ageStatusLabel,
+        bool isProduction,
+        bool hasResolvedContext,
+        Uri? webUri,
         DateTimeOffset createdOn)
     {
         Id = id;
         PipelineName = pipelineName;
+        ProjectName = projectName;
         ProjectLabel = projectLabel;
         StageLabel = stageLabel;
         PendingSinceLabel = pendingSinceLabel;
         RequestedByLabel = requestedByLabel;
+        AgeStatusLabel = ageStatusLabel;
+        IsProduction = isProduction;
+        HasResolvedContext = hasResolvedContext;
+        WebUri = webUri;
         CreatedOn = createdOn;
     }
 
     public string Id { get; }
 
     public string PipelineName { get; }
+
+    public string ProjectName { get; }
 
     public string ProjectLabel { get; }
 
@@ -1204,12 +1471,37 @@ public sealed class PipelinesApprovalItemViewModel
 
     public string RequestedByLabel { get; }
 
+    public string AgeStatusLabel { get; }
+
+    public bool IsProduction { get; }
+
+    public bool HasResolvedContext { get; }
+
+    public Uri? WebUri { get; }
+
+    public bool RequiresExplicitConfirmation => IsProduction || !HasResolvedContext;
+
+    public Visibility ProductionBadgeVisibility => IsProduction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility UnverifiedBadgeVisibility => HasResolvedContext ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility WebLinkVisibility => WebUri is null ? Visibility.Collapsed : Visibility.Visible;
+
     public DateTimeOffset CreatedOn { get; }
 
-    public static PipelinesApprovalItemViewModel FromModel(string projectName, AdoApproval approval) =>
-        new(
+    public static PipelinesApprovalItemViewModel FromModel(
+        string projectName,
+        AdoApproval approval,
+        ApprovalAgeResult ageResult)
+    {
+        var webUri = Uri.TryCreate(approval.WebUrl, UriKind.Absolute, out var parsedUri)
+            ? parsedUri
+            : null;
+
+        return new PipelinesApprovalItemViewModel(
             approval.Id,
             approval.PipelineName,
+            projectName,
             $"Project {projectName}",
             string.IsNullOrWhiteSpace(approval.EnvironmentName)
                 ? approval.StageName
@@ -1218,5 +1510,35 @@ public sealed class PipelinesApprovalItemViewModel
             string.IsNullOrWhiteSpace(approval.TriggeredBy)
                 ? "Requested by unknown operator"
                 : $"Requested by {approval.TriggeredBy}",
+            $"{FormatAge(ageResult.Age)} · {FormatAgeState(ageResult.State)}",
+            IsProductionApproval(approval),
+            HasResolvedApprovalContext(approval),
+            webUri,
             approval.CreatedOn);
+    }
+
+    private static string FormatAge(TimeSpan age) =>
+        age.TotalHours >= 1
+            ? $"{(int)age.TotalHours}h {age.Minutes}m"
+            : $"{Math.Max(1, (int)age.TotalMinutes)}m";
+
+    private static string FormatAgeState(ApprovalAgeState state) => state switch
+    {
+        ApprovalAgeState.OnTime => "On time",
+        ApprovalAgeState.Warning => "Warning",
+        ApprovalAgeState.Breached => "Breached",
+        _ => state.ToString()
+    };
+
+    private static bool IsProductionApproval(AdoApproval approval)
+    {
+        var combinedName = ((approval.EnvironmentName ?? string.Empty) + " " + (approval.StageName ?? string.Empty)).ToLowerInvariant();
+        return combinedName.Contains("prd", StringComparison.Ordinal)
+            || combinedName.Contains("prod", StringComparison.Ordinal)
+            || combinedName.Contains("production", StringComparison.Ordinal);
+    }
+
+    private static bool HasResolvedApprovalContext(AdoApproval approval) =>
+        !string.IsNullOrWhiteSpace(approval.StageName)
+        || !string.IsNullOrWhiteSpace(approval.EnvironmentName);
 }

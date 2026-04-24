@@ -17,7 +17,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Scope
 
 - In scope: WinUI shell architecture, reusable page primitives, theme application, shared workspace surfaces, and migrated domain workflows
-- In scope: regression validation for Service Bus, AKS, Redis, Storage, Pipelines/Releases, Observability, Incident Timeline, and Settings as they adopt the shared foundation
+- In scope: regression validation for Service Bus, AKS, Redis, Storage, Pipelines/Releases, Observability, and Settings as they adopt the shared foundation
 - Out of scope: exact pixel-for-pixel parity with the MAUI CSS implementation, exploratory visual experiments, and non-Windows hosts
 
 ## Main scenarios (priority)
@@ -50,11 +50,14 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: state treatment consistency — steps: validate loading, empty, error, not-configured, demo, and production-warning states on at least two workspaces.
 - Check: proving-ground and follow-on page adoption — steps: confirm `Settings`, `ServiceBus`, and `AKS` still anchor the shared primitive set and that `Redis` and `Storage` inherit the same scaffold, card, and state-treatment patterns.
 - Check: AKS pod-log slice — steps: open AKS, launch logs from a pod row, switch container/range/live settings, apply a text filter, and confirm the native log panel follows the selected pod without reopening the page.
+- Check: AKS port-forward session management — steps: open AKS, select a pod, start a port-forward with a valid local port, confirm the session appears in the native session list, stop it again, then retry with an already-used local port and confirm the native validation message appears without crashing the page.
+- Check: AKS pod shell launch — steps: open AKS, select a running pod, launch the native shell action, confirm Windows Terminal or the fallback command shell opens with a `kubectl exec` shell, then select a non-running pod and confirm the action stays disabled.
 - Check: AKS first-paint responsiveness — steps: open AKS from another route, confirm the page shell paints before cluster data arrives, and verify the app does not feel blocked while the initial bootstrap runs.
 - Check: AKS compact diagnostics state — steps: open AKS with no pod selected, confirm the page shows only a compact diagnostics hint, then select a pod and verify the full diagnostics/log surface expands in place.
 - Check: Redis baseline route — steps: open Redis, choose a configured cache or demo cache, scan keys, expand a prefix group, open one key of each common type, and verify typed details, TTL controls, and basic edit flows update the state cleanly.
 - Check: Storage baseline route — steps: open Storage, choose an account, browse containers and a virtual folder, open a text-friendly blob, verify preview/detail metadata, trigger download and URL/SAS copy actions, then reopen the saved workspace/favorite and confirm the account/container/blob context restores.
 - Check: Pipelines baseline route — steps: open Pipelines, verify the project selector and delivery metrics load, switch across the pipelines/activity/releases/approvals tabs, and confirm the baseline detail surfaces update without falling back to a placeholder route.
+- Check: Pipelines approval actions — steps: open Approvals, approve a non-production approval with an optional comment, reject another approval, then exercise a production approval and confirm the submit button stays disabled until `CONFIRM` is entered and the list stays non-interactive while the mutation is in flight.
 - Check: Observability baseline route — steps: open Observability, refresh resource discovery, activate a resource, confirm the Overview request and failure charts populate, switch through all five tabs, run both an advanced and guided logs query, save the workspace context, select a performance operation and confirm the LiveCharts trend updates with the selected operation, then open Availability and confirm the summary chart reflects the returned checks while empty-result tabs stay stable rather than requerying on every revisit and the resource/tab selection restores correctly.
 
 ## Regression risks & mitigations
@@ -74,7 +77,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the Observability Overview tab adopted native request-volume and failure-rate charts over the existing overview trend payload
+- Automated: `build-winui` green after the Pipelines WinUI approvals tab adopted inline approve/reject actions, production CONFIRM gating, and resilient cross-project refresh behavior
 - Manual: Not started
 
 ## Sign-off

@@ -99,6 +99,15 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanReloadSelectedPodLogs));
         OnPropertyChanged(nameof(CanClearSelectedPodSelection));
         OnPropertyChanged(nameof(CanToggleSelectedPodLogsLive));
+        OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
+        OnPropertyChanged(nameof(PortForwardSelectedPodLabel));
+        OnPropertyChanged(nameof(CanOpenSelectedPodShell));
+
+        if (IsPortForwardFormOpen)
+        {
+            PortForwardValidationMessage = null;
+            IsPortForwardFormOpen = false;
+        }
 
         if (!_loaded)
         {
@@ -120,6 +129,8 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanInspectSelectedPodLogs));
         OnPropertyChanged(nameof(CanReloadSelectedPodLogs));
         OnPropertyChanged(nameof(CanToggleSelectedPodLogsLive));
+        OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
+        OnPropertyChanged(nameof(CanOpenSelectedPodShell));
     }
 
     partial void OnSelectedPodLogsErrorMessageChanged(string? value)

@@ -262,6 +262,8 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <Grid ColumnSpacing="12">
@@ -287,6 +289,12 @@
                                         <ProgressRing Width="20"
                                                       Height="20"
                                                       IsActive="{Binding IsSelectedPodLogsLoading}"/>
+                                        <Button Content="Open shell"
+                                                Command="{Binding OpenSelectedPodShellCommand}"
+                                                IsEnabled="{Binding CanOpenSelectedPodShell}"/>
+                                        <Button Content="Port-forward"
+                                                Command="{Binding OpenSelectedPodPortForwardCommand}"
+                                                IsEnabled="{Binding CanStartSelectedPodPortForward}"/>
                                         <Button Content="Reload"
                                                 Command="{Binding ReloadSelectedPodLogsCommand}"
                                                 IsEnabled="{Binding CanReloadSelectedPodLogs}"/>
@@ -367,6 +375,152 @@
                                          TextWrapping="NoWrap"
                                          Visibility="{Binding SelectedPodLogsContentVisibility}"
                                          FontFamily="Cascadia Mono"/>
+
+                                <Border Grid.Row="4"
+                                        Margin="0,12,0,0"
+                                        Style="{StaticResource SwebKitInsetCardStyle}"
+                                        Visibility="{Binding PortForwardFormVisibility}">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="Start port-forward"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                        <TextBlock Text="{Binding PortForwardSelectedPodLabel}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="WrapWholeWords"/>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0"
+                                                        Spacing="6">
+                                                <TextBlock Text="Remote port"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                <TextBox Text="{Binding PortForwardRemotePortText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         InputScope="Number"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1"
+                                                        Spacing="6">
+                                                <TextBlock Text="Local port"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                <TextBox Text="{Binding PortForwardLocalPortText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         InputScope="Number"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding PortForwardValidationMessage}"
+                                                   Visibility="{Binding PortForwardValidationVisibility}"
+                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                   TextWrapping="WrapWholeWords"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <Button Content="Start"
+                                                    Command="{Binding StartSelectedPodPortForwardCommand}"
+                                                    IsEnabled="{Binding CanStartSelectedPodPortForward}"/>
+                                            <Button Content="Cancel"
+                                                    Command="{Binding CancelSelectedPodPortForwardCommand}"
+                                                    IsEnabled="{Binding IsPortForwardStarting, Converter={StaticResource InverseBooleanConverter}}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Row="5"
+                                        Margin="0,12,0,0"
+                                        Style="{StaticResource SwebKitInsetCardStyle}">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0"
+                                                        Spacing="4">
+                                                <TextBlock Text="Port-forward sessions"
+                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <TextBlock Text="{Binding PortForwardSummary}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="1"
+                                                    Content="Stop all"
+                                                    Command="{Binding StopAllPortForwardSessionsCommand}"
+                                                    IsEnabled="{Binding CanStopAllPortForwardSessions}"/>
+                                        </Grid>
+
+                                        <InfoBar IsOpen="{Binding ShowPortForwardSessionsEmptyState}"
+                                                 Severity="Informational"
+                                                 Title="No sessions yet"
+                                                 Message="Start a pod port-forward from the diagnostics surface to keep the session visible in this native workspace."/>
+
+                                        <ListView ItemsSource="{Binding PortForwardSessions}"
+                                                  Visibility="{Binding PortForwardSessionsVisibility}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="viewModels:AksPortForwardSessionItemViewModel">
+                                                    <Border Margin="0,0,0,8"
+                                                            CornerRadius="6"
+                                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="12,10">
+                                                        <StackPanel Spacing="8">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="2*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="110"/>
+                                                                    <ColumnDefinition Width="150"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0"
+                                                                            Spacing="2">
+                                                                    <TextBlock Text="{x:Bind PodName}"
+                                                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                               TextWrapping="WrapWholeWords"/>
+                                                                    <TextBlock Text="{x:Bind Namespace}"
+                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                               TextWrapping="WrapWholeWords"/>
+                                                                </StackPanel>
+
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{x:Bind PortsLabel}"
+                                                                           VerticalAlignment="Center"
+                                                                           FontFamily="Cascadia Mono"
+                                                                           TextWrapping="WrapWholeWords"/>
+
+                                                                <TextBlock Grid.Column="2"
+                                                                           Text="{x:Bind StatusLabel}"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <TextBlock Grid.Column="3"
+                                                                           Text="{x:Bind StartedText}"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+
+                                                                <Button Grid.Column="4"
+                                                                        Content="Stop"
+                                                                        Command="{Binding ViewModel.StopPortForwardSessionCommand, ElementName=PageRoot}"
+                                                                        CommandParameter="{x:Bind}"
+                                                                        IsEnabled="{x:Bind CanStop}"/>
+                                                            </Grid>
+
+                                                            <TextBlock Text="{x:Bind ErrorText}"
+                                                                       Visibility="{x:Bind ErrorVisibility}"
+                                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                       TextWrapping="WrapWholeWords"
+                                                                       FontFamily="Cascadia Mono"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
                         </Border>
                     </Grid>

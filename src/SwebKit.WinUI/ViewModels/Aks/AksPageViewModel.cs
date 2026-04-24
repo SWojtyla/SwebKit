@@ -15,6 +15,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     private readonly AppStateService _appState;
     private readonly IAksClientBootstrapper _bootstrapper;
     private readonly IShellNavigationService _navigation;
+    private readonly IPortForwardSessionService _portForwardSessions;
+    private readonly INotificationService _notifications;
     private readonly ILogger<AksPageViewModel> _logger;
     private CancellationTokenSource _loadCts = new();
     private bool _loaded;
@@ -24,11 +26,15 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         AppStateService appState,
         IAksClientBootstrapper bootstrapper,
         IShellNavigationService navigation,
+        IPortForwardSessionService portForwardSessions,
+        INotificationService notifications,
         ILogger<AksPageViewModel> logger)
     {
         _appState = appState;
         _bootstrapper = bootstrapper;
         _navigation = navigation;
+        _portForwardSessions = portForwardSessions;
+        _notifications = notifications;
         _logger = logger;
 
         ContextOptions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasContextOptions));
@@ -38,6 +44,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             OnPropertyChanged(nameof(PodCountLabel));
             OnPropertyChanged(nameof(ShowPodEmptyState));
         };
+
+        InitializePortForwardState();
     }
 
     public ObservableCollection<string> ContextOptions { get; } = [];
@@ -170,6 +178,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
     public async ValueTask DisposeAsync()
     {
+        DisposePortForwardState();
         await ResetLoadTokenAsync();
         await ResetLogsTokenAsync();
         _loadCts.Dispose();
@@ -200,6 +209,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     {
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(ShowPodEmptyState));
+        OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
+        OnPropertyChanged(nameof(CanOpenSelectedPodShell));
 
         if (value is null && SelectedPod is not null)
         {

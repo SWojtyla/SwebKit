@@ -24,7 +24,7 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 **In scope:**
 
 - New `src/SwebKit.WinUI/` project — WinUI 3 host, bootstrapped with `Microsoft.Extensions.Hosting` + MVVM
-- Migration of the full operator surface: Dashboard, shell chrome, Service Bus, AKS, Redis, Storage, Pipelines/Releases/Approvals, Observability, Incident Timeline, and Settings
+- Migration of the full operator surface: Dashboard, shell chrome, Service Bus, AKS, Redis, Storage, Pipelines/Releases/Approvals, Observability, and Settings
 - MVVM ViewModels replacing Blazor `@code` blocks
 - Replacement of all Fluent UI Blazor components with native WinUI 3 controls
 - Replacement of Blazor-ApexCharts with LiveCharts2 (WinUI)
@@ -39,6 +39,7 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 **Out of scope:**
 
 - Any changes to `SwebKit.Core`, `SwebKit.Azure`, `SwebKit.Kubernetes`, `SwebKit.Redis`, `SwebKit.DevOps`, `SwebKit.Observability`
+- Incident Timeline migration or redesign; the current feature is intentionally excluded from the WinUI cutover plan
 - E2E test migration (defer until the host is stable)
 - Non-Windows targets (never existed in practice)
 - Cross-platform portability
@@ -55,8 +56,7 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 | 5     | Storage workspace: container/blob browse, preview, SAS/download workflows, workspace restore                                             | In Progress |
 | 6     | Pipelines delivery hub: pipelines, activity, release records, approvals, tagging                                                         | In Progress |
 | 7     | Observability workspace: discovery, five tabs, guided/advanced logs, saved queries, charts                                               | In Progress |
-| 8     | Incident Timeline workbench: scope toolbar, evidence views, seed flows, export, mapping guidance                                         | Not started |
-| 9     | Delete `SwebKit.App`, update solution, verify all tests pass                                                                             | Not started |
+| 8     | Delete `SwebKit.App`, update solution, verify all tests pass                                                                             | Not started |
 
 ## Parity Scope Additions
 
@@ -68,7 +68,7 @@ The original migration outline under-described the current MAUI app. Cutover can
 - Shell parity: top-bar context, workspace hub, notification history, command palette, status bar, connection badges, production/demo cues, and profile-load warning/recovery cues.
 - Settings parity: all existing configuration sections, readiness summaries, live checks, and section/deep-link entry paths that exist today.
 - Theme/look-and-feel parity: persisted theme selection, curated dark/light presets, and a recognizable WinUI-native shell identity. Exact CSS-era pixel matching is not required.
-- Detailed per-domain parity for Service Bus, AKS, Redis, Storage, Pipelines, Observability, and Incident Timeline as listed in `frontend.md`.
+- Detailed per-domain parity for Service Bus, AKS, Redis, Storage, Pipelines, and Observability as listed in `frontend.md`.
 
 ### Round 2 candidate backlog
 
@@ -84,7 +84,7 @@ The remaining work should not be treated as a flat page-by-page migration.
 - Keep AKS moving in bounded slices because it is already live and is the highest-risk workspace, but do not let AKS consume the entire roadmap while shell/dashboard/theme parity stays unfinished.
 - After the shared shell pass is stable, Redis and Storage are the best next parallel workstreams.
 - Pipelines and Observability follow once the shared shell is stable and the WinUI chart/editor seams are locked.
-- Incident Timeline stays late in the sequence because it depends on AKS, Service Bus, Pipelines, and Observability behavior already being credible.
+- Cutover hardening follows once the remaining shared-shell, Pipelines, and Observability parity gaps are credible.
 
 `frontend.md` is the detailed source of truth for execution ordering and cutover gates.
 
@@ -107,7 +107,7 @@ The remaining work should not be treated as a flat page-by-page migration.
   **Mitigation:** Treat the curated theme system, shell status cues, dashboard, and settings/readiness surfaces as explicit cutover scope rather than optional polish.
 
 - **Risk:** Feature parity regression during the parallel branch period.  
-  **Mitigation:** `SwebKit.App` stays fully operational. `SwebKit.WinUI` is a separate csproj. No changes to the existing app until Phase 9.
+  **Mitigation:** `SwebKit.App` stays fully operational. `SwebKit.WinUI` is a separate csproj. No changes to the existing app until Phase 8.
 
 ## Related documents
 

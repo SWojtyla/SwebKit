@@ -5,3 +5,5 @@
 - The current Observability availability provider query returns the latest 200 checks, so WinUI charts and copy for that tab should describe recent returned results rather than full-window aggregates.
 - The WinUI Observability overview charts reuse `OverviewMetrics.RequestTrend` and `OverviewMetrics.FailureTrend`; new chart slices should prefer existing provider payloads over new API seams when the data already exists.
 - There is no direct WinUI automated test coverage for the current chart slices, so the expected validation loop is `build-winui` plus manual smoke checks for zero-data and dense-label states.
+- The WinUI AKS selected-pod diagnostics slice now reuses `IPortForwardSessionService` for native start/stop session management and `IAksClient.OpenShellAsync` for shell launch; later AKS work should extend those seams rather than add WinUI-only process orchestration.
+- In the WinUI AKS port-forward form, remote ports can be any valid service port (including `80` and `443`), while local-port validation should stay focused on bindability and privileged-port constraints.

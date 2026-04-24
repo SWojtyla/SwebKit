@@ -226,7 +226,7 @@ public class DevOpsClient : IDevOpsClient
 
         var dto = await response.Content.ReadFromJsonAsync<AdoListResponse<AdoApprovalDto>>(JsonOptions, ct);
 
-        return dto?.Value?
+        var approvals = dto?.Value?
             .Where(a => a.Status is "pending" or "waiting" or "assigned" or "undefined")
             .Select(a => new AdoApproval(
                 Id: a.Id ?? string.Empty,
@@ -240,6 +240,118 @@ public class DevOpsClient : IDevOpsClient
                 WebUrl: a.Links?.Web?.Href,
                 CreatedOn: a.CreatedOn
             )).ToList() ?? [];
+
+        return approvals.Count == 0
+            ? approvals
+            : await EnrichPendingApprovalsAsync(project, approvals, ct);
+    }
+
+    private async Task<List<AdoApproval>> EnrichPendingApprovalsAsync(
+        string project,
+        List<AdoApproval> approvals,
+        CancellationToken ct)
+    {
+        var approvalsById = approvals.ToDictionary(approval => approval.Id, StringComparer.Ordinal);
+
+        foreach (var pipelineGroup in approvals
+                     .Where(approval => approval.PipelineId > 0)
+                     .GroupBy(approval => approval.PipelineId))
+        {
+            var unresolvedApprovalIds = pipelineGroup
+                .Select(approval => approval.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            List<AdoPipelineRun> recentRuns;
+            try
+            {
+                recentRuns = await GetPipelineRunsAsync(project, pipelineGroup.Key, top: 10, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load recent pipeline runs for approval enrichment in project {Project} pipeline {PipelineId}.", project, pipelineGroup.Key);
+                continue;
+            }
+
+            foreach (var run in recentRuns.Where(static candidate => !string.Equals(candidate.State, "completed", StringComparison.OrdinalIgnoreCase)))
+            {
+                List<WaitingStage> waitingStages;
+                try
+                {
+                    var timeline = await GetFromJsonAsync<AdoTimelineDto>(
+                        $"{ProjectApi(project)}/build/builds/{run.Id}/timeline?api-version=7.1",
+                        JsonOptions,
+                        ct);
+
+                    if (timeline?.Records is null)
+                    {
+                        continue;
+                    }
+
+                    waitingStages = ExtractWaitingStagesFromTimeline(timeline.Records);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to inspect waiting stages for approval enrichment in project {Project} run {RunId}.", project, run.Id);
+                    continue;
+                }
+
+                if (waitingStages.Count == 0 || waitingStages.All(stage => stage.ApprovalId is null))
+                {
+                    continue;
+                }
+
+                List<AdoPipelineStage> stages;
+                try
+                {
+                    stages = await GetRunStagesAsync(project, run.Id, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load pipeline stages for approval enrichment in project {Project} run {RunId}.", project, run.Id);
+                    continue;
+                }
+
+                foreach (var waitingStage in waitingStages)
+                {
+                    if (waitingStage.ApprovalId is null || !unresolvedApprovalIds.Remove(waitingStage.ApprovalId))
+                    {
+                        continue;
+                    }
+
+                    var existingApproval = approvalsById[waitingStage.ApprovalId];
+                    var matchingStage = stages.FirstOrDefault(stage =>
+                        string.Equals(stage.Name, waitingStage.StageName, StringComparison.OrdinalIgnoreCase));
+
+                    approvalsById[waitingStage.ApprovalId] = existingApproval with
+                    {
+                        RunId = run.Id,
+                        StageName = waitingStage.StageName,
+                        EnvironmentName = matchingStage?.EnvironmentName
+                    };
+                }
+
+                if (unresolvedApprovalIds.Count == 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        return approvals
+            .Select(approval => approvalsById.GetValueOrDefault(approval.Id, approval))
+            .ToList();
     }
 
     public async Task<List<WaitingStage>> GetWaitingStagesAsync(string project, int runId, CancellationToken ct = default)
