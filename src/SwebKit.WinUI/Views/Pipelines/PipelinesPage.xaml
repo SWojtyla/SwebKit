@@ -532,7 +532,7 @@
 
                             <Border Grid.Column="1"
                                     Style="{StaticResource SwebKitSurfaceCardStyle}">
-                                <Grid RowSpacing="12">
+                                <Grid RowSpacing="16">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
@@ -566,35 +566,257 @@
                                     </StackPanel>
 
                                     <TextBlock Grid.Row="1"
-                                               Text="Components"
+                                               Text="Components and tag manager"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Visibility="{Binding SelectedReleaseDetailVisibility}"/>
 
-                                    <ListView Grid.Row="2"
-                                              ItemsSource="{Binding SelectedReleaseComponents}"
-                                              Visibility="{Binding SelectedReleaseDetailVisibility}">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="viewModels:PipelinesReleaseComponentItemViewModel">
-                                                <StackPanel Padding="0,8"
-                                                            Spacing="2">
-                                                    <TextBlock
-                                                        Text="{x:Bind ComponentName}"
-                                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind ProjectName}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind ScopeStatus}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind TargetTagLabel}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
+                                    <StackPanel Grid.Row="2"
+                                                Spacing="16"
+                                                Visibility="{Binding SelectedReleaseDetailVisibility}">
+                                        <ListView ItemsSource="{Binding SelectedReleaseComponents}"
+                                                  MaxHeight="220">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="viewModels:PipelinesReleaseComponentItemViewModel">
+                                                    <StackPanel Padding="0,8"
+                                                                Spacing="2">
+                                                        <TextBlock
+                                                            Text="{x:Bind ComponentName}"
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind ProjectName}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind ScopeStatus}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind TargetTagLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+
+                                        <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                CornerRadius="8"
+                                                Padding="16">
+                                            <Grid RowSpacing="12">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0"
+                                                                Spacing="4">
+                                                        <TextBlock
+                                                            Text="Tag manager"
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBlock
+                                                            Text="{Binding ReleaseTagSummary}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                    </StackPanel>
+
+                                                    <ProgressRing
+                                                        Grid.Column="1"
+                                                        Width="20"
+                                                        Height="20"
+                                                        IsActive="{Binding IsLoadingReleaseTags}"/>
+
+                                                    <Button
+                                                        Grid.Column="2"
+                                                        Content="Refresh tags"
+                                                        Command="{Binding RefreshReleaseTagsCommand}"
+                                                        IsEnabled="{Binding CanChangeReleaseTags}"/>
+                                                </Grid>
+
+                                                <InfoBar
+                                                    Grid.Row="1"
+                                                    IsOpen="{Binding ShowReleaseTagWarningState}"
+                                                    Severity="Warning"
+                                                    Title="Partial git metadata"
+                                                    Message="{Binding ReleaseTagLoadWarning}"/>
+
+                                                <Border Grid.Row="2"
+                                                        Visibility="{Binding ReleaseTagActionVisibility}"
+                                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                        CornerRadius="8"
+                                                        Padding="12">
+                                                    <StackPanel Spacing="10">
+                                                        <TextBlock
+                                                            Text="{Binding ReleaseTagActionTitle}"
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock
+                                                            Text="{Binding ReleaseTagActionSubtitle}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+
+                                                        <InfoBar
+                                                            IsOpen="True"
+                                                            Severity="Warning"
+                                                            Title="This action cannot be undone"
+                                                            Message="Type CONFIRM before creating the annotated git tag for this release component."/>
+
+                                                        <StackPanel Spacing="6">
+                                                            <TextBlock
+                                                                Text="Confirmation"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBox
+                                                                Text="{Binding ReleaseTagConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                IsEnabled="{Binding CanChangeReleaseTags}"
+                                                                PlaceholderText="Type CONFIRM"/>
+                                                        </StackPanel>
+
+                                                        <TextBlock
+                                                            Text="{Binding ReleaseTagError}"
+                                                            Visibility="{Binding ReleaseTagErrorVisibility}"
+                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                                    Spacing="12">
+                                                            <Button
+                                                                Content="Cancel"
+                                                                Command="{Binding CancelReleaseTagActionCommand}"
+                                                                IsEnabled="{Binding CanChangeReleaseTags}"/>
+                                                            <Button
+                                                                Content="Create tag"
+                                                                Command="{Binding SubmitReleaseTagCommand}"
+                                                                Style="{StaticResource AccentButtonStyle}"
+                                                                IsEnabled="{Binding CanSubmitReleaseTag}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <InfoBar
+                                                    Grid.Row="3"
+                                                    IsOpen="{Binding ShowReleaseTagEmptyState}"
+                                                    Severity="Informational"
+                                                    Title="No in-scope components"
+                                                    Message="This release has no in-scope components available for tag creation."/>
+
+                                                <ListView Grid.Row="4"
+                                                          ItemsSource="{Binding ReleaseTagItems}"
+                                                          Visibility="{Binding ReleaseTagListVisibility}"
+                                                          IsEnabled="{Binding CanChangeReleaseTags}">
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate x:DataType="viewModels:PipelinesReleaseTagItemViewModel">
+                                                            <Border Padding="0,10">
+                                                                <StackPanel Spacing="8">
+                                                                    <Grid ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <StackPanel Grid.Column="0"
+                                                                                    Spacing="2">
+                                                                            <TextBlock
+                                                                                Text="{x:Bind ComponentName}"
+                                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                TextWrapping="WrapWholeWords"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind ProjectName}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind LatestTagLabel}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                TextWrapping="WrapWholeWords"/>
+                                                                        </StackPanel>
+
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="{x:Bind ConfirmedTagLabel}"
+                                                                                   Visibility="{x:Bind ConfirmedTagVisibility}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                   TextWrapping="WrapWholeWords"
+                                                                                   VerticalAlignment="Top"/>
+                                                                    </Grid>
+
+                                                                    <TextBlock
+                                                                        Text="{x:Bind RecentTagsSummary}"
+                                                                        Visibility="{x:Bind RecentTagsVisibility}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                        TextWrapping="WrapWholeWords"/>
+
+                                                                    <StackPanel Spacing="10"
+                                                                                Visibility="{x:Bind CreateControlsVisibility}">
+                                                                        <StackPanel Spacing="6">
+                                                                            <TextBlock
+                                                                                Text="Tag name"
+                                                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                            <TextBox
+                                                                                Text="{x:Bind TagName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                PlaceholderText="v1.5.0"/>
+                                                                        </StackPanel>
+
+                                                                        <Grid ColumnSpacing="12">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="2*"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <StackPanel Grid.Column="0"
+                                                                                        Spacing="6">
+                                                                                <TextBlock
+                                                                                    Text="Commit"
+                                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                                <ComboBox
+                                                                                    ItemsSource="{x:Bind AvailableCommits}"
+                                                                                    SelectedItem="{x:Bind SelectedCommit, Mode=TwoWay}"
+                                                                                    DisplayMemberPath="DisplayLabel"/>
+                                                                            </StackPanel>
+
+                                                                            <StackPanel Grid.Column="1"
+                                                                                        Spacing="6">
+                                                                                <TextBlock
+                                                                                    Text="Message"
+                                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                                <TextBox
+                                                                                    Text="{x:Bind TagMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                    PlaceholderText="Release message"/>
+                                                                            </StackPanel>
+                                                                        </Grid>
+
+                                                                        <Grid ColumnSpacing="12">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <TextBlock Grid.Column="0"
+                                                                                       Text="{x:Bind CommitSummary}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                       TextWrapping="WrapWholeWords"
+                                                                                       VerticalAlignment="Center"/>
+
+                                                                            <Button Grid.Column="1"
+                                                                                    Content="Create tag"
+                                                                                    Command="{Binding DataContext.BeginCreateReleaseTagCommand, ElementName=PageRoot}"
+                                                                                    CommandParameter="{Binding}"
+                                                                                    Style="{StaticResource AccentButtonStyle}"
+                                                                                    IsEnabled="{x:Bind CanCreateTag}"/>
+                                                                        </Grid>
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </Grid>

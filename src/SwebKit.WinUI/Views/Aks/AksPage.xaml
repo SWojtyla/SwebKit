@@ -10,10 +10,9 @@
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold
-        Title="AKS"
-        Subtitle="Connect to the active cluster, switch contexts and namespaces, and browse pod health from the native WinUI workspace.">
+        Title="AKS">
         <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="16">
+            <Grid RowSpacing="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -22,7 +21,13 @@
                 <Border
                     Grid.Row="0"
                     Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <StackPanel Spacing="12">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -30,20 +35,21 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Cluster connection"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ConnectionSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
+                                        Orientation="Horizontal"
+                                        Spacing="10"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Cluster connection"
+                                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock Text="{Binding ConnectionSummary}"
+                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                           TextWrapping="WrapWholeWords"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="1"
                                         Orientation="Horizontal"
                                         Spacing="12"
-                                        VerticalAlignment="Top">
+                                        VerticalAlignment="Center">
                                 <ProgressRing
                                     Width="20"
                                     Height="20"
@@ -54,24 +60,28 @@
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock
-                            Text="{Binding ErrorMessage}"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            TextWrapping="WrapWholeWords"/>
+                        <StackPanel Grid.Row="1"
+                                    Spacing="8">
+                            <TextBlock
+                                Text="{Binding ErrorMessage}"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                TextWrapping="WrapWholeWords"/>
 
-                        <InfoBar
-                            IsOpen="{Binding ShowNotConfiguredState}"
-                            Severity="Informational"
-                            Title="AKS is not configured"
-                            Message="Configure kubeconfig path, context, and default namespace in Settings before opening the AKS workspace.">
-                            <InfoBar.ActionButton>
-                                <Button
-                                    Content="Open Settings"
-                                    Command="{Binding OpenSettingsCommand}"/>
-                            </InfoBar.ActionButton>
-                        </InfoBar>
+                            <InfoBar
+                                IsOpen="{Binding ShowNotConfiguredState}"
+                                Severity="Informational"
+                                Title="AKS is not configured"
+                                Message="Configure kubeconfig path, context, and default namespace in Settings before opening the AKS workspace.">
+                                <InfoBar.ActionButton>
+                                    <Button
+                                        Content="Open Settings"
+                                        Command="{Binding OpenSettingsCommand}"/>
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                        </StackPanel>
 
-                        <Grid ColumnSpacing="12">
+                        <Grid Grid.Row="2"
+                              ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
@@ -101,7 +111,7 @@
                                     IsEnabled="{Binding HasNamespaceOptions}"/>
                             </StackPanel>
                         </Grid>
-                    </StackPanel>
+                    </Grid>
                 </Border>
 
                 <Border
@@ -115,29 +125,14 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Pods"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding PodCountLabel}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-
+                        <StackPanel Spacing="4">
                             <TextBlock
-                                Grid.Column="1"
-                                Text="Health reflects readiness, restart pressure, and common failure states such as CrashLoopBackOff or ImagePullBackOff."
-                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                TextWrapping="WrapWholeWords"
-                                Width="320"/>
-                        </Grid>
+                                Text="Pods"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding PodCountLabel}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                        </StackPanel>
 
                         <InfoBar
                             Grid.Row="1"
@@ -254,7 +249,7 @@
                         </Grid>
 
                         <Border Grid.Row="3"
-                                Margin="0,12,0,0"
+                            Margin="0,8,0,0"
                                 Style="{StaticResource SwebKitInsetCardStyle}">
                             <Grid RowSpacing="12">
                                 <Grid.RowDefinitions>

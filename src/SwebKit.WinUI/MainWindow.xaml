@@ -78,13 +78,12 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <Grid Padding="16,12,16,16"
-                  RowSpacing="12">
+            <Grid Padding="12,8,12,12"
+                RowSpacing="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <shellControls:ShellBannerStrip
@@ -100,10 +99,6 @@
                 <Frame x:Name="ContentFrame"
                        Grid.Row="2"
                        Background="{ThemeResource SwebKitPageBackgroundBrush}"/>
-
-                <shellControls:ShellStatusStrip
-                    Grid.Row="3"
-                    DataContext="{x:Bind ShellChrome, Mode=OneWay}"/>
             </Grid>
 
         </NavigationView>

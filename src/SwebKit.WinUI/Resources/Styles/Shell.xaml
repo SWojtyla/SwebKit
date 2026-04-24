@@ -14,16 +14,32 @@
         <Setter Property="BorderThickness"
                 Value="1"/>
         <Setter Property="Padding"
-                Value="10,4"/>
+                Value="8,2"/>
     </Style>
 
     <Style x:Key="SwebKitShellActionButtonStyle"
            TargetType="Button">
         <Setter Property="Padding"
-                Value="12,8"/>
+                Value="10,6"/>
         <Setter Property="HorizontalAlignment"
                 Value="Stretch"/>
         <Setter Property="HorizontalContentAlignment"
                 Value="Left"/>
+    </Style>
+
+    <Style x:Key="SwebKitShellIconButtonStyle"
+           TargetType="Button">
+        <Setter Property="Width"
+                Value="36"/>
+        <Setter Property="Height"
+                Value="36"/>
+        <Setter Property="MinWidth"
+                Value="36"/>
+        <Setter Property="Padding"
+                Value="0"/>
+        <Setter Property="HorizontalAlignment"
+                Value="Center"/>
+        <Setter Property="VerticalAlignment"
+                Value="Center"/>
     </Style>
 </ResourceDictionary>

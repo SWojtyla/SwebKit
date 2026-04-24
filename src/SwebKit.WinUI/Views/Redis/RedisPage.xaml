@@ -10,10 +10,9 @@
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold
-        Title="Redis"
-        Subtitle="Browse grouped keys, inspect common value types, and apply key-level actions from a native WinUI workspace.">
+        Title="Redis">
         <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="16">
+            <Grid RowSpacing="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -22,9 +21,8 @@
                 <Border
                     Grid.Row="0"
                     Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <Grid RowSpacing="12">
+                    <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -32,25 +30,14 @@
 
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="240"/>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="100"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Cache connection"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ConnectionSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1"
                                         Spacing="6">
                                 <TextBlock
                                     Text="Cache"
@@ -63,7 +50,17 @@
                                     IsEnabled="{Binding HasConfiguredCaches}"/>
                             </StackPanel>
 
-                            <StackPanel Grid.Column="2"
+                                    <StackPanel Grid.Column="1"
+                                        Spacing="6">
+                                    <TextBlock
+                                        Text="Pattern"
+                                        Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBox
+                                        Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="*"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2"
                                         Spacing="6">
                                 <TextBlock
                                     Text="Group by"
@@ -96,36 +93,22 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Pattern"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBox
-                                    Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="*"/>
-                            </StackPanel>
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="{Binding ScanSummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"
+                                VerticalAlignment="Center"/>
 
-                            <StackPanel Grid.Column="1"
-                                        Spacing="6"
-                                        VerticalAlignment="Bottom">
-                                <TextBlock
-                                    Text="Loaded"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <Button
-                                    Content="{Binding LoadMoreKeysLabel}"
-                                    Command="{Binding LoadMoreKeysCommand}"
-                                    IsEnabled="{Binding CanLoadMoreKeys}"/>
-                            </StackPanel>
+                            <Button
+                                Grid.Column="1"
+                                Content="{Binding LoadMoreKeysLabel}"
+                                Command="{Binding LoadMoreKeysCommand}"
+                                IsEnabled="{Binding CanLoadMoreKeys}"
+                                VerticalAlignment="Center"/>
                         </Grid>
 
-                        <TextBlock
-                            Grid.Row="2"
-                            Text="{Binding ScanSummary}"
-                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                            TextWrapping="WrapWholeWords"/>
-
-                        <StackPanel Grid.Row="3"
+                        <StackPanel Grid.Row="2"
                                     Spacing="8">
                             <TextBlock
                                 Text="{Binding ErrorMessage}"
@@ -145,7 +128,7 @@
                 <Grid Grid.Row="1"
                       ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="390"/>
+                                                <ColumnDefinition Width="340"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -160,15 +143,9 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <StackPanel Spacing="4">
-                                <TextBlock
-                                    Text="Key browser"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="Expand prefixes, filter by subtree, and inspect keys with loaded type badges."
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
+                            <TextBlock
+                                Text="Key browser"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 
                             <InfoBar
                                 Grid.Row="1"

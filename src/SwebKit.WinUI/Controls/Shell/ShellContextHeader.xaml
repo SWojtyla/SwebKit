@@ -6,70 +6,103 @@
     xmlns:shell="using:SwebKit.WinUI.Controls.Shell"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-        <Grid ColumnSpacing="24">
+    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+        <Grid ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0"
-                        Spacing="8">
-                <TextBlock Text="{Binding CurrentAreaGroupLabel}"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                <TextBlock Text="{Binding CurrentAreaTitle}"
-                           Style="{StaticResource SwebKitPageTitleTextBlockStyle}"/>
-                <TextBlock Text="{Binding CurrentAreaSummary}"
-                           Style="{StaticResource SwebKitPageSubtitleTextBlockStyle}"/>
+            <Grid Grid.Column="0"
+                  ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                <StackPanel Orientation="Horizontal"
-                            Spacing="8">
-                    <Border Style="{StaticResource SwebKitShellBadgeStyle}"
-                            Visibility="{Binding CurrentConnectionVisibility}">
-                        <TextBlock Text="{Binding CurrentConnectionLabel}"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                    </Border>
+                <Border Width="32"
+                        Height="32"
+                        CornerRadius="8"
+                        Background="{ThemeResource SwebKitSurfaceCardBackgroundBrush}"
+                        BorderBrush="{ThemeResource SwebKitSurfaceCardBorderBrush}"
+                        BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <Image Width="20"
+                           Height="20"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+                        <Image.Source>
+                            <SvgImageSource UriSource="ms-appx:///Assets/SwebKitLogo.svg"/>
+                        </Image.Source>
+                    </Image>
+                </Border>
 
-                    <Border Style="{StaticResource SwebKitShellBadgeStyle}"
-                            Visibility="{Binding ProductionBadgeVisibility}">
-                        <TextBlock Text="Production"
+                <StackPanel Grid.Column="1"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <TextBlock Text="SwebKit"
                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                    </Border>
+                        <TextBlock Text="/"
+                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                        <TextBlock Text="{Binding CurrentAreaTitle}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                    </StackPanel>
 
-                    <Border Style="{StaticResource SwebKitShellBadgeStyle}"
-                            Visibility="{Binding DemoBadgeVisibility}">
-                        <TextBlock Text="Demo"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                    </Border>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <Border Style="{StaticResource SwebKitShellBadgeStyle}"
+                                Visibility="{Binding CurrentConnectionVisibility}">
+                            <TextBlock Text="{Binding CurrentConnectionLabel}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                        </Border>
+
+                        <Border Style="{StaticResource SwebKitShellBadgeStyle}"
+                                Visibility="{Binding ProductionBadgeVisibility}">
+                            <TextBlock Text="Production"
+                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                        </Border>
+
+                        <Border Style="{StaticResource SwebKitShellBadgeStyle}"
+                                Visibility="{Binding DemoBadgeVisibility}">
+                            <TextBlock Text="Demo"
+                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
 
             <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
                         Spacing="8"
-                        VerticalAlignment="Top">
-                <Button Content="{Binding WorkspaceButtonLabel}"
-                        Style="{StaticResource SwebKitShellActionButtonStyle}">
+                        VerticalAlignment="Center">
+                <Button Style="{StaticResource SwebKitShellIconButtonStyle}"
+                        ToolTipService.ToolTip="{Binding WorkspaceButtonLabel}">
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight">
                             <shell:WorkspaceHubPanel DataContext="{Binding ElementName=Root, Path=DataContext}"/>
                         </Flyout>
                     </Button.Flyout>
+                    <FontIcon Glyph="&#xE8A9;"/>
                 </Button>
 
-                <Button Content="{Binding NotificationButtonLabel}"
-                        Style="{StaticResource SwebKitShellActionButtonStyle}">
+                <Button Style="{StaticResource SwebKitShellIconButtonStyle}"
+                        ToolTipService.ToolTip="{Binding NotificationButtonLabel}">
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight"
                                 Opening="NotificationFlyout_Opening">
                             <shell:NotificationHistoryPanel DataContext="{Binding ElementName=Root, Path=DataContext}"/>
                         </Flyout>
                     </Button.Flyout>
+                    <FontIcon Glyph="&#xE7F4;"/>
                 </Button>
 
-                <Button Content="Command palette (Ctrl+K)"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Click="CommandPaletteButton_Click"/>
+                <Button Style="{StaticResource SwebKitShellIconButtonStyle}"
+                        ToolTipService.ToolTip="Command palette (Ctrl+K)"
+                        Click="CommandPaletteButton_Click">
+                    <FontIcon Glyph="&#xE721;"/>
+                </Button>
             </StackPanel>
         </Grid>
     </Border>

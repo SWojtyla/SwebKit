@@ -38,8 +38,7 @@
 
         <shared:PageScaffold.BodyContent>
             <ScrollViewer>
-                <StackPanel MaxWidth="1280"
-                            Spacing="16">
+                <StackPanel Spacing="16">
 
                     <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
                         <StackPanel Spacing="12">

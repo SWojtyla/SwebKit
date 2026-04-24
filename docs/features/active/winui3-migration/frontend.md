@@ -288,7 +288,7 @@ The original migration plan was too page-oriented and understated the current MA
 
 - Pipeline browser parity with project tree, recent-run detail, and inline trigger flows.
 - Activity feed parity across Azure DevOps projects.
-- Release-record parity with component-by-environment matrix, local persistence, and tag manager workflows.
+- Release-record baseline with local persistence and native tag-manager workflows; deeper parity still needs the richer component-by-environment matrix plus release edit/scope surfaces.
 - Approval center parity with aging/SLA state, inline approve/reject flows, and production confirmation requirements.
 - Failure-classification and `/releases` alias behavior retained.
 
@@ -348,7 +348,7 @@ Start these once Track 1 is stable. They are the best parallelizable next workst
 
 Start these after the shared shell is stable and the WinUI equivalents for Monaco hosting and LiveCharts usage are fixed.
 
-- Pipelines/Releases: browser, activity feed, release records, approvals, tag manager.
+- Pipelines/Releases: browser, activity feed, approvals, and the remaining release-detail/editor parity after the native tag-manager baseline.
 - Observability: discovery, five-tab experience, guided/advanced logs, saved queries, charts.
 
 #### Track 5 — Cutover hardening

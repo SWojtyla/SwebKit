@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell cutover path now also has a native WinUI dashboard landing route: the app opens to a dashboard view that owns readiness summary/probe refresh, cross-workspace health tiles, operator favorites, recent activity, and pod-health alerts without falling back to the MAUI dashboard. Phase 3 AKS now has a broader native diagnostics slice: the WinUI host has cluster bootstrap, pod browse, selected-pod log diagnostics, tracked port-forward session management, selected-pod shell launch, and the shared pod-health monitor now feeds the dashboard route directly. Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has a broader native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders overview request and failure trends, the selected-operation latency trend, an availability-by-test summary with LiveCharts2, a native availability heatmap/list toggle over the existing result set, a native saved-query baseline in the logs tab, and a focused failure-sample trace drill from the failures pane. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, saved query persistence, workspace restore, and the first chart-hosting slices. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
+The baseline WinUI migration is now broad enough to checkpoint: native routes exist for dashboard, settings, Service Bus, AKS, Redis, Storage, Pipelines, and Observability, and the shell/dashboard path no longer depends on the MAUI host. Further scope expansion should pause here. The remaining parity audit, hardening, structural refactors, and cutover-readiness work now move under `docs/features/active/winui3-cutover-audit-hardening/` so this feature can act as the baseline checkpoint instead of an ever-widening umbrella.
 
 **Jira:** not linked
 
-**Current focus:** harden the new native dashboard/shell cutover path alongside the restored WinUI demo-mode validation path, expand Observability through the remaining editor and drill-through gaps now that the availability heatmap and saved-query slices are native, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
+**Current focus:** freeze the current migration at a defensible baseline checkpoint, keep `build-winui` green, and route remaining parity/hardening work through `winui3-cutover-audit-hardening` instead of widening this feature further.
 
 ## Progress checklist
 
@@ -89,7 +89,8 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - [x] Pipeline/project scope baseline and tab shell
 - [x] Release records and approval summary baseline
 - [x] Approval mutations with production confirm gating
-- [ ] Tag manager and deeper parity
+- [x] Native release tag-manager workflow
+- [ ] Deeper release/detail parity
 
 ### Phase 7 — Observability
 
@@ -133,6 +134,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - Phase 6 Pipelines/Releases/Approvals now has a native WinUI baseline route in `SwebKit.WinUI`: project scope selection, delivery metrics, and a tabbed baseline for pipelines, activity, releases, and approvals.
 - `SwebKit.DevOps` now includes a bounded approval-enrichment/support fix for the WinUI migration so live approval actions can keep production/unverified safety cues and partial-refresh warning behavior honest.
 - The Pipelines approvals tab now supports inline approve/reject actions in `SwebKit.WinUI`, including production CONFIRM gating, per-approval SLA context, and resilient post-submit refresh even when one project approval feed fails.
+- The Pipelines releases tab now supports a native release tag-manager workflow in `SwebKit.WinUI`: scoped components load repository tags and recent commits, create annotated tags through `IDevOpsClient`, persist confirmed target tags back into the selected release record, and stay usable in demo mode for migration validation.
 - Phase 7 Observability now has a native WinUI baseline route in `SwebKit.WinUI`: Application Insights resource discovery, provider activation, five-tab workspace state, guided and advanced logs execution, and workspace restore.
 - The Observability Overview tab now renders native request-volume and failure-rate charts from the existing overview trend payload, extending the WinUI chart seam without changing provider contracts.
 - The Observability Performance tab now renders the selected-operation latency trend with LiveCharts2, establishing the first native chart-hosting seam in `SwebKit.WinUI` without changing domain or integration projects.
@@ -149,18 +151,18 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 ## Remaining
 
 - Phase 3-8 work listed above.
+- Remaining parity audit, hardening, and cutover-readiness work is now tracked in `docs/features/active/winui3-cutover-audit-hardening/`.
 - Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
 - The dashboard baseline route is now native, but deeper shell/settings/theme polish and page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
 - Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
 - Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
-- Pipelines parity still needs deeper tree/detail behavior, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
+- Pipelines parity still needs deeper tree/detail behavior, richer release-detail editing/matrix coverage, and the remaining release/approval action depth from `frontend.md`.
 - Observability parity still needs Monaco, deeper drill-through/investigation flows, and the richer explainer surfaces called out in `frontend.md`.
 
 ## Recommended next sequence
 
-- Next: harden the new dashboard plus Pipelines/Observability on the shared scaffold and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before cutover hardening starts.
-- After that: close the remaining Monaco and chart-hosting seams for Observability and push deeper approval/release parity in Pipelines.
-- Last: hardening, docs updates, test migration, and cutover.
+- Next: treat this feature as the baseline checkpoint only, and execute the remaining parity/hardening plan from `docs/features/active/winui3-cutover-audit-hardening/`.
+- After that: when the follow-up feature reaches a credible cutover recommendation, return here only to archive or close the baseline migration record.
 
 ## Planning updates
 
@@ -171,6 +173,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - `decisions.md` now records the UI foundation-first and semantic-theming decisions so page work does not drift back to ad hoc XAML.
 - `test-plan.md` now defines validation for the shared UI foundation, theme behavior, shell consistency, and downstream workspace adoption.
 - Round 2 is reserved for extra WinUI-only personalization or post-parity visual polish. Existing MAUI capabilities stay in the current plan.
+- The follow-up feature `docs/features/active/winui3-cutover-audit-hardening/` now owns the remaining parity audit, refactoring, hardening, and cutover-readiness work.
 
 ## Blockers
 
@@ -198,3 +201,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - `build-winui` succeeded on 2026-04-24 after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page.
 - `build-winui` succeeded on 2026-04-24 after the WinUI Settings page restored demo-mode enablement and the shell banner added a native demo-mode disable action.
 - `build-winui` succeeded on 2026-04-24 after the AKS demo-mode crash fix removed the missing `InverseBooleanConverter` dependency from the native port-forward form.
+- `build-winui` succeeded on 2026-04-24 after the Pipelines releases tab adopted a native release tag-manager workflow over the existing release records and Azure DevOps git operations.

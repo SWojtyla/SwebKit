@@ -115,6 +115,7 @@ The remaining work should not be treated as a flat page-by-page migration.
 - Design: `docs/architecture/design.md`
 - Codebase guide: `docs/architecture/codebase-guide.md`
 - Pitfalls: `docs/pitfalls/dotnet-csharp.md`
+- Follow-up hardening plan: `docs/features/active/winui3-cutover-audit-hardening/`
 
 ## Quick links
 
@@ -123,3 +124,4 @@ The remaining work should not be treated as a flat page-by-page migration.
 - Implementation: `frontend.md`
 - Test plan: `test-plan.md`
 - Library decisions: `decisions.md`
+- Follow-up: `docs/features/active/winui3-cutover-audit-hardening/`

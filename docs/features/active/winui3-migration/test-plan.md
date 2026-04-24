@@ -62,6 +62,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: Storage baseline route — steps: open Storage, choose an account, browse containers and a virtual folder, open a text-friendly blob, verify preview/detail metadata, trigger download and URL/SAS copy actions, then reopen the saved workspace/favorite and confirm the account/container/blob context restores.
 - Check: Pipelines baseline route — steps: open Pipelines, verify the project selector and delivery metrics load, switch across the pipelines/activity/releases/approvals tabs, and confirm the baseline detail surfaces update without falling back to a placeholder route.
 - Check: Pipelines approval actions — steps: open Approvals, approve a non-production approval with an optional comment, reject another approval, then exercise both a production approval and an approval whose environment context is unresolved, confirm the submit button stays disabled until `CONFIRM` is entered in both safety-sensitive cases, verify the list stays non-interactive while the mutation is in flight, and confirm a failed project approval feed shows the partial-refresh warning instead of the empty-state banner.
+- Check: Pipelines release tag manager — steps: open Releases in demo mode, select a release with in-scope components, confirm recent tags and commit choices load for unconfirmed components, start a tag action, verify the submit button stays disabled until `CONFIRM` is entered, create the tag, and confirm the component status flips to a confirmed target tag without leaving the WinUI route.
 - Check: Observability baseline route — steps: open Observability, refresh resource discovery, activate a resource, confirm the Overview request and failure charts populate, switch through all five tabs, run both an advanced and guided logs query, save the workspace context, select a performance operation and confirm the LiveCharts trend updates with the selected operation, then open Availability and confirm the summary chart reflects the returned checks while empty-result tabs stay stable rather than requerying on every revisit and the resource/tab selection restores correctly.
 
 ## Regression risks & mitigations
@@ -82,7 +83,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the WinUI Settings page restored demo-mode enablement and the shell banner added a native demo-mode disable action
+- Automated: `build-winui` green after the Pipelines releases tab adopted the native release tag-manager workflow
 - Manual: Not started
 
 ## Sign-off

@@ -112,36 +112,39 @@ Used by `PipelineDetail.razor` to drive the environments table.
   exists. Max 5 calls per invocation.
 - The Activity tab loads all runs on activation (no global cache). Auto-refresh is opt-in (30 s).
 - Release records are local to SwebKit and not synced to ADO.
+- The WinUI cutover baseline now includes a native release tag-manager panel inside the Releases tab. `SwebKit.WinUI` reuses `IDevOpsClient.GetTagsAsync`, `GetCommitsAsync`, and `CreateAnnotatedTagAsync` so tag confirmation stays on the existing Azure DevOps seam while the richer release matrix/editor parity is still pending.
 
 ## Main code locations
 
-| File                                                                   | Role                                                          |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `Pages/PipelinesPage.razor`                                            | Page shell: tabs, split panels, client setup, modals          |
-| `Pages/PipelinesPage.razor.css`                                        | All layout CSS for Pipelines hub                              |
-| `Pipelines/PipelineTree.razor`                                         | Left panel: project/pipeline tree with run status             |
-| `Pipelines/PipelinesOverview.razor`                                    | Right panel: project summary cards (no selection)             |
-| `Pipelines/PipelineDetail.razor`                                       | Right panel: env status, recent runs, trigger                 |
-| `Pipelines/PipelineActivity.razor`                                     | Activity tab: chronological run feed                          |
-| `Releases/ReleaseList.razor`                                           | Left panel: release record list                               |
-| `Releases/ReleaseDetail.razor`                                         | Right panel: component × env matrix + action bar              |
-| `Releases/ApprovalCenter.razor`                                        | Approvals tab: global across all projects                     |
-| `Releases/TagManager.razor`                                            | Tag creation (accessible from ReleaseDetail)                  |
-| `Releases/ReleaseEditor.razor`                                         | Modal: create/edit release record                             |
-| `Releases/ComponentScopeEditor.razor`                                  | Modal: manage pipeline scope per release                      |
-| `SwebKit.Core/Abstractions/IDevOpsClient.cs`                           | Interface                                                     |
-| `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`                    | Immutable live-client creation seam                           |
-| `SwebKit.Core/Models/DevOpsModels.cs`                                  | ADO domain models + `PipelineEnvironmentStatus`               |
-| `SwebKit.Core/Models/DeploymentAssuranceModels.cs`                     | Assurance enums and result records (aging, failure category)  |
-| `SwebKit.Core/Services/ApprovalAgingPolicy.cs`                         | SLA-based aging state for pending approvals                   |
-| `SwebKit.Core/Services/PipelineFailureClassifier.cs`                   | Stage-name heuristic failure category for failed runs         |
-| `SwebKit.Core/Models/ReleaseModels.cs`                                 | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot`       |
-| `SwebKit.Core/Configuration/ReleaseRepository.cs`                      | Local persistence (JSON)                                      |
-| `SwebKit.Core/Services/DemoDevOpsClient.cs`                            | Demo data                                                     |
-| `SwebKit.DevOps/IncidentTimeline/DevOpsReleaseTimelineSignalSource.cs` | Incident timeline adapter                                     |
-| `SwebKit.DevOps/DevOpsClientFactory.cs`                                | Creates real DevOps client snapshots                          |
-| `SwebKit.DevOps/DevOpsAuthHandler.cs`                                  | Resolves PAT per request from request options                 |
-| `SwebKit.DevOps/DevOpsClient.cs`                                       | Real ADO REST implementation using immutable config snapshots |
+| File                                                                   | Role                                                                                    |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `Pages/PipelinesPage.razor`                                            | Page shell: tabs, split panels, client setup, modals                                    |
+| `Pages/PipelinesPage.razor.css`                                        | All layout CSS for Pipelines hub                                                        |
+| `Pipelines/PipelineTree.razor`                                         | Left panel: project/pipeline tree with run status                                       |
+| `Pipelines/PipelinesOverview.razor`                                    | Right panel: project summary cards (no selection)                                       |
+| `Pipelines/PipelineDetail.razor`                                       | Right panel: env status, recent runs, trigger                                           |
+| `Pipelines/PipelineActivity.razor`                                     | Activity tab: chronological run feed                                                    |
+| `Releases/ReleaseList.razor`                                           | Left panel: release record list                                                         |
+| `Releases/ReleaseDetail.razor`                                         | Right panel: component × env matrix + action bar                                        |
+| `Releases/ApprovalCenter.razor`                                        | Approvals tab: global across all projects                                               |
+| `Releases/TagManager.razor`                                            | Tag creation (accessible from ReleaseDetail)                                            |
+| `Releases/ReleaseEditor.razor`                                         | Modal: create/edit release record                                                       |
+| `Releases/ComponentScopeEditor.razor`                                  | Modal: manage pipeline scope per release                                                |
+| `src/SwebKit.WinUI/Views/Pipelines/PipelinesPage.xaml`                 | Native WinUI baseline for pipelines, releases, approvals, and release tag-manager flows |
+| `src/SwebKit.WinUI/ViewModels/Pipelines/PipelinesPageViewModel.cs`     | WinUI route state, approval actions, release selection, and tag-manager orchestration   |
+| `SwebKit.Core/Abstractions/IDevOpsClient.cs`                           | Interface                                                                               |
+| `SwebKit.Core/Abstractions/IDevOpsClientFactory.cs`                    | Immutable live-client creation seam                                                     |
+| `SwebKit.Core/Models/DevOpsModels.cs`                                  | ADO domain models + `PipelineEnvironmentStatus`                                         |
+| `SwebKit.Core/Models/DeploymentAssuranceModels.cs`                     | Assurance enums and result records (aging, failure category)                            |
+| `SwebKit.Core/Services/ApprovalAgingPolicy.cs`                         | SLA-based aging state for pending approvals                                             |
+| `SwebKit.Core/Services/PipelineFailureClassifier.cs`                   | Stage-name heuristic failure category for failed runs                                   |
+| `SwebKit.Core/Models/ReleaseModels.cs`                                 | `ReleaseRecord`, `ComponentScope`, `DeploymentSnapshot`                                 |
+| `SwebKit.Core/Configuration/ReleaseRepository.cs`                      | Local persistence (JSON)                                                                |
+| `SwebKit.Core/Services/DemoDevOpsClient.cs`                            | Demo data                                                                               |
+| `SwebKit.DevOps/IncidentTimeline/DevOpsReleaseTimelineSignalSource.cs` | Incident timeline adapter                                                               |
+| `SwebKit.DevOps/DevOpsClientFactory.cs`                                | Creates real DevOps client snapshots                                                    |
+| `SwebKit.DevOps/DevOpsAuthHandler.cs`                                  | Resolves PAT per request from request options                                           |
+| `SwebKit.DevOps/DevOpsClient.cs`                                       | Real ADO REST implementation using immutable config snapshots                           |
 
 ## Removed in pipelines-revamp
 

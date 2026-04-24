@@ -49,4 +49,10 @@
         <ProjectReference Include="..\SwebKit.Observability\SwebKit.Observability.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Content Include="Assets\SwebKitLogo.svg">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
 </Project>
