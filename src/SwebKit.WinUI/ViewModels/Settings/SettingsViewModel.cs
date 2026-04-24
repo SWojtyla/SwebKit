@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
+using SwebKit.WinUI.Services;
 
 namespace SwebKit.WinUI.ViewModels.Settings;
 
@@ -13,6 +14,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly UserSettingsRepository _userSettings;
     private readonly AppStateService _appState;
+    private readonly ThemeCoordinator _themeCoordinator;
 
     [ObservableProperty]
     public partial string SelectedTheme { get; set; }
@@ -29,24 +31,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsDirty { get; set; }
 
-    public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
-    [
-        new ThemeOption("system", "System default"),
-        new ThemeOption("dark", "Dark"),
-        new ThemeOption("light", "Light"),
-    ];
+    public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
-    public SettingsViewModel(UserSettingsRepository userSettings, AppStateService appState)
+    public SettingsViewModel(
+        UserSettingsRepository userSettings,
+        AppStateService appState,
+        ThemeCoordinator themeCoordinator)
     {
         _userSettings = userSettings;
         _appState = appState;
+        _themeCoordinator = themeCoordinator;
+        ThemeOptions = _themeCoordinator.ThemeOptions;
         SelectedTheme = string.Empty;
     }
 
     public void Load()
     {
-        var theme = _userSettings.Settings.Theme;
-        SelectedTheme = string.IsNullOrWhiteSpace(theme) ? "system" : theme;
+        SelectedTheme = _themeCoordinator.NormalizeThemeKey(_userSettings.Settings.Theme);
         IsProduction = _appState.Config.IsProduction;
         WarmupConnectionsOnStartup = _userSettings.Settings.WarmupConnectionsOnStartup;
         IsDirty = false;
@@ -62,9 +63,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         IsSaving = true;
         try
         {
-            _userSettings.Settings.Theme = SelectedTheme == "system" ? string.Empty : SelectedTheme;
+            _userSettings.Settings.Theme = SelectedTheme;
             _userSettings.Settings.WarmupConnectionsOnStartup = WarmupConnectionsOnStartup;
             await _userSettings.SaveAsync();
+            _themeCoordinator.ApplyTheme(SelectedTheme);
 
             _appState.Config.IsProduction = IsProduction;
             await _appState.SaveConfigAsync();
@@ -77,5 +79,3 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 }
-
-public sealed record ThemeOption(string Key, string Label);

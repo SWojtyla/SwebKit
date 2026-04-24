@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS slice 1 is now live with cluster bootstrap, context/namespace selection, and a pod health grid. The next planning pass now makes the reusable WinUI UI foundation explicit so the remaining workspaces are not built as bespoke XAML screens.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS slice 1 is now live with cluster bootstrap, context/namespace selection, and a pod health grid. The first UI-foundation implementation slice is now also in place: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, and a shared page scaffold now back the current Settings, Service Bus, and AKS surfaces.
 
 **Jira:** not linked
 
-**Current focus:** UI foundation and shared shell/dashboard/settings/theme completion plus Phase 3 AKS slice 2, using the execution order in `frontend.md` as the cutover source of truth.
+**Current focus:** finish the shared shell/dashboard primitives and continue Phase 3 AKS slice 2, now that the first theme/resource/page-foundation slice is live and validated.
 
 ## Progress checklist
 
@@ -53,8 +53,8 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 ### Foundation pass — UI architecture and reusable shell primitives
 
-- [ ] Add app-level resource dictionaries for semantic tokens, curated theme dictionaries, and shared styles
-- [ ] Add a global theme coordinator and expand the current `system` / `dark` / `light` baseline to the curated theme set
+- [x] Add app-level resource dictionaries for semantic tokens, curated theme dictionaries, and shared styles
+- [x] Add a global theme coordinator and expand the current `system` / `dark` / `light` baseline to the curated theme set
 - [ ] Add reusable shell primitives for title/status chrome, notifications, workspace hub, and banners
 - [ ] Add reusable page/workspace primitives for scaffold, section cards, metric cards, state views, and detail-pane layouts
 - [ ] Refactor `Settings`, `ServiceBus`, and `AKS` onto the shared primitives as the proving ground before broader page expansion
@@ -119,12 +119,15 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
 - VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
 - Phase 3 AKS slice 1 is now live in `SwebKit.WinUI`: route wiring, cluster bootstrap, context/namespace selection, and pod browse with a native health/status grid.
+- WinUI startup now loads `UserSettingsRepository` before shell activation and applies the persisted theme globally through `ThemeCoordinator`.
+- `App.xaml` now carries semantic token, shared-style, and curated-theme resource dictionaries instead of relying only on the default WinUI resource merge.
+- `Settings`, `ServiceBus`, and `AKS` now share a `PageScaffold` header/layout primitive and the first semantic surface-card styles, providing the initial proving ground for the broader UI architecture pass.
 
 ## Remaining
 
 - Phase 3-9 work listed above.
 - Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
-- The current WinUI host still relies on default `App.xaml` resources plus inline page composition for most surfaces; the reusable UI foundation remains planned work.
+- Shared shell chrome, workspace hub/status primitives, and deeper page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
 
 ## Recommended next sequence
 
@@ -152,3 +155,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 - `build-winui` succeeded on 2026-04-23 after the Phase 2 Service Bus implementation.
 - `build-winui` succeeded on 2026-04-24 after the AKS slice 1 WinUI changes.
+- `build-winui` succeeded on 2026-04-24 after the theme/resource foundation and shared page-scaffold slice.

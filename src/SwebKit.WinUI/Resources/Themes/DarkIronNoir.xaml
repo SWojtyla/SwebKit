@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="SwebKitShellWindowBackgroundBrush"
+            Color="#FF0B0D10"/>
+    <SolidColorBrush x:Key="SwebKitShellChromeBackgroundBrush"
+            Color="#FF121417"/>
+    <SolidColorBrush x:Key="SwebKitPageBackgroundBrush"
+            Color="#FF11161B"/>
+    <SolidColorBrush x:Key="SwebKitSurfaceCardBackgroundBrush"
+            Color="#FF181F27"/>
+    <SolidColorBrush x:Key="SwebKitSurfaceInsetBackgroundBrush"
+            Color="#FF222C36"/>
+    <SolidColorBrush x:Key="SwebKitSurfaceCardBorderBrush"
+            Color="#FF3A4654"/>
+    <SolidColorBrush x:Key="SwebKitPageHeaderAccentBrush"
+            Color="#FFE7C7A1"/>
+    <SolidColorBrush x:Key="SwebKitSectionHeaderBrush"
+            Color="#FFF1D9BC"/>
+    <SolidColorBrush x:Key="SwebKitPageSubtitleBrush"
+            Color="#FFB3A392"/>
+</ResourceDictionary>

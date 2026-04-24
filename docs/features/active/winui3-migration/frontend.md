@@ -169,9 +169,9 @@ The migration now needs an explicit reusable UI layer, not just more pages.
 
 ### Current repo evidence
 
-- `src/SwebKit.WinUI/App.xaml` currently merges only `XamlControlsResources`, so there is not yet an app-specific resource-dictionary stack.
-- Current WinUI pages (`ServiceBusPage.xaml`, `AksPage.xaml`, `SettingsPage.xaml`) compose cards, headers, and layout inline rather than through shared shell/page primitives.
-- `SettingsViewModel` currently persists only `system`, `dark`, and `light` theme keys, while the MAUI host already defines a curated theme vocabulary that is richer than a simple light/dark toggle.
+- `src/SwebKit.WinUI/App.xaml` now merges semantic token/style dictionaries and curated WinUI theme dictionaries, so the app has a real resource-dictionary foundation instead of only `XamlControlsResources`.
+- `SettingsViewModel` now normalizes legacy theme keys into a curated theme set through `ThemeCoordinator`, but the remaining shell chrome still needs to adopt that same semantic system.
+- `SettingsPage.xaml`, `ServiceBusPage.xaml`, and `AksPage.xaml` now share a `PageScaffold` and semantic surface styles at the page frame level, but deeper workspace primitives (state views, detail panes, metrics, banners) are still not centralized.
 
 This is enough for bootstrap work, but it is not yet a durable UI architecture.
 

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Platforms.Windows;
 using SwebKit.WinUI.Services;
@@ -35,7 +36,12 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var appState = Host.Services.GetRequiredService<AppStateService>();
+        var userSettings = Host.Services.GetRequiredService<UserSettingsRepository>();
+        var themeCoordinator = Host.Services.GetRequiredService<ThemeCoordinator>();
+
+        await userSettings.LoadAsync();
         await appState.InitializeEssentialsAsync();
+        themeCoordinator.ApplyTheme(userSettings.Settings.Theme);
 
         var mainWindow = Host.Services.GetRequiredService<MainWindow>();
         mainWindow.Activate();

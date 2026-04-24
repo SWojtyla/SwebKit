@@ -3,151 +3,129 @@
     x:Class="SwebKit.WinUI.Views.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
     xmlns:vm="using:SwebKit.WinUI.ViewModels.Settings"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
-    <ScrollViewer Padding="24,16,24,24">
-        <StackPanel MaxWidth="720"
-                Spacing="8">
+    <shared:PageScaffold
+        Title="Settings"
+        Subtitle="Configure shell theme, startup warmup, and safety defaults while the broader settings surface continues to migrate.">
+        <shared:PageScaffold.BodyContent>
+            <ScrollViewer>
+                <StackPanel MaxWidth="720"
+                            Spacing="{StaticResource SwebKitPageSectionSpacing}">
 
-            <!-- Page header -->
-            <TextBlock
-                Text="Settings"
-                Style="{StaticResource TitleTextBlockStyle}"
-                Margin="0,0,0,16"/>
+                    <TextBlock
+                        Text="Appearance"
+                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 
-            <!-- ── Appearance ────────────────────────────────────────────── -->
-            <TextBlock
-                Text="Appearance"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                Margin="0,8,0,4"/>
+                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Theme"
+                                           Style="{StaticResource BodyTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="Choose a curated shell theme for the WinUI host."
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                            </StackPanel>
+                            <ComboBox
+                                Grid.Column="1"
+                                MinWidth="220"
+                                VerticalAlignment="Center"
+                                ItemsSource="{x:Bind ViewModel.ThemeOptions}"
+                                SelectedValuePath="Key"
+                                SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"
+                                DisplayMemberPath="Label"/>
+                        </Grid>
+                    </Border>
 
-            <Border
-                CornerRadius="8"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="Theme"
-                                Style="{StaticResource BodyTextBlockStyle}"/>
+                    <TextBlock
+                        Text="General"
+                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Warm up connections on startup"
+                                           Style="{StaticResource BodyTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts."
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                            </StackPanel>
+                            <ToggleSwitch
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                OnContent=""
+                                OffContent=""
+                                IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock
+                        Text="Safety"
+                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Production environment"
+                                           Style="{StaticResource BodyTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="Enables extra confirmation dialogs for destructive operations (e.g. DLQ resubmit/delete). Requires typing CONFIRM."
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="Wrap"
+                                    MaxWidth="480"/>
+                            </StackPanel>
+                            <ToggleSwitch
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                OnContent=""
+                                OffContent=""
+                                IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"/>
+                        </Grid>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
                         <TextBlock
-                            Text="Choose the color theme for the application."
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                    <ComboBox
-                        Grid.Column="1"
-                        MinWidth="180"
-                        VerticalAlignment="Center"
-                        ItemsSource="{x:Bind ViewModel.ThemeOptions}"
-                        SelectedValuePath="Key"
-                        SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"
-                        DisplayMemberPath="Label"/>
-                </Grid>
-            </Border>
+                            Grid.Column="0"
+                            Text="Unsaved changes"
+                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
 
-            <!-- ── General ──────────────────────────────────────────────── -->
-            <TextBlock
-                Text="General"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                Margin="0,16,0,4"/>
-
-            <Border
-                CornerRadius="8"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="Warm up connections on startup"
-                                Style="{StaticResource BodyTextBlockStyle}"/>
-                        <TextBlock
-                            Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts."
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                    <ToggleSwitch
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        OnContent=""
-                        OffContent=""
-                        IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"/>
-                </Grid>
-            </Border>
-
-            <!-- ── Safety ───────────────────────────────────────────────── -->
-            <TextBlock
-                Text="Safety"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                Margin="0,16,0,4"/>
-
-            <Border
-                CornerRadius="8"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="Production environment"
-                                Style="{StaticResource BodyTextBlockStyle}"/>
-                        <TextBlock
-                            Text="Enables extra confirmation dialogs for destructive operations (e.g. DLQ resubmit/delete). Requires typing CONFIRM."
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap"
-                            MaxWidth="480"/>
-                    </StackPanel>
-                    <ToggleSwitch
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        OnContent=""
-                        OffContent=""
-                        IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"/>
-                </Grid>
-            </Border>
-
-            <!-- Save bar -->
-            <Grid Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock
-                    Grid.Column="0"
-                    Text="Unsaved changes"
-                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                    VerticalAlignment="Center"
-                    Visibility="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-
-                <Button
-                    Grid.Column="1"
-                    Content="Save"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Command="{x:Bind ViewModel.SaveCommand}"
-                    IsEnabled="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-            </Grid>
-
-        </StackPanel>
-    </ScrollViewer>
+                        <Button
+                            Grid.Column="1"
+                            Content="Save"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Command="{x:Bind ViewModel.SaveCommand}"
+                            IsEnabled="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </shared:PageScaffold.BodyContent>
+    </shared:PageScaffold>
 
 </Page>

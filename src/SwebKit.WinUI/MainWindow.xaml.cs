@@ -16,14 +16,20 @@ public sealed partial class MainWindow : Window
 {
     public MainWindowViewModel ViewModel { get; }
     public CommandPaletteViewModel CommandPaletteViewModel { get; }
+    private readonly ThemeCoordinator _themeCoordinator;
 
-    public MainWindow(MainWindowViewModel viewModel, CommandPaletteViewModel commandPaletteViewModel)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        CommandPaletteViewModel commandPaletteViewModel,
+        ThemeCoordinator themeCoordinator)
     {
         ViewModel = viewModel;
         CommandPaletteViewModel = commandPaletteViewModel;
+        _themeCoordinator = themeCoordinator;
 
         InitializeComponent();
         Title = "SwebKit";
+        _themeCoordinator.AttachShellRoot(RootGrid);
 
         // Load persisted shell state (nav-pane expansion)
         ViewModel.LoadPersistedState();

@@ -40,6 +40,7 @@ internal static class ServiceRegistration
         services.AddSingleton<ProfileRepository>();
         services.AddSingleton<UiStateRepository>();
         services.AddSingleton<UserSettingsRepository>();
+        services.AddSingleton<ThemeCoordinator>();
         services.AddSingleton<ScheduledMessageRepository>();
         services.AddSingleton<AppStateService>();
         services.AddSingleton<IConnectionStateService, ConnectionStateService>();

@@ -5,10 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="SwebKit">
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource SwebKitShellWindowBackgroundBrush}">
 
         <NavigationView
             x:Name="NavView"
+            Background="{ThemeResource SwebKitShellChromeBackgroundBrush}"
             PaneDisplayMode="Left"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
@@ -17,43 +19,43 @@
 
             <NavigationView.MenuItems>
                 <NavigationViewItem Tag="service-bus"
-                        Content="Service Bus">
+                                    Content="Service Bus">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8AB;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="aks"
-                        Content="AKS">
+                                    Content="AKS">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE753;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="redis"
-                        Content="Redis">
+                                    Content="Redis">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xF1C7;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="storage"
-                        Content="Storage">
+                                    Content="Storage">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xED43;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="pipelines"
-                        Content="Pipelines">
+                                    Content="Pipelines">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE768;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="observability"
-                        Content="Observability">
+                                    Content="Observability">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Tag="incident-timeline"
-                        Content="Incident Timeline">
+                                    Content="Incident Timeline">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE823;"/>
                     </NavigationViewItem.Icon>
@@ -62,7 +64,7 @@
 
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem Tag="settings"
-                        Content="Settings">
+                                    Content="Settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;"/>
                     </NavigationViewItem.Icon>
@@ -70,7 +72,8 @@
             </NavigationView.FooterMenuItems>
 
             <!-- Main content frame -->
-            <Frame x:Name="ContentFrame"/>
+            <Frame x:Name="ContentFrame"
+                   Background="{ThemeResource SwebKitPageBackgroundBrush}"/>
 
         </NavigationView>
 
