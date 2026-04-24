@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LiveChartsCore;
+using LiveChartsCore.SkiaSharpView;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using SwebKit.Core.Abstractions;
@@ -64,7 +66,14 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         HookCollectionNotifications(QueryPresets, nameof(SelectedPresetDescription));
         HookCollectionNotifications(Failures, nameof(HasFailures), nameof(ShowFailuresEmptyState));
         HookCollectionNotifications(PerformanceEntries, nameof(HasPerformanceEntries), nameof(ShowPerformanceEmptyState));
-        HookCollectionNotifications(PerformanceTrend, nameof(HasPerformanceTrend), nameof(PerformanceTrendSummary));
+        HookCollectionNotifications(
+            PerformanceTrend,
+            nameof(HasPerformanceTrend),
+            nameof(PerformanceTrendSummary),
+            nameof(PerformanceTrendChartVisibility),
+            nameof(PerformanceTrendSeries),
+            nameof(PerformanceTrendXAxes),
+            nameof(PerformanceTrendYAxes));
         HookCollectionNotifications(AvailabilityResults, nameof(HasAvailabilityResults), nameof(ShowAvailabilityEmptyState));
         HookCollectionNotifications(LogRows, nameof(HasLogRows), nameof(ShowLogsEmptyState));
         HookCollectionNotifications(DependencyHealthEntries, nameof(HasDependencyHealth), nameof(ShowDependencyEmptyState));
@@ -284,6 +293,43 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             ? $"{PerformanceTrend.Count} latency buckets loaded for {SelectedPerformanceEntry.OperationName}."
             : $"No latency trend was returned for {SelectedPerformanceEntry.OperationName}.";
 
+    public IEnumerable<ISeries> PerformanceTrendSeries => HasPerformanceTrend
+        ?
+        [
+            new LineSeries<double>
+            {
+                Name = "P50",
+                Values = PerformanceTrend.Select(point => point.Point.P50Ms).ToArray(),
+            },
+            new LineSeries<double>
+            {
+                Name = "P95",
+                Values = PerformanceTrend.Select(point => point.Point.P95Ms).ToArray(),
+            },
+            new LineSeries<double>
+            {
+                Name = "P99",
+                Values = PerformanceTrend.Select(point => point.Point.P99Ms).ToArray(),
+            },
+        ]
+        : Array.Empty<ISeries>();
+
+    public Axis[] PerformanceTrendXAxes =>
+    [
+        new Axis
+        {
+            Labels = PerformanceTrend
+                .Select(point => point.Point.Timestamp.LocalDateTime.ToString("M/d HH:mm"))
+                .ToArray(),
+            LabelsRotation = 15,
+        },
+    ];
+
+    public Axis[] PerformanceTrendYAxes =>
+    [
+        new Axis(),
+    ];
+
     public string SelectedPresetDescription => SelectedQueryPreset?.Description ?? "Select a preset to load a starting query into the native logs baseline.";
 
     public string LogsModeDescription => UseGuidedLogsMode
@@ -321,6 +367,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public Visibility GuidedCompileSummaryVisibility => string.IsNullOrWhiteSpace(GuidedCompileSummary) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility GuidedCompiledQueryVisibility => string.IsNullOrWhiteSpace(GuidedCompiledQuery) ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility PerformanceTrendChartVisibility => HasPerformanceTrend ? Visibility.Visible : Visibility.Collapsed;
 
     public async Task LoadAsync()
     {
@@ -489,6 +537,12 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         OnPropertyChanged(nameof(SelectedPerformanceTitle));
         OnPropertyChanged(nameof(SelectedPerformanceSubtitle));
         OnPropertyChanged(nameof(PerformanceTrendSummary));
+        OnPropertyChanged(nameof(PerformanceTrendChartVisibility));
+        OnPropertyChanged(nameof(PerformanceTrendSeries));
+        OnPropertyChanged(nameof(PerformanceTrendXAxes));
+        OnPropertyChanged(nameof(PerformanceTrendYAxes));
+
+        PerformanceTrend.Clear();
 
         if (_suppressStateChangeSideEffects || _isDisposed || _provider is null || value is null)
         {

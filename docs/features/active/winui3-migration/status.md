@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 has now started in earnest: Pipelines and Observability both have native WinUI baseline routes wired into the shell. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, and workspace restore. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 now has its first native chart seam: Pipelines and Observability both have native WinUI baseline routes wired into the shell, and Observability now renders the selected-operation latency trend with LiveCharts2. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, workspace restore, and the first chart-hosting slice. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
 
 **Jira:** not linked
 
-**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, finish the rest of Phase 3 AKS slice 2, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
+**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, expand Observability beyond the first performance-chart seam into the remaining editor/chart parity gaps, finish the rest of Phase 3 AKS slice 2, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
 
 ## Progress checklist
 
@@ -93,7 +93,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 - [x] Resource picker (App Insights discovery)
 - [x] Overview / Failures / Performance / Logs / Availability tabs
-- [ ] LiveCharts2 charts replacing ApexCharts
+- [ ] LiveCharts2 charts replacing ApexCharts (selected-operation performance trend landed; overview and availability visuals still pending)
 - [ ] Monaco editor in WebView2 for KQL / log output
 
 ### Phase 8 — Incident Timeline
@@ -133,6 +133,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - The shared shell route map now activates the new Redis and Storage pages directly instead of sending those areas to `PlaceholderPage`.
 - Phase 6 Pipelines/Releases/Approvals now has a native WinUI baseline route in `SwebKit.WinUI`: project scope selection, delivery metrics, and a tabbed baseline for pipelines, activity, releases, and approvals.
 - Phase 7 Observability now has a native WinUI baseline route in `SwebKit.WinUI`: Application Insights resource discovery, provider activation, five-tab workspace state, guided and advanced logs execution, and workspace restore.
+- The Observability Performance tab now renders the selected-operation latency trend with LiveCharts2, establishing the first native chart-hosting seam in `SwebKit.WinUI` without changing domain or integration projects.
 - The shared shell route map now activates the new Pipelines and Observability pages directly instead of sending those areas to `PlaceholderPage`.
 - `SwebKit.WinUI` now provides a native `IObservabilityProviderFactory` implementation so the WinUI host no longer depends on the MAUI-only registration path for observability provider creation.
 
@@ -144,7 +145,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
 - Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
 - Pipelines parity still needs deeper tree/detail behavior, inline mutations, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
-- Observability parity still needs Monaco, LiveCharts2, saved-query polish, drill-through depth, and the richer explainer/investigation flows called out in `frontend.md`.
+- Observability parity still needs Monaco, overview and availability chart parity, saved-query polish, drill-through depth, and the richer explainer/investigation flows called out in `frontend.md`.
 
 ## Recommended next sequence
 
@@ -177,3 +178,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the AKS first-paint loading fix and the compact selected-pod diagnostics layout update.
 - `build-winui` succeeded on 2026-04-24 after the Redis and Storage baseline slices were wired into shared navigation and DI.
 - `build-winui` succeeded on 2026-04-24 after the native Pipelines and Observability baseline routes were wired into shared navigation, the WinUI observability provider-factory seam landed, and the activation-time Observability loading-state polish was applied.
+- `build-winui` succeeded on 2026-04-24 after the Observability Performance tab adopted the first LiveCharts2 trend view in the WinUI host.
