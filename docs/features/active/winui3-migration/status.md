@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, and Phase 4 Redis plus Phase 5 Storage now have native WinUI baseline routes wired into the shell. The new Redis surface covers cache selection, key scan/tree, typed detail/value inspection, TTL and edit flows, and load-more browsing; the new Storage surface covers account/container/blob browse, breadcrumb restore, text-friendly preview, download, and URL/SAS copy flows. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the new Redis/Storage workspaces.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, Phase 4 Redis plus Phase 5 Storage have native WinUI baseline routes, and Track 4 has now started in earnest: Pipelines and Observability both have native WinUI baseline routes wired into the shell. The new Pipelines surface covers project scope, pipeline/activity/release/approval tab baselines, while the new Observability surface covers discovery, provider activation, five-tab baseline state, guided/advanced logs execution, and workspace restore. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the newly added Track 4 workspaces.
 
 **Jira:** not linked
 
-**Current focus:** harden the new Redis and Storage slices on the shared scaffold, finish the rest of Phase 3 AKS slice 2, and then open the Pipelines/Releases and Observability workstreams without backsliding into one-off page composition.
+**Current focus:** harden the new Pipelines and Observability baseline routes on the shared scaffold, finish the rest of Phase 3 AKS slice 2, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
 
 ## Progress checklist
 
@@ -85,14 +85,14 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 ### Phase 6 — Pipelines / Releases / Approvals
 
-- [ ] Pipeline tree and run detail
-- [ ] Release records list and detail
-- [ ] Approval center
+- [x] Pipeline/project scope baseline and tab shell
+- [x] Release records and approval summary baseline
+- [ ] Approval mutations, tag manager, and deeper parity
 
 ### Phase 7 — Observability
 
-- [ ] Resource picker (App Insights discovery)
-- [ ] Overview / Failures / Performance / Logs / Availability tabs
+- [x] Resource picker (App Insights discovery)
+- [x] Overview / Failures / Performance / Logs / Availability tabs
 - [ ] LiveCharts2 charts replacing ApexCharts
 - [ ] Monaco editor in WebView2 for KQL / log output
 
@@ -131,6 +131,10 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Phase 4 Redis now has a native WinUI baseline route in `SwebKit.WinUI`: cache selection, paged key scan/tree browse, typed key details, TTL flows, rename/delete, and common value editors for string/hash/list/set/sorted-set data.
 - Phase 5 Storage now has a native WinUI baseline route in `SwebKit.WinUI`: account and container browse, hierarchical blob listing with breadcrumbs, blob detail/metadata/tags, text-friendly preview, download, and URL/SAS copy flows.
 - The shared shell route map now activates the new Redis and Storage pages directly instead of sending those areas to `PlaceholderPage`.
+- Phase 6 Pipelines/Releases/Approvals now has a native WinUI baseline route in `SwebKit.WinUI`: project scope selection, delivery metrics, and a tabbed baseline for pipelines, activity, releases, and approvals.
+- Phase 7 Observability now has a native WinUI baseline route in `SwebKit.WinUI`: Application Insights resource discovery, provider activation, five-tab workspace state, guided and advanced logs execution, and workspace restore.
+- The shared shell route map now activates the new Pipelines and Observability pages directly instead of sending those areas to `PlaceholderPage`.
+- `SwebKit.WinUI` now provides a native `IObservabilityProviderFactory` implementation so the WinUI host no longer depends on the MAUI-only registration path for observability provider creation.
 
 ## Remaining
 
@@ -139,11 +143,13 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Dashboard parity and deeper page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
 - Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
 - Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
+- Pipelines parity still needs deeper tree/detail behavior, inline mutations, tag-manager workflows, and richer release/approval action coverage from `frontend.md`.
+- Observability parity still needs Monaco, LiveCharts2, saved-query polish, drill-through depth, and the richer explainer/investigation flows called out in `frontend.md`.
 
 ## Recommended next sequence
 
-- Next: harden Redis/Storage on the shared scaffold while finishing AKS slice 2 and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before the next data-heavy workspaces land.
-- After that: Pipelines/Releases and Observability in parallel, after Monaco and chart-hosting seams are fixed for WinUI.
+- Next: harden Pipelines/Observability on the shared scaffold while finishing AKS slice 2 and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before the later parity wave and before Incident Timeline starts depending on these routes.
+- After that: close the remaining Monaco and chart-hosting seams for Observability and push deeper approval/release parity in Pipelines.
 - Then: Incident Timeline, after its upstream workspace dependencies are credible.
 - Last: hardening, docs updates, test migration, and cutover.
 
@@ -170,3 +176,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the same-family theme refresh fix and the AKS pod-log slice.
 - `build-winui` succeeded on 2026-04-24 after the AKS first-paint loading fix and the compact selected-pod diagnostics layout update.
 - `build-winui` succeeded on 2026-04-24 after the Redis and Storage baseline slices were wired into shared navigation and DI.
+- `build-winui` succeeded on 2026-04-24 after the native Pipelines and Observability baseline routes were wired into shared navigation, the WinUI observability provider-factory seam landed, and the activation-time Observability loading-state polish was applied.

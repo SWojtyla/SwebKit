@@ -15,6 +15,8 @@ using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
 using SwebKit.WinUI.ViewModels.Aks;
+using SwebKit.WinUI.ViewModels.Observability;
+using SwebKit.WinUI.ViewModels.Pipelines;
 using SwebKit.WinUI.ViewModels.Redis;
 using SwebKit.WinUI.ViewModels.ServiceBus;
 using SwebKit.WinUI.ViewModels.Settings;
@@ -68,6 +70,7 @@ internal static class ServiceRegistration
 
         // ── Observability ─────────────────────────────────────────────────────────
         services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();
+        services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
         services.AddSingleton<IGuidedKqlCompiler, GuidedKqlCompiler>();
         services.AddSingleton<IObservabilityExplainerService, ObservabilityExplainerService>();
 
@@ -123,6 +126,8 @@ internal static class ServiceRegistration
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();
         services.AddTransient<AksPageViewModel>();
+        services.AddTransient<ObservabilityPageViewModel>();
+        services.AddTransient<PipelinesPageViewModel>();
         services.AddTransient<RedisPageViewModel>();
         services.AddTransient<ServiceBusPageViewModel>();
         services.AddTransient<SettingsViewModel>();

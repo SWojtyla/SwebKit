@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using SwebKit.WinUI.Services;
 using SwebKit.WinUI.Views.Aks;
+using SwebKit.WinUI.Views.Observability;
+using SwebKit.WinUI.Views.Pipelines;
 using SwebKit.WinUI.Views.Redis;
 using SwebKit.WinUI.Views.ServiceBus;
 using SwebKit.WinUI.Views.Storage;
@@ -105,6 +107,8 @@ public sealed partial class MainWindow : Window
         var pageType = area switch
         {
             "aks" => typeof(AksPage),
+            "observability" => typeof(ObservabilityPage),
+            "pipelines" => typeof(PipelinesPage),
             "redis" => typeof(RedisPage),
             "service-bus" => typeof(ServiceBusPage),
             "settings" => typeof(SettingsPage),

@@ -53,8 +53,8 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 | 3     | AKS workspace: cluster/resource browse, diagnostics panels, batch actions, monitoring continuity, pod shell                              | In Progress |
 | 4     | Redis workspace: scan/tree, TTL and value workflows, health/prefix tooling, bulk operations                                              | In Progress |
 | 5     | Storage workspace: container/blob browse, preview, SAS/download workflows, workspace restore                                             | In Progress |
-| 6     | Pipelines delivery hub: pipelines, activity, release records, approvals, tagging                                                         | Not started |
-| 7     | Observability workspace: discovery, five tabs, guided/advanced logs, saved queries, charts                                               | Not started |
+| 6     | Pipelines delivery hub: pipelines, activity, release records, approvals, tagging                                                         | In Progress |
+| 7     | Observability workspace: discovery, five tabs, guided/advanced logs, saved queries, charts                                               | In Progress |
 | 8     | Incident Timeline workbench: scope toolbar, evidence views, seed flows, export, mapping guidance                                         | Not started |
 | 9     | Delete `SwebKit.App`, update solution, verify all tests pass                                                                             | Not started |
 

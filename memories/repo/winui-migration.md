@@ -1,0 +1,4 @@
+- Focused WinUI validation command: workspace task `build-winui` builds `src/SwebKit.WinUI/SwebKit.WinUI.csproj` for `net10.0-windows10.0.19041.0`.
+- New WinUI area pages are not reachable until `src/SwebKit.WinUI/MainWindow.xaml.cs` maps the area name to the page.
+- Stateful WinUI routes should publish and restore workspace snapshots through `OperatorWorkspaceService`, not only expose shell search providers.
+- Observability and other empty-result tabs need explicit loaded-state flags; collection counts alone are not enough to distinguish `loaded empty` from `not loaded`.

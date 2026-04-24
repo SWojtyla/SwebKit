@@ -1,0 +1,945 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SwebKit.WinUI.Views.Observability.ObservabilityPage"
+    x:Name="PageRoot"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
+    xmlns:viewModels="using:SwebKit.WinUI.ViewModels.Observability"
+    DataContext="{x:Bind ViewModel, Mode=OneWay}"
+    Background="{ThemeResource SwebKitPageBackgroundBrush}">
+
+    <shared:PageScaffold
+        Title="Observability"
+        Subtitle="Discover Application Insights resources, activate a provider, and inspect overview, failures, performance, logs, and availability from one native WinUI baseline.">
+        <shared:PageScaffold.BodyContent>
+            <Grid RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border
+                    Grid.Row="0"
+                    Style="{StaticResource SwebKitSurfaceCardStyle}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="4">
+                                <TextBlock
+                                    Text="Resource discovery and provider activation"
+                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding ConnectionSummary}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                                <TextBlock
+                                    Text="{Binding DiscoverySummary}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        Spacing="12"
+                                        VerticalAlignment="Top">
+                                <ProgressRing
+                                    Width="20"
+                                    Height="20"
+                                    IsActive="{Binding IsLoadingResources}"/>
+                                <Button
+                                    Content="Refresh resources"
+                                    Command="{Binding ReloadResourcesCommand}"/>
+                                <Button
+                                    Content="Refresh tab"
+                                    Command="{Binding RefreshCommand}"
+                                    IsEnabled="{Binding HasActiveResource}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock
+                            Text="{Binding ResourceErrorMessage}"
+                            Visibility="{Binding ResourceErrorVisibility}"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            TextWrapping="WrapWholeWords"/>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="4">
+                                <TextBlock
+                                    Text="{Binding ActiveResourceTitle}"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding ActiveResourceSubtitle}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Spacing="4">
+                                <TextBlock
+                                    Text="Provider"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBlock Text="{Binding ProviderLabel}"/>
+                                <TextBlock
+                                    Text="{Binding LastRefreshLabel}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2"
+                                        Spacing="6"
+                                        MinWidth="200">
+                                <TextBlock
+                                    Text="Time range"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <ComboBox
+                                    ItemsSource="{Binding TimeRangeOptions}"
+                                    SelectedItem="{Binding SelectedTimeRangeOption, Mode=TwoWay}"
+                                    DisplayMemberPath="Label"
+                                    HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock
+                            Text="{Binding ActiveTabErrorMessage}"
+                            Visibility="{Binding ActiveTabErrorVisibility}"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            TextWrapping="WrapWholeWords"/>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="1"
+                      ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="320"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border
+                        Grid.Column="0"
+                        Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0"
+                                            Spacing="4">
+                                    <TextBlock
+                                        Text="Application Insights resources"
+                                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                    <TextBlock
+                                        Text="Select a discovered resource and activate it before running the native tabs."
+                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                        TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+
+                                <ProgressRing
+                                    Grid.Column="1"
+                                    Width="20"
+                                    Height="20"
+                                    IsActive="{Binding IsLoadingResources}"/>
+                            </Grid>
+
+                            <InfoBar
+                                Grid.Row="1"
+                                IsOpen="{Binding ShowNoResourcesState}"
+                                Severity="Informational"
+                                Title="No resources discovered"
+                                Message="Run a scan with an authenticated Azure credential, or switch to demo mode to activate sample resources."/>
+
+                            <ListView
+                                Grid.Row="2"
+                                ItemsSource="{Binding Resources}"
+                                SelectedItem="{Binding SelectedDiscoveryResource, Mode=TwoWay}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:ObservabilityResourceItemViewModel">
+                                        <Border
+                                            Margin="0,0,0,10"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <StackPanel Spacing="8">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0"
+                                                                Spacing="4">
+                                                        <TextBlock
+                                                            Text="{x:Bind Name}"
+                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind ScopeLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock
+                                                            Text="{x:Bind LocationLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            TextWrapping="WrapWholeWords"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Text="{x:Bind ActiveStateLabel}"
+                                                        Visibility="{x:Bind ActiveVisibility, Mode=OneWay}"
+                                                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                                        VerticalAlignment="Top"/>
+                                                </Grid>
+
+                                                <Button
+                                                    Content="Activate"
+                                                    Command="{Binding ViewModel.ActivateResourceCommand, ElementName=PageRoot}"
+                                                    CommandParameter="{x:Bind}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+
+                            <StackPanel Grid.Row="3"
+                                        Orientation="Horizontal"
+                                        Spacing="8">
+                                <Button
+                                    Content="Activate selected"
+                                    Command="{Binding ActivateSelectedResourceCommand}"
+                                    IsEnabled="{Binding HasSelectedDiscoveryResource}"/>
+                                <Button
+                                    Content="Run logs"
+                                    Command="{Binding RunLogsQueryCommand}"
+                                    IsEnabled="{Binding HasActiveResource}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Column="1"
+                          RowSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border
+                            Grid.Row="0"
+                            Style="{StaticResource SwebKitSurfaceCardStyle}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0"
+                                            Spacing="4">
+                                    <TextBlock
+                                        Text="Tab status"
+                                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                    <TextBlock
+                                        Text="{Binding ActiveTabStatusText}"
+                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                        TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+
+                                <ProgressRing
+                                    Grid.Column="1"
+                                    Width="20"
+                                    Height="20"
+                                    IsActive="{Binding IsActivatingResource}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Style="{StaticResource SwebKitSurfaceCardStyle}"
+                            Visibility="{Binding EmptyStateVisibility}">
+                            <StackPanel Spacing="12">
+                                <TextBlock
+                                    Text="Activate a resource to open the native Observability tabs"
+                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="This bounded baseline keeps resource discovery, provider activation, and the five tab shells native to WinUI. Monaco and chart hosting are intentionally deferred to a later shared editor and chart wave."
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                                <Button
+                                    Content="Activate selected resource"
+                                    Command="{Binding ActivateSelectedResourceCommand}"
+                                    IsEnabled="{Binding HasSelectedDiscoveryResource}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TabView
+                            Grid.Row="1"
+                            Visibility="{Binding ResourceWorkspaceVisibility}"
+                            SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                            <TabViewItem Header="Overview">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Spacing="16"
+                                                Padding="0,4,0,0">
+                                        <Grid ColumnSpacing="12"
+                                              RowSpacing="12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Row="0"
+                                                    Grid.Column="0"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Requests"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding RequestCountText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Row="0"
+                                                    Grid.Column="1"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Failure rate"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding FailureRateText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Row="0"
+                                                    Grid.Column="2"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Availability"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding AvailabilityText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Row="1"
+                                                    Grid.Column="0"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="P50 latency"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding P50ResponseTimeText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Row="1"
+                                                    Grid.Column="1"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="P95 latency"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding P95ResponseTimeText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Row="1"
+                                                    Grid.Column="2"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Exceptions"
+                                                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding ExceptionCountText}"
+                                                            Style="{StaticResource TitleTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Column="0"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Dependency health"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding DependencyHeadline}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <InfoBar IsOpen="{Binding ShowDependencyEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No dependency anomalies surfaced"
+                                                             Message="The explainer seam is active, but this window returned no dependency rows yet."/>
+                                                    <ItemsControl ItemsSource="{Binding DependencyHealthEntries}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityDependencyHealthItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBlock Text="{x:Bind DependencyName}"
+                                                                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                        <TextBlock Text="{x:Bind SummaryText}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        <TextBlock Text="{x:Bind HealthText}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Column="1"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Dimension pivots"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding BreakdownHeadline}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <InfoBar IsOpen="{Binding ShowDimensionEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="Dimension pivots deferred"
+                                                             Message="The baseline keeps the pivot state model ready, but app-specific custom-dimension keys are intentionally left for a later slice."/>
+                                                    <ItemsControl ItemsSource="{Binding DimensionBreakdowns}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityDimensionBreakdownItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBlock Text="{x:Bind Label}"
+                                                                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                        <TextBlock Text="{x:Bind SummaryText}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabViewItem>
+
+                            <TabViewItem Header="Failures">
+                                <Grid ColumnSpacing="16"
+                                      Padding="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock Text="Exception groups"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                            <InfoBar IsOpen="{Binding ShowFailuresEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="No failures returned"
+                                                     Message="This time window returned no exception groups for the active resource."/>
+                                            <ListView ItemsSource="{Binding Failures}"
+                                                      SelectedItem="{Binding SelectedFailure, Mode=TwoWay}">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:ObservabilityFailureItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{x:Bind DetailLabel}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                                <TextBlock Text="{x:Bind CountText}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{x:Bind LastSeenText}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{x:Bind Message}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                        <Grid RowSpacing="12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <StackPanel Grid.Row="0"
+                                                        Spacing="4">
+                                                <TextBlock Text="{Binding SelectedFailureTitle}"
+                                                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                                <TextBlock Text="{Binding SelectedFailureSubtitle}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="1"
+                                                        Spacing="8">
+                                                <TextBlock Text="{Binding SelectedFailureMessage}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                                <Button Content="Drill to logs"
+                                                        Command="{Binding DrillFailureToLogsCommand}"
+                                                        IsEnabled="{Binding HasSelectedFailure}"/>
+                                            </StackPanel>
+
+                                            <ScrollViewer Grid.Row="2"
+                                                          VerticalScrollBarVisibility="Auto">
+                                                <TextBlock Text="{Binding SelectedFailureStackTrace}"
+                                                           FontFamily="Cascadia Mono"
+                                                           TextWrapping="Wrap"/>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </TabViewItem>
+
+                            <TabViewItem Header="Performance">
+                                <Grid ColumnSpacing="16"
+                                      Padding="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock Text="Operation performance"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                            <InfoBar IsOpen="{Binding ShowPerformanceEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="No performance rows returned"
+                                                     Message="The active resource returned no operation performance summaries for this window."/>
+                                            <ListView ItemsSource="{Binding PerformanceEntries}"
+                                                      SelectedItem="{Binding SelectedPerformanceEntry, Mode=TwoWay}">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:ObservabilityPerformanceItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{x:Bind OperationName}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"/>
+                                                                <TextBlock Text="{x:Bind RequestCountText}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{x:Bind FailureRateText}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{x:Bind P95Text}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{x:Bind P99Text}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock Text="{Binding SelectedPerformanceTitle}"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                            <TextBlock Text="{Binding SelectedPerformanceSubtitle}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                            <TextBlock Text="{Binding PerformanceTrendSummary}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                            <ItemsControl ItemsSource="{Binding PerformanceTrend}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:ObservabilityLatencyPointItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{x:Bind TimeLabel}"
+                                                                        Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                <TextBlock Text="{x:Bind PercentileSummary}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </TabViewItem>
+
+                            <TabViewItem Header="Logs">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Spacing="16"
+                                                Padding="0,4,0,0">
+                                        <Border CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="12">
+                                            <StackPanel Spacing="12">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0"
+                                                                Spacing="4">
+                                                        <TextBlock Text="Logs mode"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                        <ComboBox ItemsSource="{Binding LogsModeOptions}"
+                                                                  SelectedItem="{Binding SelectedLogsMode, Mode=TwoWay}"
+                                                                  DisplayMemberPath="Label"/>
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="1"
+                                                                Spacing="4">
+                                                        <TextBlock Text="Preset"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                        <ComboBox ItemsSource="{Binding QueryPresets}"
+                                                                  SelectedItem="{Binding SelectedQueryPreset, Mode=TwoWay}"
+                                                                  DisplayMemberPath="Name"/>
+                                                    </StackPanel>
+
+                                                    <Button Grid.Column="2"
+                                                            Content="Apply preset"
+                                                            Command="{Binding ApplySelectedPresetCommand}"
+                                                            VerticalAlignment="Bottom"/>
+
+                                                    <Button Grid.Column="3"
+                                                            Content="Run query"
+                                                            Command="{Binding RunLogsQueryCommand}"
+                                                            VerticalAlignment="Bottom"
+                                                            IsEnabled="{Binding HasActiveResource}"/>
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding LogsModeDescription}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                                <TextBlock Text="{Binding SelectedPresetDescription}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
+
+                                                <StackPanel Visibility="{Binding AdvancedModeVisibility}"
+                                                            Spacing="8">
+                                                    <TextBlock Text="Advanced KQL"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBox Text="{Binding AdvancedQueryText, Mode=TwoWay}"
+                                                             AcceptsReturn="True"
+                                                             TextWrapping="NoWrap"
+                                                             FontFamily="Cascadia Mono"
+                                                             MinHeight="160"/>
+                                                </StackPanel>
+
+                                                <StackPanel Visibility="{Binding GuidedModeVisibility}"
+                                                            Spacing="8">
+                                                    <TextBlock Text="Guided draft"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <Grid ColumnSpacing="12"
+                                                          RowSpacing="12">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="120"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Row="0"
+                                                                Grid.Column="0"
+                                                                Spacing="4">
+                                                            <TextBlock Text="Table"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBox Text="{Binding GuidedTableName, Mode=TwoWay}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Row="0"
+                                                                Grid.Column="1"
+                                                                Spacing="4">
+                                                            <TextBlock Text="Filter column"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBox Text="{Binding GuidedFilterColumn, Mode=TwoWay}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Row="0"
+                                                                Grid.Column="2"
+                                                                Spacing="4">
+                                                            <TextBlock Text="Operator"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <ComboBox ItemsSource="{Binding GuidedOperatorOptions}"
+                                                                      SelectedItem="{Binding SelectedGuidedOperator, Mode=TwoWay}"
+                                                                      DisplayMemberPath="Label"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Row="0"
+                                                                Grid.Column="3"
+                                                                Spacing="4">
+                                                            <TextBlock Text="Limit"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBox Text="{Binding GuidedLimitText, Mode=TwoWay}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Row="1"
+                                                                Grid.Column="0"
+                                                                Grid.ColumnSpan="4"
+                                                                Spacing="4">
+                                                            <TextBlock Text="Filter value"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBox Text="{Binding GuidedFilterValue, Mode=TwoWay}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <TextBlock Text="{Binding GuidedCompileSummary}"
+                                                               Visibility="{Binding GuidedCompileSummaryVisibility}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBox Text="{Binding GuidedCompiledQuery, Mode=OneWay}"
+                                                             Visibility="{Binding GuidedCompiledQueryVisibility}"
+                                                             AcceptsReturn="True"
+                                                             IsReadOnly="True"
+                                                             TextWrapping="NoWrap"
+                                                             FontFamily="Cascadia Mono"
+                                                             MinHeight="120"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Column="0"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Query results"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding LogsResultSummary}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <InfoBar IsOpen="{Binding ShowLogsEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No log rows returned"
+                                                             Message="Run a preset or enter a query to populate the native logs preview."/>
+                                                    <ListView ItemsSource="{Binding LogRows}">
+                                                        <ListView.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityLogRowItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBlock Text="{x:Bind PrimaryText}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+                                                                        <TextBlock Text="{x:Bind SecondaryText}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+                                                                        <TextBlock Text="{x:Bind DetailText}"
+                                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                   FontFamily="Cascadia Mono"
+                                                                                   TextWrapping="Wrap"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ListView.ItemTemplate>
+                                                    </ListView>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Column="1"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Baseline notes"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding MaxRowsSummary}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="The current logs experience is intentionally native and text-first. Monaco is deferred until the shared editor host lands for multiple areas."
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="Overview and performance keep list and metric summaries only in this slice. LiveCharts-based visuals are deferred to the later shared chart wave."
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabViewItem>
+
+                            <TabViewItem Header="Availability">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Spacing="12"
+                                                Padding="0,4,0,0">
+                                        <Border CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="12">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock Text="Availability checks"
+                                                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                <InfoBar IsOpen="{Binding ShowAvailabilityEmptyState}"
+                                                         Severity="Informational"
+                                                         Title="No availability rows returned"
+                                                         Message="The active resource returned no availability results for the current window."/>
+                                                <ItemsControl ItemsSource="{Binding AvailabilityResults}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityItemViewModel">
+                                                            <Border Margin="0,0,0,8"
+                                                                    CornerRadius="6"
+                                                                    Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                    BorderThickness="1"
+                                                                    Padding="10">
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Text="{x:Bind TestName}"
+                                                                            Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                    <TextBlock Text="{x:Bind SummaryText}"
+                                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                    <TextBlock Text="{x:Bind StatusText}"
+                                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                    <TextBlock Text="{x:Bind DurationText}"
+                                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                            TextWrapping="WrapWholeWords"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabViewItem>
+                        </TabView>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </shared:PageScaffold.BodyContent>
+    </shared:PageScaffold>
+</Page>

@@ -54,6 +54,8 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: AKS compact diagnostics state — steps: open AKS with no pod selected, confirm the page shows only a compact diagnostics hint, then select a pod and verify the full diagnostics/log surface expands in place.
 - Check: Redis baseline route — steps: open Redis, choose a configured cache or demo cache, scan keys, expand a prefix group, open one key of each common type, and verify typed details, TTL controls, and basic edit flows update the state cleanly.
 - Check: Storage baseline route — steps: open Storage, choose an account, browse containers and a virtual folder, open a text-friendly blob, verify preview/detail metadata, trigger download and URL/SAS copy actions, then reopen the saved workspace/favorite and confirm the account/container/blob context restores.
+- Check: Pipelines baseline route — steps: open Pipelines, verify the project selector and delivery metrics load, switch across the pipelines/activity/releases/approvals tabs, and confirm the baseline detail surfaces update without falling back to a placeholder route.
+- Check: Observability baseline route — steps: open Observability, refresh resource discovery, activate a resource, switch through all five tabs, run both an advanced and guided logs query, save the workspace context, and confirm empty-result tabs stay stable rather than requerying on every revisit while the resource/tab selection restores correctly.
 
 ## Regression risks & mitigations
 
@@ -66,12 +68,13 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 - The shared WinUI UI foundation exists: semantic resource dictionaries, curated theme application, reusable shell primitives, and a page/workspace scaffold.
 - `Settings`, `ServiceBus`, and `AKS` adopt the shared primitives without losing documented behavior.
+- `Pipelines` and `Observability` have native WinUI baseline routes wired into the shell and validated against their baseline scenarios.
 - Theme switching and shell state cues work consistently across migrated pages.
 - Cutover-critical workstreams continue to be validated against the parity checklist in `frontend.md`.
 
 ## Validation status
 
-- Automated: `build-winui` green after the Redis and Storage baseline routes were wired into shared navigation and DI
+- Automated: `build-winui` green after the Pipelines and Observability baseline routes were wired into shared navigation and the WinUI observability provider-factory seam
 - Manual: Not started
 
 ## Sign-off
