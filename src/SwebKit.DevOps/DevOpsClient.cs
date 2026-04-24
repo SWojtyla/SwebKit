@@ -221,8 +221,7 @@ public class DevOpsClient : IDevOpsClient
             $"{ProjectApi(project)}/pipelines/approvals?api-version=7.1-preview.1");
         using var response = await _http.SendAsync(request, ct);
 
-        if (!response.IsSuccessStatusCode)
-            return [];
+        response.EnsureSuccessStatusCode();
 
         var dto = await response.Content.ReadFromJsonAsync<AdoListResponse<AdoApprovalDto>>(JsonOptions, ct);
 

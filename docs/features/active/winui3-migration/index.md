@@ -33,12 +33,12 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 - Shell workspace parity: command palette, favorites, recents, route-first restore, notifications, readiness surfaces, and tray continuity where already supported today
 - Theme and look-and-feel parity at the product level: persisted light/dark preset selection, recognizable production/demo cues, and a WinUI-native equivalent of the current shell identity
 - Windows-specific services (`WindowsCredentialStore`, `WindowsToastNotificationService`, `WindowsTrayLifecycleService`) reused unchanged
-- All 6 integration projects and `SwebKit.Core` left completely untouched
+- `SwebKit.Core` remains unchanged, and integration-project changes stay limited to bounded parity-support fixes required to preserve the existing workflows in WinUI
 - Deletion of `SwebKit.App` and its test project after all domains are migrated
 
 **Out of scope:**
 
-- Any changes to `SwebKit.Core`, `SwebKit.Azure`, `SwebKit.Kubernetes`, `SwebKit.Redis`, `SwebKit.DevOps`, `SwebKit.Observability`
+- Broad changes to `SwebKit.Core`, `SwebKit.Azure`, `SwebKit.Kubernetes`, `SwebKit.Redis`, `SwebKit.DevOps`, or `SwebKit.Observability` beyond targeted WinUI parity support
 - Incident Timeline migration or redesign; the current feature is intentionally excluded from the WinUI cutover plan
 - E2E test migration (defer until the host is stable)
 - Non-Windows targets (never existed in practice)

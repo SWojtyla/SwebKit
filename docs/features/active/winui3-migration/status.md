@@ -39,7 +39,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - [x] Port `TabService` as a plain .NET service (no Blazor deps)
 - [x] Port `CommandRegistry` (keyboard shortcuts without JS interop)
 - [x] Port `OperatorWorkspaceService` — search, recents, favorites (NavigationManager → `IShellNavigationService`)
-- [x] Port all 6 `IOperatorResourceSearchProvider` implementations (ServiceBus, AKS, Redis, Storage, Observability, IncidentTimeline)
+- [x] Port the active cutover-scope `IOperatorResourceSearchProvider` implementations (ServiceBus, AKS, Redis, Storage, Observability); the legacy IncidentTimeline provider remains only as shell/search plumbing until later cleanup
 - [x] Port `NotificationService`, `SearchScoring`, `ShellErrorPresenter`
 - [x] `IShellNavigationService` interface — `MainWindowViewModel` implements it, bridges OperatorWorkspaceService to Frame navigation
 - [x] `MainWindowViewModel` — nav state, pane expand/collapse, command palette open/close, persists `IsNavExpanded` to `UiStateRepository`
@@ -128,6 +128,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Phase 5 Storage now has a native WinUI baseline route in `SwebKit.WinUI`: account and container browse, hierarchical blob listing with breadcrumbs, blob detail/metadata/tags, text-friendly preview, download, and URL/SAS copy flows.
 - The shared shell route map now activates the new Redis and Storage pages directly instead of sending those areas to `PlaceholderPage`.
 - Phase 6 Pipelines/Releases/Approvals now has a native WinUI baseline route in `SwebKit.WinUI`: project scope selection, delivery metrics, and a tabbed baseline for pipelines, activity, releases, and approvals.
+- `SwebKit.DevOps` now includes a bounded approval-enrichment/support fix for the WinUI migration so live approval actions can keep production/unverified safety cues and partial-refresh warning behavior honest.
 - The Pipelines approvals tab now supports inline approve/reject actions in `SwebKit.WinUI`, including production CONFIRM gating, per-approval SLA context, and resilient post-submit refresh even when one project approval feed fails.
 - Phase 7 Observability now has a native WinUI baseline route in `SwebKit.WinUI`: Application Insights resource discovery, provider activation, five-tab workspace state, guided and advanced logs execution, and workspace restore.
 - The Observability Overview tab now renders native request-volume and failure-rate charts from the existing overview trend payload, extending the WinUI chart seam without changing provider contracts.

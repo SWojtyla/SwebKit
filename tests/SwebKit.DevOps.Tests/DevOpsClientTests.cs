@@ -388,14 +388,13 @@ public sealed class DevOpsClientTests
   // ── GetPendingApprovalsAsync ──────────────────────────────────────────────
 
   [Fact]
-  public async Task GetPendingApprovalsAsync_HttpError_ReturnsEmptyList()
+  public async Task GetPendingApprovalsAsync_HttpError_Throws()
   {
     var (client, handler) = CreateClient();
     handler.EnqueueResponse(new HttpResponseMessage(HttpStatusCode.Forbidden));
 
-    var result = await client.GetPendingApprovalsAsync("TestProject", CancellationToken.None);
-
-    Assert.Empty(result);
+    await Assert.ThrowsAsync<HttpRequestException>(() =>
+      client.GetPendingApprovalsAsync("TestProject", CancellationToken.None));
   }
 
   [Fact]

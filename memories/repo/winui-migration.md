@@ -7,3 +7,5 @@
 - There is no direct WinUI automated test coverage for the current chart slices, so the expected validation loop is `build-winui` plus manual smoke checks for zero-data and dense-label states.
 - The WinUI AKS selected-pod diagnostics slice now reuses `IPortForwardSessionService` for native start/stop session management and `IAksClient.OpenShellAsync` for shell launch; later AKS work should extend those seams rather than add WinUI-only process orchestration.
 - In the WinUI AKS port-forward form, remote ports can be any valid service port (including `80` and `443`), while local-port validation should stay focused on bindability and privileged-port constraints.
+- WinUI Pipelines approval refresh must treat per-project Azure DevOps approval-feed HTTP failures as failures, not empty approval sets, so the page can show a partial-refresh warning instead of misreporting complete data.
+- WinUI Pipelines approval safety now requires `CONFIRM` for production approvals and for approvals whose stage or environment context could not be resolved; approval submit uses its own cancellation lane while the page busy state locks competing interactions.
