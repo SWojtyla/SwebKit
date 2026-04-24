@@ -18,7 +18,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 
 **Jira:** not linked
 
-**Current focus:** harden the new native dashboard/shell cutover path alongside the Pipelines and Observability baseline routes, expand Observability through the remaining editor and drill-through gaps now that the availability heatmap and saved-query slices are native, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
+**Current focus:** harden the new native dashboard/shell cutover path alongside the restored WinUI demo-mode validation path, expand Observability through the remaining editor and drill-through gaps now that the availability heatmap and saved-query slices are native, and keep pushing the remaining shared page/detail primitives so later parity work does not drift back into one-off XAML.
 
 ## Progress checklist
 
@@ -47,7 +47,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - [x] Command palette flyout (Ctrl+K keyboard accelerator — `KeyboardAccelerator` in code-behind)
 - [x] Native Dashboard route — readiness summary, cross-workspace health tiles, favorites, recent activity, and pod-health alerts wired as the default landing page
 - [x] `PlaceholderPage` — shown for areas not yet migrated (Phases 2-8)
-- [x] `SettingsPage` — Appearance (theme ComboBox), General (warm-up toggle), Safety (production toggle); saves to `UserSettingsRepository` + `AppStateService`
+- [x] `SettingsPage` — Appearance (theme ComboBox), General (warm-up toggle and demo-mode toggle), Safety (production toggle); saves to `UserSettingsRepository` + `AppStateService`
 - [x] `SettingsViewModel` — loads/saves all three settings, tracks dirty state
 - [x] `ServiceRegistration` updated — all Phase 1 services registered, TODO comments removed
 - [x] Build succeeds (0 errors, 12 AOT-compat warnings expected)
@@ -143,6 +143,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - The shared shell route map now activates the new Pipelines and Observability pages directly instead of sending those areas to `PlaceholderPage`.
 - `SwebKit.WinUI` now provides a native `IObservabilityProviderFactory` implementation so the WinUI host no longer depends on the MAUI-only registration path for observability provider creation.
 - `SwebKit.WinUI` now has a native dashboard route wired as the default landing page, backed by a WinUI-owned `DashboardPageViewModel`, `ConfigurationProbeService`, and `PodHealthMonitorService` so readiness, favorites, recents, and pod-health alerts no longer depend on the MAUI dashboard during cutover validation.
+- The WinUI host now restores a first-class demo-mode path for migration validation: Settings can persist demo-mode on/off through `AppStateService`, and the shell demo banner now exposes a native disable action without falling back to the MAUI top bar.
 
 ## Remaining
 
@@ -194,3 +195,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - `build-winui` succeeded on 2026-04-24 after the Observability Logs tab adopted native saved-query run/save/delete flows over the shared Observability profile state.
 - `build-winui` succeeded on 2026-04-24 after the Observability Failures tab adopted a focused sample-trace drill over the existing exception-group payload.
 - `build-winui` succeeded on 2026-04-24 after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page.
+- `build-winui` succeeded on 2026-04-24 after the WinUI Settings page restored demo-mode enablement and the shell banner added a native demo-mode disable action.

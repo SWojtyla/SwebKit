@@ -40,12 +40,14 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 ## Test data and setup
 
 - Demo mode remains available for shell and workflow smoke validation without live dependencies.
+- WinUI validation should exercise the migrated demo-mode path by enabling it from Settings, verifying shell/dashboard cues, and disabling it again from the shell banner.
 - Live validation requires representative Service Bus, AKS, Redis, Storage, DevOps, and Observability configuration in `%APPDATA%/SwebKit` plus credential-store entries.
 - Theme validation requires multiple curated theme dictionaries to exist and be selectable through persisted user settings.
 
 ## Manual checks
 
 - Check: shared shell coherence — steps: open Dashboard, Settings, Service Bus, and AKS; confirm title/meta/action areas, banners, cards, and status cues follow one consistent structure.
+- Check: demo-mode control path — steps: open Settings, enable demo mode, save, return to Dashboard, and confirm shell banner plus page-level demo cues appear; then use the shell banner disable action and confirm the demo cues clear without restarting the WinUI host.
 - Check: dashboard baseline route — steps: start the WinUI host and confirm it opens to Dashboard by default; verify readiness summary, four health tiles, favorites, recent activity, and pod-health sections all render natively; trigger Refresh in both demo and live-configured modes and confirm the route stays responsive without falling back to placeholder or MAUI content.
 - Check: global theme application — steps: switch between curated themes, including dark-to-dark and light-to-light swaps, navigate across migrated pages, and confirm shell chrome and page surfaces update consistently.
 - Check: resize and density behavior — steps: test narrow and wide window states, verify primary/detail panes and toolbar regions remain usable and intentional.
@@ -80,7 +82,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page
+- Automated: `build-winui` green after the WinUI Settings page restored demo-mode enablement and the shell banner added a native demo-mode disable action
 - Manual: Not started
 
 ## Sign-off

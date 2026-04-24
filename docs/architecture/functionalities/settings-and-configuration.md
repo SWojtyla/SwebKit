@@ -11,6 +11,7 @@
   - Redis cache entries
   - Storage (Azure Blob) account config
 - Local recent-resource history persisted separately in `ui-state.json`
+- Demo-mode preference persisted in `ui-state.json` and surfaced through the WinUI Settings page plus the active shell banner.
 - Shell appearance preferences persisted separately in `user-settings.json`
 - The appearance section exposes `Studio Ledger` as the curated dark default plus the supported light palettes, and legacy dark-theme aliases normalize to `Studio Ledger` when loaded.
 - Save settings back to the persisted app profile when profile persistence is healthy.
@@ -20,6 +21,7 @@
 - Non-fatal startup recovery banner when `profiles.json` is restored from the last known good backup.
 - Dashboard readiness summary and setup checklist on both the MAUI dashboard and the native WinUI dashboard route, opening the owning workspace or current settings surface when setup or repair work is still needed and limited to actionable capability areas instead of already-healthy ones.
 - Native WinUI dashboard landing route that combines readiness summary, cross-workspace health tiles, favorites, recent activity, and pod-health alerts on the default shell entry point.
+- WinUI Settings support for turning demo mode on before validating migrated native routes, with the shell banner providing the corresponding disable action while demo mode is active.
 - Settings page readiness summary for the current section, including safe credential-reference presence, explicit read-only live-check refresh, and per-area probe detail for the current session.
 - DevOps configuration validation and connection testing through fresh `IDevOpsClientFactory` snapshots.
 - Query-driven preselection of the Incident Timeline settings section when the incident page links into `/settings?section=incident-timeline`.
@@ -34,7 +36,7 @@
 6. Accordion forms mutate the config objects directly on `AppConfig`.
 7. The Incident Timeline settings form edits `AppConfig.IncidentTimeline.WorkloadMappings`, including the per-workload App Insights, Service Bus, and Azure DevOps bindings used by the incident workbench.
 8. `ProfileRepository` normalizes `FavoriteResources` and migrates legacy `SavedWorkspaces`, Service Bus links, and favorite entities into the named-favorite model during load.
-9. `UiStateRepository` persists local recent-resource history and page-level UI flags separately from the environment-scoped profile and uses the same backup-aware recovery path as profile persistence.
+9. `UiStateRepository` persists local recent-resource history, demo-mode state, and page-level UI flags separately from the environment-scoped profile and uses the same backup-aware recovery path as profile persistence.
 10. `UserSettingsRepository` persists shell appearance preferences such as theme selection in `user-settings.json`, with the same atomic write and backup recovery behavior as the other app-data repositories. `MainLayout` normalizes legacy dark-theme aliases to the chosen `Studio Ledger` default when those values are loaded.
 11. Save calls `AppState.SaveConfigAsync()` to persist `profiles.json`. Writes go through an atomic temp-file replace and refresh a `.bak` copy after every successful save. If both the primary profile file and its backup failed to load during startup, the call returns `false`, the file on disk is left untouched, and the UI surfaces `ProfilePersistenceBlockedMessage`. Saving also invalidates cached live-check results so the next readiness view cannot show stale verification.
 12. `DevOpsConfigForm` validates or tests live Azure DevOps settings by creating a fresh client snapshot through `IDevOpsClientFactory`.
@@ -47,6 +49,8 @@
 - `src/SwebKit.WinUI/ViewModels/Dashboard/DashboardPageViewModel.cs`
 - `src/SwebKit.App/Components/Pages/SettingsPage.razor`
 - `src/SwebKit.WinUI/Views/Settings/SettingsPage.xaml`
+- `src/SwebKit.WinUI/ViewModels/Settings/SettingsViewModel.cs`
+- `src/SwebKit.WinUI/Controls/Shell/ShellBannerStrip.xaml`
 - `src/SwebKit.App/Components/Shared/ConfigurationReadinessDashboard.razor`
 - `src/SwebKit.App/Components/Shared/ConfigurationReadinessAreaCard.razor`
 - `src/SwebKit.App/Services/ConfigurationProbeService.cs`
@@ -76,6 +80,7 @@
 - Live readiness checks are explicit rather than automatic. Results are read-only, time-budgeted, and cached only for the current session.
 - Favorite resources, including named favorites, are environment-scoped profile data; recent resources and page-level UI flags remain local-machine UI state.
 - Shell appearance settings such as theme selection are local-machine preferences in `user-settings.json`; legacy dark-theme aliases normalize to the curated `Studio Ledger` default during load.
+- Demo mode is local-machine UI state in `ui-state.json`; the WinUI host now lets operators enable it from Settings and disable it again from the shell banner while validating migrated routes.
 - Incident Timeline mappings are additive workload metadata; they do not replace the base Service Bus, Observability, or DevOps settings those sources still depend on.
 - Secrets are expected in credential store and not in profile JSON.
 - `ProfileRepository` blocks persistence only when both the primary file and backup fail to load; otherwise startup recovers from the last known good `.bak` copy and keeps normal saves enabled.

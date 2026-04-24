@@ -73,6 +73,32 @@
                         </Grid>
                     </Border>
 
+                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="Demo mode"
+                                           Style="{StaticResource BodyTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="Use synthetic data across the migrated WinUI workspaces so you can validate the shell, dashboard, and native pages without live external services."
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="Wrap"
+                                    MaxWidth="480"/>
+                            </StackPanel>
+                            <ToggleSwitch
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                OnContent=""
+                                OffContent=""
+                                IsOn="{x:Bind ViewModel.IsDemoModeEnabled, Mode=TwoWay}"/>
+                        </Grid>
+                    </Border>
+
                     <TextBlock
                         Text="Safety"
                         Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>

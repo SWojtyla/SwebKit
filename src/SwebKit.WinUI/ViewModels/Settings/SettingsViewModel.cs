@@ -26,6 +26,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool WarmupConnectionsOnStartup { get; set; }
 
     [ObservableProperty]
+    public partial bool IsDemoModeEnabled { get; set; }
+
+    [ObservableProperty]
     public partial bool IsSaving { get; set; }
 
     [ObservableProperty]
@@ -50,12 +53,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         SelectedTheme = _themeCoordinator.NormalizeThemeKey(_userSettings.Settings.Theme);
         IsProduction = _appState.Config.IsProduction;
         WarmupConnectionsOnStartup = _userSettings.Settings.WarmupConnectionsOnStartup;
+        IsDemoModeEnabled = _appState.UseDemoData;
         IsDirty = false;
     }
 
     partial void OnSelectedThemeChanged(string value) => IsDirty = true;
     partial void OnIsProductionChanged(bool value) => IsDirty = true;
     partial void OnWarmupConnectionsOnStartupChanged(bool value) => IsDirty = true;
+    partial void OnIsDemoModeEnabledChanged(bool value) => IsDirty = true;
 
     [RelayCommand]
     private async Task SaveAsync()
@@ -67,6 +72,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             _userSettings.Settings.WarmupConnectionsOnStartup = WarmupConnectionsOnStartup;
             await _userSettings.SaveAsync();
             _themeCoordinator.ApplyTheme(SelectedTheme);
+
+            await _appState.SetDemoModeAsync(IsDemoModeEnabled);
 
             _appState.Config.IsProduction = IsProduction;
             await _appState.SaveConfigAsync();

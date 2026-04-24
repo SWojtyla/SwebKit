@@ -27,6 +27,11 @@
                  IsClosable="False"
                  Severity="Informational"
                  Title="Demo mode is active"
-                 Message="Live connections are replaced with synthetic data until demo mode is turned off."/>
+                 Message="Live connections are replaced with synthetic data until demo mode is turned off.">
+            <InfoBar.ActionButton>
+                <Button Content="Disable"
+                        Command="{Binding DisableDemoModeCommand}"/>
+            </InfoBar.ActionButton>
+        </InfoBar>
     </StackPanel>
 </UserControl>

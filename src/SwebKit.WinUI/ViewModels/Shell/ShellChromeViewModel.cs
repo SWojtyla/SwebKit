@@ -282,6 +282,12 @@ public sealed partial class ShellChromeViewModel : ObservableObject
         _notificationService.ClearAll();
     }
 
+    [RelayCommand]
+    private async Task DisableDemoModeAsync()
+    {
+        await _appState.SetDemoModeAsync(false);
+    }
+
     private void OnShellStateChanged()
     {
         ExecuteOnUiThread(() =>

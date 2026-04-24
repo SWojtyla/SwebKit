@@ -628,17 +628,17 @@
                                                 <TextBlock Text="{Binding SelectedFailureMessage}"
                                                            TextWrapping="WrapWholeWords"/>
                                                 <StackPanel Orientation="Horizontal"
-                                                        Spacing="8">
+                                                            Spacing="8">
                                                     <Button Content="Drill to logs"
-                                                        Command="{Binding DrillFailureToLogsCommand}"
-                                                        IsEnabled="{Binding HasSelectedFailure}"/>
+                                                            Command="{Binding DrillFailureToLogsCommand}"
+                                                            IsEnabled="{Binding HasSelectedFailure}"/>
                                                     <Button Content="Trace sample"
-                                                        Command="{Binding DrillFailureTraceToLogsCommand}"
-                                                        IsEnabled="{Binding HasSelectedFailureSampleTrace}"/>
+                                                            Command="{Binding DrillFailureTraceToLogsCommand}"
+                                                            IsEnabled="{Binding HasSelectedFailureSampleTrace}"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding SelectedFailureSampleTraceLabel}"
-                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                       TextWrapping="WrapWholeWords"/>
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
                                             </StackPanel>
 
                                             <ScrollViewer Grid.Row="2"
