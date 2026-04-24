@@ -272,7 +272,7 @@
 
                                     <StackPanel Grid.Column="0"
                                                 Spacing="4">
-                                        <TextBlock Text="Pod logs"
+                                        <TextBlock Text="{Binding SelectedPodLogsTitle}"
                                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                                         <TextBlock Text="{Binding SelectedPodLogsStatus}"
                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
@@ -282,7 +282,8 @@
                                     <StackPanel Grid.Column="1"
                                                 Orientation="Horizontal"
                                                 Spacing="12"
-                                                VerticalAlignment="Top">
+                                                VerticalAlignment="Top"
+                                                Visibility="{Binding SelectedPodLogsActionsVisibility}">
                                         <ProgressRing Width="20"
                                                       Height="20"
                                                       IsActive="{Binding IsSelectedPodLogsLoading}"/>
@@ -298,10 +299,18 @@
                                 <TextBlock Grid.Row="1"
                                            Text="{Binding SelectedPodLogsErrorMessage}"
                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                           Visibility="{Binding SelectedPodLogsErrorVisibility}"
                                            TextWrapping="WrapWholeWords"/>
 
+                                <InfoBar Grid.Row="1"
+                                         IsOpen="{Binding ShowSelectPodLogsHint}"
+                                         Severity="Informational"
+                                         Title="No pod selected"
+                                         Message="Select a pod from the list to open logs and diagnostics without taking over the whole page."/>
+
                                 <Grid Grid.Row="2"
-                                      ColumnSpacing="12">
+                                      ColumnSpacing="12"
+                                      Visibility="{Binding SelectedPodLogsContentVisibility}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="180"/>
                                         <ColumnDefinition Width="170"/>
@@ -356,6 +365,7 @@
                                          IsReadOnly="True"
                                          AcceptsReturn="True"
                                          TextWrapping="NoWrap"
+                                         Visibility="{Binding SelectedPodLogsContentVisibility}"
                                          FontFamily="Cascadia Mono"/>
                             </Grid>
                         </Border>

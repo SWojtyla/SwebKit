@@ -4,6 +4,7 @@ using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using SwebKit.Core.Models;
 
 namespace SwebKit.WinUI.ViewModels.Aks;
@@ -66,6 +67,8 @@ public sealed partial class AksPageViewModel
 
     public bool HasMultipleSelectedPodContainers => SelectedPodContainerOptions.Count > 1;
 
+    public bool ShowSelectPodLogsHint => SelectedPod is null;
+
     public bool CanInspectSelectedPodLogs => !IsLoading && Client is not null && SelectedPod is not null;
 
     public bool CanReloadSelectedPodLogs => CanInspectSelectedPodLogs && !IsSelectedPodLogsLoading;
@@ -74,8 +77,24 @@ public sealed partial class AksPageViewModel
 
     public bool CanToggleSelectedPodLogsLive => CanInspectSelectedPodLogs && !IsPreviousContainerLogRangeSelected;
 
+    public Visibility SelectedPodLogsContentVisibility => SelectedPod is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility SelectedPodLogsActionsVisibility => SelectedPod is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility SelectedPodLogsErrorVisibility => string.IsNullOrWhiteSpace(SelectedPodLogsErrorMessage)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public string SelectedPodLogsTitle => SelectedPod is null
+        ? "Pod diagnostics"
+        : $"Pod diagnostics · {SelectedPod.Namespace}/{SelectedPod.Name}";
+
     partial void OnSelectedPodChanged(AksPodItemViewModel? value)
     {
+        OnPropertyChanged(nameof(ShowSelectPodLogsHint));
+        OnPropertyChanged(nameof(SelectedPodLogsContentVisibility));
+        OnPropertyChanged(nameof(SelectedPodLogsActionsVisibility));
+        OnPropertyChanged(nameof(SelectedPodLogsTitle));
         OnPropertyChanged(nameof(CanInspectSelectedPodLogs));
         OnPropertyChanged(nameof(CanReloadSelectedPodLogs));
         OnPropertyChanged(nameof(CanClearSelectedPodSelection));
@@ -101,6 +120,11 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanInspectSelectedPodLogs));
         OnPropertyChanged(nameof(CanReloadSelectedPodLogs));
         OnPropertyChanged(nameof(CanToggleSelectedPodLogsLive));
+    }
+
+    partial void OnSelectedPodLogsErrorMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(SelectedPodLogsErrorVisibility));
     }
 
     partial void OnSelectedPodLogContainerChanged(string value)

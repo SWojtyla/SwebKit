@@ -27,6 +27,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 3. Scenario: migrated workspaces adopt reusable primitives instead of bespoke layouts — Expected result: Service Bus, AKS, and subsequent pages use shared section/state/detail patterns and keep feature behavior intact.
 4. Scenario: production, demo, warning, and recovery cues stay consistent — Expected result: destructive and stateful operator cues are recognizable across shell and workspace contexts.
 5. Scenario: cutover-critical feature parity remains intact — Expected result: each migrated domain preserves its documented workflows while fitting the shared WinUI architecture.
+6. Scenario: AKS route remains responsive during bootstrap — Expected result: the page paints immediately, shows loading state promptly, and remains visibly responsive while contexts, namespaces, and pods load.
 
 ## Automated coverage
 
@@ -49,6 +50,8 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: state treatment consistency — steps: validate loading, empty, error, not-configured, demo, and production-warning states on at least two workspaces.
 - Check: proving-ground page adoption — steps: confirm `Settings`, `ServiceBus`, and `AKS` use the shared primitives before Redis/Storage/Pipelines/Observability work begins.
 - Check: AKS pod-log slice — steps: open AKS, launch logs from a pod row, switch container/range/live settings, apply a text filter, and confirm the native log panel follows the selected pod without reopening the page.
+- Check: AKS first-paint responsiveness — steps: open AKS from another route, confirm the page shell paints before cluster data arrives, and verify the app does not feel blocked while the initial bootstrap runs.
+- Check: AKS compact diagnostics state — steps: open AKS with no pod selected, confirm the page shows only a compact diagnostics hint, then select a pod and verify the full diagnostics/log surface expands in place.
 
 ## Regression risks & mitigations
 

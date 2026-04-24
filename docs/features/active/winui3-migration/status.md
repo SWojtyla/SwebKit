@@ -14,7 +14,7 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now spans slice 1 plus the first slice-2 diagnostics seam: cluster bootstrap, context/namespace selection, pod health browse, and a native per-pod log panel are live in `SwebKit.WinUI`. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, and the first reusable shell header/banner/status/workspace primitives are now in place.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now spans slice 1 plus the first slice-2 diagnostics seam: cluster bootstrap, context/namespace selection, pod health browse, and a native per-pod log panel are live in `SwebKit.WinUI`. The AKS route now also defers its first load until after initial paint and keeps diagnostics compact until a pod is selected, reducing the “frozen” navigation feel and the always-empty log slab. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, and the first reusable shell header/banner/status/workspace primitives are now in place.
 
 **Jira:** not linked
 
@@ -119,7 +119,9 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - Service Bus page now supports namespace add/remove, queue and subscription exploration, active/DLQ tabs, message detail viewing, send, and single-message DLQ resubmit/complete.
 - VS Code workspace WinUI debug is pinned to the RID-specific `bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/SwebKit.WinUI.exe` output because project-level "Debug New Instance" can run the stale parent `bin/x64/Debug/net10.0-windows10.0.19041.0/SwebKit.WinUI.exe`.
 - Phase 3 AKS slice 1 is now live in `SwebKit.WinUI`: route wiring, cluster bootstrap, context/namespace selection, and pod browse with a native health/status grid.
-- Phase 3 AKS now includes a bounded slice-2 logs seam in `SwebKit.WinUI`: each pod row exposes a native "Logs" entry point, plus container/range/live/filter controls backed by `IAksClient.StreamPodLogsAsync`.
+- Phase 3 AKS now includes a bounded slice-2 logs seam in `SwebKit.WinUI`: each pod row exposes a native diagnostics entry point, plus container/range/live/filter controls backed by `IAksClient.StreamPodLogsAsync`.
+- The AKS WinUI page now schedules its initial bootstrap after the page is loaded and yields once after loading-state transitions so the route can paint before cluster work begins.
+- The AKS diagnostics surface now stays compact until a pod is selected, instead of rendering the full empty log viewer all the time.
 - WinUI startup now loads `UserSettingsRepository` before shell activation and applies the persisted theme globally through `ThemeCoordinator`.
 - `ThemeCoordinator` now forces a WinUI resource refresh when switching between curated themes that stay within the same dark/light family, fixing no-op visual updates for dark-to-dark and light-to-light theme swaps.
 - `App.xaml` now carries semantic token, shared-style, and curated-theme resource dictionaries instead of relying only on the default WinUI resource merge.
@@ -162,3 +164,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the theme/resource foundation and shared page-scaffold slice.
 - `build-winui` succeeded on 2026-04-24 after the reusable shell-chrome/workspace-hub/notification-history slice.
 - `build-winui` succeeded on 2026-04-24 after the same-family theme refresh fix and the AKS pod-log slice.
+- `build-winui` succeeded on 2026-04-24 after the AKS first-paint loading fix and the compact selected-pod diagnostics layout update.

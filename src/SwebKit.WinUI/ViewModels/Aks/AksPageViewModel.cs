@@ -119,6 +119,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         await ResetLoadTokenAsync();
         IsLoading = true;
         ErrorMessage = null;
+        await Task.Yield();
 
         try
         {
@@ -281,6 +282,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             await ResetLoadTokenAsync();
             IsLoading = true;
             ErrorMessage = null;
+            await Task.Yield();
             await LoadPodsAsync(_loadCts.Token);
         }
         catch (OperationCanceledException)
