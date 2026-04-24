@@ -65,6 +65,20 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         HookCollectionNotifications(Resources, nameof(HasResources), nameof(ShowNoResourcesState));
         HookCollectionNotifications(QueryPresets, nameof(SelectedPresetDescription));
         HookCollectionNotifications(Failures, nameof(HasFailures), nameof(ShowFailuresEmptyState));
+        HookCollectionNotifications(
+            OverviewRequestTrend,
+            nameof(HasOverviewRequestTrend),
+            nameof(OverviewRequestChartVisibility),
+            nameof(OverviewRequestSeries),
+            nameof(OverviewRequestXAxes),
+            nameof(OverviewRequestYAxes));
+        HookCollectionNotifications(
+            OverviewFailureTrend,
+            nameof(HasOverviewFailureTrend),
+            nameof(OverviewFailureChartVisibility),
+            nameof(OverviewFailureSeries),
+            nameof(OverviewFailureXAxes),
+            nameof(OverviewFailureYAxes));
         HookCollectionNotifications(PerformanceEntries, nameof(HasPerformanceEntries), nameof(ShowPerformanceEmptyState));
         HookCollectionNotifications(
             PerformanceTrend,
@@ -121,6 +135,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public ObservableCollection<ObservabilityQueryPresetItemViewModel> QueryPresets { get; } = [];
 
     public ObservableCollection<ObservabilityFailureItemViewModel> Failures { get; } = [];
+
+    public ObservableCollection<TimeSeriesPoint> OverviewRequestTrend { get; } = [];
+
+    public ObservableCollection<TimeSeriesPoint> OverviewFailureTrend { get; } = [];
 
     public ObservableCollection<ObservabilityPerformanceItemViewModel> PerformanceEntries { get; } = [];
 
@@ -253,6 +271,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool HasFailures => Failures.Count > 0;
 
+    public bool HasOverviewRequestTrend => OverviewRequestTrend.Count > 0;
+
+    public bool HasOverviewFailureTrend => OverviewFailureTrend.Count > 0;
+
     public bool HasPerformanceEntries => PerformanceEntries.Count > 0;
 
     public bool HasPerformanceTrend => PerformanceTrend.Count > 0;
@@ -321,6 +343,59 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             },
         ]
         : Array.Empty<ISeries>();
+
+    public IEnumerable<ISeries> OverviewRequestSeries => HasOverviewRequestTrend
+        ?
+        [
+            new LineSeries<double>
+            {
+                Name = "Requests",
+                Values = OverviewRequestTrend.Select(point => point.Value).ToArray(),
+            },
+        ]
+        : Array.Empty<ISeries>();
+
+    public IEnumerable<ISeries> OverviewFailureSeries => HasOverviewFailureTrend
+        ?
+        [
+            new LineSeries<double>
+            {
+                Name = "Failure rate",
+                Values = OverviewFailureTrend.Select(point => point.Value * 100d).ToArray(),
+            },
+        ]
+        : Array.Empty<ISeries>();
+
+    public Axis[] OverviewRequestXAxes =>
+    [
+        new Axis
+        {
+            Labels = OverviewRequestTrend.Select(point => point.Timestamp.LocalDateTime.ToString("M/d HH:mm")).ToArray(),
+            LabelsRotation = 15,
+        },
+    ];
+
+    public Axis[] OverviewRequestYAxes =>
+    [
+        new Axis(),
+    ];
+
+    public Axis[] OverviewFailureXAxes =>
+    [
+        new Axis
+        {
+            Labels = OverviewFailureTrend.Select(point => point.Timestamp.LocalDateTime.ToString("M/d HH:mm")).ToArray(),
+            LabelsRotation = 15,
+        },
+    ];
+
+    public Axis[] OverviewFailureYAxes =>
+    [
+        new Axis
+        {
+            Labeler = value => $"{value:N0}%",
+        },
+    ];
 
     public Axis[] PerformanceTrendXAxes =>
     [
@@ -416,6 +491,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public Visibility GuidedCompileSummaryVisibility => string.IsNullOrWhiteSpace(GuidedCompileSummary) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility GuidedCompiledQueryVisibility => string.IsNullOrWhiteSpace(GuidedCompiledQuery) ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility OverviewRequestChartVisibility => HasOverviewRequestTrend ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility OverviewFailureChartVisibility => HasOverviewFailureTrend ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility PerformanceTrendChartVisibility => HasPerformanceTrend ? Visibility.Visible : Visibility.Collapsed;
 
@@ -853,6 +932,18 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         ExceptionCountText = metrics.ExceptionCount.ToString("N0");
         AvailabilityText = $"{metrics.AvailabilityPct:N1}%";
 
+        OverviewRequestTrend.Clear();
+        foreach (var point in metrics.RequestTrend)
+        {
+            OverviewRequestTrend.Add(point);
+        }
+
+        OverviewFailureTrend.Clear();
+        foreach (var point in metrics.FailureTrend)
+        {
+            OverviewFailureTrend.Add(point);
+        }
+
         DependencyHealthEntries.Clear();
         foreach (var entry in explainer.DependencyHealth.Entries.Take(6))
         {
@@ -1233,6 +1324,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         _performanceTrendRequestVersion = 0;
 
         Failures.Clear();
+        OverviewRequestTrend.Clear();
+        OverviewFailureTrend.Clear();
         PerformanceEntries.Clear();
         PerformanceTrend.Clear();
         AvailabilityResults.Clear();

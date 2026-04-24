@@ -55,7 +55,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: Redis baseline route — steps: open Redis, choose a configured cache or demo cache, scan keys, expand a prefix group, open one key of each common type, and verify typed details, TTL controls, and basic edit flows update the state cleanly.
 - Check: Storage baseline route — steps: open Storage, choose an account, browse containers and a virtual folder, open a text-friendly blob, verify preview/detail metadata, trigger download and URL/SAS copy actions, then reopen the saved workspace/favorite and confirm the account/container/blob context restores.
 - Check: Pipelines baseline route — steps: open Pipelines, verify the project selector and delivery metrics load, switch across the pipelines/activity/releases/approvals tabs, and confirm the baseline detail surfaces update without falling back to a placeholder route.
-- Check: Observability baseline route — steps: open Observability, refresh resource discovery, activate a resource, switch through all five tabs, run both an advanced and guided logs query, save the workspace context, select a performance operation and confirm the LiveCharts trend updates with the selected operation, then open Availability and confirm the summary chart reflects the returned checks while empty-result tabs stay stable rather than requerying on every revisit and the resource/tab selection restores correctly.
+- Check: Observability baseline route — steps: open Observability, refresh resource discovery, activate a resource, confirm the Overview request and failure charts populate, switch through all five tabs, run both an advanced and guided logs query, save the workspace context, select a performance operation and confirm the LiveCharts trend updates with the selected operation, then open Availability and confirm the summary chart reflects the returned checks while empty-result tabs stay stable rather than requerying on every revisit and the resource/tab selection restores correctly.
 
 ## Regression risks & mitigations
 
@@ -74,7 +74,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the Observability Availability tab adopted a native LiveCharts summary chart over the existing result set
+- Automated: `build-winui` green after the Observability Overview tab adopted native request-volume and failure-rate charts over the existing overview trend payload
 - Manual: Not started
 
 ## Sign-off

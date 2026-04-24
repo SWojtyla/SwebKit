@@ -3,3 +3,5 @@
 - Stateful WinUI routes should publish and restore workspace snapshots through `OperatorWorkspaceService`, not only expose shell search providers.
 - Observability and other empty-result tabs need explicit loaded-state flags; collection counts alone are not enough to distinguish `loaded empty` from `not loaded`.
 - The current Observability availability provider query returns the latest 200 checks, so WinUI charts and copy for that tab should describe recent returned results rather than full-window aggregates.
+- The WinUI Observability overview charts reuse `OverviewMetrics.RequestTrend` and `OverviewMetrics.FailureTrend`; new chart slices should prefer existing provider payloads over new API seams when the data already exists.
+- There is no direct WinUI automated test coverage for the current chart slices, so the expected validation loop is `build-winui` plus manual smoke checks for zero-data and dense-label states.

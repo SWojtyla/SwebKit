@@ -410,6 +410,65 @@
                                             </Grid.ColumnDefinitions>
 
                                             <Border Grid.Column="0"
+                                                    Visibility="{Binding OverviewRequestChartVisibility}"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Request volume"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="Recent request trend returned for the active range."
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <Border MinHeight="220"
+                                                            CornerRadius="8"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="12">
+                                                        <lvc:CartesianChart Series="{Binding OverviewRequestSeries}"
+                                                                            XAxes="{Binding OverviewRequestXAxes}"
+                                                                            YAxes="{Binding OverviewRequestYAxes}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Column="1"
+                                                    Visibility="{Binding OverviewFailureChartVisibility}"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Failure rate trend"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="Recent failure-rate trend returned for the active range."
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <Border MinHeight="220"
+                                                            CornerRadius="8"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="12">
+                                                        <lvc:CartesianChart Series="{Binding OverviewFailureSeries}"
+                                                                            XAxes="{Binding OverviewFailureXAxes}"
+                                                                            YAxes="{Binding OverviewFailureYAxes}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Column="0"
                                                     CornerRadius="8"
                                                     Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -874,7 +933,7 @@
                                                     <TextBlock Text="The current logs experience is intentionally native and text-first. Monaco is deferred until the shared editor host lands for multiple areas."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="Overview still stays metric-first, and the remaining Availability heatmap parity plus broader LiveCharts work continue beyond the selected-operation trend and availability summary charts."
+                                                    <TextBlock Text="Overview now includes native request and failure charts, while the remaining Availability heatmap parity and broader LiveCharts work continue beyond the current trend and summary slices."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
                                                 </StackPanel>
