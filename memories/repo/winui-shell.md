@@ -1,0 +1,2 @@
+- `build-winui` is the focused validation command for `src/SwebKit.WinUI` shell and XAML slices.
+- WinUI shell view models fed by singleton service events must marshal updates to the UI dispatcher and refresh workspace state before deriving connection/status text.

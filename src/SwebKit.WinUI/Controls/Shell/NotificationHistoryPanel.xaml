@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shell.NotificationHistoryPanel"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer MaxHeight="520"
+                  Width="420">
+        <StackPanel Spacing="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="Notifications"
+                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                <Button Grid.Column="1"
+                        Content="Clear history"
+                        Command="{Binding ClearNotificationsCommand}"/>
+            </Grid>
+
+            <InfoBar IsOpen="{Binding ShowNoNotifications}"
+                     IsClosable="False"
+                     Severity="Informational"
+                     Title="No notifications yet"
+                     Message="Shell alerts, confirmations, and failures will accumulate here."/>
+
+            <ItemsControl ItemsSource="{Binding NotificationHistory}"
+                          Visibility="{Binding NotificationListVisibility}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8"
+                                Style="{StaticResource SwebKitInsetCardStyle}">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            Style="{StaticResource SwebKitShellBadgeStyle}">
+                                        <TextBlock Text="{Binding Severity}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    </Border>
+
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Message}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                               TextWrapping="Wrap"/>
+
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding TimestampText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                </Grid>
+
+                                <TextBlock Text="{Binding Detail}"
+                                           Style="{StaticResource BodyTextBlockStyle}"
+                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding DetailVisibility}"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

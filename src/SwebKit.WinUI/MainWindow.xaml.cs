@@ -15,15 +15,18 @@ namespace SwebKit.WinUI;
 public sealed partial class MainWindow : Window
 {
     public MainWindowViewModel ViewModel { get; }
+    public ShellChromeViewModel ShellChrome { get; }
     public CommandPaletteViewModel CommandPaletteViewModel { get; }
     private readonly ThemeCoordinator _themeCoordinator;
 
     public MainWindow(
         MainWindowViewModel viewModel,
+        ShellChromeViewModel shellChrome,
         CommandPaletteViewModel commandPaletteViewModel,
         ThemeCoordinator themeCoordinator)
     {
         ViewModel = viewModel;
+        ShellChrome = shellChrome;
         CommandPaletteViewModel = commandPaletteViewModel;
         _themeCoordinator = themeCoordinator;
 
@@ -39,6 +42,11 @@ public sealed partial class MainWindow : Window
 
         // Ctrl+K — command palette
         RegisterCommandPaletteAccelerator();
+    }
+
+    private void ShellHeader_CommandPaletteRequested(object sender, EventArgs e)
+    {
+        _ = ShowCommandPaletteAsync();
     }
 
     // ── Navigation ─────────────────────────────────────────────────────────────

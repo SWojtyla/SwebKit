@@ -116,6 +116,7 @@ internal static class ServiceRegistration
         services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<MainWindowViewModel>());
 
         services.AddSingleton<OperatorWorkspaceService>();
+        services.AddSingleton<ShellChromeViewModel>();
 
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();

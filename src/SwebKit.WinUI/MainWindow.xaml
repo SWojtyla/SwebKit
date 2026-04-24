@@ -2,6 +2,7 @@
 <Window
     x:Class="SwebKit.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:shellControls="using:SwebKit.WinUI.Controls.Shell"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="SwebKit">
 
@@ -71,9 +72,33 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <!-- Main content frame -->
-            <Frame x:Name="ContentFrame"
-                   Background="{ThemeResource SwebKitPageBackgroundBrush}"/>
+            <Grid Padding="16,12,16,16"
+                  RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <shellControls:ShellBannerStrip
+                    Grid.Row="0"
+                    DataContext="{x:Bind ShellChrome, Mode=OneWay}"/>
+
+                <shellControls:ShellContextHeader
+                    x:Name="ShellHeader"
+                    Grid.Row="1"
+                    DataContext="{x:Bind ShellChrome, Mode=OneWay}"
+                    CommandPaletteRequested="ShellHeader_CommandPaletteRequested"/>
+
+                <Frame x:Name="ContentFrame"
+                       Grid.Row="2"
+                       Background="{ThemeResource SwebKitPageBackgroundBrush}"/>
+
+                <shellControls:ShellStatusStrip
+                    Grid.Row="3"
+                    DataContext="{x:Bind ShellChrome, Mode=OneWay}"/>
+            </Grid>
 
         </NavigationView>
 

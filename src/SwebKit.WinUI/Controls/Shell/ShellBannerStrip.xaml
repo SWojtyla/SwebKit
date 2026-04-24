@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shell.ShellBannerStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel Spacing="8">
+        <InfoBar IsOpen="{Binding ShowProfileFailureBanner}"
+                 IsClosable="False"
+                 Severity="Error"
+                 Title="Profile persistence is blocked"
+                 Message="{Binding ProfileFailureMessage}"/>
+
+        <InfoBar IsOpen="{Binding ShowProfileRecoveryBanner}"
+                 IsClosable="False"
+                 Severity="Warning"
+                 Title="Profile file recovered from backup"
+                 Message="{Binding ProfileRecoveryMessage}"/>
+
+        <InfoBar IsOpen="{Binding ShowProductionBanner}"
+                 IsClosable="False"
+                 Severity="Warning"
+                 Title="Production safeguards enabled"
+                 Message="Destructive flows require explicit confirmation in this profile."/>
+
+        <InfoBar IsOpen="{Binding ShowDemoBanner}"
+                 IsClosable="False"
+                 Severity="Informational"
+                 Title="Demo mode is active"
+                 Message="Live connections are replaced with synthetic data until demo mode is turned off."/>
+    </StackPanel>
+</UserControl>

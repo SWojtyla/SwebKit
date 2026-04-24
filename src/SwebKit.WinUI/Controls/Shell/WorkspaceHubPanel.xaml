@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shell.WorkspaceHubPanel"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer MaxHeight="560"
+                  Width="400">
+        <StackPanel Spacing="16">
+            <TextBlock Text="Workspace hub"
+                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+            <InfoBar IsOpen="{Binding ShowNoCurrentSnapshot}"
+                     IsClosable="False"
+                     Severity="Informational"
+                     Title="No active resource"
+                     Message="Open a resource in the current workspace to save or reopen it from the shell."/>
+
+            <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                    Visibility="{Binding CurrentSnapshotVisibility}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Current"
+                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                    <TextBlock Text="{Binding CurrentResourceTitle}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding CurrentResourceSummary}"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                               TextWrapping="Wrap"/>
+
+                    <TextBox Header="Favorite name"
+                             PlaceholderText="Name this resource"
+                             Text="{Binding FavoriteName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Content="Open"
+                                Command="{Binding OpenCurrentSnapshotCommand}"/>
+                        <Button Grid.Column="1"
+                                Content="{Binding SaveFavoriteButtonLabel}"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding SaveCurrentFavoriteCommand}"/>
+                        <Button Grid.Column="2"
+                                Content="Remove"
+                                Command="{Binding RemoveCurrentFavoriteCommand}"
+                                Visibility="{Binding CurrentFavoriteVisibility}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="Favorites"
+                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                <InfoBar IsOpen="{Binding ShowNoFavorites}"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Title="No favorites yet"
+                         Message="Save current resources here so the shell can reopen them quickly."/>
+
+                <ItemsControl ItemsSource="{Binding FavoriteResources}"
+                              Visibility="{Binding FavoriteListVisibility}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,8"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock Text="{Binding Name}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Summary}"
+                                                   Style="{StaticResource BodyTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Open"
+                                            Command="{Binding ElementName=Root, Path=DataContext.OpenFavoriteCommand}"
+                                            CommandParameter="{Binding}"/>
+
+                                    <Button Grid.Column="2"
+                                            Content="Remove"
+                                            Command="{Binding ElementName=Root, Path=DataContext.RemoveFavoriteCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Spacing="12">
+                <TextBlock Text="Recent"
+                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                <InfoBar IsOpen="{Binding ShowNoRecentResources}"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Title="No recent resources"
+                         Message="Recent resources will appear here after opening them in a workspace."/>
+
+                <ItemsControl ItemsSource="{Binding RecentResources}"
+                              Visibility="{Binding RecentListVisibility}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,8"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Summary}"
+                                                   Style="{StaticResource BodyTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding TimestampText}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Open"
+                                            Command="{Binding ElementName=Root, Path=DataContext.OpenRecentCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

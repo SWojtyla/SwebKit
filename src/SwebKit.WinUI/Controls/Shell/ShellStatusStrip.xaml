@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shell.ShellStatusStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+        <Grid ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0"
+                        Spacing="4">
+                <TextBlock Text="Area"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                <TextBlock Text="{Binding StatusPrimaryText}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1"
+                        Spacing="4">
+                <TextBlock Text="Status"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                <TextBlock Text="{Binding StatusSecondaryText}"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2"
+                        Spacing="4">
+                <TextBlock Text="Activity"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                <TextBlock Text="{Binding StatusTertiaryText}"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
