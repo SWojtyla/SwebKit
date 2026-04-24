@@ -14,11 +14,11 @@ last_updated: "2026-04-24"
 
 ## Quick summary
 
-Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS now spans slice 1 plus the first slice-2 diagnostics seam: cluster bootstrap, context/namespace selection, pod health browse, and a native per-pod log panel are live in `SwebKit.WinUI`. The AKS route now also defers its first load until after initial paint and keeps diagnostics compact until a pod is selected, reducing the “frozen” navigation feel and the always-empty log slab. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, and the first reusable shell header/banner/status/workspace primitives are now in place.
+Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AKS still carries the active diagnostics follow-up work, and Phase 4 Redis plus Phase 5 Storage now have native WinUI baseline routes wired into the shell. The new Redis surface covers cache selection, key scan/tree, typed detail/value inspection, TTL and edit flows, and load-more browsing; the new Storage surface covers account/container/blob browse, breadcrumb restore, text-friendly preview, download, and URL/SAS copy flows. The UI-foundation work now spans both page and shell primitives: semantic resource dictionaries, curated WinUI themes, a global theme coordinator, shared page scaffolds, reusable shell header/banner/status/workspace primitives, and deeper adoption in the new Redis/Storage workspaces.
 
 **Jira:** not linked
 
-**Current focus:** push the new semantic shell/page primitives deeper into the proving-ground workspaces and finish the rest of Phase 3 AKS slice 2, now that pod logs and the same-family theme-refresh bug fix are in place.
+**Current focus:** harden the new Redis and Storage slices on the shared scaffold, finish the rest of Phase 3 AKS slice 2, and then open the Pipelines/Releases and Observability workstreams without backsliding into one-off page composition.
 
 ## Progress checklist
 
@@ -75,13 +75,13 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 
 ### Phase 4 — Redis
 
-- [ ] Key browser with type icons
-- [ ] Value inspector (string, hash, list, set, sorted set)
+- [x] Key browser with type icons
+- [x] Value inspector (string, hash, list, set, sorted set)
 
 ### Phase 5 — Storage
 
-- [ ] Container browser
-- [ ] Blob list and download
+- [x] Container browser
+- [x] Blob list and download
 
 ### Phase 6 — Pipelines / Releases / Approvals
 
@@ -128,18 +128,22 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `Settings`, `ServiceBus`, and `AKS` now share a `PageScaffold` header/layout primitive and the first semantic surface-card styles, providing the initial proving ground for the broader UI architecture pass.
 - `MainWindow` now hosts reusable shell chrome in `SwebKit.WinUI`: a context header, banner strip, status strip, workspace hub, and notification-history surface backed by a dedicated `ShellChromeViewModel` and existing shell/core services.
 - The shell now surfaces production/demo/profile-recovery cues from `AppStateService`, current route context, connection state, favorites, recents, and persisted notification history without introducing new domain services.
+- Phase 4 Redis now has a native WinUI baseline route in `SwebKit.WinUI`: cache selection, paged key scan/tree browse, typed key details, TTL flows, rename/delete, and common value editors for string/hash/list/set/sorted-set data.
+- Phase 5 Storage now has a native WinUI baseline route in `SwebKit.WinUI`: account and container browse, hierarchical blob listing with breadcrumbs, blob detail/metadata/tags, text-friendly preview, download, and URL/SAS copy flows.
+- The shared shell route map now activates the new Redis and Storage pages directly instead of sending those areas to `PlaceholderPage`.
 
 ## Remaining
 
 - Phase 3-9 work listed above.
 - Shell/dashboard/settings/theme parity items identified by the 2026-04-24 audit remain open until they are explicitly delivered and validated in `SwebKit.WinUI`.
 - Dashboard parity and deeper page-state/detail-pane primitives are still outstanding; much of the downstream workspace composition remains inline beyond the first proving-ground adoption.
+- Redis parity still needs the later-phase health/prefix tooling, slow-log/deeper analysis surfaces, and broader bulk-operation coverage called out in `frontend.md`.
+- Storage parity still needs the later-phase bulk ZIP/version-download polish and any remaining large-file or binary-preview hardening called out in `frontend.md`.
 
 ## Recommended next sequence
 
-- Next: push the new shell/page primitive set deeper into the current proving-ground workspaces while continuing AKS slice 2 in parallel. This is the highest-value path because it reduces rework before more pages are added.
-- After that: Redis and Storage in parallel, once the shared shell surfaces are stable enough to avoid rework.
-- Then: Pipelines/Releases and Observability in parallel, after Monaco and chart-hosting seams are fixed for WinUI.
+- Next: harden Redis/Storage on the shared scaffold while finishing AKS slice 2 and the remaining shared page/detail primitives. This is the highest-value path because it reduces rework before the next data-heavy workspaces land.
+- After that: Pipelines/Releases and Observability in parallel, after Monaco and chart-hosting seams are fixed for WinUI.
 - Then: Incident Timeline, after its upstream workspace dependencies are credible.
 - Last: hardening, docs updates, test migration, and cutover.
 
@@ -165,3 +169,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. Phase 3 AK
 - `build-winui` succeeded on 2026-04-24 after the reusable shell-chrome/workspace-hub/notification-history slice.
 - `build-winui` succeeded on 2026-04-24 after the same-family theme refresh fix and the AKS pod-log slice.
 - `build-winui` succeeded on 2026-04-24 after the AKS first-paint loading fix and the compact selected-pod diagnostics layout update.
+- `build-winui` succeeded on 2026-04-24 after the Redis and Storage baseline slices were wired into shared navigation and DI.

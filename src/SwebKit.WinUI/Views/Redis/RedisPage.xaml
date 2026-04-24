@@ -1,0 +1,669 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SwebKit.WinUI.Views.Redis.RedisPage"
+    x:Name="PageRoot"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
+    xmlns:viewModels="using:SwebKit.WinUI.ViewModels.Redis"
+    DataContext="{x:Bind ViewModel, Mode=OneWay}"
+    Background="{ThemeResource SwebKitPageBackgroundBrush}">
+
+    <shared:PageScaffold
+        Title="Redis"
+        Subtitle="Browse grouped keys, inspect common value types, and apply key-level actions from a native WinUI workspace.">
+        <shared:PageScaffold.BodyContent>
+            <Grid RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border
+                    Grid.Row="0"
+                    Style="{StaticResource SwebKitSurfaceCardStyle}">
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="240"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="4">
+                                <TextBlock
+                                    Text="Cache connection"
+                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding ConnectionSummary}"
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Spacing="6">
+                                <TextBlock
+                                    Text="Cache"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <ComboBox
+                                    ItemsSource="{Binding CacheEntries}"
+                                    SelectedItem="{Binding SelectedCache, Mode=TwoWay}"
+                                    DisplayMemberPath="DisplayName"
+                                    PlaceholderText="Select cache"
+                                    IsEnabled="{Binding HasConfiguredCaches}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2"
+                                        Spacing="6">
+                                <TextBlock
+                                    Text="Group by"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBox
+                                    Text="{Binding SeparatorInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    MaxLength="4"
+                                    PlaceholderText="-"/>
+                            </StackPanel>
+
+                            <ProgressRing
+                                Grid.Column="3"
+                                Width="20"
+                                Height="20"
+                                VerticalAlignment="Bottom"
+                                IsActive="{Binding IsWorking}"/>
+
+                            <Button
+                                Grid.Column="4"
+                                Content="Refresh"
+                                Command="{Binding ReloadCommand}"
+                                IsEnabled="{Binding CanReload}"
+                                VerticalAlignment="Bottom"/>
+                        </Grid>
+
+                        <Grid Grid.Row="1"
+                              ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="6">
+                                <TextBlock
+                                    Text="Pattern"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBox
+                                    Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="*"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Spacing="6"
+                                        VerticalAlignment="Bottom">
+                                <TextBlock
+                                    Text="Loaded"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <Button
+                                    Content="{Binding LoadMoreKeysLabel}"
+                                    Command="{Binding LoadMoreKeysCommand}"
+                                    IsEnabled="{Binding CanLoadMoreKeys}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock
+                            Grid.Row="2"
+                            Text="{Binding ScanSummary}"
+                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                            TextWrapping="WrapWholeWords"/>
+
+                        <StackPanel Grid.Row="3"
+                                    Spacing="8">
+                            <TextBlock
+                                Text="{Binding ErrorMessage}"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Visibility="{Binding ErrorVisibility}"
+                                TextWrapping="WrapWholeWords"/>
+
+                            <InfoBar
+                                IsOpen="{Binding ShowNotConfiguredState}"
+                                Severity="Informational"
+                                Title="Redis is not configured"
+                                Message="Configure at least one Redis cache connection in Settings before opening this workspace."/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1"
+                      ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="390"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border
+                        Grid.Column="0"
+                        Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    Text="Key browser"
+                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="Expand prefixes, filter by subtree, and inspect keys with loaded type badges."
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+
+                            <InfoBar
+                                Grid.Row="1"
+                                IsOpen="{Binding ShowTreeEmptyState}"
+                                Severity="Informational"
+                                Title="No keys found"
+                                Message="Refresh with a broader pattern or verify that the selected cache contains keys."/>
+
+                            <ScrollViewer Grid.Row="2"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding TreeRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:RedisTreeRowViewModel">
+                                            <Border
+                                                Margin="0,0,0,8"
+                                                CornerRadius="6"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="8,6">
+                                                <Grid ColumnSpacing="8"
+                                                      Margin="{x:Bind IndentMargin}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <Button Grid.Column="0"
+                                                            Content="{x:Bind ExpandGlyph}"
+                                                            Visibility="{x:Bind ExpandVisibility}"
+                                                            Command="{Binding ViewModel.ToggleTreeRowCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"
+                                                            Padding="0"
+                                                            MinWidth="28"/>
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{x:Bind DisplayName}"
+                                                               TextWrapping="WrapWholeWords"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="Selected"
+                                                               Visibility="{x:Bind SelectedVisibility}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <Border Grid.Column="3"
+                                                            Visibility="{x:Bind KeyTypeVisibility}"
+                                                            CornerRadius="999"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            Padding="8,2"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind KeyType}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    </Border>
+
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{x:Bind PrefixCountLabel}"
+                                                               Visibility="{x:Bind PrefixCountVisibility}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <Button Grid.Column="4"
+                                                            Content="Inspect"
+                                                            Visibility="{x:Bind InspectVisibility}"
+                                                            Command="{Binding ViewModel.SelectTreeKeyCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"/>
+
+                                                    <Button Grid.Column="4"
+                                                            Content="Filter"
+                                                            Visibility="{x:Bind FilterVisibility}"
+                                                            Command="{Binding ViewModel.FilterByPrefixCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <Button Grid.Row="3"
+                                    Content="{Binding LoadMoreKeysLabel}"
+                                    Command="{Binding LoadMoreKeysCommand}"
+                                    IsEnabled="{Binding CanLoadMoreKeys}"/>
+                        </Grid>
+                    </Border>
+
+                    <Border
+                        Grid.Column="1"
+                        Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock
+                                            Text="{Binding DetailTitle}"
+                                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                        <TextBlock
+                                            Text="{Binding DetailStatusText}"
+                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                            TextWrapping="WrapWholeWords"/>
+                                    </StackPanel>
+
+                                    <ProgressRing Grid.Column="1"
+                                                  Width="20"
+                                                  Height="20"
+                                                  IsActive="{Binding IsDetailLoading}"
+                                                  VerticalAlignment="Top"/>
+                                </Grid>
+
+                                <InfoBar Grid.Row="1"
+                                         IsOpen="{Binding ShowSelectionEmptyState}"
+                                         Severity="Informational"
+                                         Title="No key selected"
+                                         Message="Choose a key from the browser to load metadata, TTL, and type-specific value details."/>
+
+                                <TextBlock Grid.Row="2"
+                                           Text="Loading key details..."
+                                           Visibility="{Binding DetailLoadingVisibility}"
+                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+
+                                <StackPanel Grid.Row="3"
+                                            Spacing="12"
+                                            Visibility="{Binding DetailContentVisibility}">
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                        <Grid RowSpacing="12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Type"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedTypeText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="1"
+                                                            Spacing="4">
+                                                    <TextBlock Text="TTL"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedTtlText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Memory"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedMemoryText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Grid.Row="1"
+                                                  ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Encoding"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedEncodingText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="1"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Frequency"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedFrequencyText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Idle"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SelectedIdleText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                        <Grid RowSpacing="12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Button Grid.Column="0"
+                                                        Content="Refresh key"
+                                                        Command="{Binding RefreshSelectedKeyCommand}"
+                                                        IsEnabled="{Binding CanRefreshSelectedKey}"/>
+
+                                                <TextBox Grid.Column="1"
+                                                         Text="{Binding RenameInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         PlaceholderText="Rename key"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Rename"
+                                                        Command="{Binding RenameSelectedKeyCommand}"
+                                                        IsEnabled="{Binding CanRenameSelectedKey}"/>
+
+                                                <Button Grid.Column="3"
+                                                        Content="{Binding DeleteSelectedLabel}"
+                                                        Command="{Binding DeleteSelectedKeyCommand}"
+                                                        IsEnabled="{Binding CanDeleteSelectedKey}"/>
+
+                                                <Button Grid.Column="4"
+                                                        Content="Cancel"
+                                                        Command="{Binding CancelDeleteSelectedCommand}"
+                                                        Visibility="{Binding DeleteSelectedCancelVisibility}"/>
+                                            </Grid>
+
+                                            <Grid Grid.Row="1"
+                                                  ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="180"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <NumberBox Grid.Column="0"
+                                                           Value="{Binding TtlEditorSeconds, Mode=TwoWay}"
+                                                           Minimum="1"
+                                                           SmallChange="30"
+                                                           SpinButtonPlacementMode="Inline"/>
+
+                                                <Button Grid.Column="1"
+                                                        Content="Set TTL"
+                                                        Command="{Binding ApplyTtlCommand}"
+                                                        IsEnabled="{Binding CanApplyTtl}"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Remove TTL"
+                                                        Command="{Binding RemoveTtlCommand}"
+                                                        IsEnabled="{Binding CanRemoveTtl}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                            Visibility="{Binding StringSectionVisibility}">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="String value"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                                            <InfoBar IsOpen="{Binding IsSelectedStringBinary}"
+                                                     Severity="Warning"
+                                                     Title="Binary content"
+                                                     Message="This string looks binary, so inline editing is disabled for safety."/>
+
+                                            <TextBox Text="{Binding SelectedStringEditorValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="Wrap"
+                                                     MinHeight="180"
+                                                     Visibility="{Binding StringEditorVisibility}"/>
+
+                                            <Button Content="Save value"
+                                                    Command="{Binding SaveStringValueCommand}"
+                                                    IsEnabled="{Binding CanSaveStringValue}"
+                                                    Visibility="{Binding StringEditorVisibility}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                            Visibility="{Binding HashSectionVisibility}">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="Hash fields"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                                            <InfoBar IsOpen="{Binding ShowHashEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="No hash fields loaded"
+                                                     Message="Use the editor below to add the first field to this hash."/>
+
+                                            <ItemsControl ItemsSource="{Binding HashFields}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:RedisHashFieldItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="220"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{x:Bind Field}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"/>
+
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{x:Bind Value}"
+                                                                           TextWrapping="WrapWholeWords"/>
+
+                                                                <Button Grid.Column="2"
+                                                                        Content="Edit"
+                                                                        Command="{Binding ViewModel.BeginEditHashFieldCommand, ElementName=PageRoot}"
+                                                                        CommandParameter="{x:Bind}"/>
+
+                                                                <Button Grid.Column="3"
+                                                                        Content="Delete"
+                                                                        Command="{Binding ViewModel.DeleteHashFieldCommand, ElementName=PageRoot}"
+                                                                        CommandParameter="{x:Bind}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="220"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding HashFieldEditorName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         PlaceholderText="Field name"/>
+
+                                                <TextBox Grid.Column="1"
+                                                         Text="{Binding HashFieldEditorValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         PlaceholderText="Field value"
+                                                         TextWrapping="Wrap"
+                                                         AcceptsReturn="True"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Upsert field"
+                                                        Command="{Binding UpsertHashFieldCommand}"
+                                                        IsEnabled="{Binding CanUpsertHashField}"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                            Visibility="{Binding CollectionSectionVisibility}">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="{Binding CollectionSectionTitle}"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                            <TextBlock Text="{Binding CollectionSectionStatus}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
+
+                                            <ItemsControl ItemsSource="{Binding CollectionItems}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <TextBlock Text="{Binding}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Button Content="{Binding LoadMoreItemsLabel}"
+                                                    Command="{Binding LoadMoreItemsCommand}"
+                                                    IsEnabled="{Binding CanLoadMoreItems}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                            Visibility="{Binding SortedSetSectionVisibility}">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="Sorted set members"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                            <TextBlock Text="{Binding SortedSetStatus}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
+
+                                            <ItemsControl ItemsSource="{Binding SortedSetEntries}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:RedisSortedSetEntryItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="140"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{x:Bind Member}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"/>
+
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{x:Bind ScoreText}"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <Button Grid.Column="2"
+                                                                        Content="Edit"
+                                                                        Command="{Binding ViewModel.BeginEditSortedSetEntryCommand, ElementName=PageRoot}"
+                                                                        CommandParameter="{x:Bind}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="180"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding SortedSetMemberEditor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         PlaceholderText="Member"/>
+
+                                                <NumberBox Grid.Column="1"
+                                                           Value="{Binding SortedSetScoreEditor, Mode=TwoWay}"
+                                                           SmallChange="1"
+                                                           SpinButtonPlacementMode="Inline"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Update score"
+                                                        Command="{Binding ApplySortedSetScoreCommand}"
+                                                        IsEnabled="{Binding CanApplySortedSetScore}"/>
+                                            </Grid>
+
+                                            <Button Content="{Binding LoadMoreItemsLabel}"
+                                                    Command="{Binding LoadMoreItemsCommand}"
+                                                    IsEnabled="{Binding CanLoadMoreItems}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Grid>
+        </shared:PageScaffold.BodyContent>
+    </shared:PageScaffold>
+</Page>

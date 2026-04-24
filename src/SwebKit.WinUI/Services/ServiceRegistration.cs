@@ -15,9 +15,11 @@ using SwebKit.Observability.IncidentTimeline;
 using SwebKit.Redis;
 using SwebKit.WinUI.Platforms.Windows;
 using SwebKit.WinUI.ViewModels.Aks;
+using SwebKit.WinUI.ViewModels.Redis;
 using SwebKit.WinUI.ViewModels.ServiceBus;
 using SwebKit.WinUI.ViewModels.Settings;
 using SwebKit.WinUI.ViewModels.Shell;
+using SwebKit.WinUI.ViewModels.Storage;
 
 namespace SwebKit.WinUI.Services;
 
@@ -121,8 +123,10 @@ internal static class ServiceRegistration
         // ── Phase 1: ViewModels ───────────────────────────────────────────────────
         services.AddSingleton<CommandPaletteViewModel>();
         services.AddTransient<AksPageViewModel>();
+        services.AddTransient<RedisPageViewModel>();
         services.AddTransient<ServiceBusPageViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<StoragePageViewModel>();
 
         // ── Shell window ──────────────────────────────────────────────────────────
         services.AddSingleton<MainWindow>();

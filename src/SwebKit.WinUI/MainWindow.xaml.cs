@@ -4,7 +4,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using SwebKit.WinUI.Services;
 using SwebKit.WinUI.Views.Aks;
+using SwebKit.WinUI.Views.Redis;
 using SwebKit.WinUI.Views.ServiceBus;
+using SwebKit.WinUI.Views.Storage;
 using SwebKit.WinUI.ViewModels.Shell;
 using SwebKit.WinUI.Views.Settings;
 using SwebKit.WinUI.Views.Shell;
@@ -18,6 +20,8 @@ public sealed partial class MainWindow : Window
     public ShellChromeViewModel ShellChrome { get; }
     public CommandPaletteViewModel CommandPaletteViewModel { get; }
     private readonly ThemeCoordinator _themeCoordinator;
+    private bool _isSyncingNavigationSelection;
+    private string? _currentArea;
 
     public MainWindow(
         MainWindowViewModel viewModel,
@@ -42,6 +46,10 @@ public sealed partial class MainWindow : Window
 
         // Ctrl+K — command palette
         RegisterCommandPaletteAccelerator();
+
+        var initialArea = string.IsNullOrWhiteSpace(ViewModel.CurrentArea) ? "service-bus" : ViewModel.CurrentArea;
+        ViewModel.OnAreaSelected(initialArea);
+        NavigateToArea(initialArea);
     }
 
     private void ShellHeader_CommandPaletteRequested(object sender, EventArgs e)
@@ -53,6 +61,11 @@ public sealed partial class MainWindow : Window
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
+        if (_isSyncingNavigationSelection)
+        {
+            return;
+        }
+
         if (e.SelectedItem is NavigationViewItem item && item.Tag is string area)
         {
             ViewModel.OnAreaSelected(area);
@@ -63,31 +76,49 @@ public sealed partial class MainWindow : Window
     private void NavigateToArea(string area)
     {
         // Sync NavigationView selection when navigation is triggered from service layer
-        foreach (var menuItem in NavView.MenuItems)
+        _isSyncingNavigationSelection = true;
+        try
         {
-            if (menuItem is NavigationViewItem navItem && navItem.Tag as string == area)
+            foreach (var menuItem in NavView.MenuItems)
             {
-                NavView.SelectedItem = navItem;
-                break;
+                if (menuItem is NavigationViewItem navItem && navItem.Tag as string == area)
+                {
+                    NavView.SelectedItem = navItem;
+                    break;
+                }
+            }
+
+            foreach (var footerItem in NavView.FooterMenuItems)
+            {
+                if (footerItem is NavigationViewItem navItem && navItem.Tag as string == area)
+                {
+                    NavView.SelectedItem = navItem;
+                    break;
+                }
             }
         }
-        foreach (var footerItem in NavView.FooterMenuItems)
+        finally
         {
-            if (footerItem is NavigationViewItem navItem && navItem.Tag as string == area)
-            {
-                NavView.SelectedItem = navItem;
-                break;
-            }
+            _isSyncingNavigationSelection = false;
         }
 
         var pageType = area switch
         {
             "aks" => typeof(AksPage),
+            "redis" => typeof(RedisPage),
             "service-bus" => typeof(ServiceBusPage),
             "settings" => typeof(SettingsPage),
+            "storage" => typeof(StoragePage),
             _ => typeof(PlaceholderPage),
         };
 
+        if (string.Equals(_currentArea, area, StringComparison.OrdinalIgnoreCase)
+            && ContentFrame.CurrentSourcePageType == pageType)
+        {
+            return;
+        }
+
+        _currentArea = area;
         ContentFrame.Navigate(pageType, area);
     }
 

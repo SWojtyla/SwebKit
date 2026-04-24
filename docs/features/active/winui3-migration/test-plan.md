@@ -48,10 +48,12 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 - Check: global theme application — steps: switch between curated themes, including dark-to-dark and light-to-light swaps, navigate across migrated pages, and confirm shell chrome and page surfaces update consistently.
 - Check: resize and density behavior — steps: test narrow and wide window states, verify primary/detail panes and toolbar regions remain usable and intentional.
 - Check: state treatment consistency — steps: validate loading, empty, error, not-configured, demo, and production-warning states on at least two workspaces.
-- Check: proving-ground page adoption — steps: confirm `Settings`, `ServiceBus`, and `AKS` use the shared primitives before Redis/Storage/Pipelines/Observability work begins.
+- Check: proving-ground and follow-on page adoption — steps: confirm `Settings`, `ServiceBus`, and `AKS` still anchor the shared primitive set and that `Redis` and `Storage` inherit the same scaffold, card, and state-treatment patterns.
 - Check: AKS pod-log slice — steps: open AKS, launch logs from a pod row, switch container/range/live settings, apply a text filter, and confirm the native log panel follows the selected pod without reopening the page.
 - Check: AKS first-paint responsiveness — steps: open AKS from another route, confirm the page shell paints before cluster data arrives, and verify the app does not feel blocked while the initial bootstrap runs.
 - Check: AKS compact diagnostics state — steps: open AKS with no pod selected, confirm the page shows only a compact diagnostics hint, then select a pod and verify the full diagnostics/log surface expands in place.
+- Check: Redis baseline route — steps: open Redis, choose a configured cache or demo cache, scan keys, expand a prefix group, open one key of each common type, and verify typed details, TTL controls, and basic edit flows update the state cleanly.
+- Check: Storage baseline route — steps: open Storage, choose an account, browse containers and a virtual folder, open a text-friendly blob, verify preview/detail metadata, trigger download and URL/SAS copy actions, then reopen the saved workspace/favorite and confirm the account/container/blob context restores.
 
 ## Regression risks & mitigations
 
@@ -69,7 +71,7 @@ Validate that the WinUI migration preserves operator-facing feature parity while
 
 ## Validation status
 
-- Automated: `build-winui` green after the same-family theme refresh fix and the AKS pod-log slice
+- Automated: `build-winui` green after the Redis and Storage baseline routes were wired into shared navigation and DI
 - Manual: Not started
 
 ## Sign-off

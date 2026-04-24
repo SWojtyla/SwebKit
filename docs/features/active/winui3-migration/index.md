@@ -51,8 +51,8 @@ MAUI Blazor Hybrid on Windows ships unnecessary cross-platform abstractions, for
 | 1     | Shell + Dashboard: `MainWindow`, navigation, workspace hub, command palette, status/notification surfaces, settings and theme baseline   | Done        |
 | 2     | Service Bus workspace: namespace connect, entity tree, active/DLQ/scheduled tabs, composer/templates, filters/columns, workspace restore | Done        |
 | 3     | AKS workspace: cluster/resource browse, diagnostics panels, batch actions, monitoring continuity, pod shell                              | In Progress |
-| 4     | Redis workspace: scan/tree, TTL and value workflows, health/prefix tooling, bulk operations                                              | Not started |
-| 5     | Storage workspace: container/blob browse, preview, SAS/download workflows, workspace restore                                             | Not started |
+| 4     | Redis workspace: scan/tree, TTL and value workflows, health/prefix tooling, bulk operations                                              | In Progress |
+| 5     | Storage workspace: container/blob browse, preview, SAS/download workflows, workspace restore                                             | In Progress |
 | 6     | Pipelines delivery hub: pipelines, activity, release records, approvals, tagging                                                         | Not started |
 | 7     | Observability workspace: discovery, five tabs, guided/advanced logs, saved queries, charts                                               | Not started |
 | 8     | Incident Timeline workbench: scope toolbar, evidence views, seed flows, export, mapping guidance                                         | Not started |
