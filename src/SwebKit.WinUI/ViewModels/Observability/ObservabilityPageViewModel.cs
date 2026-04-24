@@ -74,7 +74,15 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             nameof(PerformanceTrendSeries),
             nameof(PerformanceTrendXAxes),
             nameof(PerformanceTrendYAxes));
-        HookCollectionNotifications(AvailabilityResults, nameof(HasAvailabilityResults), nameof(ShowAvailabilityEmptyState));
+        HookCollectionNotifications(
+            AvailabilityResults,
+            nameof(HasAvailabilityResults),
+            nameof(ShowAvailabilityEmptyState),
+            nameof(AvailabilityChartSummary),
+            nameof(AvailabilityChartVisibility),
+            nameof(AvailabilityChartSeries),
+            nameof(AvailabilityChartXAxes),
+            nameof(AvailabilityChartYAxes));
         HookCollectionNotifications(LogRows, nameof(HasLogRows), nameof(ShowLogsEmptyState));
         HookCollectionNotifications(DependencyHealthEntries, nameof(HasDependencyHealth), nameof(ShowDependencyEmptyState));
         HookCollectionNotifications(DimensionBreakdowns, nameof(HasDimensionBreakdowns), nameof(ShowDimensionEmptyState));
@@ -338,6 +346,47 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public string MaxRowsSummary => $"Current row cap: {_appState.Config.ObservabilityConfig?.MaxRowsPerQuery ?? 500:N0} rows per query.";
 
+    public string AvailabilityChartSummary => !HasAvailabilityResults
+        ? "Availability summary appears after the latest returned checks load."
+        : $"{AvailabilityResults.Count(result => result.Result.Success):N0} pass · {AvailabilityResults.Count(result => !result.Result.Success):N0} fail across {AvailabilityResults.Select(result => result.TestName).Distinct(StringComparer.OrdinalIgnoreCase).Count():N0} test(s) in the latest returned checks.";
+
+    public IEnumerable<ISeries> AvailabilityChartSeries => HasAvailabilityResults
+        ?
+        [
+            new ColumnSeries<double>
+            {
+                Name = "Availability %",
+                Values = AvailabilityResults
+                    .GroupBy(result => result.TestName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.Count(result => result.Result.Success) * 100d / group.Count())
+                    .ToArray(),
+            },
+        ]
+        : Array.Empty<ISeries>();
+
+    public Axis[] AvailabilityChartXAxes =>
+    [
+        new Axis
+        {
+            Labels = AvailabilityResults
+                .GroupBy(result => result.TestName, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.Key)
+                .ToArray(),
+            LabelsRotation = 15,
+        },
+    ];
+
+    public Axis[] AvailabilityChartYAxes =>
+    [
+        new Axis
+        {
+            MinLimit = 0,
+            MaxLimit = 100,
+        },
+    ];
+
     public bool ShowNoResourcesState => !IsLoadingResources && !HasResources && string.IsNullOrWhiteSpace(ResourceErrorMessage);
 
     public bool ShowFailuresEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasFailures && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
@@ -369,6 +418,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public Visibility GuidedCompiledQueryVisibility => string.IsNullOrWhiteSpace(GuidedCompiledQuery) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility PerformanceTrendChartVisibility => HasPerformanceTrend ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AvailabilityChartVisibility => HasAvailabilityResults ? Visibility.Visible : Visibility.Collapsed;
 
     public async Task LoadAsync()
     {
@@ -932,8 +983,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         }
 
         ActiveTabStatusText = AvailabilityResults.Count == 0
-            ? "Availability returned no checks for the current window."
-            : $"Loaded {AvailabilityResults.Count:N0} availability checks for the current window.";
+            ? "Availability returned no recent checks for this window."
+            : $"Loaded {AvailabilityResults.Count:N0} recent availability checks for this window.";
         _availabilityLoaded = true;
     }
 

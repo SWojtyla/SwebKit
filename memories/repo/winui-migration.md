@@ -2,3 +2,4 @@
 - New WinUI area pages are not reachable until `src/SwebKit.WinUI/MainWindow.xaml.cs` maps the area name to the page.
 - Stateful WinUI routes should publish and restore workspace snapshots through `OperatorWorkspaceService`, not only expose shell search providers.
 - Observability and other empty-result tabs need explicit loaded-state flags; collection counts alone are not enough to distinguish `loaded empty` from `not loaded`.
+- The current Observability availability provider query returns the latest 200 checks, so WinUI charts and copy for that tab should describe recent returned results rather than full-window aggregates.

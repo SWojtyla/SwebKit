@@ -874,7 +874,7 @@
                                                     <TextBlock Text="The current logs experience is intentionally native and text-first. Monaco is deferred until the shared editor host lands for multiple areas."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="Overview remains metric-first, and Availability still keeps its list-first baseline while broader LiveCharts parity continues beyond the selected-operation performance trend."
+                                                    <TextBlock Text="Overview still stays metric-first, and the remaining Availability heatmap parity plus broader LiveCharts work continue beyond the selected-operation trend and availability summary charts."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
                                                 </StackPanel>
@@ -900,6 +900,20 @@
                                                          Severity="Informational"
                                                          Title="No availability rows returned"
                                                          Message="The active resource returned no availability results for the current window."/>
+                                                <TextBlock Text="{Binding AvailabilityChartSummary}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="WrapWholeWords"/>
+                                                <Border Visibility="{Binding AvailabilityChartVisibility}"
+                                                        MinHeight="240"
+                                                        CornerRadius="8"
+                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                        BorderThickness="1"
+                                                        Padding="12">
+                                                    <lvc:CartesianChart Series="{Binding AvailabilityChartSeries}"
+                                                                        XAxes="{Binding AvailabilityChartXAxes}"
+                                                                        YAxes="{Binding AvailabilityChartYAxes}"/>
+                                                </Border>
                                                 <ItemsControl ItemsSource="{Binding AvailabilityResults}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="viewModels:ObservabilityAvailabilityItemViewModel">
