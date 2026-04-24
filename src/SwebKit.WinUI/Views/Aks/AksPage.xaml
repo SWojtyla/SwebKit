@@ -422,7 +422,7 @@
                                                     IsEnabled="{Binding CanStartSelectedPodPortForward}"/>
                                             <Button Content="Cancel"
                                                     Command="{Binding CancelSelectedPodPortForwardCommand}"
-                                                    IsEnabled="{Binding IsPortForwardStarting, Converter={StaticResource InverseBooleanConverter}}"/>
+                                                    IsEnabled="{Binding CanCancelSelectedPodPortForward}"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>

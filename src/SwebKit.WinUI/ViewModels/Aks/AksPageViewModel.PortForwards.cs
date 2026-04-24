@@ -34,6 +34,8 @@ public sealed partial class AksPageViewModel
 
     public bool CanStartSelectedPodPortForward => SelectedPod is not null && Client is not null && !IsLoading && !IsPortForwardStarting;
 
+    public bool CanCancelSelectedPodPortForward => !IsPortForwardStarting;
+
     public bool CanStopAllPortForwardSessions => PortForwardSessions.Any(session => session.CanStop);
 
     public string PortForwardSummary => PortForwardSessions.Count switch
@@ -60,6 +62,7 @@ public sealed partial class AksPageViewModel
     partial void OnIsPortForwardStartingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
+        OnPropertyChanged(nameof(CanCancelSelectedPodPortForward));
     }
 
     partial void OnIsPortForwardFormOpenChanged(bool value)

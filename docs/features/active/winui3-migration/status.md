@@ -144,6 +144,7 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - `SwebKit.WinUI` now provides a native `IObservabilityProviderFactory` implementation so the WinUI host no longer depends on the MAUI-only registration path for observability provider creation.
 - `SwebKit.WinUI` now has a native dashboard route wired as the default landing page, backed by a WinUI-owned `DashboardPageViewModel`, `ConfigurationProbeService`, and `PodHealthMonitorService` so readiness, favorites, recents, and pod-health alerts no longer depend on the MAUI dashboard during cutover validation.
 - The WinUI host now restores a first-class demo-mode path for migration validation: Settings can persist demo-mode on/off through `AppStateService`, and the shell demo banner now exposes a native disable action without falling back to the MAUI top bar.
+- The native AKS workspace no longer depends on a missing global `InverseBooleanConverter` resource in the port-forward form; the cancel-button enabled state now comes from the view model directly, fixing the demo-mode route crash during page load.
 
 ## Remaining
 
@@ -196,3 +197,4 @@ Phase 1 shell baseline and Phase 2 Service Bus baseline are in place. The shell 
 - `build-winui` succeeded on 2026-04-24 after the Observability Failures tab adopted a focused sample-trace drill over the existing exception-group payload.
 - `build-winui` succeeded on 2026-04-24 after the native dashboard route, WinUI-owned readiness probe service, and pod-health monitor were wired into the shell as the default landing page.
 - `build-winui` succeeded on 2026-04-24 after the WinUI Settings page restored demo-mode enablement and the shell banner added a native demo-mode disable action.
+- `build-winui` succeeded on 2026-04-24 after the AKS demo-mode crash fix removed the missing `InverseBooleanConverter` dependency from the native port-forward form.
