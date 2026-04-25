@@ -12,6 +12,8 @@
   - JSON pretty-printed via `System.Text.Json`; fallback to raw text on malformed input.
   - Size-gated: warn at 512 KB; hard cap at 2 MB with "Load anyway" escape.
 - Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
+- Download the currently loaded blob selection in the active folder as a ZIP archive in the user's Downloads folder.
+- Browse blob version history, compare a historical version against the current blob, and restore a selected version of the blob when the storage profile allows mutations.
 - Copy blob direct URL to clipboard (no SAS expiry).
 - Copy SAS URL with 24-hour expiry generated client-side via the SDK.
 - Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named favorites can reopen Storage context.
@@ -21,13 +23,15 @@
 
 1. `StoragePage` reads `AppState.CurrentEnvironment?.Storage`.
 2. If null: shows "not configured" prompt with link to Settings.
-3. If set: constructs `AzureStorageClient(config, CredentialStore)` directly (no DI; same pattern as Redis/AKS).
-4. `StorageContainerTree` calls `ListContainersAsync` on first render; selection fires `SelectedContainerChanged`.
-5. `StorageBlobList` calls `ListBlobsAsync` with current prefix and pagination token; breadcrumb segments drive prefix navigation.
+3. If set: the hosted page or the WinUI viewmodel resolves either the demo storage client or a factory-created live `IStorageClient` for the selected account.
+4. `StorageContainerTree` or the native container list calls `ListContainersAsync` on first render; selection changes the active container context.
+5. `StorageBlobList` or the native blob workspace calls `ListBlobsAsync` with the current prefix and pagination token; breadcrumb segments drive prefix navigation.
 6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently.
-7. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
-8. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
-9. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
+7. The native detail pane also loads storage capabilities and blob versions; because the data-plane SDK cannot prove account-level versioning, version-history workflows stay enabled and the per-blob list determines whether restore should be offered.
+8. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
+9. Bulk ZIP download streams the currently loaded selection into a ZIP archive in Downloads; selection stays local to the active folder view.
+10. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
+11. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
 
 ## Credential Modes
 
@@ -45,6 +49,8 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 - `src/SwebKit.App/Components/Storage/StorageContainerTree.razor`
 - `src/SwebKit.App/Components/Storage/StorageBlobList.razor`
 - `src/SwebKit.App/Components/Storage/BlobDetailPane.razor`
+- `src/SwebKit.WinUI/Views/Storage/StoragePage.xaml`
+- `src/SwebKit.WinUI/ViewModels/Storage/StoragePageViewModel.cs`
 - `src/SwebKit.Core/Abstractions/IStorageClient.cs`
 - `src/SwebKit.Core/Domain/StorageConfig.cs`
 - `src/SwebKit.Core/Domain/StorageModels.cs`
@@ -52,10 +58,12 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 
 ## Important Notes
 
-- Read-only in MVP. Write operations (upload, delete) are out of scope and require an explicit per-environment mutations toggle when added.
+- Storage remains primarily read-oriented. Version restore follows the available version list and the per-profile `AllowMutations` toggle because the current data-plane SDK cannot prove account-level versioning up front.
 - Pagination: `ListBlobsAsync` returns one page (default 100 items) with a continuation token. "Load more" appends the next page in the UI.
+- ZIP download works over the blobs currently loaded in the active folder view. Operators must page in additional blobs before selecting them for the archive.
+- Deleted-blob recovery is not currently first-class in either surface because the workspace list does not yet enumerate soft-deleted blobs.
 - Binary detection: `GetBlobContentAsync` checks content-type before issuing a byte-range read. Binary blobs return `IsBinary = true` without downloading content.
-- Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). Both calls are made concurrently via `Task.WhenAll`.
+- Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). The current client fetches properties first and then fetches tags from the same blob client.
 - Download progress is local to the initiating surface; there is no background transfer manager or cross-page download queue.
 - Workspace restore is semantic and lightweight. Storage reopens the selected account/container/blob context rather than trying to preserve a live client object.
 

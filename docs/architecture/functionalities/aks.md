@@ -2,7 +2,7 @@
 
 ## What Is Supported
 
-- `SwebKit.WinUI` now includes a native AKS route with cluster bootstrap, context and namespace selection, a pod browse grid with health/status summary, selected-pod log diagnostics, bounded native port-forward session management, and selected-pod shell launch while the broader side-panel parity still remains in the MAUI host.
+- `SwebKit.WinUI` now includes a native AKS route with cluster bootstrap, context and namespace selection, shared-card metric summaries, a native explorer for Pods, Deployments, StatefulSets, Jobs, CronJobs, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes, a shared detail pane for the current workload, batch, and edge selection, selected-pod log diagnostics, bounded native port-forward session management, selected-pod shell launch, selected-resource YAML load across the expanded explorer surface, selected-resource YAML edit/apply for the currently supported Deployment, StatefulSet, and Ingress kinds, ingress analysis, network-policy analysis, workload restart/scale, and Job/CronJob rerun or trigger actions while the broader side-panel parity still remains in the MAUI host.
 - Incident Timeline backend uses `IAksClientBootstrapper` plus selector-label workload resolution to gather workload-scoped pod lifecycle and event evidence for `Deployment`, `StatefulSet`, and `Pod` scopes.
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
@@ -54,13 +54,13 @@
 ## Core Runtime Flow
 
 1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
-2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
-3. Services are loaded alongside the other namespace-scoped resources and support all-namespaces browse, selection, and YAML viewing against the selected row namespace.
+2. After bootstrap completes, the WinUI page loads Pods, Deployments, StatefulSets, Jobs, CronJobs, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes into a native resource-explorer cache for the current namespace scope.
+3. The explorer pivots between resource kinds without reconnecting, and the shared detail pane derives its facts, highlights, YAML state, diagnostics state, and supported actions from the selected explorer row.
 4. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`GatewayClass`, `Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
-5. Resource YAML for Services, Jobs, CronJobs, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
-6. Table, context-menu, and keyboard actions call `IAksClient` operations for mutations and diagnostics; `Run now` and `Rerun job` use the selected row namespace.
-7. Ingress and network-policy analysis load on demand from the side-panel components and do not join the main browse-data cache or periodic refresh loop.
-8. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
+5. Resource YAML for workloads, batch resources, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` native detail-pane path; the current editable subset remains Deployments, StatefulSets, and Ingresses.
+6. Native detail-pane actions call `IAksClient` operations for ingress analysis, network-policy analysis, restart, scale, `Run now`, and `Rerun job`; batch mutations always use the selected row namespace.
+7. Ingress and network-policy analysis load on demand and do not join the main browse-data cache or periodic refresh loop.
+8. Successful batch create actions surface the created Job name and refresh the native resource scope so the new execution becomes discoverable without leaving the page.
 9. Long-running and side-panel operations keep the main grid responsive.
 10. HTTPRoute rows render in a non-virtualized grid path so variable-height route chips do not hide later rows when several routes are present.
 11. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, ingress analysis, network analysis, etc.) is open or the Events section is expanded, and resumes on panel close.
@@ -74,6 +74,8 @@
 - **Wave 2 diagnostics contract.** `IAksClient` now exposes `AnalyzeIngressAsync` and `AnalyzeNetworkPoliciesAsync`. These return typed evidence summaries plus explicit limitation text instead of pushing raw object interpretation into Razor components.
 - **Gateway API contract.** `IAksClient` exposes `GetGatewayClassesAsync`, `GetGatewaysAsync`, and `GetHttpRoutesAsync`. `KubernetesAksClient` queries Gateway API CRDs through the custom-objects client with `v1`/`v1beta1`/`v1alpha2` fallback so Envoy Gateway migrations remain visible even when classic `Ingress` is empty.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
+- **WinUI explorer slice.** `AksPageViewModel` loads Pods, Deployments, StatefulSets, Jobs, CronJobs, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes together, projects them into one native explorer model, and keeps selected-pod diagnostics available even after the operator pivots the explorer to a non-pod resource kind.
+- **WinUI action slice.** The same selected-resource model now drives YAML, ingress analysis, network-policy analysis, restart, scale, and batch trigger commands from the native detail pane, so the first operational parity layer does not depend on the MAUI side-panel components.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
 - **Batch YAML parity.** `GetResourceYamlAsync` explicitly supports `job` and `cronjob`. `DemoAksClient` emits batch/v1 YAML for both resource kinds, matching the live-client viewer flow.
 - **Trigger provenance and sanitization.** `KubernetesAksClient` clones CronJob job templates or Job specs, strips controller-owned metadata and selectors, and annotates created Jobs with `swebkit.io/source-kind` and `swebkit.io/source-name`. Source mapping prefers owner references first, then these annotations.

@@ -4,7 +4,7 @@
 
 title: "Feature Overview - winui3-service-bus-parity"
 owner: ""
-status: "Planned"
+status: "In Progress"
 jira: "not linked"
 created: "2026-04-25"
 updated: "2026-04-25"
@@ -13,15 +13,16 @@ updated: "2026-04-25"
 
 ## Goal
 
-Bring the remaining MAUI Service Bus operator workflows onto native WinUI so advanced message operations no longer require the Blazor host.
+Bring the highest-value remaining MAUI Service Bus operator workflows onto native WinUI so scheduled work, compose/template reuse, and core destructive message operations no longer require the Blazor host, while keeping the remaining advanced-rule/custom-column and restore-hardening gaps explicit.
 
 ## Value
 
-The WinUI Service Bus page already covers baseline browsing and core message work. The remaining parity gaps are operational depth: scheduled workflows, saved templates, advanced list control, and destructive safety cues. This feature isolates that remaining work from the cutover umbrella.
+The WinUI Service Bus page now covers the main native parity baseline: scheduled-message management, compose/template reuse with scheduled send, richer message-list controls, and confirmation-gated destructive actions. Deferred follow-up still tracked under this feature includes the hosted-only advanced filter/export/purge/row-density/custom-column/full-template-management workflows plus workspace-restore hardening and page-level WinUI coverage.
 
 ## Scope
 
-- In scope: scheduled message manager parity, saved templates and reuse flows, advanced filters and column control, destructive bulk-operation safety, and workspace-restore hardening.
+- In scope for the landed native baseline: scheduled message manager tabs, template save/apply/reuse flows, compose send-or-schedule parity, text-filter and list-preference persistence, and destructive safety cues.
+- Deferred follow-up still tracked here: hosted-only filter/export/purge/row-density/custom-column/template-management parity, workspace-restore hardening, and page-level WinUI coverage.
 - In scope: aligning the page with the shared layout and settings primitives once those features land.
 - Out of scope: new broker workflows that do not already exist in MAUI, backend Azure Service Bus redesign, and Incident Timeline integration.
 

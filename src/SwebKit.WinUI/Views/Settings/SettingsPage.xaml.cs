@@ -15,9 +15,27 @@ public sealed partial class SettingsPage : Page
         InitializeComponent();
     }
 
-    protected override void OnNavigatedTo(NavigationEventArgs e)
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        ViewModel.Load();
+
+        var request = e.Parameter switch
+        {
+            SettingsNavigationRequest navigationRequest => navigationRequest,
+            string area when string.Equals(area, "settings", StringComparison.OrdinalIgnoreCase) => null,
+            string section => new SettingsNavigationRequest(section),
+            _ => null,
+        };
+
+        await ViewModel.LoadAsync(request);
+        DevOpsPatBox.Password = ViewModel.DevOpsPat;
+    }
+
+    private void DevOpsPatBox_PasswordChanged(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            ViewModel.DevOpsPat = passwordBox.Password;
+        }
     }
 }

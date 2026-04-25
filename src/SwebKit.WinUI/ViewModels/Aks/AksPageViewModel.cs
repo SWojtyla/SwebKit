@@ -7,6 +7,7 @@ using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Settings;
 
 namespace SwebKit.WinUI.ViewModels.Aks;
 
@@ -130,6 +131,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             ContextOptions.Clear();
             NamespaceOptions.Clear();
             Pods.Clear();
+            ClearResourceExplorerState();
             SelectedPod = null;
             SelectedContext = string.Empty;
             SelectedNamespace = string.Empty;
@@ -171,6 +173,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             }
             else if (result.Status == AksClientBootstrapStatus.Error)
             {
+                ClearResourceExplorerState();
                 SelectedPod = null;
                 ErrorMessage = result.ErrorMessage;
             }
@@ -180,6 +183,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
         catch (Exception ex)
         {
+            ClearResourceExplorerState();
             SelectedPod = null;
             ErrorMessage = ex.Message;
             ConnectionSummary = "AKS bootstrap failed.";
@@ -195,7 +199,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     [RelayCommand]
     private Task OpenSettingsAsync()
     {
-        _navigation.NavigateTo("settings");
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.Aks));
         return Task.CompletedTask;
     }
 
@@ -240,10 +244,16 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         OnPropertyChanged(nameof(ShowPodEmptyState));
         OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
         OnPropertyChanged(nameof(CanOpenSelectedPodShell));
+        OnPropertyChanged(nameof(ResourceEmptyStateVisibility));
 
         if (value is null && SelectedPod is not null)
         {
             SelectedPod = null;
+        }
+
+        if (value is null)
+        {
+            ClearResourceExplorerState();
         }
     }
 
@@ -330,6 +340,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
         catch (Exception ex)
         {
+            ClearResourceExplorerState();
             SelectedPod = null;
             ErrorMessage = ex.Message;
             _logger.LogError(ex, "AKS namespace switch failed.");
@@ -341,41 +352,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
     }
 
-    private async Task LoadPodsAsync(CancellationToken ct)
-    {
-        Pods.Clear();
-
-        if (Client is null)
-        {
-            SelectedPod = null;
-            return;
-        }
-
-        IReadOnlyList<PodInfo> pods;
-        if (SelectedNamespace == "*")
-        {
-            var namespaces = NamespaceOptions.Where(option => option != "*").ToList();
-            pods = namespaces.Count == 0
-                ? []
-                : await Client.GetPodsAsync(namespaces, ct);
-        }
-        else
-        {
-            pods = await Client.GetPodsAsync(SelectedNamespace, labelSelector: null, ct);
-        }
-
-        foreach (var pod in pods
-            .OrderBy(pod => pod.Namespace, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(pod => pod.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            Pods.Add(new AksPodItemViewModel(pod));
-        }
-
-        ReconcileSelectedPodAfterLoad();
-
-        OnPropertyChanged(nameof(PodCountLabel));
-        OnPropertyChanged(nameof(ShowPodEmptyState));
-    }
+    private Task LoadPodsAsync(CancellationToken ct) => LoadResourceScopeAsync(ct);
 
     private async Task ResetLoadTokenAsync()
     {

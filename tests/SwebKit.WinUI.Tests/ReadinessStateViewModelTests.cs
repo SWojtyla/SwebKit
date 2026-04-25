@@ -8,8 +8,11 @@ using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Aks;
 using SwebKit.WinUI.ViewModels.Observability;
 using SwebKit.WinUI.ViewModels.Pipelines;
+using SwebKit.WinUI.ViewModels.Settings;
+using SwebKit.WinUI.ViewModels.Storage;
 
 namespace SwebKit.WinUI.Tests;
 
@@ -58,6 +61,51 @@ public sealed class ReadinessStateViewModelTests
     }
 
     [Fact]
+    public void PipelinesOpenSettings_NavigatesToDevOpsSettingsSection()
+    {
+        var (appState, workspaceService, navigation) = CreateContext();
+        appState.Config.DevOpsConfig = new DevOpsConfig { Organization = "contoso", PatCredentialKey = "devops:pat" };
+
+        var viewModel = new PipelinesPageViewModel(
+            appState,
+            new TestDevOpsClientFactory(),
+            new DemoDevOpsClient(),
+            new ReleaseRepository(),
+            new ApprovalAgingPolicy(),
+            new ConnectionStateService(),
+            workspaceService,
+            navigation,
+            new TestNotificationService(),
+            NullLogger<PipelinesPageViewModel>.Instance);
+
+        viewModel.OpenSettingsCommand.Execute(null);
+
+        Assert.Equal("settings", navigation.CurrentArea);
+        var request = Assert.IsType<SettingsNavigationRequest>(navigation.CurrentParameter);
+        Assert.Equal(SettingsSections.DevOps, request.Section);
+    }
+
+    [Fact]
+    public void AksOpenSettings_NavigatesToAksSettingsSection()
+    {
+        var (appState, _, navigation) = CreateContext();
+
+        var viewModel = new AksPageViewModel(
+            appState,
+            new TestAksBootstrapper(),
+            navigation,
+            new TestPortForwardSessionService(),
+            new TestNotificationService(),
+            NullLogger<AksPageViewModel>.Instance);
+
+        viewModel.OpenSettingsCommand.Execute(null);
+
+        Assert.Equal("settings", navigation.CurrentArea);
+        var request = Assert.IsType<SettingsNavigationRequest>(navigation.CurrentParameter);
+        Assert.Equal(SettingsSections.Aks, request.Section);
+    }
+
+    [Fact]
     public void ObservabilityReadiness_HidesWorkspaceAndGenericEmptyStates()
     {
         var (appState, workspaceService, navigation) = CreateContext();
@@ -89,6 +137,58 @@ public sealed class ReadinessStateViewModelTests
         Assert.False(viewModel.ShowNoResourcesState);
         Assert.Equal(Visibility.Collapsed, viewModel.ResourceWorkspaceVisibility);
         Assert.Equal(Visibility.Collapsed, viewModel.EmptyStateVisibility);
+    }
+
+    [Fact]
+    public void ObservabilityOpenSettings_NavigatesToObservabilitySettingsSection()
+    {
+        var (appState, workspaceService, navigation) = CreateContext();
+
+        var viewModel = new ObservabilityPageViewModel(
+            appState,
+            new TestObservabilityDiscovery(),
+            new TestObservabilityProviderFactory(),
+            new TestGuidedKqlCompiler(),
+            new TestObservabilityExplainerService(),
+            navigation,
+            new TestNotificationService(),
+            workspaceService,
+            NullLogger<ObservabilityPageViewModel>.Instance);
+
+        viewModel.OpenSettingsCommand.Execute(null);
+
+        Assert.Equal("settings", navigation.CurrentArea);
+        var request = Assert.IsType<SettingsNavigationRequest>(navigation.CurrentParameter);
+        Assert.Equal(SettingsSections.Observability, request.Section);
+    }
+
+    [Fact]
+    public void StorageOpenSettings_NavigatesToStorageSettingsSection()
+    {
+        var (appState, workspaceService, navigation) = CreateContext();
+
+        var viewModel = new StoragePageViewModel(
+            appState,
+            new TestStorageClientFactory(),
+            new DemoStorageClient(),
+            new TestNotificationService(),
+            workspaceService,
+            navigation,
+            NullLogger<StoragePageViewModel>.Instance);
+
+        viewModel.OpenSettingsCommand.Execute(null);
+
+        Assert.Equal("settings", navigation.CurrentArea);
+        var request = Assert.IsType<SettingsNavigationRequest>(navigation.CurrentParameter);
+        Assert.Equal(SettingsSections.Storage, request.Section);
+    }
+
+    [Fact]
+    public void SettingsNavigationRequest_NormalizesUnknownSectionToAppearance()
+    {
+        var request = new SettingsNavigationRequest("Unknown-Section");
+
+        Assert.Equal(SettingsSections.Appearance, request.Section);
     }
 
     [Fact]
@@ -199,11 +299,14 @@ public sealed class ReadinessStateViewModelTests
     {
         public string? CurrentArea { get; private set; }
 
+        public object? CurrentParameter { get; private set; }
+
         public event Action? NavigationChanged;
 
-        public void NavigateTo(string area)
+        public void NavigateTo(string area, object? parameter = null)
         {
             CurrentArea = area;
+            CurrentParameter = parameter;
             NavigationChanged?.Invoke();
         }
     }
@@ -246,6 +349,37 @@ public sealed class ReadinessStateViewModelTests
     private sealed class TestDevOpsClientFactory : IDevOpsClientFactory
     {
         public IDevOpsClient Create(DevOpsConfig config) => new DemoDevOpsClient();
+    }
+
+    private sealed class TestAksBootstrapper : IAksClientBootstrapper
+    {
+        public Task<AksClientBootstrapResult> BootstrapAsync(AksClientBootstrapRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new AksClientBootstrapResult(
+                AksClientBootstrapStatus.NotConfigured,
+                null,
+                [],
+                [],
+                string.Empty,
+                "default",
+                "Not configured."));
+    }
+
+    private sealed class TestPortForwardSessionService : IPortForwardSessionService
+    {
+        public IReadOnlyList<PortForwardSession> Sessions => [];
+
+        public event Action? SessionsChanged;
+
+        public Task<PortForwardSession> StartAsync(IAksClient client, string ns, string resourceName, int localPort, int remotePort, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task StopAsync(PortForwardSession session, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task StopAllAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class TestStorageClientFactory : IStorageClientFactory
+    {
+        public IStorageClient Create(StorageConfig config) => new DemoStorageClient();
     }
 
     private sealed class ThrowingDevOpsClientFactory(Exception exception) : IDevOpsClientFactory

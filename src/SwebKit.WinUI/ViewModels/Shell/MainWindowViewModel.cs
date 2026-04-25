@@ -14,7 +14,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellNaviga
     private readonly UiStateRepository _uiState;
 
     /// <summary>Navigation to a new area was requested by a service layer call.</summary>
-    public event Action<string>? NavigationRequested;
+    public event Action<string, object?>? NavigationRequested;
 
     /// <inheritdoc/>
     public event Action? NavigationChanged;
@@ -62,10 +62,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellNaviga
     /// Called by OperatorWorkspaceService.OpenSnapshotAsync when it needs to
     /// navigate to a specific area. Raises NavigationRequested so MainWindow
     /// can call Frame.Navigate.
-    public void NavigateTo(string area)
+    public void NavigateTo(string area, object? parameter = null)
     {
         CurrentArea = area;
-        NavigationRequested?.Invoke(area);
+        NavigationRequested?.Invoke(area, parameter);
         NavigationChanged?.Invoke();
     }
 

@@ -9,6 +9,7 @@ using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Settings;
 
 namespace SwebKit.WinUI.ViewModels.Pipelines;
 
@@ -416,7 +417,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     [RelayCommand]
     private Task OpenSettingsAsync()
     {
-        _navigation.NavigateTo("settings");
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.DevOps));
         return Task.CompletedTask;
     }
 

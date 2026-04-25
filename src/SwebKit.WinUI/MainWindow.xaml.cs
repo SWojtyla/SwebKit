@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     private readonly ThemeCoordinator _themeCoordinator;
     private bool _isSyncingNavigationSelection;
     private string? _currentArea;
+    private object? _currentNavigationParameter;
 
     public MainWindow(
         MainWindowViewModel viewModel,
@@ -76,7 +77,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void NavigateToArea(string area)
+    private void NavigateToArea(string area, object? parameter = null)
     {
         // Sync NavigationView selection when navigation is triggered from service layer
         _isSyncingNavigationSelection = true;
@@ -119,13 +120,15 @@ public sealed partial class MainWindow : Window
         };
 
         if (string.Equals(_currentArea, area, StringComparison.OrdinalIgnoreCase)
-            && ContentFrame.CurrentSourcePageType == pageType)
+            && ContentFrame.CurrentSourcePageType == pageType
+            && Equals(_currentNavigationParameter, parameter ?? area))
         {
             return;
         }
 
         _currentArea = area;
-        ContentFrame.Navigate(pageType, area);
+        _currentNavigationParameter = parameter ?? area;
+        ContentFrame.Navigate(pageType, _currentNavigationParameter);
     }
 
     // ── Command palette ────────────────────────────────────────────────────────

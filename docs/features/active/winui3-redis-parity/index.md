@@ -4,7 +4,7 @@
 
 title: "Feature Overview - winui3-redis-parity"
 owner: ""
-status: "Review"
+status: "Done"
 jira: "not linked"
 created: "2026-04-25"
 updated: "2026-04-25"
@@ -17,7 +17,7 @@ Close the remaining Redis workspace parity gap in WinUI so operators can move fr
 
 ## Value
 
-The native Redis route now carries the deeper operator workflows that previously kept Redis parity anchored to MAUI: keyspace health, prefix analysis, slow-log and hot-key correlation, Pub/Sub inspection, and safer bulk actions. The remaining work is manual validation and close-out.
+The native Redis route now carries the deeper operator workflows that previously kept Redis parity anchored to MAUI: keyspace health, prefix analysis, slow-log and hot-key correlation, Pub/Sub inspection, and safer bulk actions. The feature is accepted as done for now, with any remaining demo-mode or representative live-profile verification treated as optional cutover follow-up rather than a blocker.
 
 ## Scope
 

@@ -62,6 +62,22 @@ public class AzureStorageClientTests
         Assert.Contains("storage:missing", ex.Message);
     }
 
+    [Fact]
+    public void IsExactVersionMatch_RequiresAnExactBlobName()
+    {
+        Assert.True(AzureStorageClient.IsExactVersionMatch("app-settings.json", "app-settings.json"));
+        Assert.False(AzureStorageClient.IsExactVersionMatch("app-settings.json", "app-settings.json.backup"));
+        Assert.False(AzureStorageClient.IsExactVersionMatch("folder/app-settings.json", "folder/app-settings.json/child"));
+    }
+
+    [Fact]
+    public void IsTextContentType_UsesBlobNameFallbackForOctetStream()
+    {
+        Assert.True(AzureStorageClient.IsTextContentType("application/octet-stream", "app-settings.json"));
+        Assert.True(AzureStorageClient.IsTextContentType("application/octet-stream", "settings.yaml"));
+        Assert.False(AzureStorageClient.IsTextContentType("application/octet-stream", "bundle.bin"));
+    }
+
     /// <summary>
     /// Provides a valid-looking Azure Storage connection string so that
     /// BlobServiceClient construction succeeds without network access.

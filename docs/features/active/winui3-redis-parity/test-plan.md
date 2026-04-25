@@ -4,7 +4,7 @@
 
 title: "Test Plan - winui3-redis-parity"
 owner: ""
-status: "Review"
+status: "Done"
 created: "2026-04-25"
 updated: "2026-04-25"
 
@@ -28,7 +28,7 @@ Validate that the native Redis workspace reaches the agreed analysis and bulk-op
 ## Automated coverage
 
 - Build validation: `build-winui` is green after the WinUI Redis parity implementation.
-- Unit tests: `dotnet test tests/SwebKit.WinUI.Tests/SwebKit.WinUI.Tests.csproj --filter RedisPageViewModelTests` passes and covers health analysis, prefix memory analysis, slow-log or hot-key loading, Pub/Sub loading, and bulk-delete gating.
+- Unit tests: `dotnet test tests/SwebKit.WinUI.Tests/SwebKit.WinUI.Tests.csproj --filter RedisPageViewModelTests` passes and covers demo-mode fallback without Redis config, health analysis, prefix memory analysis, slow-log or hot-key loading, Pub/Sub loading, and bulk-delete gating.
 - Regression target: rerun touched domain tests if Redis service behavior changes.
 
 ## Test data and setup
@@ -52,15 +52,15 @@ Validate that the native Redis workspace reaches the agreed analysis and bulk-op
 
 - The Redis analysis and bulk workflows called out in this plan are available natively.
 - Baseline browse and typed-detail flows remain stable.
-- `build-winui` stays green, focused Redis WinUI tests cover the new state logic, and manual demo/live checks confirm the operator flow is ready to close.
+- `build-winui` stays green, focused Redis WinUI tests cover the new state logic, and any remaining demo/live checks are either completed later or explicitly deferred during cutover coordination.
 
 ## Validation status
 
 - Automated: Complete
-- Manual: Pending demo-mode and representative live-profile validation
+- Manual: Deferred for now by operator acceptance
 
 ## Sign-off
 
 - **Approved by:**
-- **Date:**
-- **Conditions (if any):**
+- **Date:** 2026-04-25
+- **Conditions (if any):** Accepted for now; demo-mode and representative live-profile walkthroughs can be completed later if additional cutover evidence is needed.

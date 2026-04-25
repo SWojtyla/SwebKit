@@ -124,6 +124,8 @@ public sealed partial class RedisPageViewModel
             : $"{_selectedKeys.Count} loaded keys selected."
     };
 
+            public Visibility HeaderBulkToolbarVisibility => (_keys.Count > 0 || IsSelectionMode) ? Visibility.Visible : Visibility.Collapsed;
+
     public Visibility SelectionSummaryVisibility => IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
 
     public bool ShowBulkDeleteConfirmation => _appState.Config.IsProduction && IsSelectionMode && _selectedKeys.Count > 0;
@@ -827,6 +829,8 @@ public sealed partial class RedisPageViewModel
         OnPropertyChanged(nameof(CanClearSelection));
         OnPropertyChanged(nameof(CanExportLoadedKeys));
         OnPropertyChanged(nameof(CanDeleteSelectedKeys));
+        OnPropertyChanged(nameof(HeaderBulkToolbarVisibility));
+        OnPropertyChanged(nameof(HeaderMessagesVisibility));
         OnPropertyChanged(nameof(SelectionModeButtonLabel));
         OnPropertyChanged(nameof(SelectionSummaryText));
         OnPropertyChanged(nameof(SelectionSummaryVisibility));

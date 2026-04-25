@@ -1,186 +1,627 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
+    x:Name="SettingsRootPage"
     x:Class="SwebKit.WinUI.Views.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:SwebKit.Core.Models"
     xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
-    xmlns:vm="using:SwebKit.WinUI.ViewModels.Settings"
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold
         Title="Settings"
         IsHeaderCompact="True">
         <shared:PageScaffold.HeaderContent>
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                <TextBlock
-                    Text="Unsaved changes"
-                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                    VerticalAlignment="Center"
-                    Visibility="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-
-                <Button
-                    Content="Save"
+            <Button Content="{x:Bind ViewModel.RunLiveCheckButtonLabel, Mode=OneWay}"
                     Style="{StaticResource AccentButtonStyle}"
-                    Command="{x:Bind ViewModel.SaveCommand}"
-                    IsEnabled="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-            </StackPanel>
+                    Command="{x:Bind ViewModel.RunLiveCheckCommand}"
+                    Visibility="{x:Bind ViewModel.RunLiveCheckVisibility, Mode=OneWay}"/>
         </shared:PageScaffold.HeaderContent>
 
         <shared:PageScaffold.ContextContent>
             <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                <TextBlock
-                    Text="Configure shell theme, startup warmup, and safety defaults while the broader settings surface continues to migrate into native WinUI workspaces."
-                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                    TextWrapping="WrapWholeWords"/>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{x:Bind ViewModel.CurrentSectionSubtitle, Mode=OneWay}"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.CurrentAreaStatusText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SwebKitSectionHeaderBrush}"/>
+                    <TextBlock Text="{x:Bind ViewModel.CurrentAreaSummary, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.CurrentAreaDetail, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="{x:Bind ViewModel.CurrentAreaDetailVisibility, Mode=OneWay}"/>
+                    <TextBlock Text="{x:Bind ViewModel.CurrentAreaProbeSummary, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="{x:Bind ViewModel.CurrentAreaProbeSummaryVisibility, Mode=OneWay}"/>
+                </StackPanel>
             </Border>
         </shared:PageScaffold.ContextContent>
 
         <shared:PageScaffold.BodyContent>
-            <ScrollViewer>
-                <StackPanel MaxWidth="820"
-                            Spacing="16">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                    <shared:SectionCard Title="Appearance"
-                                        Description="Choose the curated shell theme used across the native WinUI workspace.">
-                        <shared:SectionCard.BodyContent>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                    <TextBlock Text="Theme"
-                                               Style="{StaticResource BodyTextBlockStyle}"/>
-                                    <TextBlock
-                                        Text="Theme changes apply immediately after save so shell chrome and work surfaces stay aligned."
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                        TextWrapping="Wrap"
-                                        MaxWidth="520"/>
-                                </StackPanel>
-
-                                <ComboBox
-                                    Grid.Column="1"
-                                    MinWidth="220"
-                                    VerticalAlignment="Center"
-                                    ItemsSource="{x:Bind ViewModel.ThemeOptions}"
-                                    SelectedValuePath="Key"
-                                    SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"
-                                    DisplayMemberPath="Label"/>
-                            </Grid>
-                        </shared:SectionCard.BodyContent>
-                    </shared:SectionCard>
-
-                    <shared:SectionCard Title="Runtime defaults"
-                                        Description="Shape how the WinUI host starts up and how parity work is exercised when live backends are not the focus.">
-                        <shared:SectionCard.BodyContent>
-                            <StackPanel Spacing="12">
-                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0"
-                                                    VerticalAlignment="Center"
-                                                    Spacing="4">
-                                            <TextBlock Text="Warm up connections on startup"
-                                                       Style="{StaticResource BodyTextBlockStyle}"/>
-                                            <TextBlock
-                                                Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts so native pages reach working state faster."
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                TextWrapping="Wrap"
-                                                MaxWidth="520"/>
-                                        </StackPanel>
-
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            OnContent=""
-                                            OffContent=""
-                                            IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"/>
-                                    </Grid>
-                                </Border>
-
-                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0"
-                                                    VerticalAlignment="Center"
-                                                    Spacing="4">
-                                            <TextBlock Text="Demo mode"
-                                                       Style="{StaticResource BodyTextBlockStyle}"/>
-                                            <TextBlock
-                                                Text="Use synthetic data across the migrated WinUI workspaces so the shell, dashboard, and native pages can be validated without live services."
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                TextWrapping="Wrap"
-                                                MaxWidth="520"/>
-                                        </StackPanel>
-
-                                        <ToggleSwitch
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            OnContent=""
-                                            OffContent=""
-                                            IsOn="{x:Bind ViewModel.IsDemoModeEnabled, Mode=TwoWay}"/>
-                                    </Grid>
-                                </Border>
-                            </StackPanel>
-                        </shared:SectionCard.BodyContent>
-                    </shared:SectionCard>
-
-                    <shared:SectionCard Title="Safety"
-                                        Description="Keep destructive workflows explicit when the current profile points at production resources.">
-                        <shared:SectionCard.BodyContent>
-                            <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0"
-                                                VerticalAlignment="Center"
-                                                Spacing="4">
-                                        <TextBlock Text="Production environment"
-                                                   Style="{StaticResource BodyTextBlockStyle}"/>
-                                        <TextBlock
-                                            Text="Enable extra confirmation dialogs for destructive actions such as DLQ resubmit or delete. Production prompts still require typing CONFIRM."
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="Wrap"
-                                            MaxWidth="520"/>
+                <shared:SectionCard Grid.Column="0"
+                                    Title="Sections"
+                                    Description="Choose the native configuration surface that owns the current repair path.">
+                    <shared:SectionCard.BodyContent>
+                        <ListView ItemsSource="{x:Bind ViewModel.Sections}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedSectionOption, Mode=TwoWay}"
+                                  SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Spacing="4"
+                                                Padding="4">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                        <TextBlock Text="{Binding Description}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="Wrap"/>
                                     </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </shared:SectionCard.BodyContent>
+                </shared:SectionCard>
 
-                                    <ToggleSwitch
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        OnContent=""
-                                        OffContent=""
-                                        IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"/>
-                                </Grid>
-                            </Border>
-                        </shared:SectionCard.BodyContent>
-                    </shared:SectionCard>
+                <ScrollViewer Grid.Column="1">
+                    <StackPanel MaxWidth="920"
+                                Spacing="16">
 
-                    <shared:StateView
-                        Title="Settings migration is still in progress"
-                        Message="Domain-specific settings continue to land in their parity waves. This page now owns the shell-wide defaults that the remaining native pages depend on."
-                        Glyph="i"/>
-                </StackPanel>
-            </ScrollViewer>
+                        <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                Visibility="{x:Bind ViewModel.SectionStatusVisibility, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind ViewModel.SectionStatusMessage, Mode=OneWay}"
+                                       Style="{StaticResource BodyTextBlockStyle}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+
+                        <shared:SectionCard Title="Readiness"
+                                            Description="The current section uses the shared configuration health and live-probe pipeline that the native routes already depend on.">
+                            <shared:SectionCard.BodyContent>
+                                <StackPanel Spacing="12">
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.CurrentActionItems}"
+                                                  Visibility="{x:Bind ViewModel.CurrentActionItemsVisibility, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:ConfigurationActionItem">
+                                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="{x:Bind Title}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBlock Text="{x:Bind Summary}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.CurrentCredentialReferences}"
+                                                  Visibility="{x:Bind ViewModel.CurrentCredentialReferencesVisibility, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:CredentialReferenceHealth">
+                                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="{x:Bind Label}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBlock Text="{x:Bind Summary}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </shared:SectionCard.BodyContent>
+                        </shared:SectionCard>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.AppearanceVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Appearance"
+                                                Description="Choose the curated shell theme used across the native WinUI workspace.">
+                                <shared:SectionCard.BodyContent>
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Theme"
+                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                            <TextBlock Text="Theme changes apply immediately after save so shell chrome and work surfaces stay aligned."
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                        <ComboBox Grid.Column="1"
+                                                  MinWidth="240"
+                                                  ItemsSource="{x:Bind ViewModel.ThemeOptions}"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedValuePath="Key"
+                                                  SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"/>
+                                    </Grid>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
+                            <shared:SectionCard Title="Runtime defaults"
+                                                Description="Shape how the WinUI host starts up and how parity work is exercised when live backends are not the focus.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Warm up connections on startup"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <TextBlock Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts so native pages reach working state faster."
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+
+                                                <ToggleSwitch Grid.Column="1"
+                                                              IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"
+                                                              OnContent=""
+                                                              OffContent=""/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Demo mode"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <TextBlock Text="Use synthetic data across the migrated WinUI workspaces so the shell, dashboard, and native pages can be validated without live services."
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+
+                                                <ToggleSwitch Grid.Column="1"
+                                                              IsOn="{x:Bind ViewModel.IsDemoModeEnabled, Mode=TwoWay}"
+                                                              OnContent=""
+                                                              OffContent=""/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Production environment"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <TextBlock Text="Enable extra confirmation dialogs for destructive actions such as bulk delete or replay. Production prompts still require typing CONFIRM."
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+
+                                                <ToggleSwitch Grid.Column="1"
+                                                              IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"
+                                                              OnContent=""
+                                                              OffContent=""/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Button Content="Save shell settings"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                HorizontalAlignment="Left"
+                                                Command="{x:Bind ViewModel.SaveAppearanceCommand}"/>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.ServiceBusVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Configured namespaces"
+                                                Description="Service Bus namespace connectivity remains profile-backed, but the native Settings route now surfaces credential health and pinned entities.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <shared:StateView Title="No Service Bus namespaces configured"
+                                                          Message="Add a Service Bus namespace from the messaging workflow or current profile before using Service Bus readiness-driven routes."
+                                                          Glyph="i"
+                                                          Visibility="{x:Bind ViewModel.ServiceBusNamespacesEmptyVisibility, Mode=OneWay}"/>
+
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.ServiceBusNamespaces}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{Binding Alias}"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                            <TextBlock Text="{Binding FullyQualifiedNamespace}"
+                                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                            <TextBlock Text="{Binding CredentialStateLabel}"
+                                                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                            <TextBlock Text="{Binding CredentialSummary}"
+                                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="Wrap"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
+                            <shared:SectionCard Title="Pinned entities"
+                                                Description="Review and remove project-scoped queue or subscription pins without leaving the native host.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <shared:StateView Title="No pinned entities yet"
+                                                          Message="Pin queues or subscriptions from the Service Bus workspace to keep them on the current profile."
+                                                          Glyph="i"
+                                                          Visibility="{x:Bind ViewModel.ServiceBusPinnedEntitiesEmptyVisibility, Mode=OneWay}"/>
+
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.ServiceBusPinnedEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{Binding DisplayPath}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="Wrap"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Remove"
+                                                                    Command="{Binding ViewModel.RemoveServiceBusLinkCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.AksVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Cluster defaults"
+                                                Description="Choose the kubeconfig scope that the native AKS workspace should open with.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBox Header="Kubeconfig path (optional)"
+                                                 Text="{x:Bind ViewModel.AksKubeconfigPath, Mode=TwoWay}"
+                                                 PlaceholderText="C:\\Users\\you\\.kube\\config"/>
+
+                                        <TextBox Header="Default context (optional)"
+                                                 Text="{x:Bind ViewModel.AksKubeconfigContext, Mode=TwoWay}"
+                                                 PlaceholderText="Use the current kubeconfig context"/>
+
+                                        <TextBox Header="Default namespace"
+                                                 Text="{x:Bind ViewModel.AksDefaultNamespace, Mode=TwoWay}"
+                                                 PlaceholderText="default"/>
+
+                                        <Button Content="Save AKS settings"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                HorizontalAlignment="Left"
+                                                Command="{x:Bind ViewModel.SaveAksCommand}"/>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.RedisVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Configured caches"
+                                                Description="Review active cache entries and switch between native Redis profiles.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <shared:StateView Title="No Redis cache configured"
+                                                          Message="Add at least one cache profile before using the native Redis workspace."
+                                                          Glyph="i"
+                                                          Visibility="{x:Bind ViewModel.RedisCachesEmptyVisibility, Mode=OneWay}"/>
+
+                                        <ComboBox Header="Active cache"
+                                                  ItemsSource="{x:Bind ViewModel.RedisCaches}"
+                                                  DisplayMemberPath="DisplayName"
+                                                  SelectedValuePath="Cache.Id"
+                                                  SelectedValue="{x:Bind ViewModel.SelectedActiveRedisCacheId, Mode=TwoWay}"/>
+
+                                        <TextBox Header="Namespace separator"
+                                                 Text="{x:Bind ViewModel.RedisNamespaceSeparator, Mode=TwoWay}"
+                                                 PlaceholderText="-"/>
+
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.RedisCaches}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{Binding DisplayName}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                <TextBlock Text="{Binding DatabaseLabel}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Edit"
+                                                                    Command="{Binding ViewModel.EditRedisCacheCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"/>
+                                                            <Button Grid.Column="2"
+                                                                    Content="Remove"
+                                                                    Command="{Binding ViewModel.RemoveRedisCacheCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
+                            <shared:SectionCard Title="{x:Bind ViewModel.RedisEditorTitle, Mode=OneWay}"
+                                                Description="Add or repair Redis cache profiles using the same connection details the workspace will consume.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBox Header="Display name"
+                                                 Text="{x:Bind ViewModel.RedisDisplayName, Mode=TwoWay}"
+                                                 PlaceholderText="Primary Redis"/>
+
+                                        <TextBox Header="Redis connection string"
+                                                 Text="{x:Bind ViewModel.RedisConnectionString, Mode=TwoWay}"
+                                                 PlaceholderText="localhost:6379,password=***,abortConnect=false"
+                                                 TextWrapping="Wrap"/>
+
+                                        <NumberBox Header="Database"
+                                                   Minimum="0"
+                                                   Maximum="15"
+                                                   Value="{x:Bind ViewModel.RedisDatabase, Mode=TwoWay}"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <Button Content="Save Redis settings"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Command="{x:Bind ViewModel.SaveRedisCommand}"/>
+                                            <Button Content="Test connection"
+                                                    Command="{x:Bind ViewModel.TestRedisConnectionCommand}"/>
+                                            <Button Content="Cancel edit"
+                                                    Command="{x:Bind ViewModel.CancelRedisEditCommand}"
+                                                    Visibility="{x:Bind ViewModel.RedisEditCancelVisibility, Mode=OneWay}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.DevOpsVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Azure DevOps access"
+                                                Description="Connect Azure DevOps so pipeline, release, and approval data can flow into the native host.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBox Header="Organization"
+                                                 Text="{x:Bind ViewModel.DevOpsOrganization, Mode=TwoWay}"
+                                                 PlaceholderText="myorg or https://dev.azure.com/myorg"/>
+
+                                        <PasswordBox x:Name="DevOpsPatBox"
+                                                     Header="Personal access token"
+                                                     PlaceholderText="Enter a new PAT to replace the stored one"
+                                                     PasswordChanged="DevOpsPatBox_PasswordChanged"
+                                                     PasswordRevealMode="Peek"/>
+
+                                        <TextBlock Text="A PAT is already stored in Windows Credential Manager. Leave the field blank to keep using it."
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{x:Bind ViewModel.StoredDevOpsPatVisibility, Mode=OneWay}"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <Button Content="Save Azure DevOps settings"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Command="{x:Bind ViewModel.SaveDevOpsCommand}"/>
+                                            <Button Content="Test connection"
+                                                    Command="{x:Bind ViewModel.TestDevOpsConnectionCommand}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.StorageVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Configured storage accounts"
+                                                Description="Review the blob-account profiles the native storage workspace can open.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <shared:StateView Title="No storage accounts configured"
+                                                          Message="Add a storage profile before using the native Storage route."
+                                                          Glyph="i"
+                                                          Visibility="{x:Bind ViewModel.StorageAccountsEmptyVisibility, Mode=OneWay}"/>
+
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.StorageAccounts}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{Binding DisplayName}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                <TextBlock Text="{Binding AccountName}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{Binding AuthLabel}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                <TextBlock Text="{Binding CredentialSummary}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="Wrap"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Edit"
+                                                                    Command="{Binding ViewModel.EditStorageAccountCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"/>
+                                                            <Button Grid.Column="2"
+                                                                    Content="Remove"
+                                                                    Command="{Binding ViewModel.RemoveStorageAccountCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
+                            <shared:SectionCard Title="{x:Bind ViewModel.StorageEditorTitle, Mode=OneWay}"
+                                                Description="Add or repair a blob-account profile with the authentication mode the native route expects.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBox Header="Display name"
+                                                 Text="{x:Bind ViewModel.StorageDisplayName, Mode=TwoWay}"
+                                                 PlaceholderText="Production Storage"/>
+
+                                        <TextBox Header="Account name"
+                                                 Text="{x:Bind ViewModel.StorageAccountName, Mode=TwoWay}"
+                                                 PlaceholderText="mystorageaccount"/>
+
+                                        <ToggleSwitch Header="Use Azure AD (DefaultAzureCredential)"
+                                                      IsOn="{x:Bind ViewModel.StorageUseAad, Mode=TwoWay}"
+                                                      OnContent="Enabled"
+                                                      OffContent="Disabled"/>
+
+                                        <TextBox Header="Connection string reference"
+                                                 Text="{x:Bind ViewModel.StorageConnectionStringRef, Mode=TwoWay}"
+                                                 PlaceholderText="storage-myaccount-connstr"/>
+
+                                        <ToggleSwitch Header="Allow mutations"
+                                                      IsOn="{x:Bind ViewModel.StorageAllowMutations, Mode=TwoWay}"
+                                                      OnContent="Enabled"
+                                                      OffContent="Disabled"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <Button Content="Save storage settings"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Command="{x:Bind ViewModel.SaveStorageCommand}"/>
+                                            <Button Content="Test connection"
+                                                    Command="{x:Bind ViewModel.TestStorageConnectionCommand}"/>
+                                            <Button Content="Cancel edit"
+                                                    Command="{x:Bind ViewModel.CancelStorageEditCommand}"
+                                                    Visibility="{x:Bind ViewModel.StorageEditCancelVisibility, Mode=OneWay}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.ObservabilityVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Azure sign-in model"
+                                                Description="Observability uses the same Azure identity chain that the native route already consumes.">
+                                <shared:SectionCard.BodyContent>
+                                    <shared:StateView Title="No credentials are stored here"
+                                                      Message="Application Insights discovery and KQL queries use DefaultAzureCredential and the Azure CLI identity already available on this machine. Run az login outside the app if access needs repair."
+                                                      Glyph="i"/>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
+                            <shared:SectionCard Title="Query and threshold defaults"
+                                                Description="Tune the query limits and performance/failure thresholds consumed by the native Observability workspace.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <NumberBox Header="Maximum rows per query"
+                                                   Minimum="100"
+                                                   Maximum="5000"
+                                                   Value="{x:Bind ViewModel.ObservabilityMaxRowsPerQuery, Mode=TwoWay}"/>
+
+                                        <NumberBox Header="Failure rate amber threshold"
+                                                   Minimum="0"
+                                                   Maximum="1"
+                                                   SmallChange="0.01"
+                                                   Value="{x:Bind ViewModel.ObservabilityFailureRateAmberThreshold, Mode=TwoWay}"/>
+
+                                        <NumberBox Header="Failure rate red threshold"
+                                                   Minimum="0"
+                                                   Maximum="1"
+                                                   SmallChange="0.01"
+                                                   Value="{x:Bind ViewModel.ObservabilityFailureRateRedThreshold, Mode=TwoWay}"/>
+
+                                        <NumberBox Header="Latency amber threshold (ms)"
+                                                   Minimum="0"
+                                                   Maximum="60000"
+                                                   Value="{x:Bind ViewModel.ObservabilityLatencyAmberThresholdMs, Mode=TwoWay}"/>
+
+                                        <NumberBox Header="Latency red threshold (ms)"
+                                                   Minimum="0"
+                                                   Maximum="60000"
+                                                   Value="{x:Bind ViewModel.ObservabilityLatencyRedThresholdMs, Mode=TwoWay}"/>
+
+                                        <Button Content="Save observability settings"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                HorizontalAlignment="Left"
+                                                Command="{x:Bind ViewModel.SaveObservabilityCommand}"/>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+                        </StackPanel>
+
+                        <StackPanel Spacing="16"
+                                    Visibility="{x:Bind ViewModel.IncidentTimelineVisibility, Mode=OneWay}">
+                            <shared:StateView Title="Incident Timeline remains deferred"
+                                              Message="The current settings parity wave makes the omission visible instead of silent. Incident Timeline configuration still belongs to a separate migration slice and is not part of the native settings close-out here."
+                                              Glyph="i"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </shared:PageScaffold.BodyContent>
     </shared:PageScaffold>
 

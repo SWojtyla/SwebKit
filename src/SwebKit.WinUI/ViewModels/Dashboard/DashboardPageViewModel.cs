@@ -9,6 +9,7 @@ using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Settings;
 
 namespace SwebKit.WinUI.ViewModels.Dashboard;
 
@@ -235,7 +236,7 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
     [RelayCommand]
     private Task OpenSettingsAsync()
     {
-        _navigation.NavigateTo("settings");
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.Appearance));
         return Task.CompletedTask;
     }
 
@@ -247,7 +248,7 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
             return Task.CompletedTask;
         }
 
-        _navigation.NavigateTo(MapDashboardRoute(item.SettingsSection));
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(item.SettingsSection));
         return Task.CompletedTask;
     }
 
@@ -786,25 +787,14 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
             TaskScheduler.Default);
     }
 
-    private static string MapDashboardRoute(string settingsSection) => settingsSection switch
+    private static string ResolveReadinessActionLabel(ConfigurationAreaHealth area) => SettingsSections.Normalize(area.SettingsSection) switch
     {
-        "servicebus" => "service-bus",
-        "aks" => "aks",
-        "redis" => "redis",
-        "devops" => "pipelines",
-        "storage" => "storage",
-        "observability" => "observability",
-        _ => "settings"
-    };
-
-    private static string ResolveReadinessActionLabel(ConfigurationAreaHealth area) => MapDashboardRoute(area.SettingsSection) switch
-    {
-        "service-bus" => "Open Service Bus workspace",
-        "aks" => "Open AKS workspace",
-        "redis" => "Open Redis workspace",
-        "storage" => "Open Storage workspace",
-        "pipelines" => "Open Pipelines workspace",
-        "observability" => "Open Observability workspace",
+        SettingsSections.ServiceBus => "Open Service Bus settings",
+        SettingsSections.Aks => "Open AKS settings",
+        SettingsSections.Redis => "Open Redis settings",
+        SettingsSections.DevOps => "Open Azure DevOps settings",
+        SettingsSections.Storage => "Open Storage settings",
+        SettingsSections.Observability => "Open Observability settings",
         _ => "Open Settings"
     };
 

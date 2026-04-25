@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO.Compression;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +9,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Settings;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace SwebKit.WinUI.ViewModels.Storage;
@@ -28,6 +30,8 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     private CancellationTokenSource _refreshCts = new();
     private CancellationTokenSource _downloadCts = new();
     private IStorageClient? _client;
+    private StorageCapabilities? _storageCapabilities;
+    private readonly HashSet<string> _selectedBlobNames = new(StringComparer.Ordinal);
     private bool _loaded;
     private bool _isDisposed;
     private bool _suppressAccountSelectionSideEffects;
@@ -67,6 +71,16 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         {
             OnPropertyChanged(nameof(BlobCountLabel));
             OnPropertyChanged(nameof(ShowBlobEmptyState));
+            RefreshBulkSelectionState();
+        };
+
+        BlobVersions.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasBlobVersions));
+            OnPropertyChanged(nameof(CanRestoreVersions));
+            OnPropertyChanged(nameof(VersionListVisibility));
+            OnPropertyChanged(nameof(VersionEmptyVisibility));
+            OnPropertyChanged(nameof(RestoreVersionActionVisibility));
         };
 
         MetadataRows.CollectionChanged += (_, _) =>
@@ -89,6 +103,8 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     public ObservableCollection<StorageContainerItemViewModel> Containers { get; } = [];
 
     public ObservableCollection<StorageBlobEntryViewModel> Blobs { get; } = [];
+
+    public ObservableCollection<StorageBlobVersionViewModel> BlobVersions { get; } = [];
 
     public ObservableCollection<StorageBreadcrumbItemViewModel> Breadcrumbs { get; } = [];
 
@@ -115,6 +131,15 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     [ObservableProperty]
     public partial bool IsDownloadIndeterminate { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSelectionMode { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsBulkDownloading { get; set; }
+
+    [ObservableProperty]
+    public partial string BulkSelectionSummaryText { get; set; } = "No loaded blobs selected for ZIP download.";
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
@@ -168,6 +193,24 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     public partial bool CanLoadExpandedPreview { get; set; }
 
     [ObservableProperty]
+    public partial bool IsLoadingVersions { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsLoadingVersionComparison { get; set; }
+
+    [ObservableProperty]
+    public partial string VersionStatusText { get; set; } = "Select a blob to inspect version history when the account supports it.";
+
+    [ObservableProperty]
+    public partial string? VersionErrorMessage { get; set; }
+
+    [ObservableProperty]
+    public partial string? VersionComparisonSummary { get; set; }
+
+    [ObservableProperty]
+    public partial string? VersionComparisonText { get; set; }
+
+    [ObservableProperty]
     public partial string? SelectedBlobUrl { get; set; }
 
     [ObservableProperty]
@@ -187,9 +230,17 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     public bool HasSelectedBlob => SelectedBlob is not null;
 
+    public bool HasBlobVersions => BlobVersions.Count > 0;
+
+    public int SelectedBlobCount => _selectedBlobNames.Count;
+
     public bool HasMetadataRows => MetadataRows.Count > 0;
 
     public bool HasTagRows => TagRows.Count > 0;
+
+    public bool AllowMutations => SelectedAccount?.Config.AllowMutations == true;
+
+    public bool CanRestoreVersions => AllowMutations && (_storageCapabilities?.CanRestore == true || HasBlobVersions);
 
     public bool ShowNotConfiguredState => !IsRefreshing && !HasAccounts && !_appState.UseDemoData;
 
@@ -230,6 +281,46 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     public Visibility BinaryPreviewVisibility => HasSelectedBlob && !IsLoadingBlobDetail && PreviewIsBinary
         ? Visibility.Visible
         : Visibility.Collapsed;
+
+    public Visibility VersionListVisibility => HasSelectedBlob && HasBlobVersions
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility VersionEmptyVisibility => HasSelectedBlob && !IsLoadingVersions && !HasBlobVersions && string.IsNullOrWhiteSpace(VersionErrorMessage)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility VersionErrorVisibility => string.IsNullOrWhiteSpace(VersionErrorMessage)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility VersionComparisonVisibility => string.IsNullOrWhiteSpace(VersionComparisonSummary) && string.IsNullOrWhiteSpace(VersionComparisonText)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility RestoreVersionActionVisibility => CanRestoreVersions ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility BulkToolbarVisibility => IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility BulkSelectionSummaryVisibility => IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility BulkSelectionToggleVisibility => IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
+
+    public string SelectionModeButtonLabel => IsSelectionMode ? "Done selecting" : "Select blobs";
+
+    public string BulkDownloadButtonLabel => IsBulkDownloading ? "Downloading ZIP..." : "Download as ZIP";
+
+    public bool CanRefreshCurrentFolder => HasSelectedContainer && !IsBulkDownloading;
+
+    public bool CanInteractWithBlobEntries => !IsBulkDownloading;
+
+    public bool CanToggleSelectionMode => HasSelectedContainer && Blobs.Any(static blob => !blob.IsPrefix) && !IsBulkDownloading && !IsDownloadingBlob;
+
+    public bool CanSelectAllLoadedBlobs => IsSelectionMode && Blobs.Any(static blob => !blob.IsPrefix) && !IsBulkDownloading && !IsDownloadingBlob;
+
+    public bool CanClearSelectedBlobs => IsSelectionMode && SelectedBlobCount > 0 && !IsBulkDownloading;
+
+    public bool CanDownloadSelectedBlobs => IsSelectionMode && SelectedBlobCount > 0 && !IsBulkDownloading && !IsDownloadingBlob;
 
     public Visibility PreviewInfoVisibility => string.IsNullOrWhiteSpace(PreviewInfoMessage) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -325,7 +416,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     [RelayCommand]
     private Task OpenSettingsAsync()
     {
-        _navigation.NavigateTo("settings");
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.Storage));
         return Task.CompletedTask;
     }
 
@@ -454,6 +545,114 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     }
 
     [RelayCommand]
+    private void ToggleSelectionMode()
+    {
+        IsSelectionMode = !IsSelectionMode;
+        if (!IsSelectionMode)
+        {
+            _selectedBlobNames.Clear();
+        }
+
+        RefreshBulkSelectionState();
+    }
+
+    [RelayCommand]
+    private void SelectAllLoadedBlobs()
+    {
+        _selectedBlobNames.Clear();
+
+        foreach (var blob in Blobs.Where(static blob => !blob.IsPrefix))
+        {
+            _selectedBlobNames.Add(blob.FullName);
+        }
+
+        IsSelectionMode = _selectedBlobNames.Count > 0;
+        RefreshBulkSelectionState();
+    }
+
+    [RelayCommand]
+    private void ClearSelectedBlobs()
+    {
+        _selectedBlobNames.Clear();
+        RefreshBulkSelectionState();
+    }
+
+    [RelayCommand]
+    private void ToggleBlobSelection(StorageBlobEntryViewModel? blob)
+    {
+        if (blob is null || blob.IsPrefix)
+        {
+            return;
+        }
+
+        if (!_selectedBlobNames.Remove(blob.FullName))
+        {
+            _selectedBlobNames.Add(blob.FullName);
+        }
+
+        RefreshBulkSelectionState();
+    }
+
+    [RelayCommand]
+    private async Task DownloadSelectedBlobsZipAsync()
+    {
+        if (_client is null || SelectedContainer is null || _selectedBlobNames.Count == 0)
+        {
+            return;
+        }
+
+        string? zipPath = null;
+
+        try
+        {
+            await ResetDownloadTokenAsync();
+            var downloadToken = _downloadCts.Token;
+
+            IsBulkDownloading = true;
+            BulkSelectionSummaryText = $"Creating a ZIP for {SelectedBlobCount} selected blob(s)...";
+            await Task.Yield();
+
+            zipPath = BuildZipDownloadPath(SelectedContainer.Name);
+
+            await using var fileStream = File.Create(zipPath);
+            using var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false);
+            var selectedBlobNames = _selectedBlobNames.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+            var usedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var blobName in selectedBlobNames)
+            {
+                var entryName = BuildUniqueZipEntryName(blobName, usedEntryNames);
+                var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
+                await using var entryStream = entry.Open();
+                await _client.DownloadBlobAsync(SelectedContainer.Name, blobName, entryStream, ct: downloadToken);
+            }
+
+            var downloadedBlobCount = SelectedBlobCount;
+            var successMessage = $"Downloaded {downloadedBlobCount} blob(s) to {zipPath}.";
+            _notifications.ShowSuccess("ZIP downloaded", Path.GetFileName(zipPath));
+            _selectedBlobNames.Clear();
+            RefreshBulkSelectionState();
+            BulkSelectionSummaryText = successMessage;
+        }
+        catch (OperationCanceledException)
+        {
+            BulkSelectionSummaryText = "ZIP download cancelled.";
+            DeletePartialDownload(zipPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage ZIP download failed for container {ContainerName}.", SelectedContainer.Name);
+            BulkSelectionSummaryText = $"ZIP download failed: {ex.Message}";
+            DeletePartialDownload(zipPath);
+            _notifications.ShowError("ZIP download failed", ex: ex);
+        }
+        finally
+        {
+            IsBulkDownloading = false;
+        }
+    }
+
+    [RelayCommand]
     private Task CopySelectedBlobUrlAsync() => CopyToClipboardAsync(() => SelectedBlobUrl, "Blob URL copied");
 
     [RelayCommand]
@@ -523,6 +722,134 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         }
     }
 
+    [RelayCommand]
+    private async Task DownloadVersionAsync(StorageBlobVersionViewModel? version)
+    {
+        if (SelectedBlob is null || version is null)
+        {
+            return;
+        }
+
+        await DownloadBlobCoreAsync(
+            SelectedBlob.FullName,
+            SelectedBlob.DisplayName,
+            versionId: version.VersionId,
+            totalBytes: version.ContentLength,
+            progressLabel: $"Downloading version {version.ShortVersionId}");
+    }
+
+    [RelayCommand]
+    private async Task CompareVersionAsync(StorageBlobVersionViewModel? version)
+    {
+        if (_client is null || SelectedContainer is null || SelectedBlob is null || version is null)
+        {
+            return;
+        }
+
+        var blobName = SelectedBlob.FullName;
+
+        try
+        {
+            IsLoadingVersionComparison = true;
+            VersionComparisonSummary = null;
+            VersionComparisonText = null;
+            VersionStatusText = $"Comparing version {version.ShortVersionId}...";
+            await Task.Yield();
+
+            var comparison = await _client.GetVersionComparisonAsync(
+                SelectedContainer.Name,
+                blobName,
+                version.VersionId,
+                ct: _refreshCts.Token);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            VersionComparisonSummary = BuildVersionComparisonSummary(comparison);
+            VersionComparisonText = string.IsNullOrWhiteSpace(comparison.TextDiff)
+                ? "No inline text diff is available for this comparison."
+                : comparison.TextDiff.ReplaceLineEndings("\n");
+            VersionStatusText = $"Compared version {version.ShortVersionId}.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage version comparison failed for {BlobName} and version {VersionId}.", blobName, version.VersionId);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            VersionComparisonSummary = "Version comparison failed.";
+            VersionComparisonText = ex.Message;
+            VersionStatusText = "Version comparison failed.";
+        }
+        finally
+        {
+            if (IsCurrentSelectedBlob(blobName))
+            {
+                IsLoadingVersionComparison = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task RestoreVersionAsync(StorageBlobVersionViewModel? version)
+    {
+        if (_client is null || SelectedContainer is null || SelectedBlob is null || version is null || !CanRestoreVersions)
+        {
+            return;
+        }
+
+        var blobName = SelectedBlob.FullName;
+
+        try
+        {
+            var result = await _client.RestoreBlobVersionAsync(SelectedContainer.Name, blobName, version.VersionId, _refreshCts.Token);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            if (result.State != BlobRecoveryState.Restored)
+            {
+                VersionStatusText = $"Version restore failed: {result.ErrorMessage ?? result.State.ToString()}";
+                _notifications.ShowError("Version restore failed", result.ErrorMessage ?? result.State.ToString());
+                return;
+            }
+
+            await RefreshSelectedBlobDetailAsync(blobName, _refreshCts.Token);
+
+            var statusMessage = result.ResultBlobPath is null
+                ? $"Restored version {version.ShortVersionId}."
+                : $"Restored version {version.ShortVersionId} to {result.ResultBlobPath}.";
+
+            VersionStatusText = statusMessage;
+            _notifications.ShowSuccess("Blob version restored", version.ShortVersionId);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage version restore failed for {BlobName} and version {VersionId}.", blobName, version.VersionId);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            VersionStatusText = $"Version restore failed: {ex.Message}";
+            _notifications.ShowError("Version restore failed", ex: ex);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_isDisposed)
@@ -540,6 +867,9 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     partial void OnSelectedAccountChanged(StorageAccountItemViewModel? value)
     {
+        OnPropertyChanged(nameof(AllowMutations));
+        OnPropertyChanged(nameof(CanRestoreVersions));
+
         if (_isDisposed || _suppressAccountSelectionSideEffects || !_loaded || value is null)
         {
             return;
@@ -551,6 +881,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     partial void OnSelectedContainerChanged(StorageContainerItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedContainer));
+        OnPropertyChanged(nameof(CanRefreshCurrentFolder));
         OnPropertyChanged(nameof(BlobWorkspaceVisibility));
         OnPropertyChanged(nameof(SelectContainerHintVisibility));
         OnPropertyChanged(nameof(SelectedContainerTitle));
@@ -565,6 +896,8 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         OnPropertyChanged(nameof(BlobDetailPlaceholderVisibility));
         OnPropertyChanged(nameof(PreviewVisibility));
         OnPropertyChanged(nameof(BinaryPreviewVisibility));
+        OnPropertyChanged(nameof(VersionListVisibility));
+        OnPropertyChanged(nameof(VersionEmptyVisibility));
     }
 
     partial void OnCurrentFolderLabelChanged(string value)
@@ -615,6 +948,32 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         OnPropertyChanged(nameof(LoadExpandedPreviewVisibility));
     }
 
+    partial void OnIsLoadingVersionsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(VersionEmptyVisibility));
+    }
+
+    partial void OnIsLoadingVersionComparisonChanged(bool value)
+    {
+        OnPropertyChanged(nameof(VersionComparisonVisibility));
+    }
+
+    partial void OnVersionErrorMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(VersionErrorVisibility));
+        OnPropertyChanged(nameof(VersionEmptyVisibility));
+    }
+
+    partial void OnVersionComparisonSummaryChanged(string? value)
+    {
+        OnPropertyChanged(nameof(VersionComparisonVisibility));
+    }
+
+    partial void OnVersionComparisonTextChanged(string? value)
+    {
+        OnPropertyChanged(nameof(VersionComparisonVisibility));
+    }
+
     partial void OnIsLoadingContainersChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowContainerEmptyState));
@@ -624,6 +983,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     {
         OnPropertyChanged(nameof(LoadMoreVisibility));
         OnPropertyChanged(nameof(ShowBlobEmptyState));
+        RefreshBulkSelectionState();
     }
 
     partial void OnIsLoadingBlobDetailChanged(bool value)
@@ -635,11 +995,30 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     partial void OnIsDownloadingBlobChanged(bool value)
     {
         OnPropertyChanged(nameof(DownloadVisibility));
+        OnPropertyChanged(nameof(CanToggleSelectionMode));
+        OnPropertyChanged(nameof(CanSelectAllLoadedBlobs));
+        OnPropertyChanged(nameof(CanDownloadSelectedBlobs));
     }
 
     partial void OnIsRefreshingChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowNotConfiguredState));
+    }
+
+    partial void OnIsSelectionModeChanged(bool value)
+    {
+        RefreshBulkSelectionState();
+    }
+
+    partial void OnIsBulkDownloadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(BulkDownloadButtonLabel));
+        OnPropertyChanged(nameof(CanRefreshCurrentFolder));
+        OnPropertyChanged(nameof(CanInteractWithBlobEntries));
+        OnPropertyChanged(nameof(CanToggleSelectionMode));
+        OnPropertyChanged(nameof(CanSelectAllLoadedBlobs));
+        OnPropertyChanged(nameof(CanClearSelectedBlobs));
+        OnPropertyChanged(nameof(CanDownloadSelectedBlobs));
     }
 
     private async Task SwitchAccountAsync(StorageAccountItemViewModel account)
@@ -845,6 +1224,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
         if (!append)
         {
+            ResetBulkSelectionState(exitSelectionMode: true);
             Blobs.Clear();
             ContinuationToken = null;
             BuildBreadcrumbs(CurrentPrefix);
@@ -923,6 +1303,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         BlobDetailErrorMessage = null;
         IsLoadingBlobDetail = true;
         BlobDetailStatusText = "Loading blob properties and preview...";
+        PrepareVersionStateForSelection();
         await Task.Yield();
 
         try
@@ -939,6 +1320,8 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
             SelectedBlobSubtitle = $"{blob.SizeText} · {blob.ContentTypeText} · {blob.LastModifiedText}";
             SelectedBlobUrl = BuildBlobUrl(SelectedAccount?.AccountName, SelectedContainer.Name, blob.FullName);
             BlobDetailStatusText = "Blob detail loaded.";
+
+            await LoadVersionStateAsync(blob.FullName, ct);
 
             await PublishSnapshotAsync(recordRecent);
         }
@@ -1026,7 +1409,70 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         CanLoadExpandedPreview = false;
     }
 
-    private async Task DownloadBlobCoreAsync(string blobName, string displayName)
+    private async Task LoadVersionStateAsync(string blobName, CancellationToken ct)
+    {
+        if (_client is null || SelectedContainer is null || !IsCurrentSelectedBlob(blobName))
+        {
+            return;
+        }
+
+        try
+        {
+            IsLoadingVersions = true;
+            VersionErrorMessage = null;
+            VersionStatusText = "Loading version history...";
+            await Task.Yield();
+
+            _storageCapabilities = await TryGetStorageCapabilitiesAsync(ct);
+            NotifyVersionCapabilityStateChanged();
+
+            var versions = await _client.ListBlobVersionsAsync(SelectedContainer.Name, blobName, ct);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            ApplyVersions(versions);
+            VersionStatusText = versions.Count switch
+            {
+                0 => "No saved versions were returned for this blob.",
+                1 => "1 version is available for this blob.",
+                _ => $"{versions.Count} versions are available for this blob.",
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage version history load failed for {BlobName}.", blobName);
+
+            if (!IsCurrentSelectedBlob(blobName))
+            {
+                return;
+            }
+
+            BlobVersions.Clear();
+            VersionErrorMessage = ex.Message;
+            VersionStatusText = "Version history could not be loaded.";
+        }
+        finally
+        {
+            if (IsCurrentSelectedBlob(blobName))
+            {
+                IsLoadingVersions = false;
+            }
+        }
+    }
+
+    private async Task DownloadBlobCoreAsync(
+        string blobName,
+        string displayName,
+        string? versionId = null,
+        long? totalBytes = null,
+        string? progressLabel = null)
     {
         if (_client is null || SelectedContainer is null)
         {
@@ -1040,23 +1486,25 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
             await ResetDownloadTokenAsync();
             var downloadToken = _downloadCts.Token;
 
-            destinationPath = BuildDownloadPath(displayName);
-            var totalBytes = FindBlob(blobName)?.SizeBytes;
+            destinationPath = BuildDownloadPath(displayName, versionId);
+            var resolvedTotalBytes = totalBytes ?? FindBlob(blobName)?.SizeBytes;
 
-            ActiveDownloadLabel = $"Downloading {displayName}";
+            ActiveDownloadLabel = progressLabel ?? (versionId is null
+                ? $"Downloading {displayName}"
+                : $"Downloading {displayName} ({ShortVersionId(versionId)})");
             DownloadProgressPercent = 0;
-            DownloadProgressText = totalBytes is > 0
-                ? $"0 of {StorageDisplayFormatter.FormatBytes(totalBytes.Value)}"
+            DownloadProgressText = resolvedTotalBytes is > 0
+                ? $"0 of {StorageDisplayFormatter.FormatBytes(resolvedTotalBytes.Value)}"
                 : "Starting download...";
-            IsDownloadIndeterminate = totalBytes is null or <= 0;
+            IsDownloadIndeterminate = resolvedTotalBytes is null or <= 0;
             IsDownloadingBlob = true;
 
             var progress = new Progress<long>(bytesTransferred =>
             {
-                if (totalBytes is > 0)
+                if (resolvedTotalBytes is > 0)
                 {
-                    DownloadProgressPercent = Math.Min(100, bytesTransferred * 100d / totalBytes.Value);
-                    DownloadProgressText = $"{StorageDisplayFormatter.FormatBytes(bytesTransferred)} of {StorageDisplayFormatter.FormatBytes(totalBytes.Value)}";
+                    DownloadProgressPercent = Math.Min(100, bytesTransferred * 100d / resolvedTotalBytes.Value);
+                    DownloadProgressText = $"{StorageDisplayFormatter.FormatBytes(bytesTransferred)} of {StorageDisplayFormatter.FormatBytes(resolvedTotalBytes.Value)}";
                     IsDownloadIndeterminate = false;
                 }
                 else
@@ -1067,10 +1515,12 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
             });
 
             await using var destination = File.Create(destinationPath);
-            await _client.DownloadBlobAsync(SelectedContainer.Name, blobName, destination, progress, versionId: null, ct: downloadToken);
+            await _client.DownloadBlobAsync(SelectedContainer.Name, blobName, destination, progress, versionId: versionId, ct: downloadToken);
 
-            BlobDetailStatusText = $"Downloaded to {destinationPath}.";
-            _notifications.ShowSuccess("Blob downloaded", destinationPath);
+            BlobDetailStatusText = versionId is null
+                ? $"Downloaded to {destinationPath}."
+                : $"Downloaded version to {destinationPath}.";
+            _notifications.ShowSuccess(versionId is null ? "Blob downloaded" : "Blob version downloaded", destinationPath);
         }
         catch (OperationCanceledException)
         {
@@ -1082,7 +1532,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
             _logger.LogError(ex, "Storage blob download failed for {BlobName}.", blobName);
             BlobDetailStatusText = ex.Message;
             DeletePartialDownload(destinationPath);
-            _notifications.ShowError("Blob download failed", ex: ex);
+            _notifications.ShowError(versionId is null ? "Blob download failed" : "Blob version download failed", ex: ex);
         }
         finally
         {
@@ -1234,6 +1684,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         Containers.Clear();
         Blobs.Clear();
         Breadcrumbs.Clear();
+        ResetBulkSelectionState(exitSelectionMode: true);
         ClearBlobDetailState();
         SelectedContainer = null;
         CurrentPrefix = string.Empty;
@@ -1382,7 +1833,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         return $"https://{accountName}.blob.core.windows.net/{Uri.EscapeDataString(containerName)}/{escapedBlobPath}";
     }
 
-    private static string BuildDownloadPath(string displayName)
+    private static string BuildDownloadPath(string displayName, string? versionId = null)
     {
         var downloadsFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -1390,7 +1841,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
         Directory.CreateDirectory(downloadsFolder);
 
-        var sanitizedFileName = StorageDisplayFormatter.SanitizeFileName(displayName);
+        var sanitizedFileName = BuildDownloadFileName(displayName, versionId);
         var candidatePath = Path.Combine(downloadsFolder, sanitizedFileName);
         if (!File.Exists(candidatePath))
         {
@@ -1410,6 +1861,20 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         }
 
         return Path.Combine(downloadsFolder, $"{Guid.NewGuid():N}{extension}");
+    }
+
+    private static string BuildDownloadFileName(string displayName, string? versionId)
+    {
+        var sanitizedFileName = StorageDisplayFormatter.SanitizeFileName(displayName);
+        if (string.IsNullOrWhiteSpace(versionId))
+        {
+            return sanitizedFileName;
+        }
+
+        var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(sanitizedFileName);
+        var extension = Path.GetExtension(sanitizedFileName);
+        var sanitizedVersionId = StorageDisplayFormatter.SanitizeFileName(versionId);
+        return string.Concat(fileNameWithoutExtension, "_", sanitizedVersionId, extension);
     }
 
     private void DeletePartialDownload(string? destinationPath)
@@ -1494,6 +1959,229 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         catch (ObjectDisposedException)
         {
         }
+    }
+
+    private void ResetBulkSelectionState(bool exitSelectionMode)
+    {
+        _selectedBlobNames.Clear();
+        if (exitSelectionMode)
+        {
+            IsSelectionMode = false;
+        }
+
+        RefreshBulkSelectionState();
+    }
+
+    private void RefreshBulkSelectionState()
+    {
+        _selectedBlobNames.RemoveWhere(blobName => Blobs.All(candidate => !string.Equals(candidate.FullName, blobName, StringComparison.Ordinal)));
+
+        foreach (var blob in Blobs)
+        {
+            blob.IsSelectionMode = IsSelectionMode;
+            blob.IsBatchSelected = _selectedBlobNames.Contains(blob.FullName);
+        }
+
+        BulkSelectionSummaryText = SelectedBlobCount switch
+        {
+            0 => "No loaded blobs selected for ZIP download.",
+            1 => "1 loaded blob selected for ZIP download.",
+            _ => $"{SelectedBlobCount} loaded blobs selected for ZIP download.",
+        };
+
+        OnPropertyChanged(nameof(SelectedBlobCount));
+        OnPropertyChanged(nameof(SelectionModeButtonLabel));
+        OnPropertyChanged(nameof(BulkToolbarVisibility));
+        OnPropertyChanged(nameof(BulkSelectionSummaryVisibility));
+        OnPropertyChanged(nameof(BulkSelectionToggleVisibility));
+        OnPropertyChanged(nameof(CanToggleSelectionMode));
+        OnPropertyChanged(nameof(CanSelectAllLoadedBlobs));
+        OnPropertyChanged(nameof(CanClearSelectedBlobs));
+        OnPropertyChanged(nameof(CanDownloadSelectedBlobs));
+    }
+
+    private static string BuildZipDownloadPath(string containerName)
+    {
+        var downloadsFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Downloads");
+
+        Directory.CreateDirectory(downloadsFolder);
+
+        var zipFileName = $"{StorageDisplayFormatter.SanitizeFileName(containerName)}_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
+        var candidatePath = Path.Combine(downloadsFolder, zipFileName);
+        if (!File.Exists(candidatePath))
+        {
+            return candidatePath;
+        }
+
+        var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(zipFileName);
+
+        for (var index = 1; index < 1000; index++)
+        {
+            candidatePath = Path.Combine(downloadsFolder, $"{fileNameWithoutExtension} ({index}).zip");
+            if (!File.Exists(candidatePath))
+            {
+                return candidatePath;
+            }
+        }
+
+        return Path.Combine(downloadsFolder, $"{Guid.NewGuid():N}.zip");
+    }
+
+    private static string BuildZipEntryName(string blobName)
+    {
+        var rawSegments = blobName.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (rawSegments.Length == 0)
+        {
+            return "blob-download";
+        }
+
+        var safeSegments = rawSegments.Select(segment =>
+        {
+            var normalizedSegment = segment switch
+            {
+                "." => "_",
+                ".." => "__",
+                _ => segment,
+            };
+
+            return StorageDisplayFormatter.SanitizeFileName(normalizedSegment);
+        });
+
+        return string.Join('/', safeSegments);
+    }
+
+    private static string BuildUniqueZipEntryName(string blobName, ISet<string> usedEntryNames)
+    {
+        var entryName = BuildZipEntryName(blobName);
+        if (usedEntryNames.Add(entryName))
+        {
+            return entryName;
+        }
+
+        var separatorIndex = entryName.LastIndexOf('/');
+        var directory = separatorIndex >= 0 ? entryName[..separatorIndex] : string.Empty;
+        var fileName = separatorIndex >= 0 ? entryName[(separatorIndex + 1)..] : entryName;
+        var extension = Path.GetExtension(fileName);
+        var baseName = fileName[..Math.Max(0, fileName.Length - extension.Length)];
+
+        for (var suffix = 2; suffix < 1000; suffix++)
+        {
+            var candidateFileName = $"{baseName} ({suffix}){extension}";
+            var candidate = string.IsNullOrWhiteSpace(directory)
+                ? candidateFileName
+                : $"{directory}/{candidateFileName}";
+
+            if (usedEntryNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var fallback = string.IsNullOrWhiteSpace(directory)
+            ? $"{baseName}-{Guid.NewGuid():N}{extension}"
+            : $"{directory}/{baseName}-{Guid.NewGuid():N}{extension}";
+
+        usedEntryNames.Add(fallback);
+        return fallback;
+    }
+
+    private void PrepareVersionStateForSelection()
+    {
+        BlobVersions.Clear();
+        _storageCapabilities = null;
+        VersionErrorMessage = null;
+        VersionComparisonSummary = null;
+        VersionComparisonText = null;
+        VersionStatusText = "Loading version history...";
+        IsLoadingVersions = false;
+        IsLoadingVersionComparison = false;
+        NotifyVersionCapabilityStateChanged();
+    }
+
+    private void ApplyVersions(IReadOnlyList<BlobVersionItem> versions)
+    {
+        BlobVersions.Clear();
+
+        foreach (var version in versions
+                     .OrderByDescending(static version => version.IsCurrentVersion)
+                     .ThenByDescending(static version => version.CreatedOn))
+        {
+            BlobVersions.Add(new StorageBlobVersionViewModel(version));
+        }
+    }
+
+    private async Task<StorageCapabilities?> TryGetStorageCapabilitiesAsync(CancellationToken ct)
+    {
+        if (_client is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _client.GetStorageCapabilitiesAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Storage capability probe failed.");
+            return null;
+        }
+    }
+
+    private async Task RefreshSelectedBlobDetailAsync(string blobName, CancellationToken ct)
+    {
+        if (!IsCurrentSelectedBlob(blobName))
+        {
+            return;
+        }
+
+        await SelectBlobCoreAsync(blobName, recordRecent: false, ct);
+    }
+
+    private bool IsCurrentSelectedBlob(string blobName) =>
+        SelectedBlob is not null && string.Equals(SelectedBlob.FullName, blobName, StringComparison.Ordinal);
+
+    private void NotifyVersionCapabilityStateChanged()
+    {
+        OnPropertyChanged(nameof(CanRestoreVersions));
+        OnPropertyChanged(nameof(RestoreVersionActionVisibility));
+    }
+
+    private static string BuildVersionComparisonSummary(BlobVersionComparison comparison)
+    {
+        var parts = new List<string>
+        {
+            $"Base {ShortVersionId(comparison.BaseVersionId)}",
+        };
+
+        if (!string.IsNullOrWhiteSpace(comparison.CompareVersionId))
+        {
+            parts.Add($"Compare {ShortVersionId(comparison.CompareVersionId)}");
+        }
+
+        parts.Add($"Sizes {FormatOptionalBytes(comparison.BaseSizeBytes)} -> {FormatOptionalBytes(comparison.CompareSizeBytes)}");
+        parts.Add($"Metadata +{comparison.MetadataDiff.AddedKeys.Count} / -{comparison.MetadataDiff.RemovedKeys.Count} / ~{comparison.MetadataDiff.ChangedKeys.Count}");
+        parts.Add(comparison.ContentComparePossible ? "Text diff available." : "Text diff unavailable.");
+        return string.Join(" · ", parts);
+    }
+
+    private static string FormatOptionalBytes(long? sizeBytes) =>
+        sizeBytes is > 0 ? StorageDisplayFormatter.FormatBytes(sizeBytes.Value) : "n/a";
+
+    private static string ShortVersionId(string versionId)
+    {
+        if (string.IsNullOrWhiteSpace(versionId))
+        {
+            return "current blob";
+        }
+
+        return versionId.Length <= 16 ? versionId : versionId[..16];
     }
 }
 
@@ -1608,14 +2296,34 @@ public sealed partial class StorageBlobEntryViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsSelectionMode { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsBatchSelected { get; set; }
+
     public string SelectionStateLabel => IsSelected ? "Selected" : string.Empty;
 
     public Visibility SelectionStateVisibility => IsSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility SelectionToggleVisibility => IsSelectionMode && !IsPrefix ? Visibility.Visible : Visibility.Collapsed;
+
+    public string SelectionActionLabel => IsBatchSelected ? "Selected" : "Select";
 
     partial void OnIsSelectedChanged(bool value)
     {
         OnPropertyChanged(nameof(SelectionStateLabel));
         OnPropertyChanged(nameof(SelectionStateVisibility));
+    }
+
+    partial void OnIsSelectionModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SelectionToggleVisibility));
+    }
+
+    partial void OnIsBatchSelectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SelectionActionLabel));
     }
 
     private static string ResolveDisplayName(string blobName, bool isPrefix)
@@ -1624,6 +2332,37 @@ public sealed partial class StorageBlobEntryViewModel : ObservableObject
         var lastSlash = trimmed.LastIndexOf('/');
         return lastSlash >= 0 ? trimmed[(lastSlash + 1)..] : trimmed;
     }
+}
+
+public sealed class StorageBlobVersionViewModel
+{
+    public StorageBlobVersionViewModel(BlobVersionItem version)
+    {
+        VersionId = version.VersionId;
+        ShortVersionId = version.VersionId.Length <= 16 ? version.VersionId : version.VersionId[..16];
+        CreatedOnText = version.CreatedOn?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Unknown timestamp";
+        ContentLength = version.ContentLength;
+        SizeText = version.ContentLength is > 0 ? StorageDisplayFormatter.FormatBytes(version.ContentLength.Value) : "Unknown size";
+        IsCurrentVersion = version.IsCurrentVersion;
+        CurrentVersionVisibility = version.IsCurrentVersion ? Visibility.Visible : Visibility.Collapsed;
+        SummaryText = $"{CreatedOnText} · {SizeText}";
+    }
+
+    public string VersionId { get; }
+
+    public string ShortVersionId { get; }
+
+    public string CreatedOnText { get; }
+
+    public long? ContentLength { get; }
+
+    public string SizeText { get; }
+
+    public bool IsCurrentVersion { get; }
+
+    public Visibility CurrentVersionVisibility { get; }
+
+    public string SummaryText { get; }
 }
 
 public sealed class StorageBreadcrumbItemViewModel
@@ -1667,6 +2406,13 @@ public sealed class StorageKeyValueRowViewModel(string key, string value)
 
 internal static class StorageDisplayFormatter
 {
+    private static readonly HashSet<string> ReservedWindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
     public static string FormatBytes(long sizeBytes)
     {
         string[] units = ["B", "KB", "MB", "GB", "TB"];
@@ -1687,7 +2433,20 @@ internal static class StorageDisplayFormatter
         var fallback = string.IsNullOrWhiteSpace(fileName) ? "blob-download" : fileName;
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var sanitizedCharacters = fallback.Select(character => invalidCharacters.Contains(character) ? '_' : character).ToArray();
-        return new string(sanitizedCharacters);
+        var sanitized = new string(sanitizedCharacters).Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = "blob-download";
+        }
+
+        var extension = Path.GetExtension(sanitized);
+        var stem = Path.GetFileNameWithoutExtension(sanitized);
+        if (ReservedWindowsDeviceNames.Contains(stem))
+        {
+            sanitized = $"_{stem}{extension}";
+        }
+
+        return sanitized;
     }
 }
 

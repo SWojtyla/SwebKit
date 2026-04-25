@@ -4,7 +4,7 @@
 
 title: "Status - winui3-storage-parity"
 owner: ""
-state: "Planned"
+state: "Review"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-25"
@@ -14,41 +14,47 @@ last_updated: "2026-04-25"
 
 ## Quick summary
 
-Storage already has a credible native baseline. The remaining work is batch, version, and preview-depth parity after the shared layout and settings dependencies land.
+The native Storage workspace now covers the remaining reachable parity slice: version-history compare, download, and restore for mutation-enabled storage profiles plus loaded-blob ZIP download. Focused WinUI validation is green; the remaining work is a manual UI smoke pass over live storage content.
 
 **Jira:** not linked
 
-**Current focus:** define the remaining MAUI-only Storage workflows and the preview/bulk-state behaviors they require in WinUI.
+**Current focus:** run a native smoke pass over version-aware containers and ZIP download behavior, then close the feature.
 
 ## Progress checklist
 
 - [x] MAUI versus WinUI Storage gap captured
-- [ ] Batch and version workflows confirmed
-- [ ] Large-file and binary-preview hardening scope confirmed
-- [ ] Shared detail/state primitive adoption planned
-- [ ] Focused validation approach defined
-- [ ] Docs aligned after implementation begins
+- [x] Batch and version workflows confirmed
+- [x] Large-file and binary-preview hardening scope confirmed
+- [x] Shared detail/state behavior aligned in the native workspace
+- [x] Focused validation approach defined
+- [x] Docs aligned after implementation begins
 
 ## Completed
 
 - Confirmed that browse, detail, and SAS-copy baselines already exist natively.
-- Isolated the remaining Storage gap as batch and preview-depth behavior rather than missing route coverage.
+- Confirmed that large-file and binary-preview safeguards already existed in the native route, so the remaining gap was workflow parity instead of preview safety.
+- Added native version history loading, compare, restore, and version download flows in the Storage detail pane, with restore respecting the existing `AllowMutations` safety gate.
+- Added native multi-select loaded-blob ZIP download behavior in the blob workspace.
+- Added focused `StoragePageViewModelTests` coverage for version and ZIP-download page-state behavior.
+- Updated active-feature and functionality docs to match the delivered native baseline.
 
 ## Remaining
 
-- Restore the MAUI batch and version workflows that still matter for cutover.
-- Harden preview behavior for large or binary content.
-- Align batch-state and failure messaging with the shared layout primitives.
+- Run a manual WinUI smoke pass against live storage content that exercises version-aware blobs, restore, and loaded-blob ZIP download.
+- Track deleted-blob discovery and undelete as a separate storage recovery follow-up because the current hosted and native list surfaces do not expose soft-deleted blobs.
+- Verify the ZIP-selection affordance and result messaging remain clear in the final native shell layout.
 
 ## Blockers
 
-- Layout redesign and settings completeness are intended to land first.
+- None.
 
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: Not started
+- Validation status: Focused WinUI storage validation is green; manual live-data smoke coverage is still pending.
+- Automated checks: `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter StoragePageViewModelTests`
 
 ## Notes
 
-- Storage can run in parallel with Redis and Service Bus once the first shared features are complete.
+- ZIP export intentionally operates over blobs currently loaded in the active folder view. Operators need to page in more blobs before selecting them for the archive.
+- Deleted-blob recovery is intentionally deferred until the storage workspace can discover soft-deleted blobs in a first-class way.

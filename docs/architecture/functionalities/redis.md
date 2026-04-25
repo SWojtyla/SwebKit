@@ -4,6 +4,7 @@
 
 - Configure multiple Redis cache entries per environment.
 - Select active cache and database index.
+- Demo mode works without persisted Redis cache configuration by exposing a synthetic demo cache entry and seeded keyspace data in the Redis workspace.
 - Connection test for configured cache.
 - Pattern-based key scan with server-side full-keyspace `MATCH` semantics and progressive loaded-match pagination (`Load more matches` support).
 - Unified key tree view: keys organized hierarchically by configurable separator (default `-`, persisted across sessions).
@@ -66,6 +67,7 @@
 - Health metadata retrieval also uses best-effort `OBJECT FREQ` and `OBJECT IDLETIME`; unsupported commands degrade gracefully.
 - Database index is clamped to 0..15 in client setup and config form.
 - Potentially destructive actions remain confirmation-gated; the main Redis page no longer exposes a direct full-database purge CTA and instead keeps destructive scope visible through the selected-key count.
+- In WinUI, the header keeps bulk controls and pagination affordances collapsed until the page has a real loaded-key context, so the top section stays compact during demo fallback and empty states.
 - In WinUI production profiles, bulk delete also requires typing `CONFIRM` before the selected loaded keys can be removed.
 - Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveConfigAsync()`.
 - Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze; Redis intentionally keeps the currently loaded match page bounded so large keyspaces do not saturate the render path.

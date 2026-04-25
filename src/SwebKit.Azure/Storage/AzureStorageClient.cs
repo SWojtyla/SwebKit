@@ -233,6 +233,11 @@ public class AzureStorageClient : IStorageClient
         await foreach (var item in container.GetBlobsAsync(
             BlobTraits.None, BlobStates.Version, blobName, ct))
         {
+            if (!IsExactVersionMatch(blobName, item.Name))
+            {
+                continue;
+            }
+
             result.Add(new BlobVersionItem(
                 VersionId: item.VersionId ?? string.Empty,
                 CreatedOn: item.Properties.CreatedOn,
@@ -242,6 +247,9 @@ public class AzureStorageClient : IStorageClient
 
         return result;
     }
+
+    internal static bool IsExactVersionMatch(string blobName, string? candidateBlobName) =>
+        string.Equals(blobName, candidateBlobName, StringComparison.Ordinal);
 
     public Task<string> GetContainerSasUrlAsync(
         string containerName, TimeSpan expiry, CancellationToken ct = default)
@@ -260,16 +268,16 @@ public class AzureStorageClient : IStorageClient
             var response = await _blobService.GetPropertiesAsync(cancellationToken: ct);
             var props = response.Value;
             // The data-plane BlobServiceProperties (Azure.Storage.Blobs 12.x) does not expose
-            // versioning enablement. Soft-delete is accurately detected via DeleteRetentionPolicy.
-            // Versioning detection would require the management-plane SDK.
+            // account-level versioning. Keep soft-delete detection accurate, but treat version
+            // workflows as available and let per-blob list/restore calls determine actual support.
             bool softDelete = props.DeleteRetentionPolicy?.Enabled == true;
             return new StorageCapabilities(
-                VersioningEnabled: false,
+                VersioningEnabled: true,
                 SoftDeleteEnabled: softDelete,
                 CanUpload: true,
                 CanCopy: true,
                 CanSetMetadata: true,
-                CanRestore: softDelete);
+                CanRestore: true);
         }
         catch (OperationCanceledException) { throw; }
         catch (RequestFailedException)
@@ -373,9 +381,10 @@ public class AzureStorageClient : IStorageClient
         string? textDiff = null;
 
         bool bothSmall = baseProps.ContentLength <= maxTextBytes && compareProps.ContentLength <= maxTextBytes;
-        bool baseIsText = IsTextContentType(baseProps.ContentType);
+        bool baseIsText = IsTextContentType(baseProps.ContentType, blobName);
+        bool compareIsText = IsTextContentType(compareProps.ContentType, blobName);
 
-        if (bothSmall && baseIsText)
+        if (bothSmall && baseIsText && compareIsText)
         {
             try
             {
@@ -480,7 +489,7 @@ public class AzureStorageClient : IStorageClient
     /// extension of <paramref name="blobName"/> so that .txt/.log/.json/etc. files are still
     /// shown as text even if the blob was uploaded without an explicit content type.
     /// </summary>
-    private static bool IsTextContentType(string? contentType, string? blobName = null)
+    internal static bool IsTextContentType(string? contentType, string? blobName = null)
     {
         if (string.IsNullOrWhiteSpace(contentType))
             return true; // no content type set — attempt text preview

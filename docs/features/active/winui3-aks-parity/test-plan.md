@@ -4,7 +4,7 @@
 
 title: "Test Plan - winui3-aks-parity"
 owner: ""
-status: "Not started"
+status: "In Progress"
 created: "2026-04-25"
 updated: "2026-04-25"
 
@@ -21,14 +21,14 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 
 ## Main scenarios (priority)
 
-1. Scenario: operators can inspect the resource types that still matter from the MAUI page. Expected result: the WinUI workspace exposes the agreed resource coverage and detail depth.
-2. Scenario: diagnostics panels reflect cluster health clearly. Expected result: health, event, and detail cards use the shared primitives and remain readable under loading, empty, and error states.
-3. Scenario: operational actions stay safe under async pressure. Expected result: logs, port-forwarding, shell launch, and other retained actions do not leave the page in a broken state when navigation changes.
+1. Scenario: operators can inspect the resource types that still matter from the MAUI page. Expected result: the WinUI workspace exposes Pods, workloads, batch resources, and Gateway API resources with the expected detail depth.
+2. Scenario: diagnostics panels reflect cluster health clearly. Expected result: ingress and network-policy evidence load into the native detail pane and remain readable under loading, empty, and error states.
+3. Scenario: operational actions stay safe under async pressure. Expected result: logs, port-forwarding, shell launch, YAML apply, restart, scale, and batch trigger flows do not leave the page in a broken state when navigation changes.
 
 ## Automated coverage
 
 - Build validation: `build-winui` must stay green.
-- Unit tests: expand `tests/SwebKit.WinUI.Tests/` for AKS view-model state transitions, especially around loading, disposal, and readiness.
+- Unit tests: `tests/SwebKit.WinUI.Tests/AksPageViewModelTests.cs` now covers resource-explorer loading across Gateway API and batch kinds, pod-selection synchronization, preserved diagnostics state while browsing non-pod resources, non-fatal partial-load handling, selected-resource YAML load/apply state, ingress diagnostics state, and CronJob-triggered job refresh behavior. The current branch cannot execute the focused AKS test file end to end until the unrelated compile failure in `tests/SwebKit.WinUI.Tests/ServiceBusPageViewModelTests.cs` is resolved.
 - Regression target: rerun touched domain tests if cluster service behavior changes.
 
 ## Test data and setup
@@ -38,7 +38,8 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 
 ## Manual checks
 
-- Check: diagnostics parity. Steps: browse an AKS workspace with real resources and verify health, events, and detail panes match the planned parity surface.
+- Check: explorer parity. Steps: browse an AKS workspace with real resources and verify Pods, Deployments, StatefulSets, Jobs, CronJobs, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes render in the native explorer with the expected detail pane summary.
+- Check: YAML and diagnostics parity. Steps: load YAML for a deployment, ingress, gateway, and CronJob; verify edit/apply behavior on supported kinds; open ingress and network analysis from the native detail pane and confirm evidence renders without leaving the page.
 - Check: async safety. Steps: start an AKS action, navigate away, and confirm the page disposes and recovers cleanly.
 
 ## Regression risks & mitigations
@@ -48,13 +49,13 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 
 ## Acceptance criteria
 
-- AKS exposes the agreed resource and diagnostics parity surface.
+- AKS exposes the agreed resource, YAML, diagnostics, and first-action parity surface.
 - Shared state and card primitives are used instead of new bespoke layouts.
 - `build-winui` stays green and focused AKS state tests exist.
 
 ## Validation status
 
-- Automated: Not started
+- Automated: `build-winui` passed. Focused `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter AksPageViewModelTests` is currently blocked by an unrelated compile failure in `tests/SwebKit.WinUI.Tests/ServiceBusPageViewModelTests.cs`.
 - Manual: Not started
 
 ## Sign-off

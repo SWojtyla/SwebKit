@@ -79,7 +79,7 @@
             </NavigationView.FooterMenuItems>
 
             <Grid Padding="12,6,12,12"
-                  RowSpacing="6">
+                RowSpacing="6">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>

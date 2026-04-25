@@ -11,7 +11,7 @@ public interface IShellNavigationService
     string? CurrentArea { get; }
 
     /// <summary>Navigates to the specified area page.</summary>
-    void NavigateTo(string area);
+    void NavigateTo(string area, object? parameter = null);
 
     /// <summary>Raised after CurrentArea changes.</summary>
     event Action? NavigationChanged;

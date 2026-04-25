@@ -109,6 +109,28 @@ public sealed partial class AksPageViewModel
             IsPortForwardFormOpen = false;
         }
 
+        if (!_suppressResourceSelectionSideEffects && string.Equals(SelectedResourceKind, "Pods", StringComparison.Ordinal))
+        {
+            var matchingResource = value is null
+                ? null
+                : ResourceItems.FirstOrDefault(item => item.PodItem is not null
+                    && string.Equals(item.PodItem.Namespace, value.Namespace, StringComparison.Ordinal)
+                    && string.Equals(item.PodItem.Name, value.Name, StringComparison.Ordinal));
+
+            if (!ReferenceEquals(SelectedResourceItem, matchingResource))
+            {
+                _suppressResourceSelectionSideEffects = true;
+                try
+                {
+                    SelectedResourceItem = matchingResource;
+                }
+                finally
+                {
+                    _suppressResourceSelectionSideEffects = false;
+                }
+            }
+        }
+
         if (!_loaded)
         {
             return;
@@ -131,6 +153,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanToggleSelectedPodLogsLive));
         OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
         OnPropertyChanged(nameof(CanOpenSelectedPodShell));
+        OnPropertyChanged(nameof(ResourceEmptyStateVisibility));
     }
 
     partial void OnSelectedPodLogsErrorMessageChanged(string? value)

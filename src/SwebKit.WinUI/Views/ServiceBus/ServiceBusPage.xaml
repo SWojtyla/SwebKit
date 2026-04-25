@@ -111,6 +111,7 @@
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
 
                                                         <StackPanel Grid.Column="0"
@@ -127,6 +128,12 @@
 
                                                         <Button
                                                             Grid.Column="1"
+                                                            Content="Scheduled"
+                                                            Command="{x:Bind OpenScheduledCommand}"
+                                                            VerticalAlignment="Top"/>
+
+                                                        <Button
+                                                            Grid.Column="2"
                                                             Content="Remove"
                                                             Command="{x:Bind RemoveCommand}"
                                                             VerticalAlignment="Top"/>
@@ -361,13 +368,13 @@
                                     <Button
                                         Grid.Column="2"
                                         Content="Resubmit DLQ"
-                                        Command="{Binding ResubmitSelectedDeadLetterCommand}"
+                                        Click="ResubmitSelectedDeadLetter_Click"
                                         IsEnabled="{Binding CanResubmitSelectedDeadLetter}"/>
 
                                     <Button
                                         Grid.Column="3"
                                         Content="Complete DLQ"
-                                        Command="{Binding CompleteSelectedDeadLetterCommand}"
+                                        Click="CompleteSelectedDeadLetter_Click"
                                         IsEnabled="{Binding CanCompleteSelectedDeadLetter}"/>
 
                                     <Button
@@ -381,7 +388,7 @@
                                     IsOpen="{Binding ShowTabEmptyState}"
                                     Severity="Informational"
                                     Title="No entity open"
-                                    Message="Open Active or DLQ for a queue or subscription from the left pane."/>
+                                    Message="Open Active, DLQ, or Scheduled workspaces from the left pane."/>
 
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                               VerticalScrollBarVisibility="Disabled">
@@ -427,12 +434,191 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Border
+                                    Grid.ColumnSpan="2"
+                                    CornerRadius="8"
+                                    Background="{ThemeResource LayerFillColorAltBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Padding="12"
+                                    Visibility="{Binding ActiveTab.IsScheduled}">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border
+                                            Grid.Column="0"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <Grid RowDefinitions="Auto,Auto,*"
+                                                  RowSpacing="12">
+                                                <StackPanel Grid.Row="0"
+                                                            Spacing="4">
+                                                    <TextBlock Text="{Binding ActiveTab.HeaderText}"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding ActiveTab.SummaryText}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Row="1"
+                                                            Spacing="8">
+                                                    <TextBlock Text="{Binding ActiveTab.MessageCountSummary}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                    <TextBlock Text="{Binding ActiveTab.ScheduledActionError}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding ActiveTab.HasScheduledActionError}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Row="2"
+                                                            Spacing="8">
+                                                    <ProgressRing IsActive="{Binding ActiveTab.IsLoading}"
+                                                                  Width="20"
+                                                                  Height="20"/>
+
+                                                    <TextBlock Text="{Binding ActiveTab.ErrorMessage}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="Wrap"/>
+
+                                                    <InfoBar
+                                                        IsOpen="{Binding ActiveTab.ShowEmptyState}"
+                                                        Severity="Informational"
+                                                        Title="No scheduled messages"
+                                                        Message="Schedule a message from an active workspace to populate this native scheduled-message manager."/>
+
+                                                    <ListView ItemsSource="{Binding ActiveTab.ScheduledMessages}"
+                                                              SelectedItem="{Binding ActiveTab.SelectedScheduledMessage, Mode=TwoWay}">
+                                                        <ListView.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ScheduledMessageItemViewModel">
+                                                                <Border
+                                                                    Margin="0,0,0,8"
+                                                                    CornerRadius="6"
+                                                                    Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                    BorderThickness="1"
+                                                                    Padding="10">
+                                                                    <StackPanel Spacing="8">
+                                                                        <Grid ColumnSpacing="8">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <StackPanel Grid.Column="0"
+                                                                                        Spacing="4">
+                                                                                <TextBlock Text="{x:Bind DisplayMessageId}"
+                                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                                <TextBlock Text="{x:Bind EntityPath}"
+                                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                                <TextBlock Text="{x:Bind ScheduledEnqueueTimeText}"
+                                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                                                <TextBlock Text="{x:Bind StatusText}"
+                                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                                            </StackPanel>
+
+                                                                            <Button
+                                                                                Grid.Column="1"
+                                                                                Content="Cancel"
+                                                                                Click="CancelScheduledMessage_Click"
+                                                                                IsEnabled="{x:Bind CanCancel}"/>
+
+                                                                            <Button
+                                                                                Grid.Column="2"
+                                                                                Content="Remove local"
+                                                                                Click="RemoveScheduledMessage_Click"/>
+                                                                        </Grid>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ListView.ItemTemplate>
+                                                    </ListView>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border
+                                            Grid.Column="1"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <StackPanel Spacing="12">
+                                                    <TextBlock Text="Scheduled message details"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                                                    <InfoBar
+                                                        IsOpen="{Binding ActiveTab.ShowNoScheduledSelectionState}"
+                                                        Severity="Informational"
+                                                        Title="No scheduled message selected"
+                                                        Message="Select a scheduled message from the list to inspect its metadata."/>
+
+                                                    <StackPanel Spacing="8"
+                                                                Visibility="{Binding ActiveTab.HasSelectedScheduledMessage}">
+                                                        <TextBlock Text="Message ID"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledMessageId}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Subject"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledSubject}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Correlation ID"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledCorrelationId}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Entity path"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledEntityPath}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Sequence number"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledSequenceNumber}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Scheduled enqueue time"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledEnqueueTime}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+
+                                                        <TextBlock Text="Status"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <TextBox Text="{Binding ActiveTab.SelectedScheduledStatus}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <Border
                                     Grid.Column="0"
                                     CornerRadius="8"
                                     Background="{ThemeResource LayerFillColorAltBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
-                                    Padding="12">
+                                    Padding="12"
+                                    Visibility="{Binding ActiveTab.IsMessageTab}">
                                     <Grid RowDefinitions="Auto,Auto,*"
                                           RowSpacing="12">
                                         <StackPanel Grid.Row="0"
@@ -443,9 +629,104 @@
                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                         </StackPanel>
 
-                                        <TextBlock Grid.Row="1"
-                                                   Text="{Binding ActiveTab.MessageCountSummary}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        <StackPanel Grid.Row="1"
+                                                    Spacing="12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding ActiveTab.MessageCountSummary}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                                                <Button
+                                                    Grid.Column="1"
+                                                    Content="{Binding ActiveTab.LoadMoreButtonLabel}"
+                                                    Command="{Binding LoadMoreActiveTabCommand}"
+                                                    IsEnabled="{Binding CanLoadMoreActiveTab}"
+                                                    Visibility="{Binding ActiveTab.LoadMoreVisibility}"/>
+                                            </Grid>
+
+                                            <Border
+                                                CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="12">
+                                                <StackPanel Spacing="12">
+                                                    <TextBox
+                                                        Header="Filter messages"
+                                                        PlaceholderText="Search loaded message IDs, subjects, correlation IDs, and bodies"
+                                                        Text="{Binding ActiveTab.FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <ComboBox
+                                                            Grid.Column="0"
+                                                            ItemsSource="{Binding ActiveTab.SavedFilters}"
+                                                            SelectedItem="{Binding ActiveTab.SelectedSavedFilter, Mode=TwoWay}"
+                                                            DisplayMemberPath="Name"
+                                                            PlaceholderText="Saved filters"
+                                                            IsEnabled="{Binding ActiveTab.HasSavedFilters}"/>
+
+                                                        <Button
+                                                            Grid.Column="1"
+                                                            Content="Apply"
+                                                            Command="{Binding ActiveTab.ApplySelectedSavedFilterCommand}"
+                                                            IsEnabled="{Binding ActiveTab.HasSelectedSavedFilter}"/>
+
+                                                        <Button
+                                                            Grid.Column="2"
+                                                            Content="Delete"
+                                                            Command="{Binding ActiveTab.DeleteSelectedSavedFilterCommand}"
+                                                            IsEnabled="{Binding ActiveTab.HasSelectedSavedFilter}"/>
+                                                    </Grid>
+
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBox
+                                                            Grid.Column="0"
+                                                            Header="Save current filter as"
+                                                            PlaceholderText="Filter name"
+                                                            Text="{Binding ActiveTab.PendingFilterName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                        <Button
+                                                            Grid.Column="1"
+                                                            Content="Save filter"
+                                                            Command="{Binding ActiveTab.SaveCurrentFilterCommand}"
+                                                            IsEnabled="{Binding ActiveTab.CanSaveCurrentFilter}"
+                                                            VerticalAlignment="Bottom"/>
+                                                    </Grid>
+
+                                                    <Expander Header="Visible list fields">
+                                                        <StackPanel Margin="0,8,0,0"
+                                                                    Spacing="8">
+                                                            <CheckBox Content="Message ID"
+                                                                      IsChecked="{Binding ActiveTab.ShowMessageIdField, Mode=TwoWay}"/>
+                                                            <CheckBox Content="Subject"
+                                                                      IsChecked="{Binding ActiveTab.ShowSubjectField, Mode=TwoWay}"/>
+                                                            <CheckBox Content="Correlation ID"
+                                                                      IsChecked="{Binding ActiveTab.ShowCorrelationIdField, Mode=TwoWay}"/>
+                                                            <CheckBox Content="Enqueued time"
+                                                                      IsChecked="{Binding ActiveTab.ShowEnqueuedField, Mode=TwoWay}"/>
+                                                            <Button Content="Reset list preferences"
+                                                                    Command="{Binding ActiveTab.ResetMessageListPreferencesCommand}"/>
+                                                        </StackPanel>
+                                                    </Expander>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
 
                                         <StackPanel Grid.Row="2"
                                                     Spacing="8">
@@ -463,7 +744,13 @@
                                                 Title="No messages available"
                                                 Message="This workspace currently has no messages to display."/>
 
-                                            <ListView ItemsSource="{Binding ActiveTab.Messages}"
+                                            <InfoBar
+                                                IsOpen="{Binding ActiveTab.ShowFilteredEmptyState}"
+                                                Severity="Informational"
+                                                Title="No matches"
+                                                Message="No loaded messages match the current search filter."/>
+
+                                            <ListView ItemsSource="{Binding ActiveTab.VisibleMessages}"
                                                       SelectedItem="{Binding ActiveTab.SelectedMessage, Mode=TwoWay}">
                                                 <ListView.ItemTemplate>
                                                     <DataTemplate x:DataType="models:SbMessage">
@@ -477,15 +764,19 @@
                                                             <StackPanel Spacing="4">
                                                                 <TextBlock Text="{x:Bind MessageId}"
                                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Visibility="{Binding DataContext.ActiveTab.MessageIdVisibility, ElementName=PageRoot}"/>
                                                                 <TextBlock Text="{x:Bind Subject}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Visibility="{Binding DataContext.ActiveTab.SubjectVisibility, ElementName=PageRoot}"/>
                                                                 <TextBlock Text="{x:Bind CorrelationId}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Visibility="{Binding DataContext.ActiveTab.CorrelationIdVisibility, ElementName=PageRoot}"/>
                                                                 <TextBlock Text="{x:Bind EnqueuedAt}"
-                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                           Visibility="{Binding DataContext.ActiveTab.EnqueuedVisibility, ElementName=PageRoot}"/>
                                                             </StackPanel>
                                                         </Border>
                                                     </DataTemplate>
@@ -501,7 +792,8 @@
                                     Background="{ThemeResource LayerFillColorAltBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
-                                    Padding="12">
+                                    Padding="12"
+                                    Visibility="{Binding ActiveTab.IsMessageTab}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <StackPanel Spacing="12">
                                             <TextBlock Text="Message details"

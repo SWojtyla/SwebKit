@@ -13,6 +13,25 @@ namespace SwebKit.WinUI.Tests;
 public sealed class RedisPageViewModelTests
 {
     [Fact]
+    public async Task DemoModeWithoutRedisConfig_AddsDemoCacheAndLoadsSeededKeys()
+    {
+        var harness = CreateHarness(TestRedisClient.CreateDefault(), isProduction: false, includeRedisConfig: false);
+
+        await harness.ViewModel.LoadAsync();
+
+        Assert.False(harness.ViewModel.IsConfigured);
+
+        await harness.AppState.SetDemoModeAsync(true);
+        await WaitForConditionAsync(() => harness.ViewModel.HasConfiguredCaches && harness.ViewModel.TreeRows.Count > 0);
+
+        Assert.True(harness.ViewModel.IsConfigured);
+        Assert.False(harness.ViewModel.ShowNotConfiguredState);
+        Assert.Contains("demo Redis cache", harness.ViewModel.ConnectionSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(":", harness.ViewModel.SeparatorInput);
+        Assert.NotEmpty(harness.ViewModel.TreeRows);
+    }
+
+    [Fact]
     public async Task AnalyzeKeyspaceHealth_PopulatesFindingsForLoadedKeys()
     {
         var fakeClient = TestRedisClient.CreateDefault();
@@ -152,6 +171,11 @@ public sealed class RedisPageViewModelTests
 
     private static RedisPageViewModel CreateViewModel(TestRedisClient fakeClient, bool isProduction)
     {
+        return CreateHarness(fakeClient, isProduction, includeRedisConfig: true).ViewModel;
+    }
+
+    private static RedisPageHarness CreateHarness(TestRedisClient fakeClient, bool isProduction, bool includeRedisConfig)
+    {
         var profileRepository = new ProfileRepository();
         var uiStateRepository = new UiStateRepository();
         var appState = new AppStateService(
@@ -163,22 +187,25 @@ public sealed class RedisPageViewModelTests
 
         appState.Config.IsProduction = isProduction;
 
-        var redisConfig = new RedisConfig
+        if (includeRedisConfig)
         {
-            NamespaceSeparator = ":",
-        };
+            var redisConfig = new RedisConfig
+            {
+                NamespaceSeparator = ":",
+            };
 
-        var cacheEntry = new RedisCacheEntry
-        {
-            Id = "cache1",
-            DisplayName = "Primary Redis",
-            ConnectionString = "localhost:6379",
-            Database = 0,
-        };
+            var cacheEntry = new RedisCacheEntry
+            {
+                Id = "cache1",
+                DisplayName = "Primary Redis",
+                ConnectionString = "localhost:6379",
+                Database = 0,
+            };
 
-        redisConfig.Caches.Add(cacheEntry);
-        redisConfig.ActiveCacheId = cacheEntry.Id;
-        appState.Config.RedisConfig = redisConfig;
+            redisConfig.Caches.Add(cacheEntry);
+            redisConfig.ActiveCacheId = cacheEntry.Id;
+            appState.Config.RedisConfig = redisConfig;
+        }
 
         var navigation = new TestShellNavigationService();
         var workspaceService = new OperatorWorkspaceService(
@@ -187,13 +214,30 @@ public sealed class RedisPageViewModelTests
             navigation,
             Array.Empty<IOperatorResourceSearchProvider>());
 
-        return new RedisPageViewModel(
+        var viewModel = new RedisPageViewModel(
             appState,
             new TestRedisClientFactory(fakeClient),
             new RedisOpsInsightsAggregator(),
             new TestNotificationService(),
             workspaceService,
             NullLogger<RedisPageViewModel>.Instance);
+
+        return new RedisPageHarness(viewModel, appState);
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> predicate)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        Assert.True(predicate());
     }
 
     private static void MarkInitialized(AppStateService appState)
@@ -210,6 +254,8 @@ public sealed class RedisPageViewModelTests
     {
         public Task<IRedisClient> CreateAsync(RedisCacheEntry cacheEntry, CancellationToken ct = default) => Task.FromResult<IRedisClient>(client);
     }
+
+    private sealed record RedisPageHarness(RedisPageViewModel ViewModel, AppStateService AppState);
 
     private sealed class TestRedisClient : IRedisClient
     {
@@ -502,7 +548,7 @@ public sealed class RedisPageViewModelTests
 
         public event Action? NavigationChanged;
 
-        public void NavigateTo(string area)
+        public void NavigateTo(string area, object? parameter = null)
         {
             CurrentArea = area;
             NavigationChanged?.Invoke();

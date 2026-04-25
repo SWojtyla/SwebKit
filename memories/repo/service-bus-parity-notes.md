@@ -1,0 +1,3 @@
+- Service Bus docs should distinguish the landed WinUI baseline from the hosted Blazor superset; when parity work lands, update the active feature folder plus docs/architecture/functionalities/service-bus.md in the same change set.
+- Verified WinUI baseline for Service Bus: scheduled-message manager tabs, compose dialog with template save/apply and scheduled send, confirmation-gated DLQ/scheduled destructive actions, text filtering, saved filters, built-in field visibility preferences, and load-more.
+- Focused validation for this slice: run the `build-winui` task and `dotnet test .\\tests\\SwebKit.WinUI.Tests\\SwebKit.WinUI.Tests.csproj --filter ServiceBusPageViewModelTests`.

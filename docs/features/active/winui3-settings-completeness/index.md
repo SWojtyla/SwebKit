@@ -4,7 +4,7 @@
 
 title: "Feature Overview - winui3-settings-completeness"
 owner: ""
-status: "Planned"
+status: "Review"
 jira: "not linked"
 created: "2026-04-25"
 updated: "2026-04-25"
@@ -17,7 +17,7 @@ Restore full native settings coverage for the in-scope WinUI operator domains so
 
 ## Value
 
-The current WinUI Settings page only exposes Appearance and General. That leaves AKS, Redis, Storage, Pipelines/Releases, Observability, and Service Bus dependent on missing or hidden configuration surfaces even where route shells already exist. This feature closes that gap and becomes the operator-controlled entry point for fixing readiness issues.
+The native WinUI Settings page now exposes sectioned repair surfaces for Service Bus, AKS, Redis, Azure DevOps, Storage, and Observability instead of stopping at shell defaults. Route-level readiness actions can land on the owning native section, while Incident Timeline remains explicitly deferred rather than silently missing.
 
 ## Scope
 
@@ -76,4 +76,4 @@ The current WinUI Settings page only exposes Appearance and General. That leaves
 - Jira: not linked
 - Status: `status.md`
 - Tests: `test-plan.md`
-- Implementation modules: none yet
+- Implementation modules: none; implementation is concentrated in `src/SwebKit.WinUI/Views/Settings/` and `src/SwebKit.WinUI/ViewModels/Settings/`

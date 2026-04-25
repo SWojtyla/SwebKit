@@ -19,6 +19,8 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     private const int ScanBatchSize = 250;
     private const int KeyTypeBatchSize = 25;
     private const int ItemPageSize = 100;
+    private const string DemoCacheId = "demo-cache";
+    private const string DemoCacheDisplayName = "Demo cache";
 
     private readonly AppStateService _appState;
     private readonly IRedisClientFactory _redisClientFactory;
@@ -55,6 +57,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         _notifications = notifications;
         _workspaceService = workspaceService;
         _logger = logger;
+        _appState.DemoModeChanged += OnDemoModeChanged;
 
         CacheEntries.CollectionChanged += (_, _) => RefreshConnectionState();
         TreeRows.CollectionChanged += (_, _) => RefreshBrowserState();
@@ -186,6 +189,14 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     public string LoadMoreKeysLabel => _hasMoreKeys
         ? $"Load more matches ({_keys.Count} loaded)"
         : "No more matches";
+
+    public Visibility HeaderStatusRowVisibility => IsConfigured ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility HeaderMessagesVisibility => ShowBulkDeleteConfirmation || !string.IsNullOrWhiteSpace(ErrorMessage) || ShowNotConfiguredState
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility LoadMoreKeysVisibility => _hasMoreKeys ? Visibility.Visible : Visibility.Collapsed;
 
     public bool CanReload => !IsWorking;
 
@@ -887,6 +898,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         }
 
         _isDisposed = true;
+        _appState.DemoModeChanged -= OnDemoModeChanged;
         _workspaceService.UnregisterRestoreHandler("redis");
         await CancelTokenAsync(_loadCts);
         await CancelTokenAsync(_detailCts);
@@ -935,6 +947,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     partial void OnErrorMessageChanged(string? value)
     {
         OnPropertyChanged(nameof(ErrorVisibility));
+        OnPropertyChanged(nameof(HeaderMessagesVisibility));
         OnPropertyChanged(nameof(ShowTreeEmptyState));
     }
 
@@ -1007,7 +1020,18 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
                 }
             }
 
-            SeparatorInput = NormalizeSeparator(redisConfig?.NamespaceSeparator);
+            if (_appState.UseDemoData && CacheEntries.Count == 0)
+            {
+                CacheEntries.Add(CreateDemoCacheEntry());
+            }
+
+            var separator = redisConfig?.NamespaceSeparator;
+            if (_appState.UseDemoData && string.IsNullOrWhiteSpace(separator))
+            {
+                separator = ":";
+            }
+
+            SeparatorInput = NormalizeSeparator(separator);
             SelectedCache = redisConfig?.ActiveCache ?? CacheEntries.FirstOrDefault();
         }
         finally
@@ -1016,6 +1040,22 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         }
 
         RefreshConnectionState();
+    }
+
+    private void OnDemoModeChanged()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (!_loaded)
+        {
+            RefreshAllState();
+            return;
+        }
+
+        _ = ReloadAsync();
     }
 
     private async Task HandleSelectedCacheChangedAsync(RedisCacheEntry? cacheEntry)
@@ -1107,6 +1147,14 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         ConnectionSummary = $"Connected to '{SelectedCache.DisplayName}' (db {SelectedCache.Database}).";
         RefreshConnectionState();
     }
+
+    private static RedisCacheEntry CreateDemoCacheEntry() => new()
+    {
+        Id = DemoCacheId,
+        DisplayName = DemoCacheDisplayName,
+        ConnectionString = "demo://redis",
+        Database = 0,
+    };
 
     private async Task ScanAsync(CancellationToken cancellationToken)
     {
@@ -1679,6 +1727,8 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         OnPropertyChanged(nameof(IsWorking));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
         OnPropertyChanged(nameof(ShowTreeEmptyState));
+        OnPropertyChanged(nameof(HeaderStatusRowVisibility));
+        OnPropertyChanged(nameof(HeaderMessagesVisibility));
         OnPropertyChanged(nameof(CanReload));
         OnPropertyChanged(nameof(CanChangeCache));
         OnPropertyChanged(nameof(CanEditPatternInput));
@@ -1692,6 +1742,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     {
         OnPropertyChanged(nameof(ShowTreeEmptyState));
         OnPropertyChanged(nameof(LoadMoreKeysLabel));
+        OnPropertyChanged(nameof(LoadMoreKeysVisibility));
         OnPropertyChanged(nameof(CanLoadMoreKeys));
         OnPropertyChanged(nameof(ScanSummary));
         RefreshAnalyticsState();

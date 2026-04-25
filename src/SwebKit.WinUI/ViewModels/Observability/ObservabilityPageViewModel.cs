@@ -11,6 +11,7 @@ using SwebKit.Core.Models;
 using SwebKit.Core.Services;
 using SwebKit.Observability;
 using SwebKit.WinUI.Services;
+using SwebKit.WinUI.ViewModels.Settings;
 
 namespace SwebKit.WinUI.ViewModels.Observability;
 
@@ -658,7 +659,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     [RelayCommand]
     private Task OpenSettingsAsync()
     {
-        _navigation.NavigateTo("settings");
+        _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.Observability));
         return Task.CompletedTask;
     }
 

@@ -4,7 +4,7 @@
 
 title: "Test Plan - winui3-settings-completeness"
 owner: ""
-status: "Not started"
+status: "Review"
 created: "2026-04-25"
 updated: "2026-04-25"
 
@@ -28,7 +28,7 @@ Validate that every in-scope operator domain has a native WinUI settings surface
 ## Automated coverage
 
 - Build validation: `build-winui` must stay green as Settings XAML and view-model logic expand.
-- Unit tests: add focused `tests/SwebKit.WinUI.Tests/` coverage for settings-section validation and any readiness deep-link routing logic.
+- Unit tests: focused `tests/SwebKit.WinUI.Tests/ReadinessStateViewModelTests.cs` coverage currently verifies page-level settings-request payloads plus request normalization; dashboard deep links, frame handoff, and section-form save flows still rely on build validation plus manual smoke coverage for now.
 - Regression target: keep the existing Pipelines/Observability readiness tests green while the Settings repair path moves.
 
 ## Test data and setup
@@ -54,8 +54,8 @@ Validate that every in-scope operator domain has a native WinUI settings surface
 
 ## Validation status
 
-- Automated: Not started
-- Manual: Not started
+- Automated: `build-winui` green and focused `ReadinessStateViewModelTests` command-level settings-navigation coverage passing; no dedicated dashboard/frame-handoff or section-form persistence coverage yet
+- Manual: Pending WinUI UI smoke across the new settings sections
 
 ## Sign-off
 

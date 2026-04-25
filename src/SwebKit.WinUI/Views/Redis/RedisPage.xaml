@@ -9,6 +9,49 @@
     DataContext="{x:Bind ViewModel, Mode=OneWay}"
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
+    <Page.Resources>
+        <Style x:Key="RedisToolbarButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="MinHeight"
+                    Value="32"/>
+            <Setter Property="Padding"
+                    Value="10,5"/>
+        </Style>
+
+        <Style x:Key="RedisTreeActionButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="MinWidth"
+                    Value="0"/>
+            <Setter Property="MinHeight"
+                    Value="30"/>
+            <Setter Property="Padding"
+                    Value="10,4"/>
+            <Setter Property="Background"
+                    Value="{ThemeResource LayerFillColorAltBrush}"/>
+            <Setter Property="BorderBrush"
+                    Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+        </Style>
+
+        <Style x:Key="RedisTreeGlyphButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Width"
+                    Value="28"/>
+            <Setter Property="Height"
+                    Value="28"/>
+            <Setter Property="MinWidth"
+                    Value="28"/>
+            <Setter Property="Padding"
+                    Value="0"/>
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="BorderBrush"
+                    Value="Transparent"/>
+        </Style>
+    </Page.Resources>
+
     <shared:PageScaffold
         Title="Redis">
         <shared:PageScaffold.BodyContent>
@@ -21,7 +64,7 @@
                 <Border
                     Grid.Row="0"
                     Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <Grid RowSpacing="10">
+                    <Grid RowSpacing="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -31,10 +74,9 @@
 
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="240"/>
+                                <ColumnDefinition Width="180"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="100"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="84"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
@@ -74,23 +116,26 @@
                                     IsEnabled="{Binding CanEditSeparatorInput}"/>
                             </StackPanel>
 
-                            <ProgressRing
-                                Grid.Column="3"
-                                Width="20"
-                                Height="20"
-                                VerticalAlignment="Bottom"
-                                IsActive="{Binding IsWorking}"/>
+                            <StackPanel Grid.Column="3"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Bottom">
+                                <ProgressRing
+                                    Width="20"
+                                    Height="20"
+                                    IsActive="{Binding IsWorking}"/>
 
-                            <Button
-                                Grid.Column="4"
-                                Content="Refresh"
-                                Command="{Binding ReloadCommand}"
-                                IsEnabled="{Binding CanReload}"
-                                VerticalAlignment="Bottom"/>
+                                <Button
+                                    Content="Refresh"
+                                    Command="{Binding ReloadCommand}"
+                                    IsEnabled="{Binding CanReload}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"/>
+                            </StackPanel>
                         </Grid>
 
                         <Grid Grid.Row="1"
-                              ColumnSpacing="12">
+                              ColumnSpacing="12"
+                              Visibility="{Binding HeaderStatusRowVisibility}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -107,33 +152,41 @@
                                 Grid.Column="1"
                                 Content="{Binding LoadMoreKeysLabel}"
                                 Command="{Binding LoadMoreKeysCommand}"
+                                Visibility="{Binding LoadMoreKeysVisibility}"
                                 IsEnabled="{Binding CanLoadMoreKeys}"
+                                Style="{StaticResource RedisToolbarButtonStyle}"
                                 VerticalAlignment="Center"/>
                         </Grid>
 
                         <ScrollViewer Grid.Row="2"
+                                      Visibility="{Binding HeaderBulkToolbarVisibility}"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel Orientation="Horizontal"
                                         Spacing="8">
                                 <Button Content="{Binding SelectionModeButtonLabel}"
                                         Command="{Binding ToggleSelectionModeCommand}"
+                                        Style="{StaticResource RedisToolbarButtonStyle}"
                                         IsEnabled="{Binding CanToggleSelectionMode}"/>
 
                                 <Button Content="Select all loaded"
                                         Command="{Binding SelectAllLoadedCommand}"
+                                        Style="{StaticResource RedisToolbarButtonStyle}"
                                         IsEnabled="{Binding CanSelectAllLoaded}"/>
 
                                 <Button Content="Clear selection"
                                         Command="{Binding ClearSelectionCommand}"
+                                        Style="{StaticResource RedisToolbarButtonStyle}"
                                         IsEnabled="{Binding CanClearSelection}"/>
 
                                 <Button Content="Export JSON"
                                         Command="{Binding ExportLoadedKeysCommand}"
+                                        Style="{StaticResource RedisToolbarButtonStyle}"
                                         IsEnabled="{Binding CanExportLoadedKeys}"/>
 
                                 <Button Content="{Binding DeleteSelectedKeysLabel}"
                                         Command="{Binding DeleteSelectedKeysCommand}"
+                                        Style="{StaticResource RedisToolbarButtonStyle}"
                                         IsEnabled="{Binding CanDeleteSelectedKeys}"/>
 
                                 <TextBlock Text="{Binding SelectionSummaryText}"
@@ -145,7 +198,8 @@
                         </ScrollViewer>
 
                         <StackPanel Grid.Row="3"
-                                    Spacing="8">
+                                    Spacing="6"
+                                    Visibility="{Binding HeaderMessagesVisibility}">
                             <InfoBar
                                 IsOpen="{Binding ShowBulkDeleteConfirmation}"
                                 Severity="Warning"
@@ -208,11 +262,11 @@
                                         <DataTemplate x:DataType="viewModels:RedisTreeRowViewModel">
                                             <Border
                                                 Margin="0,0,0,8"
-                                                CornerRadius="6"
+                                                CornerRadius="10"
                                                 Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                 BorderThickness="1"
-                                                Padding="8,6">
+                                                Padding="10,7">
                                                 <Grid ColumnSpacing="8"
                                                       Margin="{x:Bind IndentMargin}">
                                                     <Grid.ColumnDefinitions>
@@ -228,8 +282,7 @@
                                                             Visibility="{x:Bind ExpandVisibility}"
                                                             Command="{Binding ViewModel.ToggleTreeRowCommand, ElementName=PageRoot}"
                                                             CommandParameter="{x:Bind}"
-                                                            Padding="0"
-                                                            MinWidth="28"/>
+                                                            Style="{StaticResource RedisTreeGlyphButtonStyle}"/>
 
                                                     <TextBlock Grid.Column="1"
                                                                Text="{x:Bind DisplayName}"
@@ -269,19 +322,34 @@
                                                             Content="{x:Bind SelectionActionLabel}"
                                                             Visibility="{x:Bind SelectionActionVisibility}"
                                                             Command="{Binding ViewModel.ToggleTreeSelectionCommand, ElementName=PageRoot}"
+                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
                                                             CommandParameter="{x:Bind}"/>
 
                                                     <Button Grid.Column="4"
-                                                            Content="Inspect"
+                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
                                                             Visibility="{x:Bind InspectVisibility}"
                                                             Command="{Binding ViewModel.SelectTreeKeyCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}"/>
+                                                            CommandParameter="{x:Bind}">
+                                                        <StackPanel Orientation="Horizontal"
+                                                                    Spacing="6">
+                                                            <FontIcon Glyph="&#xE8A7;"
+                                                                      FontSize="12"/>
+                                                            <TextBlock Text="Open"/>
+                                                        </StackPanel>
+                                                    </Button>
 
                                                     <Button Grid.Column="4"
-                                                            Content="Filter"
+                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
                                                             Visibility="{x:Bind FilterVisibility}"
                                                             Command="{Binding ViewModel.FilterByPrefixCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}"/>
+                                                            CommandParameter="{x:Bind}">
+                                                        <StackPanel Orientation="Horizontal"
+                                                                    Spacing="6">
+                                                            <FontIcon Glyph="&#xE71C;"
+                                                                      FontSize="12"/>
+                                                            <TextBlock Text="Filter"/>
+                                                        </StackPanel>
+                                                    </Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -292,6 +360,8 @@
                             <Button Grid.Row="3"
                                     Content="{Binding LoadMoreKeysLabel}"
                                     Command="{Binding LoadMoreKeysCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    Visibility="{Binding LoadMoreKeysVisibility}"
                                     IsEnabled="{Binding CanLoadMoreKeys}"/>
                         </Grid>
                     </Border>

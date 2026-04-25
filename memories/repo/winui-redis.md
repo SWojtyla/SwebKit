@@ -1,2 +1,4 @@
 - Redis WinUI analytics or export work that survives reload or cache switches must cancel on a dedicated or renewed token before writing results back into collections.
 - Redis WinUI bulk delete safety depends on `IsWorking` covering delete and analytics states so reload, cache selection, and editable scan inputs stay disabled during long-running or destructive flows.
+- Redis WinUI demo mode must synthesize a local cache entry when no Redis config exists; otherwise the page stays trapped in the not-configured state and demo validation is blocked.
+- Redis WinUI pagination affordances should share the same collapsed-visibility contract in both header and footer surfaces so empty or fully loaded states stay compact.

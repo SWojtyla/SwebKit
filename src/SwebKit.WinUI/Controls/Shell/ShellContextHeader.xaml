@@ -51,7 +51,7 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
-                                Spacing="6">
+                            Spacing="6">
                         <Border Style="{StaticResource SwebKitShellBadgeStyle}"
                                 Visibility="{Binding CurrentConnectionVisibility}">
                             <TextBlock Text="{Binding CurrentConnectionLabel}"
@@ -75,7 +75,7 @@
 
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
-                        Spacing="6"
+                    Spacing="6"
                         VerticalAlignment="Center">
                 <Button Style="{StaticResource SwebKitShellIconButtonStyle}"
                         ToolTipService.ToolTip="{Binding WorkspaceButtonLabel}">

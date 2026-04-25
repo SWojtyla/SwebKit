@@ -4,7 +4,7 @@
 
 title: "Feature Overview - winui3-storage-parity"
 owner: ""
-status: "Planned"
+status: "Review"
 jira: "not linked"
 created: "2026-04-25"
 updated: "2026-04-25"
@@ -17,7 +17,7 @@ Close the remaining Azure Storage workspace parity gap in WinUI so operators can
 
 ## Value
 
-The native Storage route already covers account, container, and blob browsing plus SAS copy and text-friendly preview. The remaining MAUI-only value is broader batch handling, download and version workflows, and better large-file or binary-preview behavior. This feature isolates those gaps.
+The native Storage route now covers the cutover-critical parity workflows that are actually reachable today: multi-select ZIP download plus version-history compare, download, and restore when the selected storage profile allows mutations. Existing large-file and binary-preview safeguards remain the baseline, and deleted-blob discovery stays deferred as broader storage recovery work rather than part of this slice.
 
 ## Scope
 
@@ -54,4 +54,4 @@ The native Storage route already covers account, container, and blob browsing pl
 - Jira: not linked
 - Status: `status.md`
 - Tests: `test-plan.md`
-- Implementation modules: none yet
+- Implementation modules: none created; the completed slice is tracked directly in `status.md` and `test-plan.md`
