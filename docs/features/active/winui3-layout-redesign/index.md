@@ -29,7 +29,7 @@ The WinUI host already has real routed coverage, but too much of the vertical bu
 
 ### Wave 1 - Shared primitives
 
-- Add the missing shared primitives that the remaining feature plans depend on: `StateView`, `MetricCard`, `SectionCard`, and `DetailPaneHost`.
+- Add the missing shared primitives that downstream feature plans may reuse: `StateView`, `MetricCard`, `SectionCard`, and `DetailPaneHost`.
 - Extend `PageScaffold` only where necessary so page-level spacing, commands, and secondary guidance stop diverging.
 - Add compact-header and inline-context options so secondary information can move out of tall top banners and into the work surface where it is actually used.
 - Keep `DeferredPageLoadScheduler` as the lifecycle primitive and avoid folding layout work back into page activation logic.
@@ -61,10 +61,16 @@ The WinUI host already has real routed coverage, but too much of the vertical bu
 ## Dependencies
 
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
-- Downstream dependents: `docs/features/active/winui3-settings-completeness/`, `docs/features/active/winui3-aks-parity/`, `docs/features/active/winui3-pipelines-releases-parity/`, `docs/features/active/winui3-observability-parity/`
+- Shared baseline available to: `docs/features/active/winui3-settings-completeness/`, `docs/features/active/winui3-service-bus-parity/`, `docs/features/active/winui3-aks-parity/`, `docs/features/active/winui3-storage-parity/`, `docs/features/active/winui3-pipelines-releases-parity/`, `docs/features/active/winui3-observability-parity/`
 - Architecture constraints: `docs/architecture/architecture.md`, `docs/architecture/design.md`, `docs/architecture/codebase-guide.md`
 - Pitfall files that apply: `docs/pitfalls/blazor-maui.md`, `docs/pitfalls/dotnet-csharp.md`
 - Validation command: VS Code task `build-winui`
+
+## Parallel execution contract
+
+- This feature owns only reusable shared layout primitives, shell-wide spacing rules, and Dashboard or Settings as reference adopters.
+- Domain features should consume the current shared primitives inside their own page folders instead of reopening this feature for page-local composition work.
+- Only reusable cross-page primitive gaps or shell-wide contract changes should come back here.
 
 ## Risks & mitigations
 

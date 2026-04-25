@@ -105,8 +105,8 @@ Keep `winui3-cutover-audit-hardening` as the cutover coordination feature only, 
 ### Consequences
 
 - The repo now has one feature folder per remaining migration slice instead of a single catch-all checklist.
-- Dependency order is explicit: layout redesign first, settings completeness second, then the domain parity slices.
-- This umbrella can focus on integration evidence and the final cutover recommendation.
+- Shared execution contracts are explicit: reusable layout primitives and native settings repair flows are baseline assumptions, while domain features own page-local parity work.
+- This umbrella can focus on integration evidence, contract changes, and the final cutover recommendation.
 
 ### Alternatives considered
 

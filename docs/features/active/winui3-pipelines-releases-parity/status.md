@@ -4,7 +4,7 @@
 
 title: "Status - winui3-pipelines-releases-parity"
 owner: ""
-state: "Planned"
+state: "In Progress"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-25"
@@ -18,38 +18,42 @@ Pipelines already has routed native coverage and improved readiness handling, bu
 
 **Jira:** not linked
 
-**Current focus:** define the seam reduction and the MAUI-only workflow depth that must come back after Settings and layout foundations land.
+**Current focus:** finish the next Pipelines seam reductions now that the native Releases workspace and tag-manager state are no longer trapped inside the page-level coordinator.
 
 ## Progress checklist
 
 - [x] MAUI versus WinUI Pipelines gap captured
 - [x] Readiness-state gap separated from generic error handling
-- [ ] Page and view-model seam reduction plan confirmed
+- [x] Page and view-model seam reduction plan confirmed
 - [ ] Tree/detail and editing parity scope confirmed
-- [ ] Readiness-to-settings repair contract confirmed
-- [ ] Focused automated validation plan confirmed
-- [ ] Docs aligned after implementation begins
+- [x] Readiness-to-settings repair contract confirmed
+- [x] Focused automated validation plan confirmed
+- [x] Docs aligned after implementation begins
 
 ## Completed
 
 - Confirmed that Pipelines already has native route coverage and a stronger readiness story than before.
 - Identified Pipelines as a high-refactor-pressure slice because one view-model still owns too many workflows.
+- Extracted a dedicated WinUI Releases workspace seam so release selection, scoped component summaries, and release-tag manager state are coordinated outside `PipelinesPageViewModel`.
+- Kept readiness-state routing and the native `Open Settings` repair path in the page coordinator while the Releases seam moved out.
+- Added focused WinUI coverage for the extracted release workspace and kept the existing readiness refresh-gate coverage green.
 
 ## Remaining
 
-- Reduce the size and responsibility of the current Pipelines page seam.
+- Reduce the size and responsibility of the remaining Pipelines page seam, especially approval-action state and deeper pipeline tree/detail parity.
 - Restore the deeper MAUI workflow surface that still remains narrower in WinUI.
 - Add focused validation for both demo-mode and live Azure DevOps scenarios.
 
 ## Blockers
 
-- Layout redesign and settings completeness are intended to land first so this page can reuse the final layout and repair surfaces.
+- No planning blocker remains. Live Azure DevOps validation is still environment-sensitive and should stay separate from the route-owned implementation work.
 
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: Not started
+- Validation status: `build-winui` passed; focused WinUI release-workspace and readiness tests passed.
 
 ## Notes
 
 - Pipelines remains one of the cutover-critical slices because Azure DevOps readiness is environment-sensitive and operator-visible.
+- The first seam-reduction slice is now the extracted `PipelinesReleaseWorkspaceViewModel`; approval workflows still remain on the page coordinator and are the next bounded pressure point.

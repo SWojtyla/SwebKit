@@ -23,7 +23,7 @@ The WinUI Service Bus page now covers the main native parity baseline: scheduled
 
 - In scope for the landed native baseline: scheduled message manager tabs, template save/apply/reuse flows, compose send-or-schedule parity, text-filter and list-preference persistence, and destructive safety cues.
 - Deferred follow-up still tracked here: hosted-only filter/export/purge/row-density/custom-column/template-management parity, workspace-restore hardening, and page-level WinUI coverage.
-- In scope: aligning the page with the shared layout and settings primitives once those features land.
+- In scope: page-local adoption of the current shared layout primitives and Settings repair contract where Service Bus needs them.
 - Out of scope: new broker workflows that do not already exist in MAUI, backend Azure Service Bus redesign, and Incident Timeline integration.
 
 ## Source surfaces
@@ -33,10 +33,16 @@ The WinUI Service Bus page now covers the main native parity baseline: scheduled
 
 ## Dependencies
 
-- Prerequisite active features: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
+- Shared baselines available from: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
 - Functionality baseline: `docs/architecture/functionalities/service-bus.md`
 - Pitfall files that apply: `docs/pitfalls/azure-sdk.md`, `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`
+
+## Parallel execution contract
+
+- This feature owns `src/SwebKit.WinUI/Views/ServiceBus/`, `src/SwebKit.WinUI/ViewModels/ServiceBus/`, and Service Bus-specific workspace state.
+- It may consume the current layout primitives and Settings section contract without waiting on further global redesign work.
+- Reusable primitive gaps or global Settings IA changes should be raised separately; page-local adoption stays here.
 
 ## Risks & mitigations
 

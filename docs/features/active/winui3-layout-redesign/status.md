@@ -18,7 +18,7 @@ The shared WinUI layout contract is now implemented. `PageScaffold` supports com
 
 **Jira:** not linked
 
-**Current focus:** finish manual content-density checks on Dashboard and Settings, then hand the shared primitives off to downstream parity features.
+**Current focus:** finish manual content-density checks on Dashboard and Settings while keeping the shared baseline stable for downstream parity features.
 
 ## Progress checklist
 
@@ -34,7 +34,7 @@ The shared WinUI layout contract is now implemented. `PageScaffold` supports com
 
 - Confirmed that no separate layout-redesign feature folder already exists in the repo.
 - Identified the cross-cutting layout work that is currently buried inside `winui3-cutover-audit-hardening`.
-- Recorded the redesign as the first dependency for the remaining WinUI parity work.
+- Recorded the redesign as a shared baseline for the remaining WinUI parity work.
 - Added `StateView`, `MetricCard`, `SectionCard`, and `DetailPaneHost` under `src/SwebKit.WinUI/Controls/Shared/`.
 - Extended `PageScaffold` with compact-header and inline-context options so secondary guidance can move below the title row instead of expanding it.
 - Rebuilt Dashboard and Settings on the new compact scaffold and shared section or metric surfaces.
@@ -44,7 +44,7 @@ The shared WinUI layout contract is now implemented. `PageScaffold` supports com
 ## Remaining
 
 - Run the manual Dashboard and Settings content-density checks in `test-plan.md` to confirm the top chrome no longer crowds the primary work surface at typical desktop sizes.
-- Validate one downstream page adoption during its parity slice so the new shared primitives prove reusable outside the reference pages.
+- Validate one downstream page adoption during its parity slice so the new shared primitives prove reusable outside the reference pages; this is useful contract evidence, not a blocker for parallel execution.
 
 ## Blockers
 
@@ -62,3 +62,4 @@ The shared WinUI layout contract is now implemented. `PageScaffold` supports com
 
 - Downstream feature plans should treat the content-first proportion rule as a global constraint, not a page-local preference.
 - The intended reuse path is `PageScaffold.IsHeaderCompact` + `ContextContent` for compact headers, `SectionCard` for operator work sections, `MetricCard` for summary tiles, `StateView` for reusable page states, and `DetailPaneHost` for future list/detail pages.
+- Domain features can assume the current shared primitives unless they hit a reusable gap with cross-page value.

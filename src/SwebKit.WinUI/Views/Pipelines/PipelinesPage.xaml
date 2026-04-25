@@ -199,7 +199,7 @@
                                             Text="Releases"
                                             Style="{StaticResource CaptionTextBlockStyle}"/>
                                         <TextBlock
-                                            Text="{Binding ReleaseCountText}"
+                                            Text="{Binding ReleaseWorkspace.ReleaseCountText}"
                                             Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                     </StackPanel>
 
@@ -503,7 +503,7 @@
                                             Text="Scoped releases"
                                             Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                                         <TextBlock
-                                            Text="{Binding ReleasesSummary}"
+                                            Text="{Binding ReleaseWorkspace.ReleasesSummary}"
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                             TextWrapping="WrapWholeWords"/>
                                     </StackPanel>
@@ -516,8 +516,8 @@
                                         Message="The release repository returned no entries that intersect the current delivery scope."/>
 
                                     <ListView Grid.Row="2"
-                                              ItemsSource="{Binding Releases}"
-                                              SelectedItem="{Binding SelectedRelease, Mode=TwoWay}">
+                                              ItemsSource="{Binding ReleaseWorkspace.Releases}"
+                                              SelectedItem="{Binding ReleaseWorkspace.SelectedRelease, Mode=TwoWay}">
                                         <ListView.ItemTemplate>
                                             <DataTemplate x:DataType="viewModels:PipelinesReleaseItemViewModel">
                                                 <StackPanel Padding="0,8"
@@ -554,25 +554,25 @@
                                     <StackPanel Grid.Row="0"
                                                 Spacing="6">
                                         <TextBlock
-                                            Text="{Binding SelectedReleaseTitle}"
+                                            Text="{Binding ReleaseWorkspace.SelectedReleaseTitle}"
                                             Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
                                             TextWrapping="WrapWholeWords"/>
                                         <TextBlock
-                                            Text="{Binding SelectedReleaseSubtitle}"
+                                            Text="{Binding ReleaseWorkspace.SelectedReleaseSubtitle}"
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                             TextWrapping="WrapWholeWords"/>
                                         <TextBlock
-                                            Text="{Binding SelectedReleaseComponentSummary}"
+                                            Text="{Binding ReleaseWorkspace.SelectedReleaseComponentSummary}"
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                             TextWrapping="WrapWholeWords"
-                                            Visibility="{Binding SelectedReleaseDetailVisibility}"/>
+                                            Visibility="{Binding ReleaseWorkspace.SelectedReleaseDetailVisibility}"/>
                                         <TextBlock
-                                            Text="{Binding SelectedReleaseNotes}"
+                                            Text="{Binding ReleaseWorkspace.SelectedReleaseNotes}"
                                             TextWrapping="WrapWholeWords"
-                                            Visibility="{Binding SelectedReleaseDetailVisibility}"/>
+                                            Visibility="{Binding ReleaseWorkspace.SelectedReleaseDetailVisibility}"/>
                                         <TextBlock
                                             Text="Select a release to inspect its scoped components and notes."
-                                            Visibility="{Binding SelectedReleasePlaceholderVisibility}"
+                                            Visibility="{Binding ReleaseWorkspace.SelectedReleasePlaceholderVisibility}"
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                             TextWrapping="WrapWholeWords"/>
                                     </StackPanel>
@@ -580,12 +580,12 @@
                                     <TextBlock Grid.Row="1"
                                                Text="Components and tag manager"
                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                               Visibility="{Binding SelectedReleaseDetailVisibility}"/>
+                                               Visibility="{Binding ReleaseWorkspace.SelectedReleaseDetailVisibility}"/>
 
                                     <StackPanel Grid.Row="2"
                                                 Spacing="16"
-                                                Visibility="{Binding SelectedReleaseDetailVisibility}">
-                                        <ListView ItemsSource="{Binding SelectedReleaseComponents}"
+                                                Visibility="{Binding ReleaseWorkspace.SelectedReleaseDetailVisibility}">
+                                        <ListView ItemsSource="{Binding ReleaseWorkspace.SelectedReleaseComponents}"
                                                   MaxHeight="220">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="viewModels:PipelinesReleaseComponentItemViewModel">
@@ -635,7 +635,7 @@
                                                             Text="Tag manager"
                                                             Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                                         <TextBlock
-                                                            Text="{Binding ReleaseTagSummary}"
+                                                            Text="{Binding ReleaseWorkspace.ReleaseTagSummary}"
                                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                             TextWrapping="WrapWholeWords"/>
                                                     </StackPanel>
@@ -644,34 +644,34 @@
                                                         Grid.Column="1"
                                                         Width="20"
                                                         Height="20"
-                                                        IsActive="{Binding IsLoadingReleaseTags}"/>
+                                                        IsActive="{Binding ReleaseWorkspace.IsLoadingReleaseTags}"/>
 
                                                     <Button
                                                         Grid.Column="2"
                                                         Content="Refresh tags"
                                                         Command="{Binding RefreshReleaseTagsCommand}"
-                                                        IsEnabled="{Binding CanChangeReleaseTags}"/>
+                                                        IsEnabled="{Binding ReleaseWorkspace.CanChangeReleaseTags}"/>
                                                 </Grid>
 
                                                 <InfoBar
                                                     Grid.Row="1"
-                                                    IsOpen="{Binding ShowReleaseTagWarningState}"
+                                                    IsOpen="{Binding ReleaseWorkspace.ShowReleaseTagWarningState}"
                                                     Severity="Warning"
                                                     Title="Partial git metadata"
-                                                    Message="{Binding ReleaseTagLoadWarning}"/>
+                                                    Message="{Binding ReleaseWorkspace.ReleaseTagLoadWarning}"/>
 
                                                 <Border Grid.Row="2"
-                                                        Visibility="{Binding ReleaseTagActionVisibility}"
+                                                        Visibility="{Binding ReleaseWorkspace.ReleaseTagActionVisibility}"
                                                         Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                                         CornerRadius="8"
                                                         Padding="12">
                                                     <StackPanel Spacing="10">
                                                         <TextBlock
-                                                            Text="{Binding ReleaseTagActionTitle}"
+                                                            Text="{Binding ReleaseWorkspace.ReleaseTagActionTitle}"
                                                             Style="{StaticResource BodyStrongTextBlockStyle}"
                                                             TextWrapping="WrapWholeWords"/>
                                                         <TextBlock
-                                                            Text="{Binding ReleaseTagActionSubtitle}"
+                                                            Text="{Binding ReleaseWorkspace.ReleaseTagActionSubtitle}"
                                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                             TextWrapping="WrapWholeWords"/>
 
@@ -686,14 +686,14 @@
                                                                 Text="Confirmation"
                                                                 Style="{StaticResource CaptionTextBlockStyle}"/>
                                                             <TextBox
-                                                                Text="{Binding ReleaseTagConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                IsEnabled="{Binding CanChangeReleaseTags}"
+                                                                Text="{Binding ReleaseWorkspace.ReleaseTagConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                IsEnabled="{Binding ReleaseWorkspace.CanChangeReleaseTags}"
                                                                 PlaceholderText="Type CONFIRM"/>
                                                         </StackPanel>
 
                                                         <TextBlock
-                                                            Text="{Binding ReleaseTagError}"
-                                                            Visibility="{Binding ReleaseTagErrorVisibility}"
+                                                            Text="{Binding ReleaseWorkspace.ReleaseTagError}"
+                                                            Visibility="{Binding ReleaseWorkspace.ReleaseTagErrorVisibility}"
                                                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                             TextWrapping="WrapWholeWords"/>
 
@@ -702,27 +702,27 @@
                                                             <Button
                                                                 Content="Cancel"
                                                                 Command="{Binding CancelReleaseTagActionCommand}"
-                                                                IsEnabled="{Binding CanChangeReleaseTags}"/>
+                                                                IsEnabled="{Binding ReleaseWorkspace.CanChangeReleaseTags}"/>
                                                             <Button
                                                                 Content="Create tag"
                                                                 Command="{Binding SubmitReleaseTagCommand}"
                                                                 Style="{StaticResource AccentButtonStyle}"
-                                                                IsEnabled="{Binding CanSubmitReleaseTag}"/>
+                                                                IsEnabled="{Binding ReleaseWorkspace.CanSubmitReleaseTag}"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>
 
                                                 <InfoBar
                                                     Grid.Row="3"
-                                                    IsOpen="{Binding ShowReleaseTagEmptyState}"
+                                                    IsOpen="{Binding ReleaseWorkspace.ShowReleaseTagEmptyState}"
                                                     Severity="Informational"
                                                     Title="No in-scope components"
                                                     Message="This release has no in-scope components available for tag creation."/>
 
                                                 <ListView Grid.Row="4"
-                                                          ItemsSource="{Binding ReleaseTagItems}"
-                                                          Visibility="{Binding ReleaseTagListVisibility}"
-                                                          IsEnabled="{Binding CanChangeReleaseTags}">
+                                                          ItemsSource="{Binding ReleaseWorkspace.ReleaseTagItems}"
+                                                          Visibility="{Binding ReleaseWorkspace.ReleaseTagListVisibility}"
+                                                          IsEnabled="{Binding ReleaseWorkspace.CanChangeReleaseTags}">
                                                     <ListView.ItemTemplate>
                                                         <DataTemplate x:DataType="viewModels:PipelinesReleaseTagItemViewModel">
                                                             <Border Padding="0,10">

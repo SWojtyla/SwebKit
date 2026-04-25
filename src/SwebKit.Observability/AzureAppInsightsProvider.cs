@@ -238,8 +238,8 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
 
     public async Task<DimensionBreakdown> GetDimensionBreakdownAsync(TimeRange range, string dimensionKey, int topN = 15, CancellationToken ct = default)
     {
-        var escapedKey = dimensionKey.Replace("'", "\\'");
-        var kql = $"requests\n| where isnotempty(customDimensions['{escapedKey}'])\n| summarize Count=count(), FailedCount=countif(success==false) by Value=tostring(customDimensions['{escapedKey}'])\n| order by Count desc\n| take {topN + 1}";
+        var dimensionExpression = BuildDimensionExpression(dimensionKey);
+        var kql = $"requests\n| extend DimensionValue={dimensionExpression}\n| where isnotempty(DimensionValue)\n| summarize Count=count(), FailedCount=countif(success==false) by Value=tostring(DimensionValue)\n| order by Count desc\n| take {topN + 1}";
 
         try
         {
@@ -261,6 +261,18 @@ public sealed class AzureAppInsightsProvider : IObservabilityProvider
         {
             throw new InvalidOperationException($"Dimension breakdown query failed ({ex.Status}): {ex.Message}", ex);
         }
+    }
+
+    private static string BuildDimensionExpression(string dimensionKey)
+    {
+        return dimensionKey switch
+        {
+            "cloud/roleName" => "coalesce(tostring(customDimensions['cloud/roleName']), tostring(cloud_RoleName))",
+            "operation/name" => "coalesce(tostring(customDimensions['operation/name']), tostring(operation_Name), tostring(name))",
+            "cloud_RoleName" => "tostring(cloud_RoleName)",
+            "operation_Name" => "coalesce(tostring(operation_Name), tostring(name))",
+            _ => $"tostring(customDimensions['{dimensionKey.Replace("'", "\\'")}'])",
+        };
     }
 
     private static string DeriveBinSize(TimeRange range)

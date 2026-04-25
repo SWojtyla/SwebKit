@@ -32,10 +32,16 @@ The native Storage route now covers the cutover-critical parity workflows that a
 
 ## Dependencies
 
-- Prerequisite active features: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
+- Shared baselines available from: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
 - Functionality baseline: `docs/architecture/functionalities/storage.md`
 - Pitfall files that apply: `docs/pitfalls/azure-sdk.md`, `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`
+
+## Parallel execution contract
+
+- This feature owns `src/SwebKit.WinUI/Views/Storage/` and `src/SwebKit.WinUI/ViewModels/Storage/`.
+- It may consume the current shared detail-pane, state, and Settings baselines without waiting on additional global planning work.
+- Remaining review work is local to storage validation, not a blocker for parallel domain execution.
 
 ## Risks & mitigations
 

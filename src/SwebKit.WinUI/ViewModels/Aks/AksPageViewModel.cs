@@ -20,6 +20,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     private readonly INotificationService _notifications;
     private readonly ILogger<AksPageViewModel> _logger;
     private CancellationTokenSource _loadCts = new();
+    private CancellationTokenSource _selectedResourceActionCts = new();
     private bool _isDisposed;
     private bool _loaded;
     private bool _suppressSelectionSideEffects;
@@ -212,10 +213,18 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
         _isDisposed = true;
         DisposePortForwardState();
+        ResetSelectedResourceBusyStateForDispose();
+
+        if (!_selectedResourceActionCts.IsCancellationRequested)
+        {
+            await _selectedResourceActionCts.CancelAsync();
+        }
+
         await ResetLoadTokenAsync();
         await ResetLogsTokenAsync();
         _loadCts.Dispose();
         _logsCts.Dispose();
+        _selectedResourceActionCts.Dispose();
     }
 
     partial void OnSelectedContextChanged(string value)

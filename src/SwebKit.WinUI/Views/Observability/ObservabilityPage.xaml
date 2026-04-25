@@ -534,8 +534,8 @@
                                                                TextWrapping="WrapWholeWords"/>
                                                     <InfoBar IsOpen="{Binding ShowDimensionEmptyState}"
                                                              Severity="Informational"
-                                                             Title="Dimension pivots deferred"
-                                                             Message="The baseline keeps the pivot state model ready, but app-specific custom-dimension keys are intentionally left for a later slice."/>
+                                                             Title="No dimension pivots returned"
+                                                             Message="This window returned no high-signal cloud role or operation pivots for the active resource."/>
                                                     <ItemsControl ItemsSource="{Binding DimensionBreakdowns}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="viewModels:ObservabilityDimensionBreakdownItemViewModel">
@@ -551,6 +551,206 @@
                                                                         <TextBlock Text="{x:Bind SummaryText}"
                                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
                                                                     </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Column="0"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Deployment comparison"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding DeploymentComparisonHeadline}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="{Binding DeploymentComparisonSummaryText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+
+                                                    <ComboBox ItemsSource="{Binding DeploymentAnchors}"
+                                                              SelectedItem="{Binding SelectedDeploymentAnchor, Mode=TwoWay}"
+                                                              HorizontalAlignment="Stretch"
+                                                              PlaceholderText="Select a release anchor">
+                                                        <ComboBox.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityDeploymentAnchorItemViewModel">
+                                                                <StackPanel Spacing="2">
+                                                                    <TextBlock Text="{x:Bind ReleaseName}"/>
+                                                                    <TextBlock Text="{x:Bind AnchorTimeText}"
+                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </ComboBox.ItemTemplate>
+                                                    </ComboBox>
+
+                                                    <InfoBar IsOpen="{Binding ShowDeploymentAnchorEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No release anchors available"
+                                                             Message="Deployment comparison needs release snapshots with deployed timestamps in the Releases workspace."/>
+
+                                                    <InfoBar IsOpen="{Binding ShowDeploymentComparisonPlaceholder}"
+                                                             Severity="Informational"
+                                                             Title="Select a release anchor"
+                                                             Message="Choose a recorded release to compare overview telemetry four hours before and after deployment."/>
+
+                                                    <InfoBar IsOpen="{Binding ShowDeploymentComparisonEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No comparison loaded"
+                                                             Message="{Binding DeploymentComparisonSummaryText}"/>
+
+                                                    <Border Visibility="{Binding DeploymentComparisonBadgeVisibility}"
+                                                            CornerRadius="999"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="10,4">
+                                                        <TextBlock Text="{Binding DeploymentComparisonBadgeText}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    </Border>
+
+                                                    <TextBlock Text="{Binding DeploymentComparisonWindowText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+
+                                                    <ProgressRing Width="20"
+                                                                  Height="20"
+                                                                  IsActive="{Binding IsLoadingDeploymentComparison}"
+                                                                  HorizontalAlignment="Left"/>
+
+                                                    <ItemsControl ItemsSource="{Binding DeploymentComparisonDeltas}"
+                                                                  Visibility="{Binding DeploymentComparisonContentVisibility}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilityMetricDeltaItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <Grid ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <StackPanel Grid.Column="0"
+                                                                                    Spacing="2">
+                                                                            <TextBlock Text="{x:Bind MetricLabel}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                            <TextBlock Text="{x:Bind BeforeText}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock Text="{x:Bind AfterText}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        </StackPanel>
+
+                                                                        <StackPanel Grid.Column="1"
+                                                                                    HorizontalAlignment="Right"
+                                                                                    Spacing="2">
+                                                                            <TextBlock Text="{x:Bind ChangeText}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                            <TextBlock Text="{x:Bind ChangeDirectionLabel}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Grid.Column="1"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="SLO status"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding SloStatusHeadline}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="{Binding SloStatusSummaryText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+
+                                                    <InfoBar IsOpen="{Binding ShowSloNotConfiguredState}"
+                                                             Severity="Informational"
+                                                             Title="No SLO definitions configured"
+                                                             Message="Add SLO targets in Observability settings to track them in the native workspace."/>
+
+                                                    <InfoBar IsOpen="{Binding ShowSloEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No SLO evaluation available"
+                                                             Message="Configured SLOs did not return comparable overview metrics for this window."/>
+
+                                                    <Border Visibility="{Binding SloStatusBadgeVisibility}"
+                                                            CornerRadius="999"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="10,4">
+                                                        <TextBlock Text="{Binding SloStatusBadgeText}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    </Border>
+
+                                                    <ProgressRing Width="20"
+                                                                  Height="20"
+                                                                  IsActive="{Binding IsLoadingSloStatus}"
+                                                                  HorizontalAlignment="Left"/>
+
+                                                    <ItemsControl ItemsSource="{Binding SloStatusEntries}"
+                                                                  Visibility="{Binding SloStatusEntriesVisibility}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:ObservabilitySloStatusEntryItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <Grid ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <StackPanel Grid.Column="0"
+                                                                                    Spacing="2">
+                                                                            <TextBlock Text="{x:Bind Name}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                            <TextBlock Text="{x:Bind MetricLabel}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock Text="{x:Bind CurrentValueText}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock Text="{x:Bind TargetValueText}"
+                                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                        </StackPanel>
+
+                                                                        <Border Grid.Column="1"
+                                                                                Background="{x:Bind StateBackgroundBrush}"
+                                                                                CornerRadius="999"
+                                                                                Padding="10,4"
+                                                                                VerticalAlignment="Top">
+                                                                            <TextBlock Text="{x:Bind StateLabel}"
+                                                                                       Foreground="{x:Bind StateForegroundBrush}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                        </Border>
+                                                                    </Grid>
                                                                 </Border>
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
@@ -769,8 +969,8 @@
                                                                 Spacing="4">
                                                         <TextBlock Text="Logs mode"
                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                        <ComboBox ItemsSource="{Binding LogsModeOptions}"
-                                                                  SelectedItem="{Binding SelectedLogsMode, Mode=TwoWay}"
+                                                        <ComboBox ItemsSource="{Binding LogsWorkspace.LogsModeOptions}"
+                                                                  SelectedItem="{Binding LogsWorkspace.SelectedLogsMode, Mode=TwoWay}"
                                                                   DisplayMemberPath="Label"/>
                                                     </StackPanel>
 
@@ -778,8 +978,8 @@
                                                                 Spacing="4">
                                                         <TextBlock Text="Preset"
                                                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                        <ComboBox ItemsSource="{Binding QueryPresets}"
-                                                                  SelectedItem="{Binding SelectedQueryPreset, Mode=TwoWay}"
+                                                        <ComboBox ItemsSource="{Binding LogsWorkspace.QueryPresets}"
+                                                                  SelectedItem="{Binding LogsWorkspace.SelectedQueryPreset, Mode=TwoWay}"
                                                                   DisplayMemberPath="Name"/>
                                                     </StackPanel>
 
@@ -795,10 +995,10 @@
                                                             IsEnabled="{Binding HasActiveResource}"/>
                                                 </Grid>
 
-                                                <TextBlock Text="{Binding LogsModeDescription}"
+                                                <TextBlock Text="{Binding LogsWorkspace.LogsModeDescription}"
                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                            TextWrapping="WrapWholeWords"/>
-                                                <TextBlock Text="{Binding SelectedPresetDescription}"
+                                                <TextBlock Text="{Binding LogsWorkspace.SelectedPresetDescription}"
                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                            TextWrapping="WrapWholeWords"/>
 
@@ -810,7 +1010,7 @@
                                                     <StackPanel Spacing="10">
                                                         <TextBlock Text="Saved queries"
                                                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                                        <TextBlock Text="{Binding SavedQueriesSummary}"
+                                                        <TextBlock Text="{Binding LogsWorkspace.SavedQueriesSummary}"
                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                    TextWrapping="WrapWholeWords"/>
 
@@ -821,7 +1021,7 @@
                                                             </Grid.ColumnDefinitions>
 
                                                             <TextBox Grid.Column="0"
-                                                                     Text="{Binding SaveQueryName, Mode=TwoWay}"
+                                                                     Text="{Binding LogsWorkspace.SaveQueryName, Mode=TwoWay}"
                                                                      PlaceholderText="Name the current query before saving it"/>
 
                                                             <Button Grid.Column="1"
@@ -830,12 +1030,12 @@
                                                                     IsEnabled="{Binding CanSaveQuery}"/>
                                                         </Grid>
 
-                                                        <InfoBar IsOpen="{Binding ShowSavedQueriesEmptyState}"
+                                                        <InfoBar IsOpen="{Binding LogsWorkspace.ShowSavedQueriesEmptyState}"
                                                                  Severity="Informational"
                                                                  Title="No saved queries yet"
                                                                  Message="Name the current query and save it to persist it in the Observability profile."/>
 
-                                                        <ItemsControl ItemsSource="{Binding SavedQueries}">
+                                                        <ItemsControl ItemsSource="{Binding LogsWorkspace.SavedQueries}">
                                                             <ItemsControl.ItemTemplate>
                                                                 <DataTemplate x:DataType="viewModels:ObservabilitySavedQueryItemViewModel">
                                                                     <Border Margin="0,0,0,8"
@@ -873,18 +1073,18 @@
                                                     </StackPanel>
                                                 </Border>
 
-                                                <StackPanel Visibility="{Binding AdvancedModeVisibility}"
+                                                <StackPanel Visibility="{Binding LogsWorkspace.AdvancedModeVisibility}"
                                                             Spacing="8">
                                                     <TextBlock Text="Advanced KQL"
                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                                    <TextBox Text="{Binding AdvancedQueryText, Mode=TwoWay}"
+                                                    <TextBox Text="{Binding LogsWorkspace.AdvancedQueryText, Mode=TwoWay}"
                                                              AcceptsReturn="True"
                                                              TextWrapping="NoWrap"
                                                              FontFamily="Cascadia Mono"
                                                              MinHeight="160"/>
                                                 </StackPanel>
 
-                                                <StackPanel Visibility="{Binding GuidedModeVisibility}"
+                                                <StackPanel Visibility="{Binding LogsWorkspace.GuidedModeVisibility}"
                                                             Spacing="8">
                                                     <TextBlock Text="Guided draft"
                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
@@ -906,7 +1106,7 @@
                                                                     Spacing="4">
                                                             <TextBlock Text="Table"
                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <TextBox Text="{Binding GuidedTableName, Mode=TwoWay}"/>
+                                                            <TextBox Text="{Binding LogsWorkspace.GuidedTableName, Mode=TwoWay}"/>
                                                         </StackPanel>
 
                                                         <StackPanel Grid.Row="0"
@@ -914,7 +1114,7 @@
                                                                     Spacing="4">
                                                             <TextBlock Text="Filter column"
                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <TextBox Text="{Binding GuidedFilterColumn, Mode=TwoWay}"/>
+                                                            <TextBox Text="{Binding LogsWorkspace.GuidedFilterColumn, Mode=TwoWay}"/>
                                                         </StackPanel>
 
                                                         <StackPanel Grid.Row="0"
@@ -922,8 +1122,8 @@
                                                                     Spacing="4">
                                                             <TextBlock Text="Operator"
                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <ComboBox ItemsSource="{Binding GuidedOperatorOptions}"
-                                                                      SelectedItem="{Binding SelectedGuidedOperator, Mode=TwoWay}"
+                                                            <ComboBox ItemsSource="{Binding LogsWorkspace.GuidedOperatorOptions}"
+                                                                      SelectedItem="{Binding LogsWorkspace.SelectedGuidedOperator, Mode=TwoWay}"
                                                                       DisplayMemberPath="Label"/>
                                                         </StackPanel>
 
@@ -932,7 +1132,7 @@
                                                                     Spacing="4">
                                                             <TextBlock Text="Limit"
                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <TextBox Text="{Binding GuidedLimitText, Mode=TwoWay}"/>
+                                                            <TextBox Text="{Binding LogsWorkspace.GuidedLimitText, Mode=TwoWay}"/>
                                                         </StackPanel>
 
                                                         <StackPanel Grid.Row="1"
@@ -941,16 +1141,16 @@
                                                                     Spacing="4">
                                                             <TextBlock Text="Filter value"
                                                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <TextBox Text="{Binding GuidedFilterValue, Mode=TwoWay}"/>
+                                                            <TextBox Text="{Binding LogsWorkspace.GuidedFilterValue, Mode=TwoWay}"/>
                                                         </StackPanel>
                                                     </Grid>
 
-                                                    <TextBlock Text="{Binding GuidedCompileSummary}"
-                                                               Visibility="{Binding GuidedCompileSummaryVisibility}"
+                                                    <TextBlock Text="{Binding LogsWorkspace.GuidedCompileSummary}"
+                                                               Visibility="{Binding LogsWorkspace.GuidedCompileSummaryVisibility}"
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBox Text="{Binding GuidedCompiledQuery, Mode=OneWay}"
-                                                             Visibility="{Binding GuidedCompiledQueryVisibility}"
+                                                    <TextBox Text="{Binding LogsWorkspace.GuidedCompiledQuery, Mode=OneWay}"
+                                                             Visibility="{Binding LogsWorkspace.GuidedCompiledQueryVisibility}"
                                                              AcceptsReturn="True"
                                                              IsReadOnly="True"
                                                              TextWrapping="NoWrap"
@@ -975,7 +1175,7 @@
                                                 <StackPanel Spacing="10">
                                                     <TextBlock Text="Query results"
                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                                    <TextBlock Text="{Binding LogsResultSummary}"
+                                                    <TextBlock Text="{Binding LogsWorkspace.LogsResultSummary}"
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
                                                     <InfoBar IsOpen="{Binding ShowLogsEmptyState}"

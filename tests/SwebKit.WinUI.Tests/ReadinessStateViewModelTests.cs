@@ -54,7 +54,7 @@ public sealed class ReadinessStateViewModelTests
         Assert.True(viewModel.ShowNotConfiguredState);
         Assert.False(viewModel.ShowNoProjectsState);
 
-        viewModel.IsSubmittingReleaseTag = true;
+        viewModel.ReleaseWorkspace.IsSubmittingReleaseTag = true;
 
         Assert.True(viewModel.CanChangeApprovalAction);
         Assert.False(viewModel.CanRefreshWorkspace);
@@ -118,6 +118,7 @@ public sealed class ReadinessStateViewModelTests
             new TestObservabilityExplainerService(),
             navigation,
             new TestNotificationService(),
+            new ReleaseRepository(),
             workspaceService,
             NullLogger<ObservabilityPageViewModel>.Instance);
 
@@ -152,6 +153,7 @@ public sealed class ReadinessStateViewModelTests
             new TestObservabilityExplainerService(),
             navigation,
             new TestNotificationService(),
+            new ReleaseRepository(),
             workspaceService,
             NullLogger<ObservabilityPageViewModel>.Instance);
 
@@ -266,6 +268,7 @@ public sealed class ReadinessStateViewModelTests
             new TestObservabilityExplainerService(),
             navigation,
             new TestNotificationService(),
+            new ReleaseRepository(),
             workspaceService,
             NullLogger<ObservabilityPageViewModel>.Instance);
 

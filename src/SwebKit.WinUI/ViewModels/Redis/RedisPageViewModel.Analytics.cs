@@ -124,7 +124,7 @@ public sealed partial class RedisPageViewModel
             : $"{_selectedKeys.Count} loaded keys selected."
     };
 
-            public Visibility HeaderBulkToolbarVisibility => (_keys.Count > 0 || IsSelectionMode) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility HeaderBulkToolbarVisibility => (_keys.Count > 0 || IsSelectionMode) ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility SelectionSummaryVisibility => IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
 

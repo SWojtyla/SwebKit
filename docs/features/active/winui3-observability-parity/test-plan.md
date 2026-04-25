@@ -4,7 +4,7 @@
 
 title: "Test Plan - winui3-observability-parity"
 owner: ""
-status: "Not started"
+status: "In Progress"
 created: "2026-04-25"
 updated: "2026-04-25"
 
@@ -12,24 +12,24 @@ updated: "2026-04-25"
 
 ## Goal
 
-Validate that the Observability workspace reaches the agreed native parity for discovery, analysis, and query editing while staying clear under both demo-mode and live Azure credential conditions.
+Validate that the Observability workspace reaches the agreed native parity for richer overview analysis, discovery, readiness, and the already-landed native query workflow while staying clear under both demo-mode and live Azure credential conditions.
 
 ## Scope
 
-- In scope: page seam reduction, query-editor path, chart and drill-through parity, readiness-to-settings repair loop, focused tab-state validation
+- In scope: deployment comparison, SLO status, cloud-role or operation pivots, readiness-to-settings repair loop, focused tab-state validation, and regression coverage for the native logs or query baseline
 - Out of scope: new analytics capabilities beyond MAUI parity
 
 ## Main scenarios (priority)
 
 1. Scenario: missing Azure credentials are survivable. Expected result: Observability shows readiness guidance and opens the correct native Settings repair surface.
-2. Scenario: operators can complete the planned analysis workflow natively. Expected result: discovery, tabs, charts, and the query-editor path cover the agreed MAUI parity surface.
-3. Scenario: the refactored page seam is testable and stable. Expected result: discovery, tab activation, and editor state no longer compete inside one fragile state object.
+2. Scenario: operators can complete the richer overview workflow natively. Expected result: deployment comparison, SLO status, and cloud-role or operation pivots render against the active resource and recorded release anchors.
+3. Scenario: the existing native query workflow stays stable while overview parity expands. Expected result: overview changes do not regress discovery, tab activation, saved queries, logs mode state, or the extracted logs-workspace seam.
 
 ## Automated coverage
 
 - Build validation: `build-winui` must stay green.
 - Existing tests: keep `tests/SwebKit.WinUI.Tests/` green.
-- New tests: add focused WinUI coverage for discovery, readiness transitions, tab state, and any query-editor state introduced by the feature.
+- New tests: add focused WinUI coverage for richer overview parity, release-anchor comparison, readiness transitions, and the extracted logs-workspace seam in the native route.
 
 ## Test data and setup
 
@@ -39,22 +39,23 @@ Validate that the Observability workspace reaches the agreed native parity for d
 ## Manual checks
 
 - Check: readiness repair loop. Steps: trigger missing-credential behavior, open Settings from the readiness action, repair the environment, and reload Observability.
-- Check: analysis parity. Steps: exercise the agreed discovery, tab, chart, and query-editor workflow and confirm it matches the planned native surface.
+- Check: overview parity. Steps: activate a representative Application Insights resource, confirm cloud-role or operation pivots render, select a recorded release anchor, and verify deployment comparison plus configured SLO status.
+- Check: logs regression. Steps: switch between guided and advanced query modes after using the overview panels and confirm the native logs workflow still behaves correctly.
 
 ## Regression risks & mitigations
 
-- Risk: editor hosting destabilizes page activation or tab changes. Mitigation: validate discovery, navigation, and editor state separately.
-- Risk: chart parity work hides readiness regressions. Mitigation: keep credential-readiness scenarios as first-class acceptance criteria.
+- Risk: richer overview state destabilizes page activation or tab changes. Mitigation: validate discovery, navigation, and overview analysis state separately from the logs workflow.
+- Risk: overview parity work hides readiness regressions. Mitigation: keep credential-readiness scenarios as first-class acceptance criteria.
 
 ## Acceptance criteria
 
-- The agreed Observability workflow, including the query-editor path, is available natively.
+- The agreed richer overview workflow, including deployment comparison and SLO status, is available natively.
 - Readiness repair loops through native Settings successfully.
 - `build-winui` and focused WinUI tests stay green.
 
 ## Validation status
 
-- Automated: Not started
+- Automated: focused Problems checks report no errors in the touched Observability and readiness files, including the new logs-workspace view model. Full `build-winui` validation is blocked by an unrelated compile error in `src/SwebKit.WinUI/ViewModels/Pipelines/PipelinesReleaseWorkspaceViewModel.cs`, and the `runTests` tool returned 0 discovered tests for the focused files in this environment.
 - Manual: Not started
 
 ## Sign-off

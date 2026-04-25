@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -59,13 +60,22 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _notifications = notifications;
         _logger = logger;
 
+        ReleaseWorkspace = new PipelinesReleaseWorkspaceViewModel(
+            _appState,
+            _releaseRepository,
+            _notifications,
+            _logger,
+            () => ActiveClient,
+            () => ActiveReleaseSource,
+            ResetReleaseTagToken);
+
         Projects.CollectionChanged += HandleCollectionChanged;
         Pipelines.CollectionChanged += HandleCollectionChanged;
         ActivityRuns.CollectionChanged += HandleCollectionChanged;
-        Releases.CollectionChanged += HandleCollectionChanged;
         Approvals.CollectionChanged += HandleCollectionChanged;
-        SelectedReleaseComponents.CollectionChanged += HandleCollectionChanged;
-        ReleaseTagItems.CollectionChanged += HandleCollectionChanged;
+        ReleaseWorkspace.PropertyChanged += HandleReleaseWorkspacePropertyChanged;
+        ReleaseWorkspace.SelectedReleaseChanged += HandleSelectedReleaseChanged;
+        ReleaseWorkspace.ReleaseTagSubmitted += HandleReleaseTagSubmitted;
 
         _workspaceService.RegisterRestoreHandler(AreaName, RestoreWorkspaceAsync);
         _connectionState.StatesChanged += HandleConnectionStatesChanged;
@@ -81,13 +91,9 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public ObservableCollection<PipelinesRunItemViewModel> ActivityRuns { get; } = [];
 
-    public ObservableCollection<PipelinesReleaseItemViewModel> Releases { get; } = [];
-
     public ObservableCollection<PipelinesApprovalItemViewModel> Approvals { get; } = [];
 
-    public ObservableCollection<PipelinesReleaseComponentItemViewModel> SelectedReleaseComponents { get; } = [];
-
-    public ObservableCollection<PipelinesReleaseTagItemViewModel> ReleaseTagItems { get; } = [];
+    public PipelinesReleaseWorkspaceViewModel ReleaseWorkspace { get; }
 
     [ObservableProperty]
     public partial bool IsRefreshing { get; set; }
@@ -102,9 +108,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public partial bool IsLoadingApprovals { get; set; }
 
     [ObservableProperty]
-    public partial bool IsLoadingReleaseTags { get; set; }
-
-    [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
 
     [ObservableProperty]
@@ -115,15 +118,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     [ObservableProperty]
     public partial string? ApprovalRefreshWarning { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsSubmittingReleaseTag { get; set; }
-
-    [ObservableProperty]
-    public partial string? ReleaseTagLoadWarning { get; set; }
-
-    [ObservableProperty]
-    public partial string? ReleaseTagError { get; set; }
 
     [ObservableProperty]
     public partial string ConnectionStateLabel { get; set; } = "Unknown";
@@ -147,9 +141,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public partial PipelinesPipelineItemViewModel? SelectedPipeline { get; set; }
 
     [ObservableProperty]
-    public partial PipelinesReleaseItemViewModel? SelectedRelease { get; set; }
-
-    [ObservableProperty]
     public partial int SelectedTabIndex { get; set; }
 
     [ObservableProperty]
@@ -169,12 +160,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     [ObservableProperty]
     public partial string? ApprovalActionError { get; set; }
-
-    [ObservableProperty]
-    public partial PipelinesReleaseTagItemViewModel? ReleaseTagActionTarget { get; set; }
-
-    [ObservableProperty]
-    public partial string ReleaseTagConfirmText { get; set; } = string.Empty;
 
     private IDevOpsClient ActiveClient => _appState.UseDemoData ? _demoDevOpsClient : _realClient ?? _demoDevOpsClient;
 
@@ -196,8 +181,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public bool HasPipelines => Pipelines.Count > 0;
 
     public bool HasActivityRuns => ActivityRuns.Count > 0;
-
-    public bool HasReleases => Releases.Count > 0;
 
     public bool HasApprovals => Approvals.Count > 0;
 
@@ -228,7 +211,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         && SelectedPipeline is not null
         && ActivityRuns.Count == 0;
 
-    public bool ShowReleasesEmptyState => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && Releases.Count == 0;
+    public bool ShowReleasesEmptyState => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && !ReleaseWorkspace.HasReleases;
 
     public bool ShowApprovalsEmptyState => IsConfigured
         && !HasConfigurationIssue
@@ -239,17 +222,9 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public bool ShowApprovalRefreshWarningState => !IsLoadingApprovals && !string.IsNullOrWhiteSpace(ApprovalRefreshWarning);
 
-    public bool ShowReleaseTagEmptyState => SelectedRelease is not null
-        && !IsLoadingReleaseTags
-        && ReleaseTagItems.Count == 0;
-
-    public bool ShowReleaseTagWarningState => !IsLoadingReleaseTags && !string.IsNullOrWhiteSpace(ReleaseTagLoadWarning);
-
     public string ProjectCountText => Projects.Count.ToString();
 
     public string PipelineCountText => Pipelines.Count.ToString();
-
-    public string ReleaseCountText => Releases.Count.ToString();
 
     public string ApprovalCountText => Approvals.Count.ToString();
 
@@ -267,10 +242,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ? "Select a pipeline to load recent run activity."
         : $"Showing up to {ActivityRuns.Count} recent run{(ActivityRuns.Count == 1 ? string.Empty : "s")} for {SelectedPipeline.Name}.";
 
-    public string ReleasesSummary => Releases.Count == 0
-        ? "No release records intersect the current delivery scope."
-        : $"{Releases.Count} scoped release record{(Releases.Count == 1 ? string.Empty : "s")} loaded from the release repository.";
-
     public string ApprovalsSummary => !string.IsNullOrWhiteSpace(ApprovalRefreshWarning)
         ? Approvals.Count == 0
             ? "Approvals could not be fully refreshed for the current scope."
@@ -278,12 +249,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         : Approvals.Count == 0
             ? "No pending approvals were returned for the current scope."
             : $"{Approvals.Count} pending approval{(Approvals.Count == 1 ? string.Empty : "s")} across {Projects.Count} loaded project{(Projects.Count == 1 ? string.Empty : "s")}.";
-
-    public string ReleaseTagSummary => SelectedRelease is null
-        ? "Select a release to inspect scoped component tags."
-        : ReleaseTagItems.Count == 0
-            ? "No in-scope components are available for release tagging in this record."
-            : $"{ReleaseTagItems.Count(static item => item.IsTagConfirmed)} of {ReleaseTagItems.Count} in-scope component{(ReleaseTagItems.Count == 1 ? string.Empty : "s")} already have confirmed tags.";
 
     public string SelectedPipelineTitle => SelectedPipeline?.Name ?? "Select a pipeline";
 
@@ -303,22 +268,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ? "Stage progression appears here after run activity loads."
         : ActivityRuns[0].StageSummary;
 
-    public string SelectedReleaseTitle => SelectedRelease?.Name ?? "Select a release";
-
-    public string SelectedReleaseSubtitle => SelectedRelease is null
-        ? "Choose a scoped release record to inspect its state and components."
-        : $"{SelectedRelease.StatusLabel} · {SelectedRelease.CreatedLabel}";
-
-    public string SelectedReleaseNotes => SelectedRelease is null
-        ? ""
-        : string.IsNullOrWhiteSpace(SelectedRelease.Notes)
-            ? "No release notes were recorded for this entry."
-            : SelectedRelease.Notes;
-
-    public string SelectedReleaseComponentSummary => SelectedRelease is null
-        ? ""
-        : $"{SelectedRelease.ComponentCountText} · {SelectedRelease.CreatorLabel}";
-
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility WorkspaceVisibility => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && HasProjects ? Visibility.Visible : Visibility.Collapsed;
@@ -327,15 +276,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public Visibility SelectedPipelinePlaceholderVisibility => SelectedPipeline is null ? Visibility.Visible : Visibility.Collapsed;
 
-    public Visibility SelectedReleaseDetailVisibility => SelectedRelease is null ? Visibility.Collapsed : Visibility.Visible;
-
-    public Visibility SelectedReleasePlaceholderVisibility => SelectedRelease is null ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility ReleaseTagListVisibility => ReleaseTagItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-
     public bool HasApprovalActionTarget => ApprovalActionTarget is not null;
-
-    public bool HasReleaseTagActionTarget => ReleaseTagActionTarget is not null;
 
     public string ApprovalActionTitle => ApprovalActionTarget is null
         ? "Select an approval action"
@@ -344,14 +285,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public string ApprovalActionSubtitle => ApprovalActionTarget is null
         ? string.Empty
         : $"{ApprovalActionTarget.ProjectName} · {ApprovalActionTarget.StageLabel}";
-
-    public string ReleaseTagActionTitle => ReleaseTagActionTarget is null
-        ? "Create a release tag"
-        : $"Create tag for {ReleaseTagActionTarget.ComponentName}";
-
-    public string ReleaseTagActionSubtitle => ReleaseTagActionTarget is null
-        ? string.Empty
-        : $"{ReleaseTagActionTarget.ProjectName} · {ReleaseTagActionTarget.TagName} on {ReleaseTagActionTarget.SelectedCommitShortId}";
 
     public bool ApprovalActionRequiresConfirm => ApprovalActionTarget?.RequiresExplicitConfirmation == true;
 
@@ -364,8 +297,8 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         && !IsSubmittingApprovalAction;
 
     public bool CanRefreshWorkspace => CanChangeApprovalAction
-        && !IsLoadingReleaseTags
-        && !IsSubmittingReleaseTag;
+        && !ReleaseWorkspace.IsLoadingReleaseTags
+        && !ReleaseWorkspace.IsSubmittingReleaseTag;
 
     public string ApprovalActionConfirmationTitle => ApprovalActionTarget?.IsProduction == true
         ? "Production approval"
@@ -379,25 +312,11 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         && CanChangeApprovalAction
         && (!ApprovalActionRequiresConfirm || string.Equals(ApprovalActionConfirmText, "CONFIRM", StringComparison.Ordinal));
 
-    public bool CanChangeReleaseTags => SelectedRelease is not null
-        && !IsRefreshing
-        && !IsLoadingReleaseTags
-        && !IsSubmittingReleaseTag;
-
-    public bool CanSubmitReleaseTag => ReleaseTagActionTarget is not null
-        && CanChangeReleaseTags
-        && ReleaseTagActionTarget.CanCreateTag
-        && string.Equals(ReleaseTagConfirmText, "CONFIRM", StringComparison.Ordinal);
-
     public Visibility ApprovalActionVisibility => HasApprovalActionTarget ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ApprovalActionProdWarningVisibility => ApprovalActionRequiresConfirm ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ApprovalActionErrorVisibility => string.IsNullOrWhiteSpace(ApprovalActionError) ? Visibility.Collapsed : Visibility.Visible;
-
-    public Visibility ReleaseTagActionVisibility => HasReleaseTagActionTarget ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility ReleaseTagErrorVisibility => string.IsNullOrWhiteSpace(ReleaseTagError) ? Visibility.Collapsed : Visibility.Visible;
 
     public async Task LoadAsync()
     {
@@ -431,23 +350,13 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private void CancelApprovalAction() => DismissApprovalAction();
 
     [RelayCommand]
-    private Task RefreshReleaseTagsAsync() => LoadReleaseTagItemsAsync(SelectedRelease?.Id);
+    private Task RefreshReleaseTagsAsync() => ReleaseWorkspace.RefreshReleaseTagsAsync();
 
     [RelayCommand]
-    private void BeginCreateReleaseTag(PipelinesReleaseTagItemViewModel? tagItem)
-    {
-        if (tagItem is null || !tagItem.CanCreateTag)
-        {
-            return;
-        }
-
-        ReleaseTagError = null;
-        ReleaseTagConfirmText = string.Empty;
-        ReleaseTagActionTarget = tagItem;
-    }
+    private void BeginCreateReleaseTag(PipelinesReleaseTagItemViewModel? tagItem) => ReleaseWorkspace.BeginCreateReleaseTag(tagItem);
 
     [RelayCommand]
-    private void CancelReleaseTagAction() => DismissReleaseTagAction();
+    private void CancelReleaseTagAction() => ReleaseWorkspace.CancelReleaseTagAction();
 
     [RelayCommand]
     private async Task SubmitApprovalActionAsync()
@@ -512,82 +421,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     }
 
     [RelayCommand]
-    private async Task SubmitReleaseTagAsync()
-    {
-        if (ReleaseTagActionTarget is null)
-        {
-            return;
-        }
-
-        if (!CanSubmitReleaseTag)
-        {
-            ReleaseTagError = ReleaseTagActionTarget.CanCreateTag
-                ? "Type CONFIRM before creating a release tag."
-                : "Select a commit and tag name before creating a release tag.";
-            return;
-        }
-
-        var release = ResolveSelectedReleaseModel();
-        if (release is null)
-        {
-            ReleaseTagError = "The selected release could not be resolved from the current scope.";
-            return;
-        }
-
-        var target = ReleaseTagActionTarget;
-        var tagName = target.TagName.Trim();
-        var tagMessage = string.IsNullOrWhiteSpace(target.TagMessage)
-            ? $"Release {tagName}"
-            : target.TagMessage.Trim();
-        var token = ResetReleaseTagToken();
-
-        IsSubmittingReleaseTag = true;
-        IsLoadingReleaseTags = true;
-        ReleaseTagError = null;
-
-        try
-        {
-            await ActiveClient.CreateAnnotatedTagAsync(
-                target.ProjectName,
-                target.RepositoryId,
-                tagName,
-                target.SelectedCommitSha,
-                tagMessage,
-                token);
-
-            target.MarkConfirmed(tagName, tagMessage);
-
-            if (!_appState.UseDemoData)
-            {
-                await _releaseRepository.UpdateReleaseAsync(release);
-            }
-
-            var refreshedTags = await ActiveClient.GetTagsAsync(target.ProjectName, target.RepositoryId, token);
-            target.ApplyTags(refreshedTags);
-            RebuildSelectedReleaseComponents();
-            MetricsSummary = BuildMetricsSummary();
-            LastRefreshLabel = $"Updated {FormatTimestamp(DateTimeOffset.Now)} after tag creation.";
-
-            _notifications.ShowSuccess("Tag created", $"{target.ComponentName} · {tagName}");
-
-            DismissReleaseTagAction();
-            await PublishSnapshotAsync(recordRecent: false);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            ReleaseTagError = ex.Message;
-            _notifications.ShowError("Release tag creation failed", ex.Message, ex);
-        }
-        finally
-        {
-            IsSubmittingReleaseTag = false;
-            IsLoadingReleaseTags = false;
-            NotifyDerivedStateChanged();
-        }
-    }
+    private Task SubmitReleaseTagAsync() => ReleaseWorkspace.SubmitReleaseTagAsync();
 
     public ValueTask DisposeAsync()
     {
@@ -599,6 +433,9 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _isDisposed = true;
         _workspaceService.UnregisterRestoreHandler(AreaName);
         _connectionState.StatesChanged -= HandleConnectionStatesChanged;
+        ReleaseWorkspace.PropertyChanged -= HandleReleaseWorkspacePropertyChanged;
+        ReleaseWorkspace.SelectedReleaseChanged -= HandleSelectedReleaseChanged;
+        ReleaseWorkspace.ReleaseTagSubmitted -= HandleReleaseTagSubmitted;
 
         try
         {
@@ -640,20 +477,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _ = HandlePipelineSelectionChangedAsync(value);
     }
 
-    partial void OnSelectedReleaseChanged(PipelinesReleaseItemViewModel? value)
-    {
-        RebuildSelectedReleaseComponents();
-        _ = LoadReleaseTagItemsAsync(value?.Id);
-        NotifyDerivedStateChanged();
-
-        if (_suppressSelectionSideEffects || !_loaded || _isDisposed)
-        {
-            return;
-        }
-
-        _ = PublishSnapshotAsync(recordRecent: false);
-    }
-
     partial void OnSelectedTabIndexChanged(int value)
     {
         NotifyDerivedStateChanged();
@@ -679,25 +502,15 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         NotifyDerivedStateChanged();
     }
 
-    partial void OnReleaseTagActionTargetChanged(PipelinesReleaseTagItemViewModel? value)
-    {
-        if (value is null)
-        {
-            ReleaseTagConfirmText = string.Empty;
-            ReleaseTagError = null;
-            IsSubmittingReleaseTag = false;
-        }
-
-        NotifyDerivedStateChanged();
-    }
-
     partial void OnIsApprovingApprovalActionChanged(bool value) => NotifyDerivedStateChanged();
 
     partial void OnIsSubmittingApprovalActionChanged(bool value) => NotifyDerivedStateChanged();
 
-    partial void OnIsLoadingReleaseTagsChanged(bool value) => NotifyDerivedStateChanged();
-
-    partial void OnIsSubmittingReleaseTagChanged(bool value) => NotifyDerivedStateChanged();
+    partial void OnIsRefreshingChanged(bool value)
+    {
+        ReleaseWorkspace.IsRefreshBlocked = value;
+        NotifyDerivedStateChanged();
+    }
 
     partial void OnApprovalActionConfirmTextChanged(string value) => NotifyDerivedStateChanged();
 
@@ -705,22 +518,16 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     partial void OnApprovalRefreshWarningChanged(string? value) => NotifyDerivedStateChanged();
 
-    partial void OnReleaseTagConfirmTextChanged(string value) => NotifyDerivedStateChanged();
-
-    partial void OnReleaseTagLoadWarningChanged(string? value) => NotifyDerivedStateChanged();
-
-    partial void OnReleaseTagErrorChanged(string? value) => NotifyDerivedStateChanged();
-
     private async Task RefreshCoreAsync(bool notifySuccess)
     {
-        if (_isDisposed || IsLoadingReleaseTags || IsSubmittingReleaseTag)
+        if (_isDisposed || ReleaseWorkspace.IsLoadingReleaseTags || ReleaseWorkspace.IsSubmittingReleaseTag)
         {
             return;
         }
 
         var preservedProjectName = SelectedProject?.Name;
         var preservedPipelineId = SelectedPipeline?.Id;
-        var preservedReleaseId = SelectedRelease?.Id;
+        var preservedReleaseId = ReleaseWorkspace.SelectedRelease?.Id;
         var token = ResetApprovalActionToken();
 
         IsRefreshing = true;
@@ -988,11 +795,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         IsApprovingApprovalAction = true;
     }
 
-    private void DismissReleaseTagAction()
-    {
-        ReleaseTagActionTarget = null;
-    }
-
     private void ReconcileApprovalActionTarget()
     {
         if (ApprovalActionTarget is null)
@@ -1060,25 +862,19 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     private void PopulateReleases(Guid? preferredReleaseId)
     {
-        Releases.Clear();
-
         var scopedProjectNames = Projects
             .Select(static project => project.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var releases = ActiveReleaseSource
-            .Where(release => scopedProjectNames.Count == 0
-                || release.Components.Any(component => scopedProjectNames.Contains(component.ProjectName)))
-            .OrderByDescending(static release => release.CreatedAt)
-            .Select(PipelinesReleaseItemViewModel.FromModel)
-            .ToList();
-
-        foreach (var release in releases)
+        _suppressSelectionSideEffects = true;
+        try
         {
-            Releases.Add(release);
+            ReleaseWorkspace.PopulateReleases(scopedProjectNames, preferredReleaseId);
         }
-
-        SelectRelease(preferredReleaseId);
+        finally
+        {
+            _suppressSelectionSideEffects = false;
+        }
     }
 
     private void SelectRelease(Guid? preferredReleaseId)
@@ -1086,150 +882,12 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _suppressSelectionSideEffects = true;
         try
         {
-            SelectedRelease = preferredReleaseId.HasValue
-                ? Releases.FirstOrDefault(candidate => candidate.Id == preferredReleaseId.Value)
-                : Releases.FirstOrDefault();
+            ReleaseWorkspace.SelectRelease(preferredReleaseId);
         }
         finally
         {
             _suppressSelectionSideEffects = false;
         }
-
-        RebuildSelectedReleaseComponents();
-    }
-
-    private void RebuildSelectedReleaseComponents()
-    {
-        SelectedReleaseComponents.Clear();
-
-        var selectedRelease = ResolveSelectedReleaseModel();
-        if (selectedRelease is null)
-        {
-            NotifyDerivedStateChanged();
-            return;
-        }
-
-        foreach (var component in selectedRelease.Components
-                     .OrderBy(static component => component.ComponentName, StringComparer.OrdinalIgnoreCase)
-                     .Select(PipelinesReleaseComponentItemViewModel.FromModel))
-        {
-            SelectedReleaseComponents.Add(component);
-        }
-
-        NotifyDerivedStateChanged();
-    }
-
-    private async Task LoadReleaseTagItemsAsync(Guid? releaseId)
-    {
-        ReleaseTagItems.Clear();
-        DismissReleaseTagAction();
-        ReleaseTagError = null;
-        ReleaseTagLoadWarning = null;
-
-        var release = releaseId.HasValue
-            ? ActiveReleaseSource.FirstOrDefault(candidate => candidate.Id == releaseId.Value)
-            : ResolveSelectedReleaseModel();
-
-        if (release is null)
-        {
-            NotifyDerivedStateChanged();
-            return;
-        }
-
-        var scopedComponents = release.Components
-            .Where(static component => component.InScope)
-            .OrderBy(static component => component.ComponentName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (scopedComponents.Count == 0)
-        {
-            NotifyDerivedStateChanged();
-            return;
-        }
-
-        var token = ResetReleaseTagToken();
-        var failures = new List<string>();
-        var defaultBranches = await BuildReleaseTagDefaultBranchMapAsync(scopedComponents, token);
-
-        IsLoadingReleaseTags = true;
-
-        try
-        {
-            foreach (var component in scopedComponents)
-            {
-                var item = PipelinesReleaseTagItemViewModel.FromModel(component);
-                ReleaseTagItems.Add(item);
-
-                try
-                {
-                    var tags = await ActiveClient.GetTagsAsync(component.ProjectName, component.RepositoryId, token);
-                    var branchName = defaultBranches.TryGetValue(component.RepositoryId, out var resolvedBranch)
-                        ? resolvedBranch
-                        : "main";
-                    var commits = await ActiveClient.GetCommitsAsync(component.ProjectName, component.RepositoryId, branchName, ct: token);
-                    item.ApplyRepositoryData(tags, commits);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Release tag metadata refresh failed for component {ComponentName}.", component.ComponentName);
-                    item.ApplyLoadFailure();
-                    failures.Add(component.ComponentName);
-                }
-            }
-
-            if (failures.Count > 0)
-            {
-                var detail = failures.Count == 1
-                    ? failures[0]
-                    : string.Join(", ", failures.Take(3)) + (failures.Count > 3 ? ", ..." : string.Empty);
-                ReleaseTagLoadWarning = $"Git metadata for {detail} could not be fully refreshed.";
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            IsLoadingReleaseTags = false;
-            NotifyDerivedStateChanged();
-        }
-    }
-
-    private async Task<Dictionary<string, string>> BuildReleaseTagDefaultBranchMapAsync(
-        IReadOnlyList<ComponentScope> scopedComponents,
-        CancellationToken cancellationToken)
-    {
-        var defaultBranches = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var projectNames = scopedComponents
-            .Select(static component => component.ProjectName)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var projectName in projectNames)
-        {
-            try
-            {
-                var repositories = await ActiveClient.GetRepositoriesAsync(projectName, cancellationToken);
-                foreach (var repository in repositories)
-                {
-                    defaultBranches[repository.Id] = NormalizeBranchName(repository.DefaultBranch);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Release tag branch lookup fell back to main for Azure DevOps project {ProjectName}.", projectName);
-            }
-        }
-
-        return defaultBranches;
     }
 
     private bool TryResolveClient()
@@ -1291,14 +949,18 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     {
         Projects.Clear();
         ClearProjectScopedData();
-        Releases.Clear();
-        SelectedReleaseComponents.Clear();
-        ReleaseTagItems.Clear();
         DismissApprovalAction();
-        DismissReleaseTagAction();
+        _suppressSelectionSideEffects = true;
+        try
+        {
+            ReleaseWorkspace.Clear();
+        }
+        finally
+        {
+            _suppressSelectionSideEffects = false;
+        }
         SelectedProject = null;
         SelectedPipeline = null;
-        SelectedRelease = null;
     }
 
     private void ClearProjectScopedData()
@@ -1308,10 +970,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         Approvals.Clear();
         ApprovalRefreshWarning = null;
     }
-
-    private ReleaseRecord? ResolveSelectedReleaseModel() => SelectedRelease is null
-        ? null
-        : ActiveReleaseSource.FirstOrDefault(candidate => candidate.Id == SelectedRelease.Id);
 
     private IReadOnlyList<AdoProject> FilterProjects(IEnumerable<AdoProject> allProjects)
     {
@@ -1379,7 +1037,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
                 : "pipelines:scope";
 
         var displayName = SelectedPipeline?.Name
-            ?? SelectedRelease?.Name
+            ?? ReleaseWorkspace.SelectedRelease?.Name
             ?? projectName
             ?? "Pipelines scope";
 
@@ -1406,7 +1064,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
                 ["tab"] = GetTabKey(SelectedTabIndex),
                 ["project"] = projectName ?? string.Empty,
                 ["pipelineId"] = SelectedPipeline?.Id.ToString() ?? string.Empty,
-                ["releaseId"] = SelectedRelease?.Id.ToString() ?? string.Empty,
+                ["releaseId"] = ReleaseWorkspace.SelectedRelease?.Id.ToString() ?? string.Empty,
             },
         };
 
@@ -1476,7 +1134,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(HasProjects));
         OnPropertyChanged(nameof(HasPipelines));
         OnPropertyChanged(nameof(HasActivityRuns));
-        OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(HasApprovals));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
         OnPropertyChanged(nameof(ShowReadinessState));
@@ -1487,36 +1144,23 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(ShowReleasesEmptyState));
         OnPropertyChanged(nameof(ShowApprovalsEmptyState));
         OnPropertyChanged(nameof(ShowApprovalRefreshWarningState));
-        OnPropertyChanged(nameof(ShowReleaseTagEmptyState));
-        OnPropertyChanged(nameof(ShowReleaseTagWarningState));
         OnPropertyChanged(nameof(ProjectCountText));
         OnPropertyChanged(nameof(PipelineCountText));
-        OnPropertyChanged(nameof(ReleaseCountText));
         OnPropertyChanged(nameof(ApprovalCountText));
         OnPropertyChanged(nameof(SelectedProjectSummary));
         OnPropertyChanged(nameof(PipelinesSummary));
         OnPropertyChanged(nameof(ActivitySummary));
-        OnPropertyChanged(nameof(ReleasesSummary));
         OnPropertyChanged(nameof(ApprovalsSummary));
-        OnPropertyChanged(nameof(ReleaseTagSummary));
         OnPropertyChanged(nameof(SelectedPipelineTitle));
         OnPropertyChanged(nameof(SelectedPipelineSubtitle));
         OnPropertyChanged(nameof(SelectedPipelineStatusText));
         OnPropertyChanged(nameof(SelectedPipelineRunSummary));
         OnPropertyChanged(nameof(SelectedPipelineStageSummary));
-        OnPropertyChanged(nameof(SelectedReleaseTitle));
-        OnPropertyChanged(nameof(SelectedReleaseSubtitle));
-        OnPropertyChanged(nameof(SelectedReleaseNotes));
-        OnPropertyChanged(nameof(SelectedReleaseComponentSummary));
         OnPropertyChanged(nameof(ErrorVisibility));
         OnPropertyChanged(nameof(WorkspaceVisibility));
         OnPropertyChanged(nameof(SelectedPipelineDetailVisibility));
         OnPropertyChanged(nameof(SelectedPipelinePlaceholderVisibility));
-        OnPropertyChanged(nameof(SelectedReleaseDetailVisibility));
-        OnPropertyChanged(nameof(SelectedReleasePlaceholderVisibility));
-        OnPropertyChanged(nameof(ReleaseTagListVisibility));
         OnPropertyChanged(nameof(HasApprovalActionTarget));
-        OnPropertyChanged(nameof(HasReleaseTagActionTarget));
         OnPropertyChanged(nameof(ApprovalActionTitle));
         OnPropertyChanged(nameof(ApprovalActionSubtitle));
         OnPropertyChanged(nameof(ApprovalActionRequiresConfirm));
@@ -1529,12 +1173,6 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(ApprovalActionVisibility));
         OnPropertyChanged(nameof(ApprovalActionProdWarningVisibility));
         OnPropertyChanged(nameof(ApprovalActionErrorVisibility));
-        OnPropertyChanged(nameof(ReleaseTagActionTitle));
-        OnPropertyChanged(nameof(ReleaseTagActionSubtitle));
-        OnPropertyChanged(nameof(CanChangeReleaseTags));
-        OnPropertyChanged(nameof(CanSubmitReleaseTag));
-        OnPropertyChanged(nameof(ReleaseTagActionVisibility));
-        OnPropertyChanged(nameof(ReleaseTagErrorVisibility));
     }
 
     private void ClearReadinessState()
@@ -1567,7 +1205,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private string BuildMetricsSummary()
     {
         var activeProject = SelectedProject?.Name ?? "No project selected";
-        return $"{activeProject} · {Pipelines.Count} pipeline{(Pipelines.Count == 1 ? string.Empty : "s")} · {Releases.Count} release{(Releases.Count == 1 ? string.Empty : "s")} · {Approvals.Count} approval{(Approvals.Count == 1 ? string.Empty : "s")}.";
+        return $"{activeProject} · {Pipelines.Count} pipeline{(Pipelines.Count == 1 ? string.Empty : "s")} · {ReleaseWorkspace.Releases.Count} release{(ReleaseWorkspace.Releases.Count == 1 ? string.Empty : "s")} · {Approvals.Count} approval{(Approvals.Count == 1 ? string.Empty : "s")}.";
     }
 
     private CancellationToken ResetWorkToken()
@@ -1657,17 +1295,41 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     private static Guid? ParseNullableGuid(string? value) => Guid.TryParse(value, out var parsed) ? parsed : null;
 
-    private static string NormalizeBranchName(string? branchName)
+    private void HandleReleaseWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(branchName))
+        if (e.PropertyName is nameof(PipelinesReleaseWorkspaceViewModel.HasReleases))
         {
-            return "main";
+            OnPropertyChanged(nameof(ShowReleasesEmptyState));
         }
 
-        const string prefix = "refs/heads/";
-        return branchName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? branchName[prefix.Length..]
-            : branchName;
+        if (e.PropertyName is nameof(PipelinesReleaseWorkspaceViewModel.IsLoadingReleaseTags)
+            or nameof(PipelinesReleaseWorkspaceViewModel.IsSubmittingReleaseTag))
+        {
+            OnPropertyChanged(nameof(CanRefreshWorkspace));
+        }
+    }
+
+    private void HandleSelectedReleaseChanged(object? sender, EventArgs e)
+    {
+        if (_suppressSelectionSideEffects || !_loaded || _isDisposed)
+        {
+            return;
+        }
+
+        _ = PublishSnapshotAsync(recordRecent: false);
+    }
+
+    private void HandleReleaseTagSubmitted(object? sender, EventArgs e)
+    {
+        MetricsSummary = BuildMetricsSummary();
+        LastRefreshLabel = $"Updated {FormatTimestamp(DateTimeOffset.Now)} after tag creation.";
+
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _ = PublishSnapshotAsync(recordRecent: false);
     }
 }
 

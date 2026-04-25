@@ -58,31 +58,35 @@ public sealed partial class ServiceBusPage : Page
 
     private async void ResubmitSelectedDeadLetter_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.ActiveTab?.SelectedMessage?.SequenceNumber is not long sequenceNumber)
+        if (ViewModel.ActiveTab?.SelectedMessage?.SequenceNumber is not long)
         {
             return;
         }
 
+        var request = ServiceBusPagePresentation.BuildResubmitDeadLetterConfirmation(ViewModel.ActiveTab);
+
         await ExecuteConfirmedActionAsync(
-            title: "Resubmit dead-letter message",
-            message: $"Resubmit {BuildMessageLabel(ViewModel.ActiveTab.SelectedMessage.MessageId, sequenceNumber)} from {ViewModel.ActiveTab.EntityPath} back to the active entity?",
-            primaryButtonText: "Resubmit",
-            failureTitle: "Resubmit failed",
+            title: request.Title,
+            message: request.Message,
+            primaryButtonText: request.PrimaryButtonText,
+            failureTitle: request.FailureTitle,
             action: () => ViewModel.ResubmitSelectedDeadLetterCommand.ExecuteAsync(null));
     }
 
     private async void CompleteSelectedDeadLetter_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.ActiveTab?.SelectedMessage?.SequenceNumber is not long sequenceNumber)
+        if (ViewModel.ActiveTab?.SelectedMessage?.SequenceNumber is not long)
         {
             return;
         }
 
+        var request = ServiceBusPagePresentation.BuildCompleteDeadLetterConfirmation(ViewModel.ActiveTab);
+
         await ExecuteConfirmedActionAsync(
-            title: "Complete dead-letter message",
-            message: $"Permanently complete {BuildMessageLabel(ViewModel.ActiveTab.SelectedMessage.MessageId, sequenceNumber)} from {ViewModel.ActiveTab.EntityPath}? This removes it from the dead-letter queue.",
-            primaryButtonText: "Complete",
-            failureTitle: "Complete failed",
+            title: request.Title,
+            message: request.Message,
+            primaryButtonText: request.PrimaryButtonText,
+            failureTitle: request.FailureTitle,
             action: () => ViewModel.CompleteSelectedDeadLetterCommand.ExecuteAsync(null));
     }
 
@@ -93,11 +97,13 @@ public sealed partial class ServiceBusPage : Page
             return;
         }
 
+        var request = ServiceBusPagePresentation.BuildCancelScheduledConfirmation(scheduledMessage);
+
         await ExecuteConfirmedActionAsync(
-            title: "Cancel scheduled message",
-            message: $"Cancel {BuildMessageLabel(scheduledMessage.MessageId, scheduledMessage.SequenceNumber)} scheduled for {scheduledMessage.ScheduledEnqueueTimeText} on {scheduledMessage.EntityPath}?",
-            primaryButtonText: "Cancel send",
-            failureTitle: "Scheduled cancel failed",
+            title: request.Title,
+            message: request.Message,
+            primaryButtonText: request.PrimaryButtonText,
+            failureTitle: request.FailureTitle,
             action: () => ViewModel.CancelScheduledMessageCommand.ExecuteAsync(scheduledMessage));
     }
 
@@ -108,16 +114,23 @@ public sealed partial class ServiceBusPage : Page
             return;
         }
 
+        var request = ServiceBusPagePresentation.BuildRemoveScheduledConfirmation(scheduledMessage);
+
         await ExecuteConfirmedActionAsync(
-            title: "Remove local scheduled entry",
-            message: $"Remove the local record for {BuildMessageLabel(scheduledMessage.MessageId, scheduledMessage.SequenceNumber)} on {scheduledMessage.EntityPath}? This only clears the saved workspace entry.",
-            primaryButtonText: "Remove local entry",
-            failureTitle: "Local removal failed",
+            title: request.Title,
+            message: request.Message,
+            primaryButtonText: request.PrimaryButtonText,
+            failureTitle: request.FailureTitle,
             action: () => ViewModel.RemoveScheduledMessageCommand.ExecuteAsync(scheduledMessage));
     }
 
     private ContentDialog CreateComposeDialog(ServiceBusComposeDraft draft)
     {
+        var targetEntityText = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+        };
+
         var templateSummaryText = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
@@ -209,11 +222,7 @@ public sealed partial class ServiceBusPage : Page
         templateSaveRow.Children.Add(saveTemplateButton);
 
         var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock
-        {
-            Text = $"Target entity: {ViewModel.ActiveTab?.EntityPath ?? string.Empty}",
-            TextWrapping = TextWrapping.Wrap,
-        });
+        content.Children.Add(targetEntityText);
         content.Children.Add(new TextBlock { Text = "Saved templates" });
         content.Children.Add(templateSummaryText);
         content.Children.Add(templateRow);
@@ -243,6 +252,19 @@ public sealed partial class ServiceBusPage : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
+
+        void RefreshComposePresentation(int templateCount)
+        {
+            var state = ServiceBusPagePresentation.BuildComposeDialogState(
+                ViewModel.ActiveTab?.EntityPath,
+                templateCount,
+                scheduleToggle.IsOn);
+
+            targetEntityText.Text = state.TargetEntityText;
+            templateSummaryText.Text = state.TemplateSummaryText;
+            schedulePanel.Visibility = state.SchedulePanelVisibility;
+            dialog.PrimaryButtonText = state.PrimaryButtonText;
+        }
 
         void SetStatus(string? text)
         {
@@ -282,24 +304,19 @@ public sealed partial class ServiceBusPage : Page
         {
             var templates = ViewModel.MessageTemplates.ToList();
             templatePicker.ItemsSource = templates;
-            templateSummaryText.Text = templates.Count == 0
-                ? "No saved templates yet."
-                : $"{templates.Count} saved template(s) available.";
 
             if (selectedTemplate is not null)
             {
                 templatePicker.SelectedItem = templates.FirstOrDefault(template => template.Id == selectedTemplate.Id);
             }
 
+            RefreshComposePresentation(templates.Count);
             applyTemplateButton.IsEnabled = templatePicker.SelectedItem is SbMessageTemplate;
         }
 
         void RefreshDialogState()
         {
-            schedulePanel.Visibility = scheduleToggle.IsOn
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-            dialog.PrimaryButtonText = scheduleToggle.IsOn ? "Schedule" : "Send";
+            RefreshComposePresentation(ViewModel.MessageTemplates.Count);
             applyTemplateButton.IsEnabled = templatePicker.SelectedItem is SbMessageTemplate;
         }
 
@@ -425,18 +442,6 @@ public sealed partial class ServiceBusPage : Page
 
     private static ScheduledMessageItemViewModel? TryGetScheduledMessage(object sender) =>
         sender is Button button ? button.DataContext as ScheduledMessageItemViewModel : null;
-
-    private static string BuildMessageLabel(string? messageId, long? sequenceNumber)
-    {
-        if (!string.IsNullOrWhiteSpace(messageId))
-        {
-            return $"message '{messageId}'";
-        }
-
-        return sequenceNumber is long value
-            ? $"sequence #{value}"
-            : "the selected message";
-    }
 
     private static void AddLabeledControl(Panel parent, string label, Control control)
     {

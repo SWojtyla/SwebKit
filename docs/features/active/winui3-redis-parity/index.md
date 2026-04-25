@@ -32,7 +32,7 @@ The native Redis route now carries the deeper operator workflows that previously
 
 ## Dependencies
 
-- Related active features that shaped this implementation: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
+- Shared baselines already absorbed from: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
 - Functionality baseline: `docs/architecture/functionalities/redis.md`
 - Pitfall files that apply: `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`

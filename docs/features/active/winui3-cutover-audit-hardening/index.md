@@ -17,14 +17,15 @@ Coordinate the final WinUI migration cutover after the remaining work has been s
 
 ## Value
 
-This feature is no longer the monolithic owner of every remaining parity task. The repo now has separate active plans for layout redesign, settings completeness, and each remaining domain slice. Keeping one active umbrella still matters because someone has to own dependency order, cross-feature smoke validation, and the final cutover recommendation.
+This feature is no longer the monolithic owner of every remaining parity task. The repo now has separate active plans for layout redesign, settings completeness, and each remaining domain slice. Keeping one active umbrella still matters because someone has to own shared execution contracts, cross-feature smoke validation, and the final cutover recommendation.
 
 ## Scope
 
-### Wave 0 - Planning split and dependency control
+### Wave 0 - Planning split and contract control
 
 - Freeze the old monolithic plan and move the remaining work into feature-specific active folders.
-- Keep the dependency order explicit: layout redesign first, settings completeness next, then the domain parity slices.
+- Keep ownership boundaries explicit so multiple agents can work in parallel without reopening the same global scope.
+- Treat shared layout primitives, the native settings repair path, and cutover-critical labels as coordinated contracts rather than serialized blockers.
 
 ### Wave 1 - Cross-feature integration tracking
 
@@ -34,7 +35,7 @@ This feature is no longer the monolithic owner of every remaining parity task. T
 
 ### Wave 2 - Cutover validation
 
-- Run and record the manual and automated cutover gate once the dependency features are implemented.
+- Run and record the manual and automated cutover gate once the coordinated feature set is ready for integration review.
 - Update architecture or functionality docs when the WinUI host becomes the primary supported path.
 - Produce the explicit cutover recommendation: ready, not ready, or ready with bounded follow-up debt.
 
@@ -47,7 +48,7 @@ This feature is no longer the monolithic owner of every remaining parity task. T
 ## Dependencies
 
 - Baseline archive: `docs/features/archive/winui3-migration/`
-- Active dependency features:
+- Active coordinated features:
   - `docs/features/active/winui3-layout-redesign/`
   - `docs/features/active/winui3-settings-completeness/`
   - `docs/features/active/winui3-service-bus-parity/`
@@ -58,6 +59,13 @@ This feature is no longer the monolithic owner of every remaining parity task. T
   - `docs/features/active/winui3-observability-parity/`
 - Architecture constraints: `docs/architecture/architecture.md`, `docs/architecture/design.md`, `docs/architecture/codebase-guide.md`
 - Focused validation command: VS Code task `build-winui`
+
+## Parallel execution contract
+
+- This umbrella does not serialize feature execution unless two slices need the same shared surface.
+- Layout redesign and settings completeness are treated as current shared baselines for downstream plans; their remaining review work is tracked in their own folders.
+- Domain features own page-local adoption of shared layout primitives and readiness-to-settings flows inside their own routes.
+- Any proposal that changes shared file ownership, the current settings navigation contract, or cutover-critical labels must be recorded here before it changes more than one feature plan.
 
 ## Risks & mitigations
 

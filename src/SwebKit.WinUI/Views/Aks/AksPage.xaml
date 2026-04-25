@@ -245,88 +245,88 @@
                                         <StackPanel Spacing="12"
                                                     Visibility="{Binding SelectedResourceContentVisibility}">
                                             <Border Style="{StaticResource SwebKitInsetCardStyle}"
-                                                Visibility="{Binding SelectedResourceActionBarVisibility}">
-                                            <StackPanel Spacing="10">
-                                                <TextBlock Text="Actions"
-                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    Visibility="{Binding SelectedResourceActionBarVisibility}">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="Actions"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
 
-                                                <TextBlock Text="{Binding SelectedResourceActionErrorMessage}"
-                                                       Visibility="{Binding SelectedResourceActionErrorVisibility}"
-                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                       TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="{Binding SelectedResourceActionErrorMessage}"
+                                                               Visibility="{Binding SelectedResourceActionErrorVisibility}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
 
-                                                <InfoBar IsOpen="{Binding ShowSelectedResourceConfirmMessage}"
-                                                     Severity="Warning"
-                                                     Title="Production confirmation required"
-                                                     Message="{Binding SelectedResourceConfirmationMessage}"/>
+                                                    <InfoBar IsOpen="{Binding ShowSelectedResourceConfirmMessage}"
+                                                             Severity="Warning"
+                                                             Title="Production confirmation required"
+                                                             Message="{Binding SelectedResourceConfirmationMessage}"/>
 
-                                                <TextBox Text="{Binding SelectedResourceConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                     Visibility="{Binding SelectedResourceConfirmVisibility}"
-                                                     PlaceholderText="Type CONFIRM to continue"/>
+                                                    <TextBox Text="{Binding SelectedResourceConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             Visibility="{Binding SelectedResourceConfirmVisibility}"
+                                                             PlaceholderText="Type CONFIRM to continue"/>
 
-                                                <StackPanel Orientation="Horizontal"
-                                                    Spacing="8">
-                                                <Button Content="{Binding SelectedResourceYamlButtonText}"
-                                                    Command="{Binding OpenSelectedResourceYamlCommand}"
-                                                    IsEnabled="{Binding CanOpenSelectedResourceYaml}"/>
-                                                <Button Content="Edit YAML"
-                                                    Command="{Binding EditSelectedResourceYamlCommand}"
-                                                    Visibility="{Binding SelectedResourceYamlEditVisibility}"
-                                                    IsEnabled="{Binding CanStartSelectedResourceYamlEdit}"/>
-                                                <Button Content="{Binding SelectedResourceAnalyzeLabel}"
-                                                    Command="{Binding AnalyzeSelectedResourceCommand}"
-                                                    Visibility="{Binding SelectedResourceAnalyzeVisibility}"
-                                                    IsEnabled="{Binding CanAnalyzeSelectedResource}"/>
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="8">
+                                                        <Button Content="{Binding SelectedResourceYamlButtonText}"
+                                                                Command="{Binding OpenSelectedResourceYamlCommand}"
+                                                                IsEnabled="{Binding CanOpenSelectedResourceYaml}"/>
+                                                        <Button Content="Edit YAML"
+                                                                Command="{Binding EditSelectedResourceYamlCommand}"
+                                                                Visibility="{Binding SelectedResourceYamlEditVisibility}"
+                                                                IsEnabled="{Binding CanStartSelectedResourceYamlEdit}"/>
+                                                        <Button Content="{Binding SelectedResourceAnalyzeLabel}"
+                                                                Command="{Binding AnalyzeSelectedResourceCommand}"
+                                                                Visibility="{Binding SelectedResourceAnalyzeVisibility}"
+                                                                IsEnabled="{Binding CanAnalyzeSelectedResource}"/>
+                                                    </StackPanel>
+
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="8">
+                                                        <Button Content="Restart"
+                                                                Command="{Binding RestartSelectedResourceCommand}"
+                                                                Visibility="{Binding SelectedResourceRestartVisibility}"
+                                                                IsEnabled="{Binding CanRestartSelectedResource}"/>
+                                                        <Button Content="Trigger CronJob"
+                                                                Command="{Binding TriggerSelectedResourceCommand}"
+                                                                Visibility="{Binding SelectedResourceTriggerVisibility}"
+                                                                IsEnabled="{Binding CanTriggerSelectedResource}"/>
+                                                        <Button Content="Rerun Job"
+                                                                Command="{Binding RerunSelectedResourceCommand}"
+                                                                Visibility="{Binding SelectedResourceRerunVisibility}"
+                                                                IsEnabled="{Binding CanRerunSelectedResource}"/>
+                                                    </StackPanel>
+
+                                                    <StackPanel Spacing="8"
+                                                                Visibility="{Binding SelectedResourceScaleVisibility}">
+                                                        <TextBlock Text="Scale workload"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="140"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBox Grid.Column="0"
+                                                                     Text="{Binding SelectedResourceScaleReplicaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     InputScope="Number"
+                                                                     PlaceholderText="Desired replicas"/>
+                                                            <Button Grid.Column="1"
+                                                                    Content="Apply scale"
+                                                                    Command="{Binding ScaleSelectedResourceCommand}"
+                                                                    IsEnabled="{Binding CanScaleSelectedResource}"/>
+                                                            <TextBlock Grid.Column="2"
+                                                                       Text="{Binding SelectedResourceScaleHint}"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </Grid>
+
+                                                        <TextBlock Text="{Binding SelectedResourceScaleErrorMessage}"
+                                                                   Visibility="{Binding SelectedResourceScaleErrorVisibility}"
+                                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                   TextWrapping="WrapWholeWords"/>
+                                                    </StackPanel>
                                                 </StackPanel>
-
-                                                <StackPanel Orientation="Horizontal"
-                                                    Spacing="8">
-                                                <Button Content="Restart"
-                                                    Command="{Binding RestartSelectedResourceCommand}"
-                                                    Visibility="{Binding SelectedResourceRestartVisibility}"
-                                                    IsEnabled="{Binding CanRestartSelectedResource}"/>
-                                                <Button Content="Trigger CronJob"
-                                                    Command="{Binding TriggerSelectedResourceCommand}"
-                                                    Visibility="{Binding SelectedResourceTriggerVisibility}"
-                                                    IsEnabled="{Binding CanTriggerSelectedResource}"/>
-                                                <Button Content="Rerun Job"
-                                                    Command="{Binding RerunSelectedResourceCommand}"
-                                                    Visibility="{Binding SelectedResourceRerunVisibility}"
-                                                    IsEnabled="{Binding CanRerunSelectedResource}"/>
-                                                </StackPanel>
-
-                                                <StackPanel Spacing="8"
-                                                    Visibility="{Binding SelectedResourceScaleVisibility}">
-                                                <TextBlock Text="Scale workload"
-                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                <Grid ColumnSpacing="8">
-                                                    <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="140"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <TextBox Grid.Column="0"
-                                                         Text="{Binding SelectedResourceScaleReplicaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         InputScope="Number"
-                                                         PlaceholderText="Desired replicas"/>
-                                                    <Button Grid.Column="1"
-                                                        Content="Apply scale"
-                                                        Command="{Binding ScaleSelectedResourceCommand}"
-                                                        IsEnabled="{Binding CanScaleSelectedResource}"/>
-                                                    <TextBlock Grid.Column="2"
-                                                           Text="{Binding SelectedResourceScaleHint}"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                           TextWrapping="WrapWholeWords"/>
-                                                </Grid>
-
-                                                <TextBlock Text="{Binding SelectedResourceScaleErrorMessage}"
-                                                       Visibility="{Binding SelectedResourceScaleErrorVisibility}"
-                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                       TextWrapping="WrapWholeWords"/>
-                                                </StackPanel>
-                                            </StackPanel>
                                             </Border>
 
                                             <ItemsControl ItemsSource="{Binding SelectedResourceFacts}">

@@ -2,7 +2,7 @@
 
 ## Scope
 
-This module now coordinates the split WinUI migration plan rather than owning every remaining implementation detail itself. It keeps the dependency order, the already-landed hardening evidence, and the cutover-critical gaps visible in one place.
+This module now coordinates the split WinUI migration plan rather than owning every remaining implementation detail itself. It keeps the shared execution contracts, the already-landed hardening evidence, and the cutover-critical gaps visible in one place.
 
 ## Architecture touchpoints
 
@@ -22,40 +22,41 @@ This module now coordinates the split WinUI migration plan rather than owning ev
 
 ## Active feature split
 
-| Feature                            | Purpose                                                                                 | Depends on               | Cutover critical |
-| ---------------------------------- | --------------------------------------------------------------------------------------- | ------------------------ | ---------------- |
-| `winui3-layout-redesign`           | Shared page-state and card/layout primitives plus Dashboard and Settings frame adoption | baseline hardening only  | Yes              |
-| `winui3-settings-completeness`     | Restore native configuration and repair surfaces for in-scope domains                   | `winui3-layout-redesign` | Yes              |
-| `winui3-service-bus-parity`        | Remaining advanced Service Bus workflows                                                | layout + settings        | Medium           |
-| `winui3-aks-parity`                | Broader AKS diagnostics and action parity                                               | layout + settings        | Yes              |
-| `winui3-redis-parity`              | Redis analytics and bulk-workflow parity                                                | layout + settings        | Medium           |
-| `winui3-storage-parity`            | Storage batch, version, and preview-depth parity                                        | layout + settings        | Medium           |
-| `winui3-pipelines-releases-parity` | Pipelines workflow parity plus seam reduction                                           | layout + settings        | Yes              |
-| `winui3-observability-parity`      | Observability workflow parity plus seam reduction                                       | layout + settings        | Yes              |
+| Feature                            | Purpose                                                                                 | Owned surface or shared contract                                                                                               | Cutover critical |
+| ---------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| `winui3-layout-redesign`           | Shared page-state and card/layout primitives plus Dashboard and Settings frame adoption | Owns `src/SwebKit.WinUI/Controls/Shared/`, shared shell spacing, and reference adoption on Dashboard and Settings              | Yes              |
+| `winui3-settings-completeness`     | Restore native configuration and repair surfaces for in-scope domains                   | Owns `src/SwebKit.WinUI/Views/Settings/`, `src/SwebKit.WinUI/ViewModels/Settings/`, and settings deep-link contract            | Yes              |
+| `winui3-service-bus-parity`        | Remaining advanced Service Bus workflows                                                | Owns `src/SwebKit.WinUI/Views/ServiceBus/` and `src/SwebKit.WinUI/ViewModels/ServiceBus/`; consumes current shared baselines   | Medium           |
+| `winui3-aks-parity`                | Broader AKS diagnostics and action parity                                               | Owns `src/SwebKit.WinUI/Views/Aks/` and `src/SwebKit.WinUI/ViewModels/Aks/`; consumes current shared baselines                 | Yes              |
+| `winui3-redis-parity`              | Redis analytics and bulk-workflow parity                                                | Owns `src/SwebKit.WinUI/Views/Redis/` and `src/SwebKit.WinUI/ViewModels/Redis/`; current baseline already landed               | Medium           |
+| `winui3-storage-parity`            | Storage batch, version, and preview-depth parity                                        | Owns `src/SwebKit.WinUI/Views/Storage/` and `src/SwebKit.WinUI/ViewModels/Storage/`; consumes current shared baselines         | Medium           |
+| `winui3-pipelines-releases-parity` | Pipelines workflow parity plus seam reduction                                           | Owns `src/SwebKit.WinUI/Views/Pipelines/`, `src/SwebKit.WinUI/ViewModels/Pipelines/`, and route-local readiness wiring         | Yes              |
+| `winui3-observability-parity`      | Observability workflow parity plus seam reduction                                       | Owns `src/SwebKit.WinUI/Views/Observability/`, `src/SwebKit.WinUI/ViewModels/Observability/`, and route-local readiness wiring | Yes              |
 
 ## Coordination rules
 
 - Do not move implementation backlog back into this umbrella once a split feature owns it.
-- Treat layout redesign as the first execution slice, because shared page-state and card primitives are still missing.
+- Domain features may proceed in parallel when they stay inside their owned surfaces and consume the current shared contracts.
 - Treat compact headers and content-first proportions as a global rule, not a Dashboard-only cleanup. Downstream features should assume that top-of-page chrome is constrained and that main work surfaces get priority.
-- Treat Settings completeness as the next dependency slice, because the environment-sensitive routes need a native repair path.
+- Treat the current Settings section and deep-link model as the native repair-path contract unless a true shared gap is discovered.
+- Reopen layout or settings only for reusable cross-page changes, not for page-local composition or route-specific validation work.
 - Preserve the current readiness-hardening behavior while Pipelines and Observability keep evolving.
 - Keep demo-mode validation separate from live-environment validation when recording cutover evidence.
 
 ## Open cutover-critical gaps
 
-- Shared page-state and card primitives are still missing beyond `PageScaffold`.
-- Current page proportions still over-invest in header and context chrome instead of the main task surface.
-- Native Settings still needs full domain coverage.
+- Parallel-execution contracts need to stay current as the domain plans evolve.
+- Incident Timeline remains outside the current native migration scope and must stay visible as deferred debt.
 - AKS, Pipelines, and Observability still carry the highest page-seam and parity pressure.
 - Manual smoke validation for the full native host is still not recorded.
 
 ## Implementation tasks
 
 - [x] Capture the remaining work as split active features instead of one monolithic wave plan.
-- [ ] Keep the dependency order and cutover-critical labels current as the split features evolve.
+- [x] Freeze the current shared execution contracts for parallel work.
+- [ ] Keep the owned-surface matrix and cutover-critical labels current as the split features evolve.
 - [ ] Record which open gaps are deferred versus still blocking cutover.
-- [ ] Run the final native-host smoke gate once the dependency features land.
+- [ ] Run the final native-host smoke gate once the coordinated feature set is ready for integration review.
 - [ ] Convert the results into the explicit cutover recommendation.
 
 ## Validation notes

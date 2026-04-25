@@ -351,3 +351,115 @@ public sealed class ObservabilityDimensionBreakdownItemViewModel
 
     public string SummaryText => $"{Entry.Count:N0} hits · {Entry.FailureRate:P1} failure rate";
 }
+
+public sealed class ObservabilityDeploymentAnchorItemViewModel
+{
+    public ObservabilityDeploymentAnchorItemViewModel(DeploymentAnchor anchor)
+    {
+        Anchor = anchor;
+    }
+
+    public DeploymentAnchor Anchor { get; }
+
+    public string ReleaseName => Anchor.ReleaseName;
+
+    public string AnchorTimeText => $"Anchored {Anchor.AnchorTime.LocalDateTime:g}";
+}
+
+public sealed class ObservabilityMetricDeltaItemViewModel
+{
+    public ObservabilityMetricDeltaItemViewModel(MetricDelta delta)
+    {
+        Delta = delta;
+    }
+
+    public MetricDelta Delta { get; }
+
+    public string MetricLabel => Delta.MetricName switch
+    {
+        "FailureRate" => "Failure rate",
+        "P50ResponseTimeMs" => "P50 latency",
+        "P95ResponseTimeMs" => "P95 latency",
+        "AvailabilityPct" => "Availability",
+        _ => Delta.MetricName,
+    };
+
+    public string BeforeText => FormatMetricValue(Delta.MetricName, Delta.Before);
+
+    public string AfterText => FormatMetricValue(Delta.MetricName, Delta.After);
+
+    public string ChangeText => $"{(Delta.DeltaPct >= 0 ? "+" : "-")}{Math.Abs(Delta.DeltaPct):F1}%";
+
+    public string ChangeDirectionLabel => Delta.DeltaPct >= 0 ? "Increase" : "Decrease";
+
+    private static string FormatMetricValue(string metricName, double value) => metricName switch
+    {
+        "FailureRate" => $"{value * 100:F1}%",
+        "AvailabilityPct" => $"{value:F1}%",
+        "P50ResponseTimeMs" or "P95ResponseTimeMs" => $"{value:N0} ms",
+        _ => value < 10_000 ? $"{value:F2}" : $"{value:N0}",
+    };
+}
+
+public sealed class ObservabilitySloStatusEntryItemViewModel
+{
+    private static readonly SolidColorBrush MetBackgroundBrush = new(ColorHelper.FromArgb(255, 49, 120, 78));
+    private static readonly SolidColorBrush MetForegroundBrush = new(Colors.White);
+    private static readonly SolidColorBrush AtRiskBackgroundBrush = new(ColorHelper.FromArgb(255, 190, 127, 42));
+    private static readonly SolidColorBrush AtRiskForegroundBrush = new(Colors.Black);
+    private static readonly SolidColorBrush BreachedBackgroundBrush = new(ColorHelper.FromArgb(255, 161, 43, 59));
+    private static readonly SolidColorBrush BreachedForegroundBrush = new(Colors.White);
+
+    public ObservabilitySloStatusEntryItemViewModel(SloStatusEntry entry)
+    {
+        Entry = entry;
+    }
+
+    public SloStatusEntry Entry { get; }
+
+    public string Name => Entry.Definition.Name;
+
+    public string MetricLabel => Entry.Definition.Metric switch
+    {
+        SloMetric.FailureRate => "Failure rate",
+        SloMetric.P95ResponseTimeMs => "P95 latency",
+        SloMetric.AvailabilityPct => "Availability",
+        _ => Entry.Definition.Metric.ToString(),
+    };
+
+    public string CurrentValueText => FormatValue(Entry.CurrentValue, Entry.Definition.Metric);
+
+    public string TargetValueText => FormatValue(Entry.Definition.Target, Entry.Definition.Metric);
+
+    public string StateLabel => Entry.State switch
+    {
+        SloState.Met => "Met",
+        SloState.AtRisk => "At risk",
+        SloState.Breached => "Breached",
+        _ => Entry.State.ToString(),
+    };
+
+    public Brush StateBackgroundBrush => Entry.State switch
+    {
+        SloState.Met => MetBackgroundBrush,
+        SloState.AtRisk => AtRiskBackgroundBrush,
+        SloState.Breached => BreachedBackgroundBrush,
+        _ => MetBackgroundBrush,
+    };
+
+    public Brush StateForegroundBrush => Entry.State switch
+    {
+        SloState.Met => MetForegroundBrush,
+        SloState.AtRisk => AtRiskForegroundBrush,
+        SloState.Breached => BreachedForegroundBrush,
+        _ => MetForegroundBrush,
+    };
+
+    private static string FormatValue(double value, SloMetric metric) => metric switch
+    {
+        SloMetric.FailureRate => $"{value * 100:F2}%",
+        SloMetric.P95ResponseTimeMs => $"{value:F0} ms",
+        SloMetric.AvailabilityPct => $"{value:F2}%",
+        _ => $"{value:F2}",
+    };
+}

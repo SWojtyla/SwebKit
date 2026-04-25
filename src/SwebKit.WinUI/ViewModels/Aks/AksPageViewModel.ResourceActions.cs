@@ -252,6 +252,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         SelectedResourceActionErrorMessage = null;
         SelectedResourceYamlErrorMessage = null;
         IsSelectedResourceYamlPanelOpen = true;
@@ -262,22 +264,28 @@ public sealed partial class AksPageViewModel
 
         try
         {
-            var yaml = await Client.GetResourceYamlAsync(resource.Namespace, resource.ApiKind, resource.Name);
+            var yaml = await Client.GetResourceYamlAsync(resource.Namespace, resource.ApiKind, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             _loadedSelectedResourceYaml = yaml;
             SelectedResourceYamlText = yaml;
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceYamlErrorMessage = ex.Message;
-            _notifications.ShowError("AKS YAML load failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceYamlErrorMessage = ex.Message;
+                _notifications.ShowError("AKS YAML load failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceYamlLoading = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceYamlLoading = false;
+            }
         }
     }
 
@@ -331,6 +339,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         if (!CanExecuteSelectedResourceMutation)
         {
             SelectedResourceActionErrorMessage = "Type CONFIRM before applying production YAML changes.";
@@ -350,7 +360,8 @@ public sealed partial class AksPageViewModel
 
         try
         {
-            await Client.ApplyResourceYamlAsync(resource.Namespace, resource.ApiKind, resource.Name, SelectedResourceYamlText);
+            await Client.ApplyResourceYamlAsync(resource.Namespace, resource.ApiKind, resource.Name, SelectedResourceYamlText, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             _loadedSelectedResourceYaml = SelectedResourceYamlText;
             IsSelectedResourceYamlEditorOpen = false;
             SelectedResourceConfirmText = string.Empty;
@@ -358,16 +369,21 @@ public sealed partial class AksPageViewModel
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceYamlErrorMessage = ex.Message;
-            _notifications.ShowError("AKS YAML apply failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceYamlErrorMessage = ex.Message;
+                _notifications.ShowError("AKS YAML apply failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceYamlApplying = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceYamlApplying = false;
+            }
         }
     }
 
@@ -380,6 +396,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         SelectedResourceDiagnosticsErrorMessage = null;
         SelectedResourceDiagnosticsSummary = string.Empty;
         SelectedResourceDiagnosticsFacts = [];
@@ -391,28 +409,35 @@ public sealed partial class AksPageViewModel
         {
             if (resource.CanAnalyzeIngress)
             {
-                var ingressAnalysis = await Client.AnalyzeIngressAsync(resource.Namespace, resource.Name);
+                var ingressAnalysis = await Client.AnalyzeIngressAsync(resource.Namespace, resource.Name, actionToken);
+                ThrowIfSelectedResourceActionCanceled(actionToken);
                 ApplyIngressAnalysis(resource, ingressAnalysis);
             }
             else if (resource.CanAnalyzeNetworkPolicies)
             {
                 var workloadKind = resource.NetworkPolicyKind ?? resource.ApiKind;
-                var networkAnalysis = await Client.AnalyzeNetworkPoliciesAsync(resource.Namespace, workloadKind, resource.Name);
+                var networkAnalysis = await Client.AnalyzeNetworkPoliciesAsync(resource.Namespace, workloadKind, resource.Name, actionToken);
+                ThrowIfSelectedResourceActionCanceled(actionToken);
                 ApplyNetworkPolicyAnalysis(resource, networkAnalysis);
             }
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceDiagnosticsErrorMessage = ex.Message;
-            _notifications.ShowError("AKS analysis failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS analysis failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceDiagnosticsLoading = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
         }
     }
 
@@ -437,6 +462,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         if (!CanExecuteSelectedResourceMutation)
         {
             SelectedResourceActionErrorMessage = "Type CONFIRM before running a production AKS action.";
@@ -450,29 +477,35 @@ public sealed partial class AksPageViewModel
         {
             if (string.Equals(resource.ApiKind, "Deployment", StringComparison.Ordinal))
             {
-                await Client.RestartDeploymentAsync(resource.Namespace, resource.Name);
+                await Client.RestartDeploymentAsync(resource.Namespace, resource.Name, actionToken);
             }
             else
             {
-                await Client.RestartStatefulSetAsync(resource.Namespace, resource.Name);
+                await Client.RestartStatefulSetAsync(resource.Namespace, resource.Name, actionToken);
             }
 
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             SelectedResourceConfirmText = string.Empty;
             _notifications.ShowSuccess("AKS workload restart queued", $"{resource.ApiKind} {resource.Name}");
-            await LoadResourceScopeAsync(CancellationToken.None);
+            await LoadResourceScopeAsync(actionToken);
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceActionErrorMessage = ex.Message;
-            _notifications.ShowError("AKS workload restart failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("AKS workload restart failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceMutationRunning = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
+            }
         }
     }
 
@@ -484,6 +517,8 @@ public sealed partial class AksPageViewModel
         {
             return;
         }
+
+        var actionToken = _selectedResourceActionCts.Token;
 
         if (!TryParseSelectedResourceScaleReplica(out var replicas, out var error))
         {
@@ -505,29 +540,35 @@ public sealed partial class AksPageViewModel
         {
             if (string.Equals(resource.ApiKind, "Deployment", StringComparison.Ordinal))
             {
-                await Client.ScaleDeploymentAsync(resource.Namespace, resource.Name, replicas);
+                await Client.ScaleDeploymentAsync(resource.Namespace, resource.Name, replicas, actionToken);
             }
             else
             {
-                await Client.ScaleStatefulSetAsync(resource.Namespace, resource.Name, replicas);
+                await Client.ScaleStatefulSetAsync(resource.Namespace, resource.Name, replicas, actionToken);
             }
 
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             SelectedResourceConfirmText = string.Empty;
             _notifications.ShowSuccess("AKS workload scaled", $"{resource.ApiKind} {resource.Name} -> {replicas}");
-            await LoadResourceScopeAsync(CancellationToken.None);
+            await LoadResourceScopeAsync(actionToken);
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceActionErrorMessage = ex.Message;
-            _notifications.ShowError("AKS scale action failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("AKS scale action failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceMutationRunning = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
+            }
         }
     }
 
@@ -540,6 +581,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         if (!CanExecuteSelectedResourceMutation)
         {
             SelectedResourceActionErrorMessage = "Type CONFIRM before running a production AKS action.";
@@ -551,23 +594,29 @@ public sealed partial class AksPageViewModel
 
         try
         {
-            var createdJobName = await Client.TriggerCronJobAsync(resource.Namespace, resource.Name);
+            var createdJobName = await Client.TriggerCronJobAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             SelectedResourceConfirmText = string.Empty;
             _notifications.ShowSuccess("CronJob triggered", createdJobName);
-            await LoadResourceScopeAsync(CancellationToken.None);
+            await LoadResourceScopeAsync(actionToken);
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceActionErrorMessage = ex.Message;
-            _notifications.ShowError("CronJob trigger failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("CronJob trigger failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceMutationRunning = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
+            }
         }
     }
 
@@ -580,6 +629,8 @@ public sealed partial class AksPageViewModel
             return;
         }
 
+        var actionToken = _selectedResourceActionCts.Token;
+
         if (!CanExecuteSelectedResourceMutation)
         {
             SelectedResourceActionErrorMessage = "Type CONFIRM before running a production AKS action.";
@@ -591,24 +642,38 @@ public sealed partial class AksPageViewModel
 
         try
         {
-            var createdJobName = await Client.RerunJobAsync(resource.Namespace, resource.Name);
+            var createdJobName = await Client.RerunJobAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
             SelectedResourceConfirmText = string.Empty;
             _notifications.ShowSuccess("Job rerun started", createdJobName);
-            await LoadResourceScopeAsync(CancellationToken.None);
+            await LoadResourceScopeAsync(actionToken);
         }
         catch (OperationCanceledException)
         {
-            throw;
         }
         catch (Exception ex)
         {
-            SelectedResourceActionErrorMessage = ex.Message;
-            _notifications.ShowError("Job rerun failed", ex.Message, ex);
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("Job rerun failed", ex.Message, ex);
+            }
         }
         finally
         {
-            IsSelectedResourceMutationRunning = false;
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
+            }
         }
+    }
+
+    private void ResetSelectedResourceBusyStateForDispose()
+    {
+        IsSelectedResourceYamlLoading = false;
+        IsSelectedResourceYamlApplying = false;
+        IsSelectedResourceDiagnosticsLoading = false;
+        IsSelectedResourceMutationRunning = false;
     }
 
     private void ResetSelectedResourceActionState(AksResourceBrowseItemViewModel? resource)
@@ -766,6 +831,14 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(SelectedResourceConfirmationMessage));
         OnPropertyChanged(nameof(CanExecuteSelectedResourceMutation));
         OnPropertyChanged(nameof(SelectedResourceActionErrorVisibility));
+    }
+
+    private void ThrowIfSelectedResourceActionCanceled(CancellationToken actionToken)
+    {
+        if (_isDisposed || actionToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(actionToken);
+        }
     }
 
     private static string? ValidateYaml(string yaml)

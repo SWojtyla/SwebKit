@@ -28,7 +28,7 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 ## Automated coverage
 
 - Build validation: `build-winui` must stay green.
-- Unit tests: `tests/SwebKit.WinUI.Tests/AksPageViewModelTests.cs` now covers resource-explorer loading across Gateway API and batch kinds, pod-selection synchronization, preserved diagnostics state while browsing non-pod resources, non-fatal partial-load handling, selected-resource YAML load/apply state, ingress diagnostics state, and CronJob-triggered job refresh behavior. The current branch cannot execute the focused AKS test file end to end until the unrelated compile failure in `tests/SwebKit.WinUI.Tests/ServiceBusPageViewModelTests.cs` is resolved.
+- Unit tests: `tests/SwebKit.WinUI.Tests/AksPageViewModelTests.cs` now covers resource-explorer loading across Gateway API and batch kinds, pod-selection synchronization, preserved diagnostics state while browsing non-pod resources, non-fatal partial-load handling, selected-resource YAML load/apply state, ingress diagnostics state, CronJob-triggered job refresh behavior, and disposal cancellation for selected-resource diagnostics plus restart actions.
 - Regression target: rerun touched domain tests if cluster service behavior changes.
 
 ## Test data and setup
@@ -40,12 +40,12 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 
 - Check: explorer parity. Steps: browse an AKS workspace with real resources and verify Pods, Deployments, StatefulSets, Jobs, CronJobs, Services, Ingresses, GatewayClasses, Gateways, and HTTPRoutes render in the native explorer with the expected detail pane summary.
 - Check: YAML and diagnostics parity. Steps: load YAML for a deployment, ingress, gateway, and CronJob; verify edit/apply behavior on supported kinds; open ingress and network analysis from the native detail pane and confirm evidence renders without leaving the page.
-- Check: async safety. Steps: start an AKS action, navigate away, and confirm the page disposes and recovers cleanly.
+- Check: async safety. Steps: start selected-resource diagnostics, YAML, or a workload action, navigate away, and confirm the page disposes cleanly without stale error or success notifications surfacing afterward.
 
 ## Regression risks & mitigations
 
 - Risk: new diagnostics views reintroduce duplicated XAML. Mitigation: require shared-primitives adoption before the feature closes.
-- Risk: async actions resume after disposal. Mitigation: extend focused tests around navigation-away behavior.
+- Risk: selected-resource async actions resume after disposal and mutate page state after navigation-away. Mitigation: bind selected-resource YAML, diagnostics, and mutation flows to the page lifetime token and keep focused disposal tests in the AKS view-model suite.
 
 ## Acceptance criteria
 
@@ -55,7 +55,7 @@ Validate that the native AKS workspace reaches the required MAUI parity for clus
 
 ## Validation status
 
-- Automated: `build-winui` passed. Focused `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter AksPageViewModelTests` is currently blocked by an unrelated compile failure in `tests/SwebKit.WinUI.Tests/ServiceBusPageViewModelTests.cs`.
+- Automated: focused `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj -c Release --filter "FullyQualifiedName~AksPageViewModelTests"` passed with 9 tests.
 - Manual: Not started
 
 ## Sign-off

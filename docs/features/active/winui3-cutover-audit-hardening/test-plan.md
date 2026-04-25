@@ -12,7 +12,7 @@ updated: "2026-04-25"
 
 ## Goal
 
-Validate the final WinUI migration cutover once the split dependency features land, and produce a defensible recommendation on whether the MAUI host can move to legacy-only status.
+Validate the final WinUI migration cutover once the split feature set converges, and produce a defensible recommendation on whether the MAUI host can move to legacy-only status.
 
 ## Scope
 
@@ -22,13 +22,13 @@ Validate the final WinUI migration cutover once the split dependency features la
 
 ## Main scenarios (priority)
 
-1. Scenario: the split feature sequence actually produces one coherent native host. Expected result: layout redesign, settings completeness, and the domain parity slices work together without falling back to MAUI assumptions.
+1. Scenario: the split feature set actually produces one coherent native host. Expected result: the shared layout and settings contracts plus the domain parity slices work together without falling back to MAUI assumptions.
 2. Scenario: environment-sensitive routes remain survivable. Expected result: Pipelines and Observability still surface actionable readiness guidance and recover through native Settings.
 3. Scenario: the WinUI host is cutover-ready. Expected result: the repo can state, with evidence, whether `SwebKit.App` is still required.
 
 ## Automated coverage
 
-- Build validation: `build-winui` must stay green after every dependency feature lands.
+- Build validation: `build-winui` must stay green after every coordinated feature lands.
 - Feature validation: each split feature must complete its own focused automated checks before it can be counted toward the cutover gate.
 - Cross-feature baseline: keep the existing WinUI and DevOps test projects green while the split features land.
 
@@ -56,7 +56,7 @@ Validate the final WinUI migration cutover once the split dependency features la
 
 ## Validation status
 
-- Automated: last known baseline remains green (`build-winui`, `tests/SwebKit.WinUI.Tests`, `tests/SwebKit.DevOps.Tests`), but the split feature execution has not started yet.
+- Automated: last known baseline remains green (`build-winui`, `tests/SwebKit.WinUI.Tests`, `tests/SwebKit.DevOps.Tests`); split feature execution may now proceed in parallel, but the final cutover gate has not started yet.
 - Manual: Not started
 
 ## Sign-off

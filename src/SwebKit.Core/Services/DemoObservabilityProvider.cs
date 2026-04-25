@@ -267,12 +267,19 @@ public sealed class DemoObservabilityProvider : IObservabilityProvider
                 new("tenant-delta",    540, 0.003),
                 new("tenant-epsilon",  310, 0.0),
             ],
-            "cloud_RoleName" =>
+            "cloud_RoleName" or "cloud/roleName" =>
             [
                 new("orders-api",    4_800, 0.022),
                 new("payments-svc",    340, 0.035),
                 new("user-svc",      8_200, 0.001),
                 new("gateway",       1_100, 0.008),
+            ],
+            "operation_Name" or "operation/name" =>
+            [
+                new("GET /api/orders",     4_800, 0.022),
+                new("POST /api/payments",    340, 0.035),
+                new("GET /api/users",      8_200, 0.001),
+                new("PUT /api/orders/{id}", 1_100, 0.008),
             ],
             _ =>
             [

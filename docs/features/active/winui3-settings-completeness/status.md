@@ -18,7 +18,7 @@ The native Settings page now owns sectioned repair surfaces for Service Bus, AKS
 
 **Jira:** not linked
 
-**Current focus:** run a manual UI smoke pass across the new sections and section-targeted readiness entry points before marking the feature done.
+**Current focus:** run a manual UI smoke pass across the current sections and section-targeted readiness entry points while keeping the repair contract stable for downstream routes.
 
 ## Progress checklist
 
@@ -26,18 +26,19 @@ The native Settings page now owns sectioned repair surfaces for Service Bus, AKS
 - [x] Native section list confirmed for all in-scope domains
 - [x] Validation and readiness handoff defined per section
 - [x] Persistence and credential flows verified against current services
-- [x] Downstream feature dependencies updated after implementation starts
+- [x] Downstream feature coordination updated after implementation starts
 - [x] Tests and docs aligned
 
 ## Completed
 
 - Confirmed that the current WinUI Settings page is materially narrower than the MAUI Settings page.
-- Identified Settings as a cutover-critical dependency rather than a cosmetic follow-up.
+- Identified Settings as a cutover-critical shared contract rather than a cosmetic follow-up.
 - Linked this feature to all downstream parity slices that depend on live configuration repair.
 - Rebuilt the native Settings page around section navigation, shared readiness summaries, and per-section repair content for Service Bus, AKS, Redis, Azure DevOps, Storage, and Observability.
 - Added section-targeted navigation requests so Pipelines, Observability, AKS, Storage, and dashboard readiness flows can open the owning native Settings section instead of a generic route.
 - Added native save/test flows for the in-scope configuration areas while keeping Incident Timeline explicitly deferred in the settings IA.
 - Added focused WinUI tests for the new section-targeted settings navigation contract.
+- Froze the current native section and deep-link contract so downstream domain features can consume it without reopening the Settings IA.
 
 ## Remaining
 
@@ -57,3 +58,4 @@ The native Settings page now owns sectioned repair surfaces for Service Bus, AKS
 
 - Incident Timeline stays explicitly deferred unless a separate migration feature is created for it.
 - Service Bus namespace connectivity remains profile-backed, but the native Settings route now surfaces credential health and pinned-entity repair instead of leaving the omission hidden.
+- Downstream domain features should treat the current section and deep-link contract as baseline and only reopen Settings for clear shared IA gaps.

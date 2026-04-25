@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
@@ -6,6 +7,7 @@ using LiveChartsCore.SkiaSharpView;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
@@ -18,21 +20,23 @@ namespace SwebKit.WinUI.ViewModels.Observability;
 public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyncDisposable
 {
     private const string AreaName = "observability";
-    private const string DefaultAdvancedQuery = "requests\n| order by timestamp desc\n| take 100";
+    private static readonly string[] OverviewDimensionKeys = ["cloud/roleName", "operation/name"];
+    private static readonly TimeSpan DeploymentComparisonWindow = TimeSpan.FromHours(4);
 
     private readonly AppStateService _appState;
     private readonly IObservabilityResourceDiscovery _realDiscovery;
     private readonly IObservabilityProviderFactory _observabilityProviderFactory;
-    private readonly IGuidedKqlCompiler _guidedKqlCompiler;
     private readonly IObservabilityExplainerService _explainerService;
     private readonly IShellNavigationService _navigation;
     private readonly INotificationService _notifications;
+    private readonly ReleaseRepository _releaseRepository;
     private readonly OperatorWorkspaceService _workspaceService;
     private readonly ILogger<ObservabilityPageViewModel> _logger;
     private readonly DemoObservabilityResourceDiscovery _demoDiscovery = new();
 
     private CancellationTokenSource _resourceDiscoveryCts = new();
     private CancellationTokenSource _tabRefreshCts = new();
+    private CancellationTokenSource _deploymentComparisonCts = new();
     private IObservabilityProvider? _provider;
     private bool _isDisposed;
     private bool _loaded;
@@ -43,7 +47,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     private bool _availabilityLoaded;
     private bool _suppressStateChangeSideEffects;
     private int _performanceTrendRequestVersion;
-    private string? _pendingPresetId;
 
     public ObservabilityPageViewModel(
         AppStateService appState,
@@ -53,22 +56,21 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         IObservabilityExplainerService explainerService,
         IShellNavigationService navigation,
         INotificationService notifications,
+        ReleaseRepository releaseRepository,
         OperatorWorkspaceService workspaceService,
         ILogger<ObservabilityPageViewModel> logger)
     {
         _appState = appState;
         _realDiscovery = realDiscovery;
         _observabilityProviderFactory = observabilityProviderFactory;
-        _guidedKqlCompiler = guidedKqlCompiler;
         _explainerService = explainerService;
         _navigation = navigation;
         _notifications = notifications;
+        _releaseRepository = releaseRepository;
         _workspaceService = workspaceService;
         _logger = logger;
 
         HookCollectionNotifications(Resources, nameof(HasResources), nameof(ShowNoResourcesState));
-        HookCollectionNotifications(QueryPresets, nameof(SelectedPresetDescription));
-        HookCollectionNotifications(SavedQueries, nameof(HasSavedQueries), nameof(ShowSavedQueriesEmptyState), nameof(SavedQueriesSummary));
         HookCollectionNotifications(Failures, nameof(HasFailures), nameof(ShowFailuresEmptyState));
         HookCollectionNotifications(
             OverviewRequestTrend,
@@ -105,6 +107,25 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         HookCollectionNotifications(LogRows, nameof(HasLogRows), nameof(ShowLogsEmptyState));
         HookCollectionNotifications(DependencyHealthEntries, nameof(HasDependencyHealth), nameof(ShowDependencyEmptyState));
         HookCollectionNotifications(DimensionBreakdowns, nameof(HasDimensionBreakdowns), nameof(ShowDimensionEmptyState));
+        HookCollectionNotifications(
+            DeploymentAnchors,
+            nameof(HasDeploymentAnchors),
+            nameof(ShowDeploymentAnchorEmptyState),
+            nameof(ShowDeploymentComparisonPlaceholder));
+        HookCollectionNotifications(
+            DeploymentComparisonDeltas,
+            nameof(HasDeploymentComparison),
+            nameof(ShowDeploymentComparisonPlaceholder),
+            nameof(ShowDeploymentComparisonEmptyState),
+            nameof(DeploymentComparisonContentVisibility));
+        HookCollectionNotifications(
+            SloStatusEntries,
+            nameof(HasSloStatusEntries),
+            nameof(ShowSloEmptyState),
+            nameof(SloStatusEntriesVisibility));
+
+        LogsWorkspace = new ObservabilityLogsWorkspaceViewModel(guidedKqlCompiler);
+        LogsWorkspace.PropertyChanged += OnLogsWorkspacePropertyChanged;
 
         _suppressStateChangeSideEffects = true;
 
@@ -114,21 +135,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         TimeRangeOptions.Add(new ObservabilityTimeRangeOptionViewModel("7d", "Last 7 days", static () => TimeRange.Last7Days));
         TimeRangeOptions.Add(new ObservabilityTimeRangeOptionViewModel("30d", "Last 30 days", static () => TimeRange.Last30Days));
 
-        LogsModeOptions.Add(new ObservabilityLogsModeOptionViewModel("advanced", "Advanced KQL"));
-        LogsModeOptions.Add(new ObservabilityLogsModeOptionViewModel("guided", "Guided compiler"));
-
-        GuidedOperatorOptions.Add(new ObservabilityGuidedOperatorOptionViewModel(GuidedKqlFilterOperator.Contains, "Contains"));
-        GuidedOperatorOptions.Add(new ObservabilityGuidedOperatorOptionViewModel(GuidedKqlFilterOperator.Equals, "Equals"));
-        GuidedOperatorOptions.Add(new ObservabilityGuidedOperatorOptionViewModel(GuidedKqlFilterOperator.StartsWith, "Starts with"));
-        GuidedOperatorOptions.Add(new ObservabilityGuidedOperatorOptionViewModel(GuidedKqlFilterOperator.EndsWith, "Ends with"));
-        GuidedOperatorOptions.Add(new ObservabilityGuidedOperatorOptionViewModel(GuidedKqlFilterOperator.NotEquals, "Not equals"));
-
         SelectedTimeRangeOption = TimeRangeOptions.FirstOrDefault(option => option.RestoreKey == "24h") ?? TimeRangeOptions[0];
-        SelectedLogsMode = LogsModeOptions[0];
-        SelectedGuidedOperator = GuidedOperatorOptions[0];
 
         _suppressStateChangeSideEffects = false;
-        UpdateGuidedPreview();
 
         _workspaceService.RegisterRestoreHandler(AreaName, RestoreWorkspaceAsync);
         RefreshConnectionSummary();
@@ -137,9 +146,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public ObservableCollection<ObservabilityResourceItemViewModel> Resources { get; } = [];
 
-    public ObservableCollection<ObservabilityQueryPresetItemViewModel> QueryPresets { get; } = [];
-
-    public ObservableCollection<ObservabilitySavedQueryItemViewModel> SavedQueries { get; } = [];
+    public ObservabilityLogsWorkspaceViewModel LogsWorkspace { get; }
 
     public ObservableCollection<ObservabilityFailureItemViewModel> Failures { get; } = [];
 
@@ -163,11 +170,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public ObservableCollection<ObservabilityDimensionBreakdownItemViewModel> DimensionBreakdowns { get; } = [];
 
+    public ObservableCollection<ObservabilityDeploymentAnchorItemViewModel> DeploymentAnchors { get; } = [];
+
+    public ObservableCollection<ObservabilityMetricDeltaItemViewModel> DeploymentComparisonDeltas { get; } = [];
+
+    public ObservableCollection<ObservabilitySloStatusEntryItemViewModel> SloStatusEntries { get; } = [];
+
     public ObservableCollection<ObservabilityTimeRangeOptionViewModel> TimeRangeOptions { get; } = [];
-
-    public ObservableCollection<ObservabilityLogsModeOptionViewModel> LogsModeOptions { get; } = [];
-
-    public ObservableCollection<ObservabilityGuidedOperatorOptionViewModel> GuidedOperatorOptions { get; } = [];
 
     [ObservableProperty]
     public partial bool IsLoadingResources { get; set; }
@@ -224,10 +233,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public partial ObservabilityPerformanceItemViewModel? SelectedPerformanceEntry { get; set; }
 
     [ObservableProperty]
-    public partial ObservabilityQueryPresetItemViewModel? SelectedQueryPreset { get; set; }
-
-    [ObservableProperty]
-    public partial ObservabilityLogsModeOptionViewModel? SelectedLogsMode { get; set; }
+    public partial ObservabilityDeploymentAnchorItemViewModel? SelectedDeploymentAnchor { get; set; }
 
     [ObservableProperty]
     public partial ObservabilityAvailabilityItemViewModel? SelectedAvailabilityResult { get; set; }
@@ -236,34 +242,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public partial bool ShowAvailabilityHeatmap { get; set; }
 
     [ObservableProperty]
-    public partial ObservabilityGuidedOperatorOptionViewModel? SelectedGuidedOperator { get; set; }
+    public partial bool IsLoadingDeploymentComparison { get; set; }
 
     [ObservableProperty]
-    public partial string SaveQueryName { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string AdvancedQueryText { get; set; } = DefaultAdvancedQuery;
-
-    [ObservableProperty]
-    public partial string GuidedTableName { get; set; } = "traces";
-
-    [ObservableProperty]
-    public partial string GuidedFilterColumn { get; set; } = "cloud_RoleName";
-
-    [ObservableProperty]
-    public partial string GuidedFilterValue { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string GuidedLimitText { get; set; } = "100";
-
-    [ObservableProperty]
-    public partial string GuidedCompileSummary { get; set; } = "Guided mode compiles a small draft into KQL and surfaces any validation issues inline.";
-
-    [ObservableProperty]
-    public partial string GuidedCompiledQuery { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string LogsResultSummary { get; set; } = "Run a query to preview logs in the native baseline.";
+    public partial bool IsLoadingSloStatus { get; set; }
 
     [ObservableProperty]
     public partial string RequestCountText { get; set; } = "0";
@@ -289,6 +271,27 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     [ObservableProperty]
     public partial string BreakdownHeadline { get; set; } = "Custom dimension pivots are intentionally deferred in this baseline.";
 
+    [ObservableProperty]
+    public partial string DeploymentComparisonHeadline { get; set; } = "Compare telemetry before and after a recorded deployment.";
+
+    [ObservableProperty]
+    public partial string DeploymentComparisonSummaryText { get; set; } = "Select a release anchor to compare overview metrics for the active resource.";
+
+    [ObservableProperty]
+    public partial string DeploymentComparisonWindowText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string DeploymentComparisonBadgeText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SloStatusHeadline { get; set; } = "No SLO definitions configured for this observability profile.";
+
+    [ObservableProperty]
+    public partial string SloStatusSummaryText { get; set; } = "SLO tracking is optional and can be configured in Settings.";
+
+    [ObservableProperty]
+    public partial string SloStatusBadgeText { get; set; } = string.Empty;
+
     public bool HasResources => Resources.Count > 0;
 
     public bool HasSelectedDiscoveryResource => SelectedDiscoveryResource is not null;
@@ -296,8 +299,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public bool HasActiveResource => ActiveResource is not null;
 
     public bool HasFailures => Failures.Count > 0;
-
-    public bool HasSavedQueries => SavedQueries.Count > 0;
 
     public bool HasOverviewRequestTrend => OverviewRequestTrend.Count > 0;
 
@@ -315,15 +316,21 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool HasDimensionBreakdowns => DimensionBreakdowns.Count > 0;
 
+    public bool HasDeploymentAnchors => DeploymentAnchors.Count > 0;
+
+    public bool HasDeploymentComparison => DeploymentComparisonDeltas.Count > 0;
+
+    public bool HasConfiguredSloDefinitions => (_appState.Config.ObservabilityConfig?.SloDefinitions?.Count ?? 0) > 0;
+
+    public bool HasSloStatusEntries => SloStatusEntries.Count > 0;
+
     public bool HasSelectedFailure => SelectedFailure is not null;
 
     public bool HasSelectedFailureSampleTrace => !string.IsNullOrWhiteSpace(SelectedFailure?.SampleOperationId);
 
     public bool HasSelectedPerformanceEntry => SelectedPerformanceEntry is not null;
 
-    public bool CanSaveQuery => HasActiveResource && !string.IsNullOrWhiteSpace(SaveQueryName);
-
-    public bool UseGuidedLogsMode => string.Equals(SelectedLogsMode?.Key, "guided", StringComparison.OrdinalIgnoreCase);
+    public bool CanSaveQuery => HasActiveResource && LogsWorkspace.CanSaveQueryDraft;
 
     public string SelectedTabLabel => GetTabLabel(SelectedTabIndex);
 
@@ -447,16 +454,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         new Axis(),
     ];
 
-    public string SelectedPresetDescription => SelectedQueryPreset?.Description ?? "Select a preset to load a starting query into the native logs baseline.";
-
-    public string SavedQueriesSummary => !HasSavedQueries
-        ? "Saved queries are persisted in the Observability profile and can be loaded back into the advanced editor baseline."
-        : $"{SavedQueries.Count:N0} saved quer{(SavedQueries.Count == 1 ? "y" : "ies")} available in this profile.";
-
-    public string LogsModeDescription => UseGuidedLogsMode
-        ? "Guided mode compiles a bounded query draft with the shared KQL compiler seam."
-        : "Advanced mode runs raw KQL in the native text editor baseline; Monaco is deferred to a later shared editor wave.";
-
     public string MaxRowsSummary => $"Current row cap: {_appState.Config.ObservabilityConfig?.MaxRowsPerQuery ?? 500:N0} rows per query.";
 
     public string AvailabilityChartSummary => !HasAvailabilityResults
@@ -571,11 +568,24 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         && !HasLogRows
         && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
-    public bool ShowSavedQueriesEmptyState => !HasSavedQueries;
-
     public bool ShowDependencyEmptyState => !ShowReadinessState && !IsRefreshingActiveTab && !HasDependencyHealth;
 
     public bool ShowDimensionEmptyState => !ShowReadinessState && !IsRefreshingActiveTab && !HasDimensionBreakdowns;
+
+    public bool ShowDeploymentAnchorEmptyState => !IsLoadingDeploymentComparison && !HasDeploymentAnchors;
+
+    public bool ShowDeploymentComparisonPlaceholder => !IsLoadingDeploymentComparison
+        && HasDeploymentAnchors
+        && SelectedDeploymentAnchor is null
+        && !HasDeploymentComparison;
+
+    public bool ShowDeploymentComparisonEmptyState => !IsLoadingDeploymentComparison
+        && SelectedDeploymentAnchor is not null
+        && !HasDeploymentComparison;
+
+    public bool ShowSloNotConfiguredState => !HasConfiguredSloDefinitions;
+
+    public bool ShowSloEmptyState => HasConfiguredSloDefinitions && !IsLoadingSloStatus && !HasSloStatusEntries;
 
     public Visibility ResourceErrorVisibility => string.IsNullOrWhiteSpace(ResourceErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -586,14 +596,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public Visibility ResourceWorkspaceVisibility => HasActiveResource && !ShowReadinessState ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility EmptyStateVisibility => HasActiveResource || ShowReadinessState ? Visibility.Collapsed : Visibility.Visible;
-
-    public Visibility GuidedModeVisibility => UseGuidedLogsMode ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility AdvancedModeVisibility => UseGuidedLogsMode ? Visibility.Collapsed : Visibility.Visible;
-
-    public Visibility GuidedCompileSummaryVisibility => string.IsNullOrWhiteSpace(GuidedCompileSummary) ? Visibility.Collapsed : Visibility.Visible;
-
-    public Visibility GuidedCompiledQueryVisibility => string.IsNullOrWhiteSpace(GuidedCompiledQuery) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility OverviewRequestChartVisibility => HasOverviewRequestTrend ? Visibility.Visible : Visibility.Collapsed;
 
@@ -615,6 +617,14 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         ? Visibility.Visible
         : Visibility.Collapsed;
 
+    public Visibility DeploymentComparisonContentVisibility => HasDeploymentComparison ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility DeploymentComparisonBadgeVisibility => string.IsNullOrWhiteSpace(DeploymentComparisonBadgeText) ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility SloStatusEntriesVisibility => HasSloStatusEntries ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility SloStatusBadgeVisibility => string.IsNullOrWhiteSpace(SloStatusBadgeText) ? Visibility.Collapsed : Visibility.Visible;
+
     public async Task LoadAsync()
     {
         if (_isDisposed || _loaded)
@@ -624,8 +634,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         _loaded = true;
 
-        await _appState.WhenInitializedAsync();
+        await Task.WhenAll(_appState.WhenInitializedAsync(), _releaseRepository.LoadAsync());
         ApplyConfigState();
+        LoadDeploymentAnchors(reloadComparison: false);
         await DiscoverResourcesAsync(invalidateCache: false);
         await _workspaceService.ApplyPendingRestoreAsync(AreaName);
 
@@ -666,14 +677,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     [RelayCommand]
     private Task ApplySelectedPresetAsync()
     {
-        if (SelectedQueryPreset is null)
+        var presetName = LogsWorkspace.ApplySelectedPreset();
+        if (string.IsNullOrWhiteSpace(presetName))
         {
             return Task.CompletedTask;
         }
 
-        AdvancedQueryText = SelectedQueryPreset.Query;
-        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
-        ActiveTabStatusText = $"Loaded preset '{SelectedQueryPreset.Name}' into the advanced query editor baseline.";
+        ActiveTabStatusText = $"Loaded preset '{presetName}' into the advanced query editor baseline.";
         return PublishSnapshotAsync(recordRecent: false);
     }
 
@@ -697,38 +707,17 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return;
         }
 
-        var queryName = SaveQueryName.Trim();
+        var queryName = LogsWorkspace.SaveQueryName.Trim();
         if (string.IsNullOrWhiteSpace(queryName))
         {
             _notifications.ShowWarning("Saved query name required", "Enter a name before saving the current query.");
             return;
         }
 
-        string queryText;
-        if (UseGuidedLogsMode)
+        if (!LogsWorkspace.TryPrepareQueryForSave(out var queryText, out var failureMessage))
         {
-            var compileResult = BuildGuidedCompileResult();
-            GuidedCompiledQuery = compileResult.Result.Query;
-            GuidedCompileSummary = BuildCompileSummary(compileResult.ValidationMessage, compileResult.Result);
-            OnPropertyChanged(nameof(GuidedCompileSummaryVisibility));
-            OnPropertyChanged(nameof(GuidedCompiledQueryVisibility));
-
-            if (!compileResult.Result.CanExecute || string.IsNullOrWhiteSpace(compileResult.Result.Query))
-            {
-                _notifications.ShowWarning("Saved query unavailable", "Fix the guided query validation issues before saving it.");
-                return;
-            }
-
-            queryText = compileResult.Result.Query;
-        }
-        else
-        {
-            queryText = AdvancedQueryText.Trim();
-            if (string.IsNullOrWhiteSpace(queryText))
-            {
-                _notifications.ShowWarning("Saved query unavailable", "Enter a query before saving it.");
-                return;
-            }
+            _notifications.ShowWarning("Saved query unavailable", failureMessage);
+            return;
         }
 
         var config = EnsureConfig();
@@ -741,8 +730,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         };
 
         config.SavedQueries.Add(savedQuery);
-        LoadSavedQueries(savedQuery.Id);
-        SaveQueryName = string.Empty;
+        LogsWorkspace.LoadSavedQueries(config);
+        LogsWorkspace.SaveQueryName = string.Empty;
         ActiveTabStatusText = $"Saved query '{savedQuery.Name}' in the Observability profile baseline.";
 
         var persisted = await _appState.SaveConfigAsync();
@@ -758,14 +747,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     [RelayCommand]
     private Task LoadSavedQueryAsync(ObservabilitySavedQueryItemViewModel? savedQuery)
     {
-        if (savedQuery is null)
+        var savedQueryName = LogsWorkspace.ApplySavedQuery(savedQuery);
+        if (string.IsNullOrWhiteSpace(savedQueryName))
         {
             return Task.CompletedTask;
         }
 
-        AdvancedQueryText = savedQuery.Query;
-        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
-        ActiveTabStatusText = $"Running saved query '{savedQuery.Name}' from the Observability profile baseline.";
+        ActiveTabStatusText = $"Running saved query '{savedQueryName}' from the Observability profile baseline.";
         SelectedTabIndex = 3;
         return RefreshCurrentTabAsync(force: true);
     }
@@ -787,7 +775,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return;
         }
 
-        LoadSavedQueries();
+        LogsWorkspace.LoadSavedQueries(config);
         ActiveTabStatusText = $"Deleted saved query '{savedQuery.Name}' from the Observability profile baseline.";
 
         var persisted = await _appState.SaveConfigAsync();
@@ -815,8 +803,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         }
 
         var escapedExceptionType = SelectedFailure.ExceptionType.Replace("'", "\\'");
-        AdvancedQueryText = $"exceptions\n| where type == '{escapedExceptionType}'\n| project timestamp, type, operationId=operation_Id, operationName=operation_Name, cloud_RoleName, innermostMessage\n| order by timestamp desc\n| take 100";
-        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
+        LogsWorkspace.UseAdvancedQuery($"exceptions\n| where type == '{escapedExceptionType}'\n| project timestamp, type, operationId=operation_Id, operationName=operation_Name, cloud_RoleName, innermostMessage\n| order by timestamp desc\n| take 100");
         SelectedTabIndex = 3;
         return RefreshCurrentTabAsync(force: true);
     }
@@ -829,8 +816,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return Task.CompletedTask;
         }
 
-        AdvancedQueryText = KqlPresets.TraceByOperationId(SelectedFailure.SampleOperationId);
-        SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => option.Key == "advanced") ?? LogsModeOptions[0];
+        LogsWorkspace.UseAdvancedQuery(KqlPresets.TraceByOperationId(SelectedFailure.SampleOperationId));
         SelectedTabIndex = 3;
         ActiveTabStatusText = $"Running a focused trace query for exception '{SelectedFailure.ExceptionType}'.";
         return RefreshCurrentTabAsync(force: true);
@@ -851,6 +837,11 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         _tabRefreshCts.Cancel();
         _tabRefreshCts.Dispose();
+
+        _deploymentComparisonCts.Cancel();
+        _deploymentComparisonCts.Dispose();
+
+        LogsWorkspace.PropertyChanged -= OnLogsWorkspacePropertyChanged;
 
         return ValueTask.CompletedTask;
     }
@@ -953,37 +944,45 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         OnPropertyChanged(nameof(SelectedAvailabilityFailureVisibility));
     }
 
-    partial void OnSelectedQueryPresetChanged(ObservabilityQueryPresetItemViewModel? value)
+    partial void OnSelectedDeploymentAnchorChanged(ObservabilityDeploymentAnchorItemViewModel? value)
     {
-        OnPropertyChanged(nameof(SelectedPresetDescription));
-    }
-
-    partial void OnSaveQueryNameChanged(string value)
-    {
-        OnPropertyChanged(nameof(CanSaveQuery));
-    }
-
-    partial void OnSelectedLogsModeChanged(ObservabilityLogsModeOptionViewModel? value)
-    {
-        OnPropertyChanged(nameof(UseGuidedLogsMode));
-        OnPropertyChanged(nameof(GuidedModeVisibility));
-        OnPropertyChanged(nameof(AdvancedModeVisibility));
-        OnPropertyChanged(nameof(LogsModeDescription));
-
-        if (!UseGuidedLogsMode && string.IsNullOrWhiteSpace(AdvancedQueryText) && !string.IsNullOrWhiteSpace(GuidedCompiledQuery))
-        {
-            AdvancedQueryText = GuidedCompiledQuery;
-        }
-
-        UpdateGuidedPreview();
+        OnPropertyChanged(nameof(ShowDeploymentComparisonPlaceholder));
+        OnPropertyChanged(nameof(ShowDeploymentComparisonEmptyState));
 
         if (_suppressStateChangeSideEffects || _isDisposed)
         {
             return;
         }
 
-        _ = PersistLogsConfigAsync();
-        _ = PublishSnapshotAsync(recordRecent: false);
+        if (value is null || _provider is null)
+        {
+            ResetDeploymentComparisonState();
+            return;
+        }
+
+        _ = LoadDeploymentComparisonAsync(value.Anchor);
+    }
+
+    partial void OnIsLoadingDeploymentComparisonChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowDeploymentAnchorEmptyState));
+        OnPropertyChanged(nameof(ShowDeploymentComparisonPlaceholder));
+        OnPropertyChanged(nameof(ShowDeploymentComparisonEmptyState));
+    }
+
+    partial void OnIsLoadingSloStatusChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowSloEmptyState));
+    }
+
+    partial void OnDeploymentComparisonBadgeTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(DeploymentComparisonBadgeVisibility));
+    }
+
+    partial void OnSloStatusBadgeTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(SloStatusBadgeVisibility));
     }
 
     partial void OnShowAvailabilityHeatmapChanged(bool value)
@@ -993,29 +992,26 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         OnPropertyChanged(nameof(AvailabilityListVisibility));
     }
 
-    partial void OnSelectedGuidedOperatorChanged(ObservabilityGuidedOperatorOptionViewModel? value)
+    private void OnLogsWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        UpdateGuidedPreview();
-    }
+        if (string.Equals(e.PropertyName, nameof(ObservabilityLogsWorkspaceViewModel.CanSaveQueryDraft), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ObservabilityLogsWorkspaceViewModel.SaveQueryName), StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(CanSaveQuery));
+        }
 
-    partial void OnGuidedTableNameChanged(string value)
-    {
-        UpdateGuidedPreview();
-    }
+        if (!string.Equals(e.PropertyName, nameof(ObservabilityLogsWorkspaceViewModel.SelectedLogsMode), StringComparison.Ordinal))
+        {
+            return;
+        }
 
-    partial void OnGuidedFilterColumnChanged(string value)
-    {
-        UpdateGuidedPreview();
-    }
+        if (_suppressStateChangeSideEffects || _isDisposed)
+        {
+            return;
+        }
 
-    partial void OnGuidedFilterValueChanged(string value)
-    {
-        UpdateGuidedPreview();
-    }
-
-    partial void OnGuidedLimitTextChanged(string value)
-    {
-        UpdateGuidedPreview();
+        _ = PersistLogsConfigAsync();
+        _ = PublishSnapshotAsync(recordRecent: false);
     }
 
     private async Task DiscoverResourcesAsync(bool invalidateCache)
@@ -1127,9 +1123,10 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
             _provider = CreateProvider(resource.ResourceId);
             ProviderLabel = _provider.ProviderType;
-            LoadQueryPresets();
+            LogsWorkspace.LoadQueryPresets(_provider);
             IsRefreshingActiveTab = true;
             ResetTabData();
+            LoadDeploymentAnchors(reloadComparison: true);
 
             if (persistSelection)
             {
@@ -1229,54 +1226,92 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     {
         var range = GetSelectedRange();
         var metricsTask = _provider!.GetOverviewAsync(range, cancellationToken);
-        var explainerTask = _explainerService.GetExplainerSummaryAsync(_provider, range, Array.Empty<string>(), cancellationToken);
+        var explainerTask = _explainerService.GetExplainerSummaryAsync(_provider, range, OverviewDimensionKeys, cancellationToken);
+        var hasConfiguredSlos = HasConfiguredSloDefinitions;
+        Task<SloStatusSummary>? sloTask = null;
 
-        await Task.WhenAll(metricsTask, explainerTask);
-
-        var metrics = metricsTask.Result;
-        var explainer = explainerTask.Result;
-
-        RequestCountText = metrics.RequestCount.ToString("N0");
-        FailureRateText = metrics.FailureRate.ToString("P1");
-        P50ResponseTimeText = $"{metrics.P50ResponseTimeMs:N0} ms";
-        P95ResponseTimeText = $"{metrics.P95ResponseTimeMs:N0} ms";
-        ExceptionCountText = metrics.ExceptionCount.ToString("N0");
-        AvailabilityText = $"{metrics.AvailabilityPct:N1}%";
-
-        OverviewRequestTrend.Clear();
-        foreach (var point in metrics.RequestTrend)
+        if (hasConfiguredSlos)
         {
-            OverviewRequestTrend.Add(point);
+            IsLoadingSloStatus = true;
+            sloTask = _explainerService.GetSloStatusAsync(
+                _provider,
+                _appState.Config.ObservabilityConfig!.SloDefinitions,
+                range,
+                cancellationToken);
+        }
+        else
+        {
+            ResetSloStatusState();
         }
 
-        OverviewFailureTrend.Clear();
-        foreach (var point in metrics.FailureTrend)
+        try
         {
-            OverviewFailureTrend.Add(point);
-        }
-
-        DependencyHealthEntries.Clear();
-        foreach (var entry in explainer.DependencyHealth.Entries.Take(6))
-        {
-            DependencyHealthEntries.Add(new ObservabilityDependencyHealthItemViewModel(entry));
-        }
-
-        DimensionBreakdowns.Clear();
-        foreach (var breakdown in explainer.DimensionPivots)
-        {
-            foreach (var entry in breakdown.TopEntries.Take(4))
+            if (sloTask is null)
             {
-                DimensionBreakdowns.Add(new ObservabilityDimensionBreakdownItemViewModel(breakdown.DimensionKey, entry));
+                await Task.WhenAll(metricsTask, explainerTask);
             }
+            else
+            {
+                await Task.WhenAll(metricsTask, explainerTask, sloTask);
+            }
+
+            var metrics = metricsTask.Result;
+            var explainer = explainerTask.Result;
+
+            RequestCountText = metrics.RequestCount.ToString("N0");
+            FailureRateText = metrics.FailureRate.ToString("P1");
+            P50ResponseTimeText = $"{metrics.P50ResponseTimeMs:N0} ms";
+            P95ResponseTimeText = $"{metrics.P95ResponseTimeMs:N0} ms";
+            ExceptionCountText = metrics.ExceptionCount.ToString("N0");
+            AvailabilityText = $"{metrics.AvailabilityPct:N1}%";
+
+            OverviewRequestTrend.Clear();
+            foreach (var point in metrics.RequestTrend)
+            {
+                OverviewRequestTrend.Add(point);
+            }
+
+            OverviewFailureTrend.Clear();
+            foreach (var point in metrics.FailureTrend)
+            {
+                OverviewFailureTrend.Add(point);
+            }
+
+            DependencyHealthEntries.Clear();
+            foreach (var entry in explainer.DependencyHealth.Entries.Take(6))
+            {
+                DependencyHealthEntries.Add(new ObservabilityDependencyHealthItemViewModel(entry));
+            }
+
+            DimensionBreakdowns.Clear();
+            foreach (var breakdown in explainer.DimensionPivots)
+            {
+                foreach (var entry in breakdown.TopEntries.Take(4))
+                {
+                    DimensionBreakdowns.Add(new ObservabilityDimensionBreakdownItemViewModel(breakdown.DimensionKey, entry));
+                }
+            }
+
+            DependencyHeadline = explainer.TopDependencyName is null
+                ? "No high-signal dependency anomaly was returned for this window."
+                : $"Highest-risk dependency in this window: {explainer.TopDependencyName}.";
+
+            BreakdownHeadline = explainer.DimensionPivots.Count == 0
+                ? "No cloud role or operation pivots crossed the current threshold in this window."
+                : $"Loaded {explainer.DimensionPivots.Count:N0} cloud role or operation breakdown(s) for this window.";
+
+            if (sloTask is not null)
+            {
+                ApplySloStatusSummary(sloTask.Result);
+            }
+
+            ActiveTabStatusText = $"Overview refreshed across {SelectedTimeRangeOption?.Label ?? "the current range"}.";
+            _overviewLoaded = true;
         }
-
-        DependencyHeadline = explainer.TopDependencyName is null
-            ? "No high-signal dependency anomaly was returned for this window."
-            : $"Highest-risk dependency in this window: {explainer.TopDependencyName}.";
-
-        BreakdownHeadline = "Custom dimension pivots are intentionally deferred until WinUI adopts app-specific keys for this area.";
-        ActiveTabStatusText = $"Overview refreshed across {SelectedTimeRangeOption?.Label ?? "the current range"}.";
-        _overviewLoaded = true;
+        finally
+        {
+            IsLoadingSloStatus = false;
+        }
     }
 
     private async Task LoadFailuresAsync(CancellationToken cancellationToken)
@@ -1326,33 +1361,11 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     private async Task LoadLogsAsync(CancellationToken cancellationToken)
     {
-        string query;
-
-        if (UseGuidedLogsMode)
+        if (!LogsWorkspace.TryPrepareQueryForExecution(out var query))
         {
-            var compileResult = BuildGuidedCompileResult();
-            GuidedCompiledQuery = compileResult.Result.Query;
-            GuidedCompileSummary = BuildCompileSummary(compileResult.ValidationMessage, compileResult.Result);
-
-            if (!compileResult.Result.CanExecute)
-            {
-                LogRows.Clear();
-                LogsResultSummary = "Guided query has validation issues. Fix them before running the logs tab.";
-                ActiveTabStatusText = "Guided query validation blocked logs execution.";
-                return;
-            }
-
-            query = compileResult.Result.Query;
-            AdvancedQueryText = query;
-        }
-        else
-        {
-            query = string.IsNullOrWhiteSpace(AdvancedQueryText)
-                ? SelectedQueryPreset?.Query ?? DefaultAdvancedQuery
-                : AdvancedQueryText;
-
-            AdvancedQueryText = query;
-            GuidedCompileSummary = "Advanced mode runs the raw KQL query shown in the native editor baseline.";
+            LogRows.Clear();
+            ActiveTabStatusText = "Guided query validation blocked logs execution.";
+            return;
         }
 
         await PersistLogsConfigAsync();
@@ -1369,7 +1382,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             LogRows.Add(MapLogRow(row));
         }
 
-        LogsResultSummary = $"{result.Rows.Count:N0} row(s) · {result.ExecutionTime.TotalMilliseconds:N0} ms{(result.Truncated ? " · truncated" : string.Empty)}";
+        LogsWorkspace.LogsResultSummary = $"{result.Rows.Count:N0} row(s) · {result.ExecutionTime.TotalMilliseconds:N0} ms{(result.Truncated ? " · truncated" : string.Empty)}";
         ActiveTabStatusText = $"Logs query completed against {ActiveResource?.Name ?? "the active resource"}.";
         _logsLoaded = true;
     }
@@ -1473,13 +1486,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
                 ["resourceName"] = ActiveResource.Name,
                 ["tab"] = GetTabKey(SelectedTabIndex),
                 ["range"] = SelectedTimeRangeOption?.RestoreKey ?? "24h",
-                ["logsMode"] = SelectedLogsMode?.Key ?? "advanced",
+                ["logsMode"] = LogsWorkspace.SelectedLogsMode?.Key ?? "advanced",
             },
         };
 
-        if (SelectedQueryPreset is not null)
+        if (LogsWorkspace.SelectedQueryPreset is not null)
         {
-            snapshot.RestoreState["presetId"] = SelectedQueryPreset.Id;
+            snapshot.RestoreState["presetId"] = LogsWorkspace.SelectedQueryPreset.Id;
         }
 
         return snapshot;
@@ -1506,8 +1519,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
             if (snapshot.RestoreState.TryGetValue("logsMode", out var restoredLogsMode))
             {
-                SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => string.Equals(option.Key, restoredLogsMode, StringComparison.OrdinalIgnoreCase))
-                    ?? SelectedLogsMode;
+                LogsWorkspace.RestoreLogsMode(restoredLogsMode);
             }
 
             if (snapshot.RestoreState.TryGetValue("tab", out var restoredTabKey))
@@ -1515,9 +1527,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
                 SelectedTabIndex = GetTabIndex(restoredTabKey);
             }
 
-            _pendingPresetId = snapshot.RestoreState.TryGetValue("presetId", out var restoredPresetId)
+            LogsWorkspace.QueuePresetRestore(snapshot.RestoreState.TryGetValue("presetId", out var restoredPresetId)
                 ? restoredPresetId
-                : null;
+                : null);
         }
         finally
         {
@@ -1547,31 +1559,18 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         try
         {
-            SelectedLogsMode = LogsModeOptions.FirstOrDefault(option => string.Equals(option.Key, GetLogsModeKey(config.LogsQueryMode), StringComparison.OrdinalIgnoreCase))
-                ?? LogsModeOptions[0];
-
-            var draft = config.GuidedLogsDraft ?? GuidedKqlQueryDefinition.CreateDefault();
-            var filter = draft.Filters.FirstOrDefault();
-
-            GuidedTableName = string.IsNullOrWhiteSpace(draft.Table) ? "traces" : draft.Table;
-            GuidedFilterColumn = string.IsNullOrWhiteSpace(filter?.Column) ? "cloud_RoleName" : filter.Column;
-            GuidedFilterValue = filter?.Value ?? string.Empty;
-            GuidedLimitText = (draft.Limit > 0 ? draft.Limit : 100).ToString();
-            SelectedGuidedOperator = GuidedOperatorOptions.FirstOrDefault(option => option.Operator == (filter?.Operator ?? GuidedKqlFilterOperator.Contains))
-                ?? GuidedOperatorOptions[0];
-
-            if (string.IsNullOrWhiteSpace(AdvancedQueryText))
-            {
-                AdvancedQueryText = DefaultAdvancedQuery;
-            }
+            LogsWorkspace.ApplyConfig(config);
         }
         finally
         {
             _suppressStateChangeSideEffects = false;
         }
 
-        LoadSavedQueries();
-        UpdateGuidedPreview();
+        ResetSloStatusState();
+
+        OnPropertyChanged(nameof(HasConfiguredSloDefinitions));
+        OnPropertyChanged(nameof(ShowSloNotConfiguredState));
+        OnPropertyChanged(nameof(ShowSloEmptyState));
     }
 
     private async Task PersistSelectedResourceAsync(ObservabilityResourceInfo resource)
@@ -1595,57 +1594,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         }
 
         var config = EnsureConfig();
-        config.LogsQueryMode = UseGuidedLogsMode ? GuidedLogsQueryMode.Guided : GuidedLogsQueryMode.Advanced;
-        config.GuidedLogsDraft = BuildGuidedDefinition();
+        LogsWorkspace.WriteConfig(config);
 
         await _appState.SaveConfigAsync();
-    }
-
-    private void LoadSavedQueries(string? preferredId = null)
-    {
-        SavedQueries.Clear();
-
-        var config = EnsureConfig();
-        config.SavedQueries ??= [];
-
-        foreach (var savedQuery in config.SavedQueries
-                     .OrderByDescending(query => query.CreatedAt)
-                     .ThenBy(query => query.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            SavedQueries.Add(new ObservabilitySavedQueryItemViewModel(savedQuery));
-        }
-
-        OnPropertyChanged(nameof(HasSavedQueries));
-        OnPropertyChanged(nameof(ShowSavedQueriesEmptyState));
-        OnPropertyChanged(nameof(SavedQueriesSummary));
-    }
-
-    private void LoadQueryPresets()
-    {
-        QueryPresets.Clear();
-
-        if (_provider is null)
-        {
-            SelectedQueryPreset = null;
-            return;
-        }
-
-        foreach (var preset in _provider.GetPresets())
-        {
-            QueryPresets.Add(new ObservabilityQueryPresetItemViewModel(preset));
-        }
-
-        var restoringPreset = !string.IsNullOrWhiteSpace(_pendingPresetId);
-        var preferredPresetId = _pendingPresetId ?? SelectedQueryPreset?.Id;
-        SelectedQueryPreset = QueryPresets.FirstOrDefault(candidate => string.Equals(candidate.Id, preferredPresetId, StringComparison.OrdinalIgnoreCase))
-            ?? QueryPresets.FirstOrDefault();
-
-        if ((restoringPreset || string.IsNullOrWhiteSpace(AdvancedQueryText)) && SelectedQueryPreset is not null)
-        {
-            AdvancedQueryText = SelectedQueryPreset.Query;
-        }
-
-        _pendingPresetId = null;
     }
 
     private void ResetTabData()
@@ -1668,12 +1619,14 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         LogRows.Clear();
         DependencyHealthEntries.Clear();
         DimensionBreakdowns.Clear();
+        DeploymentComparisonDeltas.Clear();
+        SloStatusEntries.Clear();
 
         SelectedFailure = null;
         SelectedPerformanceEntry = null;
         SelectedAvailabilityResult = null;
         ActiveTabErrorMessage = null;
-        LogsResultSummary = "Run a query to preview logs in the native baseline.";
+        LogsWorkspace.ResetResultSummary();
 
         RequestCountText = "0";
         FailureRateText = "0.0%";
@@ -1682,7 +1635,12 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         ExceptionCountText = "0";
         AvailabilityText = "0.0%";
         DependencyHeadline = "Dependency health will appear after the first overview refresh.";
-        BreakdownHeadline = "Custom dimension pivots are intentionally deferred in this baseline.";
+        BreakdownHeadline = "Cloud role and operation pivots will appear after the first overview refresh.";
+        IsLoadingDeploymentComparison = false;
+        IsLoadingSloStatus = false;
+
+        ResetDeploymentComparisonState();
+        ResetSloStatusState();
 
         OnPropertyChanged(nameof(OverallAvailabilityText));
         OnPropertyChanged(nameof(AvailabilityPassFailSummary));
@@ -1690,6 +1648,182 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         OnPropertyChanged(nameof(AvailabilityHeatmapVisibility));
         OnPropertyChanged(nameof(AvailabilityListVisibility));
     }
+
+    private void LoadDeploymentAnchors(bool reloadComparison)
+    {
+        var selectedReleaseId = SelectedDeploymentAnchor?.Anchor.ReleaseId;
+        var anchors = ObservabilityExplainerService.GetDeploymentAnchors(_releaseRepository);
+
+        _suppressStateChangeSideEffects = true;
+        try
+        {
+            DeploymentAnchors.Clear();
+            foreach (var anchor in anchors)
+            {
+                DeploymentAnchors.Add(new ObservabilityDeploymentAnchorItemViewModel(anchor));
+            }
+
+            SelectedDeploymentAnchor = selectedReleaseId is null
+                ? null
+                : DeploymentAnchors.FirstOrDefault(candidate => candidate.Anchor.ReleaseId == selectedReleaseId.Value);
+        }
+        finally
+        {
+            _suppressStateChangeSideEffects = false;
+        }
+
+        if (!reloadComparison || _provider is null || SelectedDeploymentAnchor is null)
+        {
+            if (!HasDeploymentAnchors)
+            {
+                ResetDeploymentComparisonState();
+            }
+
+            return;
+        }
+
+        _ = LoadDeploymentComparisonAsync(SelectedDeploymentAnchor.Anchor);
+    }
+
+    private async Task LoadDeploymentComparisonAsync(DeploymentAnchor anchor)
+    {
+        if (_provider is null || _isDisposed)
+        {
+            return;
+        }
+
+        ResetDeploymentComparisonToken();
+        var cancellationToken = _deploymentComparisonCts.Token;
+
+        IsLoadingDeploymentComparison = true;
+        DeploymentComparisonDeltas.Clear();
+        DeploymentComparisonHeadline = $"{anchor.ReleaseName} deployment comparison";
+        DeploymentComparisonSummaryText = "Comparing overview metrics before and after the selected deployment anchor.";
+        DeploymentComparisonWindowText = string.Empty;
+        DeploymentComparisonBadgeText = string.Empty;
+
+        try
+        {
+            var summary = await _explainerService.GetDeploymentComparisonAsync(
+                _provider,
+                anchor,
+                DeploymentComparisonWindow,
+                cancellationToken);
+
+            if (_isDisposed
+                || cancellationToken.IsCancellationRequested
+                || SelectedDeploymentAnchor is null
+                || SelectedDeploymentAnchor.Anchor.ReleaseId != anchor.ReleaseId)
+            {
+                return;
+            }
+
+            ApplyDeploymentComparisonSummary(summary);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Deployment comparison failed for release {ReleaseName}.", anchor.ReleaseName);
+            DeploymentComparisonSummaryText = $"No deployment comparison is available for {anchor.ReleaseName} right now.";
+        }
+        finally
+        {
+            IsLoadingDeploymentComparison = false;
+        }
+    }
+
+    private void ApplyDeploymentComparisonSummary(DeploymentComparisonSummary summary)
+    {
+        DeploymentComparisonDeltas.Clear();
+        foreach (var delta in summary.Deltas)
+        {
+            DeploymentComparisonDeltas.Add(new ObservabilityMetricDeltaItemViewModel(delta));
+        }
+
+        DeploymentComparisonHeadline = $"{summary.Anchor.ReleaseName} deployment comparison";
+        DeploymentComparisonWindowText = $"Before {FormatWindow(summary.BeforeWindow)} · After {FormatWindow(summary.AfterWindow)}";
+        DeploymentComparisonBadgeText = summary.HasRegression ? "Regression detected" : "No regression detected";
+        DeploymentComparisonSummaryText = summary.HasRegression
+            ? "Failure rate or latency regressed across the tracked overview metrics."
+            : "Tracked overview metrics stayed within the expected before and after thresholds.";
+    }
+
+    private void ResetDeploymentComparisonState()
+    {
+        DeploymentComparisonDeltas.Clear();
+        DeploymentComparisonWindowText = string.Empty;
+        DeploymentComparisonBadgeText = string.Empty;
+
+        if (!HasDeploymentAnchors)
+        {
+            DeploymentComparisonHeadline = "No release anchors are available for deployment comparison.";
+            DeploymentComparisonSummaryText = "Record deployed release snapshots in Releases before comparing telemetry across a deployment.";
+            return;
+        }
+
+        DeploymentComparisonHeadline = "Compare telemetry before and after a recorded deployment.";
+        DeploymentComparisonSummaryText = SelectedDeploymentAnchor is null
+            ? "Select a release anchor to compare overview metrics for the active resource."
+            : $"Refreshing the active resource clears the previous comparison. Reselect {SelectedDeploymentAnchor.ReleaseName} to compare it again.";
+    }
+
+    private void ApplySloStatusSummary(SloStatusSummary summary)
+    {
+        SloStatusEntries.Clear();
+        foreach (var entry in summary.Entries)
+        {
+            SloStatusEntries.Add(new ObservabilitySloStatusEntryItemViewModel(entry));
+        }
+
+        if (summary.Entries.Count == 0)
+        {
+            ResetSloStatusState();
+            return;
+        }
+
+        SloStatusBadgeText = summary.AnyBreached
+            ? "SLO breached"
+            : summary.AnyAtRisk
+                ? "SLO at risk"
+                : "All SLOs met";
+
+        SloStatusHeadline = summary.AnyBreached
+            ? "One or more configured SLOs are currently breached."
+            : summary.AnyAtRisk
+                ? "Configured SLOs are approaching their warning thresholds."
+                : "Configured SLOs are meeting their targets for this window.";
+
+        SloStatusSummaryText = $"Evaluated {summary.Entries.Count:N0} SLO definition(s) across the active time range.";
+    }
+
+    private void ResetSloStatusState()
+    {
+        SloStatusEntries.Clear();
+        SloStatusBadgeText = string.Empty;
+
+        if (HasConfiguredSloDefinitions)
+        {
+            SloStatusHeadline = "Configured SLOs load when the overview tab refreshes.";
+            SloStatusSummaryText = "Refresh Overview to evaluate the current SLO window for this resource.";
+        }
+        else
+        {
+            SloStatusHeadline = "No SLO definitions configured for this observability profile.";
+            SloStatusSummaryText = "SLO tracking is optional and can be configured in Settings.";
+        }
+    }
+
+    private void ResetDeploymentComparisonToken()
+    {
+        _deploymentComparisonCts.Cancel();
+        _deploymentComparisonCts.Dispose();
+        _deploymentComparisonCts = new CancellationTokenSource();
+    }
+
+    private static string FormatWindow(TimeRange range) =>
+        $"{range.Start.LocalDateTime:HH:mm} - {range.End.LocalDateTime:HH:mm}";
 
     private void RebuildAvailabilityHeatmap()
     {
@@ -1736,58 +1870,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         OnPropertyChanged(nameof(HasAvailabilityHeatmap));
         OnPropertyChanged(nameof(AvailabilityHeatmapVisibility));
         OnPropertyChanged(nameof(AvailabilityListVisibility));
-    }
-
-    private void UpdateGuidedPreview()
-    {
-        var compileResult = BuildGuidedCompileResult();
-        GuidedCompiledQuery = compileResult.Result.Query;
-        GuidedCompileSummary = BuildCompileSummary(compileResult.ValidationMessage, compileResult.Result);
-        OnPropertyChanged(nameof(GuidedCompileSummaryVisibility));
-        OnPropertyChanged(nameof(GuidedCompiledQueryVisibility));
-    }
-
-    private (GuidedKqlCompileResult Result, string? ValidationMessage) BuildGuidedCompileResult()
-    {
-        var definition = BuildGuidedDefinition(out var validationMessage);
-        var result = _guidedKqlCompiler.Compile(definition);
-        return (result, validationMessage);
-    }
-
-    private GuidedKqlQueryDefinition BuildGuidedDefinition()
-    {
-        return BuildGuidedDefinition(out _);
-    }
-
-    private GuidedKqlQueryDefinition BuildGuidedDefinition(out string? validationMessage)
-    {
-        var definition = GuidedKqlQueryDefinition.CreateDefault();
-        definition.Table = string.IsNullOrWhiteSpace(GuidedTableName) ? "traces" : GuidedTableName.Trim();
-
-        if (!TryParseGuidedLimit(out var limit))
-        {
-            limit = 100;
-            validationMessage = "The guided limit must be a positive whole number. Using 100 until it is corrected.";
-        }
-        else
-        {
-            validationMessage = null;
-        }
-
-        definition.Limit = Math.Clamp(limit, 1, 500);
-        definition.Sort = new GuidedKqlSort { Column = "timestamp", Descending = true };
-
-        if (!string.IsNullOrWhiteSpace(GuidedFilterColumn) && !string.IsNullOrWhiteSpace(GuidedFilterValue))
-        {
-            definition.Filters.Add(new GuidedKqlFilter
-            {
-                Column = GuidedFilterColumn.Trim(),
-                Operator = SelectedGuidedOperator?.Operator ?? GuidedKqlFilterOperator.Contains,
-                Value = GuidedFilterValue.Trim(),
-            });
-        }
-
-        return definition;
     }
 
     private bool TryGetPersistedResource(out ObservabilityResourceInfo resource)
@@ -1963,8 +2045,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         _ => 0,
     };
 
-    private static string GetLogsModeKey(GuidedLogsQueryMode? mode) => mode == GuidedLogsQueryMode.Guided ? "guided" : "advanced";
-
     private static string ExtractResourceName(string resourceId)
     {
         if (string.IsNullOrWhiteSpace(resourceId))
@@ -1974,28 +2054,6 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         var segments = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return segments.Length == 0 ? resourceId : segments[^1];
-    }
-
-    private static string BuildCompileSummary(string? validationMessage, GuidedKqlCompileResult compileResult)
-    {
-        var messages = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(validationMessage))
-        {
-            messages.Add(validationMessage);
-        }
-
-        foreach (var issue in compileResult.Issues)
-        {
-            messages.Add($"{issue.Severity}: {issue.Message}");
-        }
-
-        if (messages.Count == 0)
-        {
-            messages.Add("Guided query compiled successfully.");
-        }
-
-        return string.Join(Environment.NewLine, messages);
     }
 
     private static bool TryGetColumnValue(IReadOnlyDictionary<string, object?> columns, string key, out object? value)
@@ -2067,8 +2125,4 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             severity);
     }
 
-    private bool TryParseGuidedLimit(out int limit)
-    {
-        return int.TryParse(GuidedLimitText, out limit) && limit > 0;
-    }
 }

@@ -96,6 +96,42 @@ public sealed class AksPageViewModelTests
     }
 
     [Fact]
+    public async Task AnalyzeSelectedResourceAsync_WhenDisposed_CancelsQuietly()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var notifications = new TestNotificationService();
+        await using var viewModel = CreateViewModel(
+            TestAksClient.CreateDefault(
+                analyzeIngressAsyncOverride: async (_, _, ct) =>
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    return new IngressAnalysis
+                    {
+                        Namespace = "orders",
+                        IngressName = "public-api",
+                    };
+                }),
+            notifications: notifications);
+
+        await viewModel.LoadAsync();
+        viewModel.SelectedResourceKind = "Ingresses";
+        var ingressItem = Assert.Single(viewModel.ResourceItems);
+
+        await viewModel.SelectResourceItemCommand.ExecuteAsync(ingressItem);
+
+        var analyzeTask = viewModel.AnalyzeSelectedResourceCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsSelectedResourceDiagnosticsLoading);
+
+        await viewModel.DisposeAsync();
+        await analyzeTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(viewModel.IsSelectedResourceDiagnosticsLoading);
+        Assert.Null(viewModel.SelectedResourceDiagnosticsErrorMessage);
+        Assert.Empty(notifications.All);
+    }
+
+    [Fact]
     public async Task TriggerSelectedResourceAsync_ForCronJob_AddsNewJobAfterReload()
     {
         using var syncScope = new SynchronizationContextScope();
@@ -113,6 +149,37 @@ public sealed class AksPageViewModelTests
         Assert.Equal(2, viewModel.ResourceItems.Count);
         Assert.Contains(viewModel.ResourceItems, item => item.Name.StartsWith("orders-backfill-manual", StringComparison.Ordinal));
         Assert.Null(viewModel.SelectedResourceActionErrorMessage);
+    }
+
+    [Fact]
+    public async Task RestartSelectedResourceAsync_WhenDisposed_CancelsQuietly()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var notifications = new TestNotificationService();
+        await using var viewModel = CreateViewModel(
+            TestAksClient.CreateDefault(
+                restartDeploymentAsyncOverride: async (_, _, ct) =>
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                }),
+            notifications: notifications);
+
+        await viewModel.LoadAsync();
+        viewModel.SelectedResourceKind = "Deployments";
+        var deploymentItem = Assert.Single(viewModel.ResourceItems);
+
+        await viewModel.SelectResourceItemCommand.ExecuteAsync(deploymentItem);
+
+        var restartTask = viewModel.RestartSelectedResourceCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsSelectedResourceMutationRunning);
+
+        await viewModel.DisposeAsync();
+        await restartTask.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(viewModel.IsSelectedResourceMutationRunning);
+        Assert.Null(viewModel.SelectedResourceActionErrorMessage);
+        Assert.Empty(notifications.All);
     }
 
     [Fact]
@@ -176,7 +243,11 @@ public sealed class AksPageViewModelTests
         Assert.True(viewModel.ShowResourceLoadMessage);
     }
 
-    private static AksPageViewModel CreateViewModel(TestAksClient fakeClient)
+    private static AksPageViewModel CreateViewModel(
+        TestAksClient fakeClient,
+        TestShellNavigationService? navigation = null,
+        TestPortForwardSessionService? portForwardSessions = null,
+        TestNotificationService? notifications = null)
     {
         var profileRepository = new ProfileRepository();
         var uiStateRepository = new UiStateRepository();
@@ -192,12 +263,16 @@ public sealed class AksPageViewModelTests
             DefaultNamespace = "orders",
         };
 
+        navigation ??= new TestShellNavigationService();
+        portForwardSessions ??= new TestPortForwardSessionService();
+        notifications ??= new TestNotificationService();
+
         return new AksPageViewModel(
             appState,
             new TestAksBootstrapper(fakeClient),
-            new TestShellNavigationService(),
-            new TestPortForwardSessionService(),
-            new TestNotificationService(),
+            navigation,
+            portForwardSessions,
+            notifications,
             NullLogger<AksPageViewModel>.Instance);
     }
 
@@ -262,6 +337,8 @@ public sealed class AksPageViewModelTests
         private readonly List<CronJobInfo> _cronJobs;
         private readonly Dictionary<(string Namespace, string Kind, string Name), string> _resourceYamls;
         private readonly bool _throwOnServices;
+        private readonly Func<string, string, CancellationToken, Task<IngressAnalysis>>? _analyzeIngressAsyncOverride;
+        private readonly Func<string, string, CancellationToken, Task>? _restartDeploymentAsyncOverride;
         private int _manualJobSequence;
 
         private TestAksClient(
@@ -276,7 +353,9 @@ public sealed class AksPageViewModelTests
             List<JobInfo> jobs,
             List<CronJobInfo> cronJobs,
             Dictionary<(string Namespace, string Kind, string Name), string> resourceYamls,
-            bool throwOnServices)
+            bool throwOnServices,
+            Func<string, string, CancellationToken, Task<IngressAnalysis>>? analyzeIngressAsyncOverride,
+            Func<string, string, CancellationToken, Task>? restartDeploymentAsyncOverride)
         {
             _deployments = deployments;
             _statefulSets = statefulSets;
@@ -290,9 +369,14 @@ public sealed class AksPageViewModelTests
             _cronJobs = cronJobs;
             _resourceYamls = resourceYamls;
             _throwOnServices = throwOnServices;
+            _analyzeIngressAsyncOverride = analyzeIngressAsyncOverride;
+            _restartDeploymentAsyncOverride = restartDeploymentAsyncOverride;
         }
 
-        public static TestAksClient CreateDefault(bool throwOnServices = false)
+        public static TestAksClient CreateDefault(
+            bool throwOnServices = false,
+            Func<string, string, CancellationToken, Task<IngressAnalysis>>? analyzeIngressAsyncOverride = null,
+            Func<string, string, CancellationToken, Task>? restartDeploymentAsyncOverride = null)
         {
             return new TestAksClient(
                 deployments:
@@ -477,7 +561,9 @@ public sealed class AksPageViewModelTests
                     [("orders", "CronJob", "orders-backfill")] = "apiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: orders-backfill\n  namespace: orders",
                     [("orders", "Job", "orders-backfill-001")] = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: orders-backfill-001\n  namespace: orders",
                 },
-                throwOnServices);
+                throwOnServices,
+                analyzeIngressAsyncOverride,
+                restartDeploymentAsyncOverride);
         }
 
         public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
@@ -523,34 +609,36 @@ public sealed class AksPageViewModelTests
             => Task.FromResult(FilterByNamespace(_ingresses, ns));
 
         public Task<IngressAnalysis> AnalyzeIngressAsync(string ns, string ingressName, CancellationToken ct = default)
-            => Task.FromResult(new IngressAnalysis
-            {
-                Namespace = ns,
-                IngressName = ingressName,
-                IngressClass = "nginx",
-                Summary = "Ingress resolves to the orders-api service and exposes one ready backend.",
-                Addresses = ["20.30.40.50"],
-                Findings = ["Ingress address is present.", "Backend service resolves successfully."],
-                Backends =
-                [
-                    new IngressBackendAnalysis
-                    {
-                        Host = "api.contoso.local",
-                        Path = "/orders",
-                        ServiceName = "orders-api",
-                        ServiceNamespace = "orders",
-                        RequestedPort = "80",
-                        ServiceExists = true,
-                        ServiceType = "ClusterIP",
-                        ServicePortResolved = true,
-                        ResolvedServicePort = "80",
-                        HasSelector = true,
-                        MatchingPodCount = 1,
-                        ReadyPodCount = 1,
-                        Findings = ["One ready pod matches the backend selector."],
-                    },
-                ],
-            });
+            => _analyzeIngressAsyncOverride is not null
+                ? _analyzeIngressAsyncOverride(ns, ingressName, ct)
+                : Task.FromResult(new IngressAnalysis
+                {
+                    Namespace = ns,
+                    IngressName = ingressName,
+                    IngressClass = "nginx",
+                    Summary = "Ingress resolves to the orders-api service and exposes one ready backend.",
+                    Addresses = ["20.30.40.50"],
+                    Findings = ["Ingress address is present.", "Backend service resolves successfully."],
+                    Backends =
+                    [
+                        new IngressBackendAnalysis
+                        {
+                            Host = "api.contoso.local",
+                            Path = "/orders",
+                            ServiceName = "orders-api",
+                            ServiceNamespace = "orders",
+                            RequestedPort = "80",
+                            ServiceExists = true,
+                            ServiceType = "ClusterIP",
+                            ServicePortResolved = true,
+                            ResolvedServicePort = "80",
+                            HasSelector = true,
+                            MatchingPodCount = 1,
+                            ReadyPodCount = 1,
+                            Findings = ["One ready pod matches the backend selector."],
+                        },
+                    ],
+                });
 
         public Task<NetworkPolicyAnalysis> AnalyzeNetworkPoliciesAsync(string ns, string workloadKind, string workloadName, CancellationToken ct = default)
             => Task.FromResult(new NetworkPolicyAnalysis
@@ -595,7 +683,10 @@ public sealed class AksPageViewModelTests
         public Task<bool> TestConnectionAsync(CancellationToken ct = default)
             => Task.FromResult(true);
 
-        public Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default)
+            => _restartDeploymentAsyncOverride is not null
+                ? _restartDeploymentAsyncOverride(ns, deploymentName, ct)
+                : Task.CompletedTask;
 
         public Task DeletePodAsync(string ns, string podName, CancellationToken ct = default) => Task.CompletedTask;
 

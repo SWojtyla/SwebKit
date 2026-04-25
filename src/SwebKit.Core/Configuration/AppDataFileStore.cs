@@ -85,15 +85,7 @@ internal static class AppDataFileStore
         try
         {
             await File.WriteAllTextAsync(tempPath, contents);
-
-            if (File.Exists(filePath))
-            {
-                File.Replace(tempPath, filePath, null, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(tempPath, filePath);
-            }
+            CommitTempFile(tempPath, filePath);
         }
         catch
         {
@@ -118,19 +110,29 @@ internal static class AppDataFileStore
         try
         {
             File.Copy(filePath, backupTempPath);
-
-            if (File.Exists(backupPath))
-            {
-                File.Replace(backupTempPath, backupPath, null, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(backupTempPath, backupPath);
-            }
+            CommitTempFile(backupTempPath, backupPath);
         }
         catch
         {
             TryDelete(backupTempPath);
+        }
+    }
+
+    private static void CommitTempFile(string tempPath, string destinationPath)
+    {
+        if (File.Exists(destinationPath))
+        {
+            File.Replace(tempPath, destinationPath, null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        try
+        {
+            File.Move(tempPath, destinationPath);
+        }
+        catch (IOException) when (File.Exists(destinationPath))
+        {
+            File.Replace(tempPath, destinationPath, null, ignoreMetadataErrors: true);
         }
     }
 

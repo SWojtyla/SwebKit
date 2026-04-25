@@ -23,13 +23,14 @@ Validate that the Pipelines and Releases workspace reaches the agreed WinUI pari
 
 1. Scenario: invalid or missing Azure DevOps configuration is survivable. Expected result: the page shows the readiness state and opens the correct native Settings repair surface.
 2. Scenario: the deeper Pipelines and Releases workflows are available natively. Expected result: the agreed tree/detail, approval, history, and tag-management paths no longer require MAUI.
-3. Scenario: the refactored page seam is testable. Expected result: approvals, release-tag flows, and project-scope behavior are no longer trapped in one untestable state object.
+3. Scenario: the refactored page seam is testable. Expected result: release selection, scoped component summaries, and release-tag flows are isolated behind a dedicated native Releases workspace seam instead of remaining trapped in the page coordinator.
 
 ## Automated coverage
 
 - Build validation: `build-winui` must stay green.
 - Existing tests: keep `tests/SwebKit.DevOps.Tests/` and `tests/SwebKit.WinUI.Tests/` green.
-- New tests: add focused WinUI coverage for seam-reduced Pipelines state and any validation logic restored from MAUI.
+- New tests: keep focused WinUI coverage on the extracted Releases workspace seam and any validation logic restored from MAUI.
+- Focused slice: `PipelinesReleaseWorkspaceViewModelTests` covers preferred release selection and release-tag confirmation, while `ReadinessStateViewModelTests` continues to assert the readiness-driven refresh gate and Settings repair loop.
 
 ## Test data and setup
 
@@ -54,7 +55,7 @@ Validate that the Pipelines and Releases workspace reaches the agreed WinUI pari
 
 ## Validation status
 
-- Automated: Not started
+- Automated: `build-winui` passed; `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj -c Release --filter "FullyQualifiedName~PipelinesReleaseWorkspaceViewModelTests|FullyQualifiedName~ReadinessStateViewModelTests"` passed.
 - Manual: Not started
 
 ## Sign-off

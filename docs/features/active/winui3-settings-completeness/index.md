@@ -50,11 +50,17 @@ The native WinUI Settings page now exposes sectioned repair surfaces for Service
 
 ## Dependencies
 
-- Prerequisite active feature: `docs/features/active/winui3-layout-redesign/`
+- Shared baseline already available from: `docs/features/active/winui3-layout-redesign/`
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
-- Downstream dependents: `docs/features/active/winui3-service-bus-parity/`, `docs/features/active/winui3-aks-parity/`, `docs/features/active/winui3-redis-parity/`, `docs/features/active/winui3-storage-parity/`, `docs/features/active/winui3-pipelines-releases-parity/`, `docs/features/active/winui3-observability-parity/`
+- Parallel domain consumers: `docs/features/active/winui3-service-bus-parity/`, `docs/features/active/winui3-aks-parity/`, `docs/features/active/winui3-redis-parity/`, `docs/features/active/winui3-storage-parity/`, `docs/features/active/winui3-pipelines-releases-parity/`, `docs/features/active/winui3-observability-parity/`
 - Functionality baseline: `docs/architecture/functionalities/settings-and-configuration.md`
 - Pitfall files that apply: `docs/pitfalls/blazor-maui.md`, `docs/pitfalls/dotnet-csharp.md`
+
+## Parallel execution contract
+
+- This feature owns `src/SwebKit.WinUI/Views/Settings/`, `src/SwebKit.WinUI/ViewModels/Settings/`, and the section and deep-link repair contract.
+- Domain features should consume the current section keys and readiness-to-settings navigation behavior without reopening the Settings IA by default.
+- Only missing shared Settings IA or deep-link contract gaps should come back here.
 
 ## Risks & mitigations
 

@@ -46,11 +46,17 @@ Pipelines is already one of the hardest WinUI routes: it owns environment-sensit
 
 ## Dependencies
 
-- Prerequisite active features: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
+- Shared baselines available from: `docs/features/active/winui3-layout-redesign/`, `docs/features/active/winui3-settings-completeness/`
 - Related active feature: `docs/features/active/winui3-cutover-audit-hardening/`
 - Functionality baseline: `docs/architecture/functionalities/releases.md`
 - Pitfall files that apply: `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`
 - Relevant automated surface: `tests/SwebKit.DevOps.Tests/`, `tests/SwebKit.WinUI.Tests/`
+
+## Parallel execution contract
+
+- This feature owns `src/SwebKit.WinUI/Views/Pipelines/`, `src/SwebKit.WinUI/ViewModels/Pipelines/`, and route-local readiness wiring for the Pipelines workspace.
+- It may consume the current layout baseline and Settings deep-link contract without waiting on further global feature sequencing.
+- Only missing shared Settings IA or reusable shell-contract gaps should leave this feature.
 
 ## Risks & mitigations
 

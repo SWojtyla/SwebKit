@@ -29,8 +29,8 @@ Validate that the native Service Bus workspace closes the current MAUI parity ba
 
 - Build validation: `build-winui` must stay green.
 - Unit tests: expand `tests/SwebKit.WinUI.Tests/` for Service Bus view-model state and any template or filter persistence logic.
-- Current automated slice: `ServiceBusPageViewModelTests` now covers template persistence, scheduled send plus local scheduled-history storage, text filtering, saved-filter persistence, and built-in field preference persistence for the native workspace.
-- Current automated gap: page-level coverage does not yet exercise `ServiceBusPage.xaml.cs` dialog/confirmation wiring or the scheduled-workspace render path.
+- Current automated slice: `ServiceBusPageViewModelTests` covers template persistence, scheduled send plus local scheduled-history storage, text filtering, saved-filter persistence, and built-in field preference persistence for the native workspace; `ServiceBusPagePresentationTests` covers compose-dialog presentation state, confirmation copy, and the scheduled-workspace XAML wiring.
+- Current automated gap: workspace restore still needs explicit reopen/navigation coverage for the richer native tab state.
 - Regression target: rerun relevant domain tests if shared Service Bus or configuration behavior changes.
 
 ## Test data and setup
@@ -48,7 +48,7 @@ Validate that the native Service Bus workspace closes the current MAUI parity ba
 
 - Risk: advanced list behavior breaks workspace restore. Mitigation: validate persistence across navigation and restart.
 - Risk: template flows overcomplicate the page state. Mitigation: cover the save, load, and execute loops explicitly in tests.
-- Risk: page-level dialog wiring drifts from the validated view-model behavior. Mitigation: add targeted WinUI page coverage or manual checks for the compose and confirmation flows.
+- Risk: page-level dialog wiring drifts from the validated view-model behavior. Mitigation: keep the page presentation helper and `ServiceBusPagePresentationTests` aligned whenever compose or confirmation copy changes.
 
 ## Acceptance criteria
 
@@ -58,7 +58,7 @@ Validate that the native Service Bus workspace closes the current MAUI parity ba
 
 ## Validation status
 
-- Automated: `build-winui` passed; `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter ServiceBusPageViewModelTests` passed on 2026-04-25 for the scheduled/template/list-control baseline.
+- Automated: `build-winui` passed; `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter ServiceBusPageViewModelTests|ServiceBusPagePresentationTests` passed on 2026-04-25 for the scheduled/template/list-control baseline plus page-level compose/confirmation/scheduled-workspace coverage.
 - Manual: Not started
 
 ## Sign-off

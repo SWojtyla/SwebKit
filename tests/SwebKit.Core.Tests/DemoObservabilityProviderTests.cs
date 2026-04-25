@@ -203,6 +203,26 @@ public class DemoObservabilityProviderTests
         Assert.Contains(result, r => !r.Success);
     }
 
+    // ── Dimension breakdown ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDimensionBreakdownAsync_SemanticCloudRoleKey_ReturnsRoleEntries()
+    {
+        var result = await _provider.GetDimensionBreakdownAsync(DefaultRange, "cloud/roleName");
+
+        Assert.NotEmpty(result.TopEntries);
+        Assert.Contains(result.TopEntries, entry => entry.Value == "orders-api");
+    }
+
+    [Fact]
+    public async Task GetDimensionBreakdownAsync_SemanticOperationKey_ReturnsOperationEntries()
+    {
+        var result = await _provider.GetDimensionBreakdownAsync(DefaultRange, "operation/name");
+
+        Assert.NotEmpty(result.TopEntries);
+        Assert.Contains(result.TopEntries, entry => entry.Value == "GET /api/orders");
+    }
+
     // ── Presets ───────────────────────────────────────────────────────────────
 
     [Fact]

@@ -14,11 +14,11 @@ last_updated: "2026-04-25"
 
 ## Quick summary
 
-The cutover umbrella now owns coordination and validation, not the whole implementation backlog. The remaining migration work has been split into separate active features, with layout redesign first, settings completeness second, and domain parity slices after that.
+The cutover umbrella now owns coordination and validation, not the whole implementation backlog. The shared layout and settings baselines are now explicit, and the remaining domain plans are structured to execute in parallel where their owned files do not overlap.
 
 **Jira:** not linked
 
-**Current focus:** hold the dependency order steady while the new feature plans become the source of truth for execution.
+**Current focus:** keep the shared execution contracts and cutover-critical matrix current while the feature-specific plans drive implementation.
 
 ## Progress checklist
 
@@ -29,10 +29,10 @@ The cutover umbrella now owns coordination and validation, not the whole impleme
 - [x] MAUI versus WinUI parity comparison completed by domain
 - [x] Feature-specific active plans created for remaining migration work
 
-### Shared cutover dependencies
+### Shared cutover contracts
 
-- [ ] Layout redesign implemented
-- [ ] Settings completeness implemented
+- [x] Layout baseline available for downstream reuse
+- [x] Settings repair baseline available for downstream reuse
 - [ ] Domain parity features implemented and validated
 
 ### Final cutover gate
@@ -49,16 +49,18 @@ The cutover umbrella now owns coordination and validation, not the whole impleme
 - Landed the current hardening baseline: shared deferred first-load scheduling, disposal guards, Pipelines and Observability readiness states, app-level unhandled-exception logging, and focused WinUI readiness tests.
 - Archived the completed `winui3-migration` baseline as a historical checkpoint.
 - Replaced the monolithic remaining-work plan with dedicated active features for layout redesign, settings completeness, Service Bus, AKS, Redis, Storage, Pipelines/Releases, and Observability.
+- Reframed the split plans around owned surfaces and shared contracts so multiple agents can work in parallel with less overlap.
 
 ## Remaining
 
-- Execute the dependency features in the planned order.
+- Keep the owned-surface and contract matrix current as parallel feature work lands.
 - Decide which domain gaps remain truly cutover-critical once the split features land.
 - Run the first full native-host smoke pass and record the cutover gate.
 - Produce the final recommendation on whether `SwebKit.App` can move to legacy-only status.
 
 ## Blockers
 
+- No planning blocker remains for parallel execution.
 - Live validation of Pipelines and Observability remains environment-sensitive because the current machine state does not provide a successful Azure DevOps or Azure credential path.
 
 ## Validation
@@ -70,4 +72,4 @@ The cutover umbrella now owns coordination and validation, not the whole impleme
 
 ## Notes
 
-- The split feature folders are now the execution source of truth; this umbrella should only retain cross-feature cutover work.
+- The split feature folders are now the execution source of truth; this umbrella should only retain cross-feature contract changes, cutover-critical labels, and final integration evidence.
