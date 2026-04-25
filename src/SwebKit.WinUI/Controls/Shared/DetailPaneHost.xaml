@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shared.DetailPaneHost"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid ColumnSpacing="{StaticResource SwebKitPageSectionSpacing}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition x:Name="DetailColumn"
+                              Width="0"/>
+        </Grid.ColumnDefinitions>
+
+        <ContentPresenter Content="{Binding MainContent, ElementName=Root}"/>
+
+        <Border x:Name="DetailBorder"
+                Grid.Column="1"
+                Style="{StaticResource SwebKitSurfaceCardStyle}"
+                Visibility="Collapsed">
+            <StackPanel Spacing="{StaticResource SwebKitPageSectionSpacing}">
+                <ContentPresenter x:Name="DetailHeaderPresenter"
+                                  Content="{Binding DetailHeaderContent, ElementName=Root}"/>
+                <ContentPresenter Content="{Binding DetailContent, ElementName=Root}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

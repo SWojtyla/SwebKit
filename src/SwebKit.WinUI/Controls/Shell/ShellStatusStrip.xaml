@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Border Style="{StaticResource SwebKitInsetCardStyle}">
-        <Grid ColumnSpacing="24">
+        <Grid ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="2*"/>
@@ -13,7 +13,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0"
-                        Spacing="4">
+                        Spacing="2">
                 <TextBlock Text="Area"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
@@ -23,7 +23,7 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1"
-                        Spacing="4">
+                        Spacing="2">
                 <TextBlock Text="Status"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
@@ -34,7 +34,7 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2"
-                        Spacing="4">
+                        Spacing="2">
                 <TextBlock Text="Activity"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>

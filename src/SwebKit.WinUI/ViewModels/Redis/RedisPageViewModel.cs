@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
@@ -43,12 +44,14 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     public RedisPageViewModel(
         AppStateService appState,
         IRedisClientFactory redisClientFactory,
+        RedisOpsInsightsAggregator opsInsightsAggregator,
         INotificationService notifications,
         OperatorWorkspaceService workspaceService,
         ILogger<RedisPageViewModel> logger)
     {
         _appState = appState;
         _redisClientFactory = redisClientFactory;
+        _opsInsightsAggregator = opsInsightsAggregator;
         _notifications = notifications;
         _workspaceService = workspaceService;
         _logger = logger;
@@ -134,7 +137,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
 
     public bool IsConnected => _client is not null;
 
-    public bool IsWorking => IsLoading || IsDetailLoading;
+    public bool IsWorking => IsLoading || IsDetailLoading || IsAnalyzingHealth || IsAnalyzingMemory || IsLoadingSlowLog || IsLoadingPubSub || IsDeletingSelectedKeys;
 
     public bool ShowNotConfiguredState => !IsLoading && !IsConfigured;
 
@@ -184,9 +187,15 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         ? $"Load more matches ({_keys.Count} loaded)"
         : "No more matches";
 
-    public bool CanReload => !IsLoading;
+    public bool CanReload => !IsWorking;
 
-    public bool CanLoadMoreKeys => _hasMoreKeys && IsConnected && !IsLoading;
+    public bool CanLoadMoreKeys => _hasMoreKeys && IsConnected && !IsWorking;
+
+    public bool CanChangeCache => HasConfiguredCaches && !IsWorking;
+
+    public bool CanEditPatternInput => !IsWorking;
+
+    public bool CanEditSeparatorInput => !IsWorking;
 
     public string DetailTitle => SelectedKey ?? "Key detail";
 
@@ -292,6 +301,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         await _appState.WhenInitializedAsync();
         SyncConfigState();
         ErrorMessage = null;
+        await ResetInsightsTokenAsync();
 
         if (!IsConfigured)
         {
@@ -430,6 +440,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
                 _keys.Add(key);
             }
 
+            InvalidateAnalysisState();
             RebuildTree();
             UpdateScanSummary();
             await LoadVisibleKeyTypesAsync(nextPage, cancellationToken);
@@ -574,6 +585,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
             }
 
             _scanAccumulator.RegisterVisibleKey(newKey);
+            InvalidateAnalysisState();
             SelectedKey = newKey;
             RebuildTree();
             await RefreshSelectedKeyAsync();
@@ -610,6 +622,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
             await _client.DeleteKeysAsync([deletedKey], _detailCts.Token);
             _keys.Remove(deletedKey);
             _keyTypes.Remove(deletedKey);
+            InvalidateAnalysisState();
             IsDeleteConfirmationArmed = false;
             SelectedKey = null;
             RebuildTree();
@@ -644,6 +657,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         {
             var ttlSeconds = Math.Max(1, (int)Math.Ceiling(TtlEditorSeconds));
             await _client.SetTtlAsync(SelectedKey, TimeSpan.FromSeconds(ttlSeconds), _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("TTL updated", $"{ttlSeconds}s on '{SelectedKey}'");
         }
@@ -667,6 +681,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         try
         {
             await _client.RemoveTtlAsync(SelectedKey, _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("TTL removed", $"Key '{SelectedKey}' will not expire.");
         }
@@ -690,6 +705,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         try
         {
             await _client.SetKeyValueAsync(SelectedKey, SelectedStringEditorValue, ct: _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("Value saved", SelectedKey);
         }
@@ -732,6 +748,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         try
         {
             await _client.SetHashFieldAsync(SelectedKey, fieldName, HashFieldEditorValue, _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("Hash field saved", $"{fieldName} on '{SelectedKey}'");
         }
@@ -755,6 +772,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         try
         {
             await _client.DeleteHashFieldAsync(SelectedKey, field.Field, _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("Hash field deleted", $"{field.Field} from '{SelectedKey}'");
         }
@@ -791,6 +809,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         try
         {
             await _client.UpdateSortedSetScoreAsync(SelectedKey, SortedSetMemberEditor, SortedSetScoreEditor, _detailCts.Token);
+            InvalidateAnalysisState();
             await RefreshSelectedKeyAsync();
             _notifications.ShowSuccess("Sorted set score updated", $"{SortedSetMemberEditor} = {SortedSetScoreEditor:G}");
         }
@@ -871,9 +890,11 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         _workspaceService.UnregisterRestoreHandler("redis");
         await CancelTokenAsync(_loadCts);
         await CancelTokenAsync(_detailCts);
+        await CancelTokenAsync(_insightsCts);
         DisposeClient();
         _loadCts.Dispose();
         _detailCts.Dispose();
+        _insightsCts.Dispose();
     }
 
     partial void OnSelectedCacheChanged(RedisCacheEntry? value)
@@ -1405,6 +1426,8 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         _expandedPrefixes.Clear();
         _scanAccumulator.Reset();
         TreeRows.Clear();
+        ResetSelectionState(clearSelectionMode: clearSelection);
+        InvalidateAnalysisState();
         UpdateScanSummary();
 
         if (clearSelection)
@@ -1451,6 +1474,8 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         var keyType = node.IsKey && node.FullKey is not null && _keyTypes.TryGetValue(node.FullKey, out var resolvedType)
             ? resolvedType
             : string.Empty;
+        var selectionKeys = CollectSelectionKeys(node);
+        var selectedKeyCount = selectionKeys.Count(key => _selectedKeys.Contains(key));
 
         TreeRows.Add(new RedisTreeRowViewModel(
             rowId: node.IsKey ? node.FullKey ?? node.FullPrefix : node.FullPrefix,
@@ -1463,7 +1488,10 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
             canExpand: !node.IsKey && node.Children.Count > 0,
             isExpanded: isExpanded,
             isSelected: node.IsKey && string.Equals(node.FullKey, SelectedKey, StringComparison.Ordinal),
-            keyType: keyType));
+            keyType: keyType,
+            selectionKeys: selectionKeys,
+            isSelectionMode: IsSelectionMode,
+            selectedKeyCount: selectedKeyCount));
 
         if (!node.IsKey && isExpanded)
         {
@@ -1652,6 +1680,11 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         OnPropertyChanged(nameof(ShowNotConfiguredState));
         OnPropertyChanged(nameof(ShowTreeEmptyState));
         OnPropertyChanged(nameof(CanReload));
+        OnPropertyChanged(nameof(CanChangeCache));
+        OnPropertyChanged(nameof(CanEditPatternInput));
+        OnPropertyChanged(nameof(CanEditSeparatorInput));
+        RefreshAnalyticsState();
+        RefreshSelectionState();
         RefreshBrowserState();
     }
 
@@ -1661,6 +1694,8 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         OnPropertyChanged(nameof(LoadMoreKeysLabel));
         OnPropertyChanged(nameof(CanLoadMoreKeys));
         OnPropertyChanged(nameof(ScanSummary));
+        RefreshAnalyticsState();
+        RefreshSelectionState();
     }
 
     private void RefreshDetailState()
@@ -1705,5 +1740,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         RefreshConnectionState();
         RefreshDetailState();
         OnPropertyChanged(nameof(ErrorVisibility));
+        RefreshAnalyticsState();
+        RefreshSelectionState();
     }
 }

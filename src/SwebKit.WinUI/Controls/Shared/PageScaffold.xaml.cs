@@ -23,6 +23,18 @@ public sealed partial class PageScaffold : UserControl
         typeof(PageScaffold),
         new PropertyMetadata(null, OnHeaderContentChanged));
 
+    public static readonly DependencyProperty ContextContentProperty = DependencyProperty.Register(
+        nameof(ContextContent),
+        typeof(object),
+        typeof(PageScaffold),
+        new PropertyMetadata(null, OnContextContentChanged));
+
+    public static readonly DependencyProperty IsHeaderCompactProperty = DependencyProperty.Register(
+        nameof(IsHeaderCompact),
+        typeof(bool),
+        typeof(PageScaffold),
+        new PropertyMetadata(false, OnIsHeaderCompactChanged));
+
     public static readonly DependencyProperty BodyContentProperty = DependencyProperty.Register(
         nameof(BodyContent),
         typeof(object),
@@ -34,6 +46,8 @@ public sealed partial class PageScaffold : UserControl
         InitializeComponent();
         UpdateSubtitleVisibility();
         UpdateHeaderVisibility();
+        UpdateContextVisibility();
+        UpdateHeaderLayout();
     }
 
     public string Title
@@ -54,6 +68,18 @@ public sealed partial class PageScaffold : UserControl
         set => SetValue(HeaderContentProperty, value);
     }
 
+    public object? ContextContent
+    {
+        get => GetValue(ContextContentProperty);
+        set => SetValue(ContextContentProperty, value);
+    }
+
+    public bool IsHeaderCompact
+    {
+        get => (bool)GetValue(IsHeaderCompactProperty);
+        set => SetValue(IsHeaderCompactProperty, value);
+    }
+
     public object? BodyContent
     {
         get => GetValue(BodyContentProperty);
@@ -70,6 +96,16 @@ public sealed partial class PageScaffold : UserControl
         ((PageScaffold)dependencyObject).UpdateHeaderVisibility();
     }
 
+    private static void OnContextContentChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        ((PageScaffold)dependencyObject).UpdateContextVisibility();
+    }
+
+    private static void OnIsHeaderCompactChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        ((PageScaffold)dependencyObject).UpdateHeaderLayout();
+    }
+
     private void UpdateSubtitleVisibility()
     {
         SubtitleTextBlock.Visibility = string.IsNullOrWhiteSpace(Subtitle)
@@ -82,5 +118,41 @@ public sealed partial class PageScaffold : UserControl
         HeaderPresenter.Visibility = HeaderContent is null
             ? Visibility.Collapsed
             : Visibility.Visible;
+    }
+
+    private void UpdateContextVisibility()
+    {
+        ContextPresenter.Visibility = ContextContent is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void UpdateHeaderLayout()
+    {
+        RootGrid.Padding = GetThicknessResource(
+            IsHeaderCompact ? "SwebKitCompactPagePadding" : "SwebKitPagePadding",
+            IsHeaderCompact ? new Thickness(20, 8, 20, 16) : new Thickness(20, 12, 20, 16));
+
+        HeaderTextStack.Spacing = GetDoubleResource(
+            IsHeaderCompact ? "SwebKitCompactPageHeaderSpacing" : "SwebKitPageHeaderSpacing",
+            IsHeaderCompact ? 2d : 4d);
+
+        TitleTextBlock.FontSize = IsHeaderCompact ? 26 : 30;
+        SubtitleTextBlock.MaxWidth = IsHeaderCompact ? 720 : 840;
+        HeaderPresenter.VerticalAlignment = IsHeaderCompact ? VerticalAlignment.Center : VerticalAlignment.Top;
+    }
+
+    private static Thickness GetThicknessResource(string key, Thickness fallback)
+    {
+        return Application.Current.Resources.TryGetValue(key, out var value) && value is Thickness thickness
+            ? thickness
+            : fallback;
+    }
+
+    private static double GetDoubleResource(string key, double fallback)
+    {
+        return Application.Current.Resources.TryGetValue(key, out var value) && value is double resourceValue
+            ? resourceValue
+            : fallback;
     }
 }

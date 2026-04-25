@@ -7,7 +7,7 @@
 
     <ScrollViewer MaxHeight="560"
                   Width="400">
-        <StackPanel Spacing="16">
+        <StackPanel Spacing="14">
             <TextBlock Text="Workspace hub"
                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 
@@ -19,7 +19,7 @@
 
             <Border Style="{StaticResource SwebKitInsetCardStyle}"
                     Visibility="{Binding CurrentSnapshotVisibility}">
-                <StackPanel Spacing="12">
+                <StackPanel Spacing="10">
                     <TextBlock Text="Current"
                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                     <TextBlock Text="{Binding CurrentResourceTitle}"
@@ -56,7 +56,7 @@
                 </StackPanel>
             </Border>
 
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Favorites"
                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 
@@ -106,7 +106,7 @@
                 </ItemsControl>
             </StackPanel>
 
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Recent"
                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 

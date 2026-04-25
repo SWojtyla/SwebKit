@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="SwebKit.WinUI.Controls.Shared.SectionCard"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+        <StackPanel Spacing="{StaticResource SwebKitPageSectionSpacing}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="TitleTextBlock"
+                               Text="{Binding Title, ElementName=Root}"
+                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                               TextWrapping="WrapWholeWords"/>
+                    <TextBlock x:Name="DescriptionTextBlock"
+                               Text="{Binding Description, ElementName=Root}"
+                               Style="{StaticResource SwebKitPageSubtitleTextBlockStyle}"/>
+                </StackPanel>
+
+                <ContentPresenter x:Name="HeaderPresenter"
+                                  Grid.Column="1"
+                                  Content="{Binding HeaderContent, ElementName=Root}"
+                                  VerticalAlignment="Top"/>
+            </Grid>
+
+            <ContentPresenter Content="{Binding BodyContent, ElementName=Root}"/>
+        </StackPanel>
+    </Border>
+</UserControl>

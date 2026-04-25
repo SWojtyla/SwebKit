@@ -9,97 +9,113 @@
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold Title="Dashboard"
-                         Subtitle="{x:Bind ViewModel.DashboardSubtitle, Mode=OneWay}">
+                         IsHeaderCompact="True">
         <shared:PageScaffold.HeaderContent>
-            <StackPanel Orientation="Horizontal"
-                        Spacing="8">
-                <Border Style="{StaticResource SwebKitInsetCardStyle}"
-                        Visibility="{x:Bind ViewModel.DemoBadgeVisibility, Mode=OneWay}">
-                    <TextBlock Text="Demo mode"
-                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                </Border>
-
-                <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                    <TextBlock Text="{x:Bind ViewModel.FavoritesBadgeText, Mode=OneWay}"
-                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                </Border>
-
-                <Border Style="{StaticResource SwebKitInsetCardStyle}"
-                        Visibility="{x:Bind ViewModel.MonitoringBadgeVisibility, Mode=OneWay}">
-                    <TextBlock Text="{x:Bind ViewModel.MonitoringBadgeText, Mode=OneWay}"
-                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                </Border>
-
-                <Button Content="{x:Bind ViewModel.RefreshButtonLabel, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.RefreshDashboardCommand}"
-                        IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"/>
-            </StackPanel>
+            <Button Content="{x:Bind ViewModel.RefreshButtonLabel, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.RefreshDashboardCommand}"
+                    IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"/>
         </shared:PageScaffold.HeaderContent>
+
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{x:Bind ViewModel.DashboardSubtitle, Mode=OneWay}"
+                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                               TextWrapping="WrapWholeWords"
+                               MaxWidth="860"/>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                Visibility="{x:Bind ViewModel.DemoBadgeVisibility, Mode=OneWay}">
+                            <TextBlock Text="Demo mode"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </Border>
+
+                        <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                            <TextBlock Text="{x:Bind ViewModel.FavoritesBadgeText, Mode=OneWay}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </Border>
+
+                        <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                Visibility="{x:Bind ViewModel.MonitoringBadgeVisibility, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind ViewModel.MonitoringBadgeText, Mode=OneWay}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </shared:PageScaffold.ContextContent>
 
         <shared:PageScaffold.BodyContent>
             <ScrollViewer>
                 <StackPanel Spacing="16">
 
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="Readiness"
-                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                            <TextBlock Text="{x:Bind ViewModel.ReadinessSummary, Mode=OneWay}"
-                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                       TextWrapping="WrapWholeWords"/>
-                            <TextBlock Text="{x:Bind ViewModel.ReadinessLastUpdatedText, Mode=OneWay}"
-                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                    <shared:SectionCard Title="Readiness"
+                                        Description="{x:Bind ViewModel.ReadinessSummary, Mode=OneWay}">
+                        <shared:SectionCard.BodyContent>
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="{x:Bind ViewModel.ReadinessLastUpdatedText, Mode=OneWay}"
+                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
 
-                            <InfoBar IsOpen="{x:Bind ViewModel.ShowHealthyReadinessMessage, Mode=OneWay}"
-                                     Severity="Success"
-                                     Title="Core areas look ready"
-                                     Message="{x:Bind ViewModel.HealthyReadinessMessage, Mode=OneWay}"/>
+                                <InfoBar IsOpen="{x:Bind ViewModel.ShowHealthyReadinessMessage, Mode=OneWay}"
+                                         Severity="Success"
+                                         Title="Core areas look ready"
+                                         Message="{x:Bind ViewModel.HealthyReadinessMessage, Mode=OneWay}"/>
 
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.AttentionAreas, Mode=OneWay}"
-                                          Visibility="{x:Bind ViewModel.ReadinessAttentionVisibility, Mode=OneWay}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="viewModels:DashboardReadinessAreaItem">
-                                        <Border Margin="0,0,0,8"
-                                                Style="{StaticResource SwebKitInsetCardStyle}">
-                                            <StackPanel Spacing="8">
-                                                <Grid ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.AttentionAreas, Mode=OneWay}"
+                                              Visibility="{x:Bind ViewModel.ReadinessAttentionVisibility, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:DashboardReadinessAreaItem">
+                                            <Border Margin="0,0,0,8"
+                                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                                <StackPanel Spacing="8">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
 
-                                                    <StackPanel Spacing="4">
-                                                        <TextBlock Text="{x:Bind Title}"
-                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                   TextWrapping="WrapWholeWords"/>
-                                                        <TextBlock Text="{x:Bind Summary}"
-                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                                   TextWrapping="WrapWholeWords"/>
-                                                    </StackPanel>
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{x:Bind Title}"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock Text="{x:Bind Summary}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
 
-                                                    <Border Grid.Column="1"
-                                                            Style="{StaticResource SwebKitInsetCardStyle}">
-                                                        <TextBlock Text="{x:Bind StatusLabel}"
-                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                    </Border>
-                                                </Grid>
+                                                        <Border Grid.Column="1"
+                                                                Style="{StaticResource SwebKitInsetCardStyle}">
+                                                            <TextBlock Text="{x:Bind StatusLabel}"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        </Border>
+                                                    </Grid>
 
-                                                <TextBlock Text="{x:Bind Detail}"
-                                                           Visibility="{x:Bind DetailVisibility}"
-                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                           TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="{x:Bind Detail}"
+                                                               Visibility="{x:Bind DetailVisibility}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
 
-                                                <Button Content="{x:Bind ActionLabel}"
-                                                        HorizontalAlignment="Left"
-                                                        Command="{Binding ViewModel.OpenReadinessAreaCommand, ElementName=PageRoot}"
-                                                        CommandParameter="{x:Bind}"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
+                                                    <Button Content="{x:Bind ActionLabel}"
+                                                            HorizontalAlignment="Left"
+                                                            Command="{Binding ViewModel.OpenReadinessAreaCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </shared:SectionCard.BodyContent>
+                    </shared:SectionCard>
 
                     <Grid ColumnSpacing="12"
                           RowSpacing="12">
@@ -112,219 +128,108 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Border Grid.Row="0"
-                                Grid.Column="0"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <StackPanel Spacing="6">
-                                <Grid>
-                                    <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.Title, Mode=OneWay}"
-                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.Glyph, Mode=OneWay}"
-                                               HorizontalAlignment="Right"
-                                               FontSize="18"/>
-                                </Grid>
-                                <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.MetricText, Mode=OneWay}"
-                                           Style="{StaticResource TitleTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.MetricLabel, Mode=OneWay}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.DetailText, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                           TextWrapping="WrapWholeWords"/>
-                                <TextBlock Text="{x:Bind ViewModel.ServiceBusHealth.TimestampText, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.ServiceBusHealth.TimestampVisibility, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-                        </Border>
+                        <shared:MetricCard Grid.Row="0"
+                                           Grid.Column="0"
+                                           Title="{x:Bind ViewModel.ServiceBusHealth.Title, Mode=OneWay}"
+                                           Glyph="{x:Bind ViewModel.ServiceBusHealth.Glyph, Mode=OneWay}"
+                                           ValueText="{x:Bind ViewModel.ServiceBusHealth.MetricText, Mode=OneWay}"
+                                           ValueLabel="{x:Bind ViewModel.ServiceBusHealth.MetricLabel, Mode=OneWay}"
+                                           DetailText="{x:Bind ViewModel.ServiceBusHealth.DetailText, Mode=OneWay}"
+                                           TimestampText="{x:Bind ViewModel.ServiceBusHealth.TimestampText, Mode=OneWay}"
+                                           TimestampVisibility="{x:Bind ViewModel.ServiceBusHealth.TimestampVisibility, Mode=OneWay}"/>
 
-                        <Border Grid.Row="0"
-                                Grid.Column="1"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <StackPanel Spacing="6">
-                                <Grid>
-                                    <TextBlock Text="{x:Bind ViewModel.AksHealth.Title, Mode=OneWay}"
-                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Text="{x:Bind ViewModel.AksHealth.Glyph, Mode=OneWay}"
-                                               HorizontalAlignment="Right"
-                                               FontSize="18"/>
-                                </Grid>
-                                <TextBlock Text="{x:Bind ViewModel.AksHealth.MetricText, Mode=OneWay}"
-                                           Style="{StaticResource TitleTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.AksHealth.MetricLabel, Mode=OneWay}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.AksHealth.DetailText, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                           TextWrapping="WrapWholeWords"/>
-                                <TextBlock Text="{x:Bind ViewModel.AksHealth.TimestampText, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.AksHealth.TimestampVisibility, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-                        </Border>
+                        <shared:MetricCard Grid.Row="0"
+                                           Grid.Column="1"
+                                           Title="{x:Bind ViewModel.AksHealth.Title, Mode=OneWay}"
+                                           Glyph="{x:Bind ViewModel.AksHealth.Glyph, Mode=OneWay}"
+                                           ValueText="{x:Bind ViewModel.AksHealth.MetricText, Mode=OneWay}"
+                                           ValueLabel="{x:Bind ViewModel.AksHealth.MetricLabel, Mode=OneWay}"
+                                           DetailText="{x:Bind ViewModel.AksHealth.DetailText, Mode=OneWay}"
+                                           TimestampText="{x:Bind ViewModel.AksHealth.TimestampText, Mode=OneWay}"
+                                           TimestampVisibility="{x:Bind ViewModel.AksHealth.TimestampVisibility, Mode=OneWay}"/>
 
-                        <Border Grid.Row="1"
-                                Grid.Column="0"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <StackPanel Spacing="6">
-                                <Grid>
-                                    <TextBlock Text="{x:Bind ViewModel.RedisHealth.Title, Mode=OneWay}"
-                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Text="{x:Bind ViewModel.RedisHealth.Glyph, Mode=OneWay}"
-                                               HorizontalAlignment="Right"
-                                               FontSize="18"/>
-                                </Grid>
-                                <TextBlock Text="{x:Bind ViewModel.RedisHealth.MetricText, Mode=OneWay}"
-                                           Style="{StaticResource TitleTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.RedisHealth.MetricLabel, Mode=OneWay}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.RedisHealth.DetailText, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                           TextWrapping="WrapWholeWords"/>
-                                <TextBlock Text="{x:Bind ViewModel.RedisHealth.TimestampText, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.RedisHealth.TimestampVisibility, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-                        </Border>
+                        <shared:MetricCard Grid.Row="1"
+                                           Grid.Column="0"
+                                           Title="{x:Bind ViewModel.RedisHealth.Title, Mode=OneWay}"
+                                           Glyph="{x:Bind ViewModel.RedisHealth.Glyph, Mode=OneWay}"
+                                           ValueText="{x:Bind ViewModel.RedisHealth.MetricText, Mode=OneWay}"
+                                           ValueLabel="{x:Bind ViewModel.RedisHealth.MetricLabel, Mode=OneWay}"
+                                           DetailText="{x:Bind ViewModel.RedisHealth.DetailText, Mode=OneWay}"
+                                           TimestampText="{x:Bind ViewModel.RedisHealth.TimestampText, Mode=OneWay}"
+                                           TimestampVisibility="{x:Bind ViewModel.RedisHealth.TimestampVisibility, Mode=OneWay}"/>
 
-                        <Border Grid.Row="1"
-                                Grid.Column="1"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <StackPanel Spacing="6">
-                                <Grid>
-                                    <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.Title, Mode=OneWay}"
-                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.Glyph, Mode=OneWay}"
-                                               HorizontalAlignment="Right"
-                                               FontSize="18"/>
-                                </Grid>
-                                <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.MetricText, Mode=OneWay}"
-                                           Style="{StaticResource TitleTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.MetricLabel, Mode=OneWay}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.DetailText, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                           TextWrapping="WrapWholeWords"/>
-                                <TextBlock Text="{x:Bind ViewModel.PipelinesHealth.TimestampText, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.PipelinesHealth.TimestampVisibility, Mode=OneWay}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-                        </Border>
+                        <shared:MetricCard Grid.Row="1"
+                                           Grid.Column="1"
+                                           Title="{x:Bind ViewModel.PipelinesHealth.Title, Mode=OneWay}"
+                                           Glyph="{x:Bind ViewModel.PipelinesHealth.Glyph, Mode=OneWay}"
+                                           ValueText="{x:Bind ViewModel.PipelinesHealth.MetricText, Mode=OneWay}"
+                                           ValueLabel="{x:Bind ViewModel.PipelinesHealth.MetricLabel, Mode=OneWay}"
+                                           DetailText="{x:Bind ViewModel.PipelinesHealth.DetailText, Mode=OneWay}"
+                                           TimestampText="{x:Bind ViewModel.PipelinesHealth.TimestampText, Mode=OneWay}"
+                                           TimestampVisibility="{x:Bind ViewModel.PipelinesHealth.TimestampVisibility, Mode=OneWay}"/>
                     </Grid>
 
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}"
-                            Visibility="{x:Bind ViewModel.PodHealthSectionVisibility, Mode=OneWay}">
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="Pod Health"
-                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                            <TextBlock Text="{x:Bind ViewModel.MonitoringBadgeText, Mode=OneWay}"
-                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                       TextWrapping="WrapWholeWords"/>
-
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.MonitoredNamespaces, Mode=OneWay}"
-                                          Visibility="{x:Bind ViewModel.MonitoringBadgeVisibility, Mode=OneWay}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="viewModels:DashboardNamespaceItem">
-                                        <Border Margin="0,0,8,8"
-                                                Style="{StaticResource SwebKitInsetCardStyle}">
-                                            <StackPanel Orientation="Horizontal"
-                                                        Spacing="8">
-                                                <TextBlock Text="{x:Bind Name}"/>
-                                                <Button Content="Stop"
-                                                        Command="{Binding ViewModel.StopMonitoringNamespaceCommand, ElementName=PageRoot}"
-                                                        CommandParameter="{x:Bind}"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
+                    <shared:SectionCard Title="Pod Health"
+                                        Description="{x:Bind ViewModel.MonitoringBadgeText, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.PodHealthSectionVisibility, Mode=OneWay}">
+                        <shared:SectionCard.HeaderContent>
                             <Button Content="Stop all monitoring"
-                                    HorizontalAlignment="Left"
                                     Visibility="{x:Bind ViewModel.MonitoringBadgeVisibility, Mode=OneWay}"
                                     Command="{x:Bind ViewModel.StopAllMonitoringCommand}"/>
+                        </shared:SectionCard.HeaderContent>
 
-                            <InfoBar IsOpen="{x:Bind ViewModel.ShowNoPodHealthAlerts, Mode=OneWay}"
-                                     Severity="Informational"
-                                     Title="No pod health events detected"
-                                     Message="Start monitoring namespaces from AKS to surface pod-health events here and in the tray."/>
-
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.PodHealthAlerts, Mode=OneWay}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="viewModels:DashboardPodHealthAlertItem">
-                                        <Border Margin="0,0,0,8"
-                                                Style="{StaticResource SwebKitInsetCardStyle}">
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <StackPanel Spacing="4">
-                                                    <TextBlock Text="{x:Bind PodName}"
-                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                    <TextBlock Text="{x:Bind Namespace}"
-                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                    <TextBlock Text="{x:Bind DetailText}"
-                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                </StackPanel>
-
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{x:Bind TimestampText}"
-                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                           VerticalAlignment="Top"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Grid ColumnSpacing="12"
-                          RowSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border Grid.Column="0"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
+                        <shared:SectionCard.BodyContent>
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Recent Activity"
-                                           Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <InfoBar IsOpen="{x:Bind ViewModel.ShowNoActivities, Mode=OneWay}"
-                                         Severity="Informational"
-                                         Title="No recent activity yet"
-                                         Message="Actions taken across Service Bus, AKS, and Pipelines will appear here during the current session."/>
-
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Activities, Mode=OneWay}">
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.MonitoredNamespaces, Mode=OneWay}"
+                                              Visibility="{x:Bind ViewModel.MonitoringBadgeVisibility, Mode=OneWay}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:DashboardActivityItem">
+                                        <DataTemplate x:DataType="viewModels:DashboardNamespaceItem">
+                                            <Border Margin="0,0,8,8"
+                                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                    <TextBlock Text="{x:Bind Name}"/>
+                                                    <Button Content="Stop"
+                                                            Command="{Binding ViewModel.StopMonitoringNamespaceCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <InfoBar IsOpen="{x:Bind ViewModel.ShowNoPodHealthAlerts, Mode=OneWay}"
+                                         Severity="Informational"
+                                         Title="No pod health events detected"
+                                         Message="Start monitoring namespaces from AKS to surface pod-health events here and in the tray."/>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.PodHealthAlerts, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:DashboardPodHealthAlertItem">
                                             <Border Margin="0,0,0,8"
                                                     Style="{StaticResource SwebKitInsetCardStyle}">
                                                 <Grid ColumnSpacing="12">
                                                     <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <TextBlock Text="{x:Bind Icon}"
-                                                               FontSize="18"
-                                                               VerticalAlignment="Center"/>
-
-                                                    <StackPanel Grid.Column="1"
-                                                                Spacing="2">
-                                                        <TextBlock Text="{x:Bind Description}"
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="{x:Bind PodName}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
                                                                    TextWrapping="WrapWholeWords"/>
-                                                        <TextBlock Text="{x:Bind Area}"
+                                                        <TextBlock Text="{x:Bind Namespace}"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                        <TextBlock Text="{x:Bind DetailText}"
                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
                                                     </StackPanel>
 
-                                                    <TextBlock Grid.Column="2"
+                                                    <TextBlock Grid.Column="1"
                                                                Text="{x:Bind TimestampText}"
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                VerticalAlignment="Top"/>
@@ -334,67 +239,114 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
-                        </Border>
+                        </shared:SectionCard.BodyContent>
+                    </shared:SectionCard>
 
-                        <Border Grid.Column="1"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <StackPanel Spacing="12">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                    <Grid ColumnSpacing="12"
+                          RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                                    <TextBlock Text="Favorites"
-                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                        <shared:SectionCard Grid.Column="0"
+                                            Title="Recent Activity">
+                            <shared:SectionCard.BodyContent>
+                                <StackPanel Spacing="12">
+                                    <InfoBar IsOpen="{x:Bind ViewModel.ShowNoActivities, Mode=OneWay}"
+                                             Severity="Informational"
+                                             Title="No recent activity yet"
+                                             Message="Actions taken across Service Bus, AKS, and Pipelines will appear here during the current session."/>
 
-                                    <Button Grid.Column="1"
-                                            Content="Open Settings"
-                                            Command="{x:Bind ViewModel.OpenSettingsCommand}"/>
-                                </Grid>
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.Activities, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:DashboardActivityItem">
+                                                <Border Margin="0,0,0,8"
+                                                        Style="{StaticResource SwebKitInsetCardStyle}">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
 
-                                <InfoBar IsOpen="{x:Bind ViewModel.ShowNoFavoriteItems, Mode=OneWay}"
-                                         Severity="Informational"
-                                         Title="No favorites yet"
-                                         Message="Save queues, topics, subscriptions, or workloads as favorites to keep them close in the WinUI shell."/>
+                                                        <TextBlock Text="{x:Bind Icon}"
+                                                                   FontSize="18"
+                                                                   VerticalAlignment="Center"/>
 
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.FavoriteItems, Mode=OneWay}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:DashboardFavoriteItem">
-                                            <Border Margin="0,0,0,8"
-                                                    Style="{StaticResource SwebKitInsetCardStyle}">
-                                                <Grid ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="1"
+                                                                    Spacing="2">
+                                                            <TextBlock Text="{x:Bind Description}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock Text="{x:Bind Area}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                        </StackPanel>
 
-                                                    <TextBlock Text="{x:Bind Icon}"
-                                                               FontSize="18"
-                                                               VerticalAlignment="Center"/>
-
-                                                    <StackPanel Grid.Column="1"
-                                                                Spacing="2">
-                                                        <TextBlock Text="{x:Bind DisplayPath}"
-                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                                   TextWrapping="WrapWholeWords"/>
-                                                        <TextBlock Text="{x:Bind Summary}"
+                                                        <TextBlock Grid.Column="2"
+                                                                   Text="{x:Bind TimestampText}"
                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                                   TextWrapping="WrapWholeWords"/>
-                                                    </StackPanel>
+                                                                   VerticalAlignment="Top"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </shared:SectionCard.BodyContent>
+                        </shared:SectionCard>
 
-                                                    <Button Grid.Column="2"
-                                                            Content="Open"
-                                                            Command="{Binding ViewModel.OpenFavoriteCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}"/>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
+                        <shared:SectionCard Grid.Column="1"
+                                            Title="Favorites">
+                            <shared:SectionCard.HeaderContent>
+                                <Button Content="Open Settings"
+                                        Command="{x:Bind ViewModel.OpenSettingsCommand}"/>
+                            </shared:SectionCard.HeaderContent>
+
+                            <shared:SectionCard.BodyContent>
+                                <StackPanel Spacing="12">
+                                    <InfoBar IsOpen="{x:Bind ViewModel.ShowNoFavoriteItems, Mode=OneWay}"
+                                             Severity="Informational"
+                                             Title="No favorites yet"
+                                             Message="Save queues, topics, subscriptions, or workloads as favorites to keep them close in the WinUI shell."/>
+
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.FavoriteItems, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:DashboardFavoriteItem">
+                                                <Border Margin="0,0,0,8"
+                                                        Style="{StaticResource SwebKitInsetCardStyle}">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Text="{x:Bind Icon}"
+                                                                   FontSize="18"
+                                                                   VerticalAlignment="Center"/>
+
+                                                        <StackPanel Grid.Column="1"
+                                                                    Spacing="2">
+                                                            <TextBlock Text="{x:Bind DisplayPath}"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock Text="{x:Bind Summary}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+
+                                                        <Button Grid.Column="2"
+                                                                Content="Open"
+                                                                Command="{Binding ViewModel.OpenFavoriteCommand, ElementName=PageRoot}"
+                                                                CommandParameter="{x:Bind}"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </shared:SectionCard.BodyContent>
+                        </shared:SectionCard>
                     </Grid>
                 </StackPanel>
             </ScrollViewer>

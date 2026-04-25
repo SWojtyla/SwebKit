@@ -26,6 +26,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Grid ColumnSpacing="12">
@@ -47,20 +48,21 @@
                                     SelectedItem="{Binding SelectedCache, Mode=TwoWay}"
                                     DisplayMemberPath="DisplayName"
                                     PlaceholderText="Select cache"
-                                    IsEnabled="{Binding HasConfiguredCaches}"/>
+                                    IsEnabled="{Binding CanChangeCache}"/>
                             </StackPanel>
 
-                                    <StackPanel Grid.Column="1"
+                            <StackPanel Grid.Column="1"
                                         Spacing="6">
-                                    <TextBlock
-                                        Text="Pattern"
-                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                    <TextBox
-                                        Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        PlaceholderText="*"/>
-                                    </StackPanel>
+                                <TextBlock
+                                    Text="Pattern"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBox
+                                    Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="*"
+                                    IsEnabled="{Binding CanEditPatternInput}"/>
+                            </StackPanel>
 
-                                    <StackPanel Grid.Column="2"
+                            <StackPanel Grid.Column="2"
                                         Spacing="6">
                                 <TextBlock
                                     Text="Group by"
@@ -68,7 +70,8 @@
                                 <TextBox
                                     Text="{Binding SeparatorInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                     MaxLength="4"
-                                    PlaceholderText="-"/>
+                                    PlaceholderText="-"
+                                    IsEnabled="{Binding CanEditSeparatorInput}"/>
                             </StackPanel>
 
                             <ProgressRing
@@ -108,8 +111,52 @@
                                 VerticalAlignment="Center"/>
                         </Grid>
 
-                        <StackPanel Grid.Row="2"
+                        <ScrollViewer Grid.Row="2"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                <Button Content="{Binding SelectionModeButtonLabel}"
+                                        Command="{Binding ToggleSelectionModeCommand}"
+                                        IsEnabled="{Binding CanToggleSelectionMode}"/>
+
+                                <Button Content="Select all loaded"
+                                        Command="{Binding SelectAllLoadedCommand}"
+                                        IsEnabled="{Binding CanSelectAllLoaded}"/>
+
+                                <Button Content="Clear selection"
+                                        Command="{Binding ClearSelectionCommand}"
+                                        IsEnabled="{Binding CanClearSelection}"/>
+
+                                <Button Content="Export JSON"
+                                        Command="{Binding ExportLoadedKeysCommand}"
+                                        IsEnabled="{Binding CanExportLoadedKeys}"/>
+
+                                <Button Content="{Binding DeleteSelectedKeysLabel}"
+                                        Command="{Binding DeleteSelectedKeysCommand}"
+                                        IsEnabled="{Binding CanDeleteSelectedKeys}"/>
+
+                                <TextBlock Text="{Binding SelectionSummaryText}"
+                                           Visibility="{Binding SelectionSummaryVisibility}"
+                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="3"
                                     Spacing="8">
+                            <InfoBar
+                                IsOpen="{Binding ShowBulkDeleteConfirmation}"
+                                Severity="Warning"
+                                Title="Production bulk delete confirmation"
+                                Message="Type CONFIRM before deleting selected keys from a production profile."/>
+
+                            <TextBox
+                                Text="{Binding BulkDeleteConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Type CONFIRM"
+                                Visibility="{Binding BulkDeleteConfirmationVisibility}"/>
+
                             <TextBlock
                                 Text="{Binding ErrorMessage}"
                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
@@ -128,7 +175,7 @@
                 <Grid Grid.Row="1"
                       ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="340"/>
+                        <ColumnDefinition Width="320"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -195,6 +242,13 @@
                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                VerticalAlignment="Center"/>
 
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{x:Bind SelectionStatusText}"
+                                                               Visibility="{x:Bind SelectionStatusVisibility}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               VerticalAlignment="Center"
+                                                               TextWrapping="WrapWholeWords"/>
+
                                                     <Border Grid.Column="3"
                                                             Visibility="{x:Bind KeyTypeVisibility}"
                                                             CornerRadius="999"
@@ -210,6 +264,12 @@
                                                                Visibility="{x:Bind PrefixCountVisibility}"
                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                VerticalAlignment="Center"/>
+
+                                                    <Button Grid.Column="4"
+                                                            Content="{x:Bind SelectionActionLabel}"
+                                                            Visibility="{x:Bind SelectionActionVisibility}"
+                                                            Command="{Binding ViewModel.ToggleTreeSelectionCommand, ElementName=PageRoot}"
+                                                            CommandParameter="{x:Bind}"/>
 
                                                     <Button Grid.Column="4"
                                                             Content="Inspect"
@@ -633,6 +693,410 @@
                                             <Button Content="{Binding LoadMoreItemsLabel}"
                                                     Command="{Binding LoadMoreItemsCommand}"
                                                     IsEnabled="{Binding CanLoadMoreItems}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                        <StackPanel Spacing="12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Keyspace health"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding HealthCoverageText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock Text="{Binding HealthSignalText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                </StackPanel>
+
+                                                <ProgressRing Grid.Column="1"
+                                                              Width="20"
+                                                              Height="20"
+                                                              IsActive="{Binding IsAnalyzingHealth}"
+                                                              VerticalAlignment="Top"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Analyze"
+                                                        Command="{Binding AnalyzeKeyspaceHealthCommand}"
+                                                        IsEnabled="{Binding CanAnalyzeHealth}"
+                                                        VerticalAlignment="Top"/>
+                                            </Grid>
+
+                                            <InfoBar IsOpen="{Binding ShowHealthEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="Health analysis not loaded"
+                                                     Message="Run Analyze to inspect TTL, size, prefix, and hot-key risk signals for the currently loaded keys."/>
+
+                                            <StackPanel Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        Visibility="{Binding HealthFiltersVisibility}">
+                                                <Button Content="{Binding HealthAllFilterLabel}"
+                                                        Command="{Binding ShowAllHealthFindingsCommand}"/>
+                                                <Button Content="{Binding HealthCriticalFilterLabel}"
+                                                        Command="{Binding FilterCriticalHealthFindingsCommand}"/>
+                                                <Button Content="{Binding HealthWarningFilterLabel}"
+                                                        Command="{Binding FilterWarningHealthFindingsCommand}"/>
+                                                <Button Content="{Binding HealthInfoFilterLabel}"
+                                                        Command="{Binding FilterInfoHealthFindingsCommand}"/>
+                                            </StackPanel>
+
+                                            <InfoBar IsOpen="{Binding ShowFilteredHealthEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="No findings in this filter"
+                                                     Message="The current health severity filter does not match any loaded finding."/>
+
+                                            <ItemsControl ItemsSource="{Binding HealthFindings}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:RedisHealthFindingItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="120"/>
+                                                                    <ColumnDefinition Width="140"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{x:Bind SeverityText}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{x:Bind RiskTypeText}"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <TextBlock Grid.Column="2"
+                                                                           Text="{x:Bind Finding.Target}"
+                                                                           TextWrapping="WrapWholeWords"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <StackPanel Grid.Column="3"
+                                                                            Spacing="2">
+                                                                    <TextBlock Text="{x:Bind Finding.Reason}"
+                                                                               TextWrapping="WrapWholeWords"/>
+                                                                    <TextBlock Text="{x:Bind MetricsText}"
+                                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                               TextWrapping="WrapWholeWords"/>
+                                                                </StackPanel>
+
+                                                                <Button Grid.Column="4"
+                                                                        Content="Open key"
+                                                                        Visibility="{x:Bind OpenKeyVisibility}"
+                                                                        Command="{Binding ViewModel.OpenHealthFindingCommand, ElementName=PageRoot}"
+                                                                        CommandParameter="{x:Bind}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                        <StackPanel Spacing="12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0"
+                                                            Spacing="4">
+                                                    <TextBlock Text="Memory by prefix"
+                                                               Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                    <TextBlock Text="{Binding PrefixMemorySummaryText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                </StackPanel>
+
+                                                <ProgressRing Grid.Column="1"
+                                                              Width="20"
+                                                              Height="20"
+                                                              IsActive="{Binding IsAnalyzingMemory}"
+                                                              VerticalAlignment="Top"/>
+
+                                                <Button Grid.Column="2"
+                                                        Content="Analyze"
+                                                        Command="{Binding AnalyzePrefixMemoryCommand}"
+                                                        IsEnabled="{Binding CanAnalyzePrefixMemory}"
+                                                        VerticalAlignment="Top"/>
+                                            </Grid>
+
+                                            <InfoBar IsOpen="{Binding ShowPrefixMemoryEmptyState}"
+                                                     Severity="Informational"
+                                                     Title="Prefix analysis not loaded"
+                                                     Message="Run Analyze to inspect memory distribution across the currently loaded key prefixes."/>
+
+                                            <ItemsControl ItemsSource="{Binding PrefixMemoryBuckets}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:PrefixMemoryBucketItemViewModel">
+                                                        <Border Margin="0,0,0,8"
+                                                                CornerRadius="6"
+                                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                Padding="10">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="200"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="90"/>
+                                                                    <ColumnDefinition Width="110"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{x:Bind Prefix}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <ProgressBar Grid.Column="1"
+                                                                             Minimum="0"
+                                                                             Maximum="100"
+                                                                             Value="{x:Bind Percentage}"
+                                                                             Height="12"
+                                                                             VerticalAlignment="Center"/>
+
+                                                                <TextBlock Grid.Column="2"
+                                                                           Text="{x:Bind PercentageText}"
+                                                                           VerticalAlignment="Center"/>
+
+                                                                <StackPanel Grid.Column="3"
+                                                                            Spacing="2">
+                                                                    <TextBlock Text="{x:Bind TotalBytesText}"
+                                                                               VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{x:Bind KeyCountText}"
+                                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                               VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="Ops insights"
+                                                       Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+
+                                            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                <StackPanel Spacing="12">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0"
+                                                                    Spacing="4">
+                                                            <TextBlock Text="Slowlog and hot keys"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                            <TextBlock Text="{Binding SlowLogSummaryText}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+
+                                                        <ProgressRing Grid.Column="1"
+                                                                      Width="20"
+                                                                      Height="20"
+                                                                      IsActive="{Binding IsLoadingSlowLog}"
+                                                                      VerticalAlignment="Top"/>
+
+                                                        <Button Grid.Column="2"
+                                                                Content="Refresh"
+                                                                Command="{Binding LoadSlowLogCommand}"
+                                                                IsEnabled="{Binding CanLoadSlowLog}"
+                                                                VerticalAlignment="Top"/>
+                                                    </Grid>
+
+                                                    <InfoBar IsOpen="{Binding ShowSlowLogEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="Slowlog not loaded"
+                                                             Message="Refresh slowlog to inspect expensive Redis commands and execution timing."/>
+
+                                                    <ItemsControl ItemsSource="{Binding SlowLogEntries}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:RedisSlowLogEntryItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <StackPanel Spacing="4">
+                                                                        <Grid ColumnSpacing="12">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="170"/>
+                                                                                <ColumnDefinition Width="110"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <TextBlock Grid.Column="0"
+                                                                                       Text="{x:Bind ExecutedAtText}"
+                                                                                       VerticalAlignment="Center"/>
+
+                                                                            <TextBlock Grid.Column="1"
+                                                                                       Text="{x:Bind DurationText}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                       VerticalAlignment="Center"/>
+
+                                                                            <TextBlock Grid.Column="2"
+                                                                                       Text="{x:Bind CommandText}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                       VerticalAlignment="Center"/>
+                                                                        </Grid>
+
+                                                                        <TextBlock Text="{x:Bind ArgumentsText}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+
+                                                                        <TextBlock Text="{x:Bind ClientNameText}"
+                                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <InfoBar IsOpen="{Binding ShowHotKeySignalsEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="Hot-key signals"
+                                                             Message="Refresh slowlog to correlate recent expensive commands with loaded key metadata."/>
+
+                                                    <ItemsControl ItemsSource="{Binding HotKeySignals}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:RedisHotKeySignalItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <Grid ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="200"/>
+                                                                            <ColumnDefinition Width="180"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <TextBlock Grid.Column="0"
+                                                                                   Text="{x:Bind Signal.Key}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                   TextWrapping="WrapWholeWords"
+                                                                                   VerticalAlignment="Center"/>
+
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="{x:Bind Signal.SignalSource}"
+                                                                                   TextWrapping="WrapWholeWords"
+                                                                                   VerticalAlignment="Center"/>
+
+                                                                        <StackPanel Grid.Column="2"
+                                                                                    Spacing="2">
+                                                                            <TextBlock Text="{x:Bind Signal.Explanation}"
+                                                                                       TextWrapping="WrapWholeWords"/>
+                                                                            <TextBlock Text="{x:Bind MetricsText}"
+                                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                       TextWrapping="WrapWholeWords"/>
+                                                                        </StackPanel>
+
+                                                                        <Button Grid.Column="3"
+                                                                                Content="Open key"
+                                                                                Command="{Binding ViewModel.OpenHotKeySignalCommand, ElementName=PageRoot}"
+                                                                                CommandParameter="{x:Bind}"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                                <StackPanel Spacing="12">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0"
+                                                                    Spacing="4">
+                                                            <TextBlock Text="Pub/Sub"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                            <TextBlock Text="{Binding PubSubSummaryText}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+
+                                                        <ProgressRing Grid.Column="1"
+                                                                      Width="20"
+                                                                      Height="20"
+                                                                      IsActive="{Binding IsLoadingPubSub}"
+                                                                      VerticalAlignment="Top"/>
+
+                                                        <Button Grid.Column="2"
+                                                                Content="Refresh"
+                                                                Command="{Binding LoadPubSubCommand}"
+                                                                IsEnabled="{Binding CanLoadPubSub}"
+                                                                VerticalAlignment="Top"/>
+                                                    </Grid>
+
+                                                    <InfoBar IsOpen="{Binding ShowPubSubEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="Pub/Sub snapshot not loaded"
+                                                             Message="Refresh Pub/Sub to inspect active channels and subscriber counts."/>
+
+                                                    <ItemsControl ItemsSource="{Binding PubSubChannels}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:RedisPubSubChannelItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        CornerRadius="6"
+                                                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                        BorderThickness="1"
+                                                                        Padding="10">
+                                                                    <Grid ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="160"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <TextBlock Grid.Column="0"
+                                                                                   Text="{x:Bind Channel}"
+                                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                   TextWrapping="WrapWholeWords"/>
+
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="{x:Bind SubscriberCountText}"
+                                                                                   VerticalAlignment="Center"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>

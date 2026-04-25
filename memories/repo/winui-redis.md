@@ -1,0 +1,2 @@
+- Redis WinUI analytics or export work that survives reload or cache switches must cancel on a dedicated or renewed token before writing results back into collections.
+- Redis WinUI bulk delete safety depends on `IsWorking` covering delete and analytics states so reload, cache selection, and editable scan inputs stay disabled during long-running or destructive flows.

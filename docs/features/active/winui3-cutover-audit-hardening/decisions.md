@@ -85,3 +85,57 @@ Use the follow-up feature to complete shared state, metric, and detail primitive
 
 - Keep shipping page-local XAML and refactor later — rejected because the duplication is already visible.
 - Rewrite the entire WinUI UI layer before any more parity work — rejected because the current baseline is already useful and should be hardened incrementally.
+
+---
+
+## Decision 004 — Split the remaining migration work into feature-specific active plans
+
+**Status:** Accepted
+
+**Date:** 2026-04-25
+
+### Context
+
+The original follow-up feature still grouped layout redesign, settings parity, and all remaining domain work under one umbrella. That was broad enough to hide ordering, ownership, and cutover-critical dependencies.
+
+### Decision
+
+Keep `winui3-cutover-audit-hardening` as the cutover coordination feature only, and move the remaining implementation plan into dedicated active features for layout redesign, settings completeness, Service Bus, AKS, Redis, Storage, Pipelines/Releases, and Observability.
+
+### Consequences
+
+- The repo now has one feature folder per remaining migration slice instead of a single catch-all checklist.
+- Dependency order is explicit: layout redesign first, settings completeness second, then the domain parity slices.
+- This umbrella can focus on integration evidence and the final cutover recommendation.
+
+### Alternatives considered
+
+- Keep expanding the umbrella with sub-checklists only — rejected because the execution surface would still be too broad.
+- Create one new global wave plan — rejected because it would repeat the same coordination problem under a new name.
+
+---
+
+## Decision 005 — Prefer content-first proportions over tall page-header chrome
+
+**Status:** Accepted
+
+**Date:** 2026-04-25
+
+### Context
+
+The current WinUI pages spend too much vertical space on top-of-page header and context bands while the actual operator workspaces remain compressed. The layout redesign needed a global rule, not just a page-local preference, so later parity work would not keep repeating the same proportion problem.
+
+### Decision
+
+Adopt a global content-first layout rule across the remaining WinUI migration work: page headers should stay compact, carry only title, primary actions, and critical live state, and defer secondary context to inline, collapsible, or adjacent surfaces closer to the active workspace.
+
+### Consequences
+
+- The layout redesign now has a concrete proportion target instead of a generic shared-primitives goal.
+- Downstream feature plans should treat oversized top-of-page info bands as layout debt, not as the default structure.
+- Dashboard, Settings, and later workspaces should expose more visible task content at normal desktop sizes.
+
+### Alternatives considered
+
+- Keep the current tall header structure and only restyle it — rejected because it does not solve the content-density problem.
+- Let each page decide how much header chrome it needs — rejected because the problem is global and would otherwise repeat across every feature.

@@ -71,6 +71,7 @@ internal static class ServiceRegistration
 
         // ── Redis ─────────────────────────────────────────────────────────────────
         services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
+        services.AddSingleton<RedisOpsInsightsAggregator>();
 
         // ── Observability ─────────────────────────────────────────────────────────
         services.AddSingleton<IObservabilityResourceDiscovery, AppInsightsDiscoveryService>();

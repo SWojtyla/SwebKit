@@ -16,6 +16,8 @@
 - Stronger selected-row treatment in the key tree so active rows remain clearly visible during both single-select detail inspection and multi-select bulk workflows, including namespace rows that represent a partially or fully selected loaded subtree.
 - Prefix memory analysis workflow.
 - **Keyspace Health Explorer**: read-only risk analysis for no-TTL keys, oversized values, heavy prefixes, and possible hot keys, including severity counts, filtering, and key drill-through.
+- Slow-log review with hot-key correlation built from loaded key metadata and recent expensive commands.
+- Pub/Sub snapshot inspection showing active channels and subscriber counts.
 - Scan coverage/confidence reporting (loaded keys vs estimated keyspace) to make partial analysis explicit.
 
 ## Core Runtime Flow
@@ -28,8 +30,11 @@
 6. Tree nodes are either namespace prefixes (expandable) or key leaves (clickable to load details when browse mode is active); key-type badges are filled with lightweight batched type lookups so the initial tree does not wait on full key metadata for every match, and new scan/filter/cache contexts supersede older badge batches before stale writes reach the tree.
 7. In multi-select mode, clicking a key row toggles that loaded key, clicking a namespace row toggles its loaded descendant keys, and expand/collapse remains available through the dedicated chevron control.
 8. Detail pane actions dispatch typed operations through `IRedisClient`.
-9. Bulk cleanup stays selection-driven: the toolbar can `Select all loaded`, namespace row toggles stay scoped to loaded descendants only, and delete still flows through explicit confirmation of the selected keys.
+9. Bulk cleanup stays selection-driven: the toolbar can `Select all loaded`, namespace row toggles stay scoped to loaded descendants only, export stays limited to the loaded key set, and delete still flows through explicit confirmation of the selected keys.
 10. Health analysis (on-demand) loads full metadata for currently loaded keys, computes findings via `RedisKeyspaceHealthAnalyzer`, and supports drill-through to key detail.
+11. Prefix analysis computes aggregate memory usage across the loaded namespace groups to surface the heaviest prefixes without rescanning the entire keyspace.
+12. Slow-log analysis pulls recent expensive commands, correlates them with loaded key metadata through `RedisOpsInsightsAggregator`, and exposes likely hot-key signals.
+13. Pub/Sub analysis requests a current server snapshot of channels and subscriber counts.
 
 ## Main Code Locations
 
@@ -40,9 +45,14 @@
 - `src/SwebKit.App/Components/Redis/RedisKeyDetail.razor` — key details + TTL visualisation
 - `src/SwebKit.App/Components/Redis/RedisPrefixMemory.razor`
 - `src/SwebKit.App/Components/Redis/RedisKeyspaceHealthExplorer.razor`
+- `src/SwebKit.WinUI/Views/Redis/RedisPage.xaml`
+- `src/SwebKit.WinUI/ViewModels/Redis/RedisPageViewModel.cs`
+- `src/SwebKit.WinUI/ViewModels/Redis/RedisPageViewModel.Analytics.cs`
+- `src/SwebKit.WinUI/ViewModels/Redis/RedisPageModels.cs`
 - `src/SwebKit.Core/Abstractions/IRedisClient.cs`
 - `src/SwebKit.Core/Services/TtlFormatter.cs` — human-readable TTL formatting and bar math
 - `src/SwebKit.Core/Services/RedisKeyspaceHealthAnalyzer.cs`
+- `src/SwebKit.Core/Services/RedisOpsInsightsAggregator.cs`
 - `src/SwebKit.Core/Services/RedisScanPageAccumulator.cs`
 - `src/SwebKit.Redis/RedisClient.cs`
 - `src/SwebKit.Redis/RedisScanResponseParser.cs`
@@ -56,6 +66,7 @@
 - Health metadata retrieval also uses best-effort `OBJECT FREQ` and `OBJECT IDLETIME`; unsupported commands degrade gracefully.
 - Database index is clamped to 0..15 in client setup and config form.
 - Potentially destructive actions remain confirmation-gated; the main Redis page no longer exposes a direct full-database purge CTA and instead keeps destructive scope visible through the selected-key count.
+- In WinUI production profiles, bulk delete also requires typing `CONFIRM` before the selected loaded keys can be removed.
 - Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveConfigAsync()`.
 - Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze; Redis intentionally keeps the currently loaded match page bounded so large keyspaces do not saturate the render path.
 - If Redis returns more keys than requested for one `SCAN COUNT`, the page shows only one loaded-match page immediately and carries the overflow forward to the next `Load more matches` action.
@@ -76,3 +87,4 @@
 - `tests/SwebKit.Core.Tests/RedisValueHelpersTests.cs`
 - `tests/SwebKit.Core.Tests/RedisKeyspaceHealthAnalyzerTests.cs`
 - `tests/SwebKit.App.Tests/RedisKeyspaceHealthExplorerTests.cs`
+- `tests/SwebKit.WinUI.Tests/RedisPageViewModelTests.cs`

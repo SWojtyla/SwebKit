@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Thickness x:Key="SwebKitPagePadding">20,12,20,16</Thickness>
+    <Thickness x:Key="SwebKitCompactPagePadding">20,8,20,16</Thickness>
     <Thickness x:Key="SwebKitSurfaceCardPadding">14</Thickness>
     <Thickness x:Key="SwebKitInsetCardPadding">10</Thickness>
 
@@ -11,5 +12,8 @@
     <CornerRadius x:Key="SwebKitInsetCornerRadius">10</CornerRadius>
 
     <x:Double x:Key="SwebKitPageHeaderSpacing">4</x:Double>
+    <x:Double x:Key="SwebKitCompactPageHeaderSpacing">2</x:Double>
     <x:Double x:Key="SwebKitPageSectionSpacing">12</x:Double>
+    <x:Double x:Key="SwebKitMetricValueFontSize">28</x:Double>
+    <x:Double x:Key="SwebKitDetailPaneWidth">420</x:Double>
 </ResourceDictionary>

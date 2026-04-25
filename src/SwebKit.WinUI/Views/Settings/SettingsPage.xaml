@@ -9,146 +9,176 @@
 
     <shared:PageScaffold
         Title="Settings"
-        Subtitle="Configure shell theme, startup warmup, and safety defaults while the broader settings surface continues to migrate.">
+        IsHeaderCompact="True">
+        <shared:PageScaffold.HeaderContent>
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                <TextBlock
+                    Text="Unsaved changes"
+                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
+
+                <Button
+                    Content="Save"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.SaveCommand}"
+                    IsEnabled="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
+            </StackPanel>
+        </shared:PageScaffold.HeaderContent>
+
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                <TextBlock
+                    Text="Configure shell theme, startup warmup, and safety defaults while the broader settings surface continues to migrate into native WinUI workspaces."
+                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                    TextWrapping="WrapWholeWords"/>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+
         <shared:PageScaffold.BodyContent>
             <ScrollViewer>
-                <StackPanel MaxWidth="720"
-                            Spacing="{StaticResource SwebKitPageSectionSpacing}">
+                <StackPanel MaxWidth="820"
+                            Spacing="16">
 
-                    <TextBlock
-                        Text="Appearance"
-                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                    <shared:SectionCard Title="Appearance"
+                                        Description="Choose the curated shell theme used across the native WinUI workspace.">
+                        <shared:SectionCard.BodyContent>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="Theme"
-                                           Style="{StaticResource BodyTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="Choose a curated shell theme for the WinUI host."
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                <StackPanel Grid.Column="0"
+                                            VerticalAlignment="Center"
+                                            Spacing="4">
+                                    <TextBlock Text="Theme"
+                                               Style="{StaticResource BodyTextBlockStyle}"/>
+                                    <TextBlock
+                                        Text="Theme changes apply immediately after save so shell chrome and work surfaces stay aligned."
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                        TextWrapping="Wrap"
+                                        MaxWidth="520"/>
+                                </StackPanel>
+
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="220"
+                                    VerticalAlignment="Center"
+                                    ItemsSource="{x:Bind ViewModel.ThemeOptions}"
+                                    SelectedValuePath="Key"
+                                    SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"
+                                    DisplayMemberPath="Label"/>
+                            </Grid>
+                        </shared:SectionCard.BodyContent>
+                    </shared:SectionCard>
+
+                    <shared:SectionCard Title="Runtime defaults"
+                                        Description="Shape how the WinUI host starts up and how parity work is exercised when live backends are not the focus.">
+                        <shared:SectionCard.BodyContent>
+                            <StackPanel Spacing="12">
+                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="4">
+                                            <TextBlock Text="Warm up connections on startup"
+                                                       Style="{StaticResource BodyTextBlockStyle}"/>
+                                            <TextBlock
+                                                Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts so native pages reach working state faster."
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                TextWrapping="Wrap"
+                                                MaxWidth="520"/>
+                                        </StackPanel>
+
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            OnContent=""
+                                            OffContent=""
+                                            IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"/>
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="4">
+                                            <TextBlock Text="Demo mode"
+                                                       Style="{StaticResource BodyTextBlockStyle}"/>
+                                            <TextBlock
+                                                Text="Use synthetic data across the migrated WinUI workspaces so the shell, dashboard, and native pages can be validated without live services."
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                TextWrapping="Wrap"
+                                                MaxWidth="520"/>
+                                        </StackPanel>
+
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            OnContent=""
+                                            OffContent=""
+                                            IsOn="{x:Bind ViewModel.IsDemoModeEnabled, Mode=TwoWay}"/>
+                                    </Grid>
+                                </Border>
                             </StackPanel>
-                            <ComboBox
-                                Grid.Column="1"
-                                MinWidth="220"
-                                VerticalAlignment="Center"
-                                ItemsSource="{x:Bind ViewModel.ThemeOptions}"
-                                SelectedValuePath="Key"
-                                SelectedValue="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}"
-                                DisplayMemberPath="Label"/>
-                        </Grid>
-                    </Border>
+                        </shared:SectionCard.BodyContent>
+                    </shared:SectionCard>
 
-                    <TextBlock
-                        Text="General"
-                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                    <shared:SectionCard Title="Safety"
+                                        Description="Keep destructive workflows explicit when the current profile points at production resources.">
+                        <shared:SectionCard.BodyContent>
+                            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
 
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="Warm up connections on startup"
-                                           Style="{StaticResource BodyTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="Pre-connect to Service Bus, AKS, and Redis when SwebKit starts."
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-                            <ToggleSwitch
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                OnContent=""
-                                OffContent=""
-                                IsOn="{x:Bind ViewModel.WarmupConnectionsOnStartup, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
+                                    <StackPanel Grid.Column="0"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                        <TextBlock Text="Production environment"
+                                                   Style="{StaticResource BodyTextBlockStyle}"/>
+                                        <TextBlock
+                                            Text="Enable extra confirmation dialogs for destructive actions such as DLQ resubmit or delete. Production prompts still require typing CONFIRM."
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                            TextWrapping="Wrap"
+                                            MaxWidth="520"/>
+                                    </StackPanel>
 
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="Demo mode"
-                                           Style="{StaticResource BodyTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="Use synthetic data across the migrated WinUI workspaces so you can validate the shell, dashboard, and native pages without live external services."
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="Wrap"
-                                    MaxWidth="480"/>
-                            </StackPanel>
-                            <ToggleSwitch
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                OnContent=""
-                                OffContent=""
-                                IsOn="{x:Bind ViewModel.IsDemoModeEnabled, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        OnContent=""
+                                        OffContent=""
+                                        IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"/>
+                                </Grid>
+                            </Border>
+                        </shared:SectionCard.BodyContent>
+                    </shared:SectionCard>
 
-                    <TextBlock
-                        Text="Safety"
-                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-
-                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="Production environment"
-                                           Style="{StaticResource BodyTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="Enables extra confirmation dialogs for destructive operations (e.g. DLQ resubmit/delete). Requires typing CONFIRM."
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="Wrap"
-                                    MaxWidth="480"/>
-                            </StackPanel>
-                            <ToggleSwitch
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                OnContent=""
-                                OffContent=""
-                                IsOn="{x:Bind ViewModel.IsProduction, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock
-                            Grid.Column="0"
-                            Text="Unsaved changes"
-                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                            VerticalAlignment="Center"
-                            Visibility="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-
-                        <Button
-                            Grid.Column="1"
-                            Content="Save"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Command="{x:Bind ViewModel.SaveCommand}"
-                            IsEnabled="{x:Bind ViewModel.IsDirty, Mode=OneWay}"/>
-                    </Grid>
+                    <shared:StateView
+                        Title="Settings migration is still in progress"
+                        Message="Domain-specific settings continue to land in their parity waves. This page now owns the shell-wide defaults that the remaining native pages depend on."
+                        Glyph="i"/>
                 </StackPanel>
             </ScrollViewer>
         </shared:PageScaffold.BodyContent>
