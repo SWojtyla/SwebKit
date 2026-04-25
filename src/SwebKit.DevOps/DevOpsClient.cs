@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,11 @@ public class DevOpsClient : IDevOpsClient
         if (absoluteUri is not null)
             return NormalizeFromAbsoluteUri(absoluteUri);
 
+        if (input.Contains("://", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Azure DevOps organization URLs must use HTTPS.");
+        }
+
         if (input.StartsWith($"{DevAzureHost}/", StringComparison.OrdinalIgnoreCase))
         {
             absoluteUri = ParseAbsoluteUri($"https://{input}");
@@ -61,8 +67,31 @@ public class DevOpsClient : IDevOpsClient
                 return NormalizeFromAbsoluteUri(absoluteUri);
         }
 
+        if (LooksLikeUnsupportedHostInput(input))
+        {
+            throw new InvalidOperationException(
+                "Azure DevOps organization input must be an organization slug, https://dev.azure.com/<organization>, or https://<organization>.visualstudio.com.");
+        }
+
         var organizationSlug = ExtractOrganizationSlug(input);
         return $"https://{DevAzureHost}/{organizationSlug}";
+    }
+
+    private static bool LooksLikeUnsupportedHostInput(string input)
+    {
+        if (input.Contains('.', StringComparison.Ordinal) && !input.Contains('/', StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var slashIndex = input.IndexOf('/');
+        if (slashIndex <= 0)
+        {
+            return false;
+        }
+
+        var firstSegment = input[..slashIndex].Trim();
+        return firstSegment.Contains('.', StringComparison.Ordinal);
     }
 
     private static Uri? ParseAbsoluteUri(string input)
@@ -78,6 +107,11 @@ public class DevOpsClient : IDevOpsClient
 
     private static string NormalizeFromAbsoluteUri(Uri absoluteUri)
     {
+        if (!absoluteUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Azure DevOps organization URLs must use HTTPS.");
+        }
+
         var host = absoluteUri.Host.TrimEnd('.');
 
         if (host.Equals(DevAzureHost, StringComparison.OrdinalIgnoreCase))
@@ -93,7 +127,8 @@ public class DevOpsClient : IDevOpsClient
             return $"https://{organizationSlug}{VisualStudioHostSuffix}";
         }
 
-        return absoluteUri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        throw new InvalidOperationException(
+            "Azure DevOps organization URLs must use https://dev.azure.com/<organization> or https://<organization>.visualstudio.com.");
     }
 
     private static string ExtractOrganizationSlug(string input)
@@ -121,11 +156,22 @@ public class DevOpsClient : IDevOpsClient
         {
             using var request = CreateRequest(HttpMethod.Get, $"{OrgApi}/projects?api-version=7.1&$top=1");
             using var response = await _http.SendAsync(request, ct);
-            return response.IsSuccessStatusCode;
+
+            if (response.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            throw new HttpRequestException($"Azure DevOps connection validation returned {(int)response.StatusCode} ({response.ReasonPhrase}).");
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return false;
+            throw new TimeoutException("Azure DevOps connection validation timed out.");
         }
     }
 

@@ -6,7 +6,7 @@ title: "Test Plan - winui3-cutover-audit-hardening"
 owner: ""
 status: "In Progress"
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 
 ---
 
@@ -33,7 +33,7 @@ Validate that the native WinUI host is not only present, but credible enough to 
 
 - Build validation: `build-winui` must stay green after every parity or hardening slice.
 - Existing domain tests: `tests/SwebKit.Core.Tests/`, `tests/SwebKit.Azure.Tests/`, `tests/SwebKit.Kubernetes.Tests/`, and `tests/SwebKit.DevOps.Tests/` must remain green when touched behavior changes.
-- WinUI coverage target: add focused tests for shell/navigation/theme state and for page view-model seams that currently carry high orchestration load.
+- WinUI coverage target: keep `tests/SwebKit.WinUI.Tests/` green and expand focused tests into shell/navigation/theme state and deeper page view-model seams that currently carry high orchestration load.
 - End-to-end target: add one native-host smoke journey per major area once the manual checkpoint is stable.
 
 ## Test data and setup
@@ -66,7 +66,7 @@ Validate that the native WinUI host is not only present, but credible enough to 
 
 ## Validation status
 
-- Automated: `build-winui` currently passes
+- Automated: `build-winui` currently passes; `dotnet test tests/SwebKit.WinUI.Tests/SwebKit.WinUI.Tests.csproj` also passes with 8 tests covering readiness formatter classification plus Pipelines/Observability readiness-state and generic-error gating. Focused lifecycle tests for the shared page scheduler are still missing.
 - Manual: Not started
 
 ## Sign-off

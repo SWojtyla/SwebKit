@@ -7,6 +7,7 @@ public interface IShellErrorPresenter
 {
     void PresentBackgroundInitializationFailure(Exception exception);
     void PresentKeyboardShortcutRegistrationFailure(Exception exception);
+    void PresentPageActivationFailure(string pageName, Exception exception);
 }
 
 public sealed class ShellErrorPresenter : IShellErrorPresenter
@@ -35,6 +36,14 @@ public sealed class ShellErrorPresenter : IShellErrorPresenter
             detail: "The shell loaded, but keyboard shortcuts could not be registered. You can keep using the visible UI and restart SwebKit if the problem persists.",
             exception: exception,
             logAsError: false);
+
+    public void PresentPageActivationFailure(string pageName, Exception exception) =>
+        PresentFailure(
+            shellOperation: $"PageActivation:{pageName}",
+            userImpact: $"{pageName} could not finish loading",
+            detail: "The page hit an unexpected activation error. You can switch areas or restart SwebKit while the failure is investigated.",
+            exception: exception,
+            logAsError: true);
 
     private void PresentFailure(string shellOperation, string userImpact, string detail, Exception exception, bool logAsError)
     {

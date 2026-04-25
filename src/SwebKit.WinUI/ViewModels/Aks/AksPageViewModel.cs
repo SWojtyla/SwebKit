@@ -19,6 +19,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     private readonly INotificationService _notifications;
     private readonly ILogger<AksPageViewModel> _logger;
     private CancellationTokenSource _loadCts = new();
+    private bool _isDisposed;
     private bool _loaded;
     private bool _suppressSelectionSideEffects;
 
@@ -88,19 +89,35 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
     public async Task LoadAsync()
     {
-        if (_loaded)
+        if (_loaded || _isDisposed)
         {
             return;
         }
 
         _loaded = true;
+
+        if (_isDisposed)
+        {
+            return;
+        }
+
         await ReloadAsync();
     }
 
     [RelayCommand]
     private async Task ReloadAsync()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         await _appState.WhenInitializedAsync();
+
+        if (_isDisposed)
+        {
+            return;
+        }
 
         OnPropertyChanged(nameof(IsConfigured));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
@@ -128,6 +145,12 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         IsLoading = true;
         ErrorMessage = null;
         await Task.Yield();
+
+        if (_isDisposed)
+        {
+            IsLoading = false;
+            return;
+        }
 
         try
         {
@@ -178,6 +201,12 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
     public async ValueTask DisposeAsync()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
         DisposePortForwardState();
         await ResetLoadTokenAsync();
         await ResetLogsTokenAsync();

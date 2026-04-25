@@ -23,7 +23,7 @@ CommunityToolkit.WinUI.Controls.Segmented     (8.2.251219)
 CommunityToolkit.WinUI.Controls.Sizers        (GridSplitter replacement — 8.2.251219)
 ```
 
-**Note — DataGrid:** `CommunityToolkit.WinUI.UI.Controls.DataGrid` (v7) targets UWP, not WinUI 3. There is no v8 WinUI 3 port of DataGrid in the toolkit as of April 2026. The WinUI 3 / Windows App SDK does not ship a built-in DataGrid control either. Options for Phase 2+:
+**Note — DataGrid:** `CommunityToolkit.WinUI.UI.Controls.DataGrid` (v7) targets UWP, not WinUI 3. There is no v8 WinUI 3 port of DataGrid in the toolkit as of April 2026. The WinUI 3 / Windows App SDK does not ship a built-in DataGrid control either. The baseline checkpoint recorded these later follow-up options:
 
 - Custom `ListView`/`ItemsView` with column headers (sufficient for most grids in this app)
 - Telerik or Syncfusion DataGrid (commercial)
@@ -147,7 +147,7 @@ LiveChartsCore.SkiaSharpView.WinUI
 - WinUI Community Toolkit Charts — too basic (bar/line only, no real-time support).
 - Telerik/Syncfusion charts — commercial.
 
-**Migration effort:** Medium. Each chart in `Observability/` must be converted. Shapes of the data models (series, data points) are compatible with LiveCharts2 `ISeries<T>` bindings. Axis formatting and tooltip customization will need re-implementation.
+**Recorded migration effort:** Medium. Each chart in `Observability/` needed conversion. The data model shapes (series, data points) were already compatible with LiveCharts2 `ISeries<T>` bindings, while axis formatting and tooltip customization still required follow-up work.
 
 ---
 
@@ -173,7 +173,7 @@ Microsoft.Web.WebView2   (ships with Windows App SDK; no separate package needed
 - AvalonEdit WinUI port — community-maintained, incomplete syntax support for KQL/YAML.
 - Scintilla.NET — requires P/Invoke, poor WinUI 3 integration.
 
-**Migration effort:** Low. Copy JS assets, write the `editor.html` wrapper page, wire `WebView2` in XAML. The ViewModel posts content changes via `ExecuteScriptAsync("setEditorContent(...)"); `.
+**Recorded migration effort:** Low. The baseline approach was to copy the JS assets, add an `editor.html` wrapper page, and host Monaco through `WebView2` while the view model posted content changes via `ExecuteScriptAsync("setEditorContent(...)"); `.
 
 ---
 
@@ -238,7 +238,7 @@ Both `using` and the call site change. No other MAUI references in these files.
 
 ## D-10: UI architecture foundation before page proliferation
 
-**Decision:** Add an explicit shared UI layer in `SwebKit.WinUI` before the remaining workspaces are migrated broadly.
+**Decision:** Add an explicit shared UI layer in `SwebKit.WinUI` before the remaining workspaces were migrated broadly.
 
 **Rationale:**
 
@@ -246,10 +246,10 @@ Both `using` and the call site change. No other MAUI references in these files.
 - If Redis, Storage, Pipelines, and Observability are added on top of that baseline, the app will accumulate one-off XAML structures that are expensive to unify later.
 - The MAUI app already behaves like one product; the WinUI host needs the same shared shell and page language from the start.
 
-**Implication:**
+**Historical implication:**
 
-- Add app-level resource dictionaries, shell primitives, and shared page/workspace scaffolds before opening too many additional page migrations.
-- `Settings`, `ServiceBus`, and `AKS` become the proving grounds for these shared primitives.
+- The baseline work added app-level resource dictionaries, shell primitives, and shared page/workspace scaffolds before further page breadth.
+- `Settings`, `ServiceBus`, and `AKS` served as the proving grounds for those shared primitives.
 
 ---
 
@@ -263,11 +263,11 @@ Both `using` and the call site change. No other MAUI references in these files.
 - WinUI's built-in theme resources are a strong base, but they are not by themselves a product design system.
 - Semantic tokens let curated themes change shell mood and brand cues while keeping page composition and interaction patterns stable.
 
-**Implication:**
+**Historical implication:**
 
-- Persist a theme key that maps to curated theme dictionaries.
-- Apply themes centrally through a shell-level coordinator.
-- Prefer semantic resource names in pages and shared controls; direct brush selection should remain rare.
+- Theme selection persisted a theme key that mapped to curated theme dictionaries.
+- Themes were applied centrally through a shell-level coordinator.
+- Pages and shared controls preferred semantic resource names over direct brush selection.
 
 ---
 

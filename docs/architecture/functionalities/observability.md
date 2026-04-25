@@ -34,7 +34,9 @@
 
 The developer typically just needs to have run `az login` once. No secrets or settings need to be stored in SwebKit.
 
-The resolved identity is shown as a badge in the Observability toolbar (provider type label) so the user can confirm which account is active.
+The Observability toolbar shows the active provider type label so the user can confirm whether the page is using Azure Application Insights or demo data.
+
+In the WinUI host, a failed Azure credential chain is now surfaced as a readiness state with explicit sign-in guidance instead of a generic resource-loading failure. Unexpected provider/query failures still surface as true errors.
 
 ## Resource Discovery
 

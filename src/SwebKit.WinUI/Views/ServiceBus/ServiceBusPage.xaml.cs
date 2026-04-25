@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SwebKit.Core.Models;
+using SwebKit.WinUI.Services;
 using SwebKit.WinUI.ViewModels.ServiceBus;
 
 namespace SwebKit.WinUI.Views.ServiceBus;
@@ -19,7 +20,20 @@ public sealed partial class ServiceBusPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        await ViewModel.LoadAsync();
+
+        try
+        {
+            await ViewModel.LoadAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            App.Current.Services
+                .GetRequiredService<IShellErrorPresenter>()
+                .PresentPageActivationFailure(nameof(ServiceBusPage), ex);
+        }
     }
 
     protected override async void OnNavigatedFrom(NavigationEventArgs e)

@@ -69,6 +69,18 @@
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                             TextWrapping="WrapWholeWords"/>
 
+                        <InfoBar
+                            IsOpen="{Binding ShowReadinessState}"
+                            Severity="Warning"
+                            Title="{Binding ReadinessTitle}"
+                            Message="{Binding ReadinessMessage}">
+                            <InfoBar.ActionButton>
+                                <Button
+                                    Content="Open Settings"
+                                    Command="{Binding OpenSettingsCommand}"/>
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="2*"/>

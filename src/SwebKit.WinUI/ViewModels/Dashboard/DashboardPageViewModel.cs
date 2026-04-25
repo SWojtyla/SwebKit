@@ -39,6 +39,7 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
     private readonly HashSet<Task> _pendingRefreshTasks = [];
     private PeriodicTimer? _refreshTimer;
     private Task? _refreshLoopTask;
+    private bool _isDisposed;
     private bool _loaded;
 
     public DashboardPageViewModel(
@@ -204,18 +205,30 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
 
     public async Task LoadAsync()
     {
-        if (_loaded)
+        if (_loaded || _isDisposed)
         {
             return;
         }
 
         _loaded = true;
         await _appState.WhenInitializedAsync();
+
+        if (_isDisposed)
+        {
+            return;
+        }
+
         SyncAppSignals();
         SyncFavorites();
         SyncMonitoringState();
         SyncPodHealthAlerts();
         await RunTrackedRefreshAsync(runLiveReadinessProbe: false);
+
+        if (_isDisposed)
+        {
+            return;
+        }
+
         _refreshLoopTask = Task.Run(() => RefreshLoopAsync(_lifetimeCts.Token));
     }
 
@@ -269,6 +282,12 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
 
     public async ValueTask DisposeAsync()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
         _events.Unsubscribe<ActivityEvent>(OnActivityReceived);
         _events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
         _monitor.PodHealthDetected -= OnPodHealthDetected;

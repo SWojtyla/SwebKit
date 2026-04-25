@@ -24,6 +24,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     private readonly IObservabilityProviderFactory _observabilityProviderFactory;
     private readonly IGuidedKqlCompiler _guidedKqlCompiler;
     private readonly IObservabilityExplainerService _explainerService;
+    private readonly IShellNavigationService _navigation;
     private readonly INotificationService _notifications;
     private readonly OperatorWorkspaceService _workspaceService;
     private readonly ILogger<ObservabilityPageViewModel> _logger;
@@ -49,6 +50,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         IObservabilityProviderFactory observabilityProviderFactory,
         IGuidedKqlCompiler guidedKqlCompiler,
         IObservabilityExplainerService explainerService,
+        IShellNavigationService navigation,
         INotificationService notifications,
         OperatorWorkspaceService workspaceService,
         ILogger<ObservabilityPageViewModel> logger)
@@ -58,6 +60,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         _observabilityProviderFactory = observabilityProviderFactory;
         _guidedKqlCompiler = guidedKqlCompiler;
         _explainerService = explainerService;
+        _navigation = navigation;
         _notifications = notifications;
         _workspaceService = workspaceService;
         _logger = logger;
@@ -179,6 +182,12 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     [ObservableProperty]
     public partial string? ActiveTabErrorMessage { get; set; }
+
+    [ObservableProperty]
+    public partial string? ReadinessTitle { get; set; }
+
+    [ObservableProperty]
+    public partial string? ReadinessMessage { get; set; }
 
     [ObservableProperty]
     public partial string ConnectionSummary { get; set; } = "Scan accessible subscriptions to populate Application Insights resources.";
@@ -532,29 +541,50 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         },
     ];
 
-    public bool ShowNoResourcesState => !IsLoadingResources && !HasResources && string.IsNullOrWhiteSpace(ResourceErrorMessage);
+    public bool ShowNoResourcesState => !ShowReadinessState
+        && !IsLoadingResources
+        && !HasResources
+        && string.IsNullOrWhiteSpace(ResourceErrorMessage);
 
-    public bool ShowFailuresEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasFailures && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
+    public bool ShowFailuresEmptyState => HasActiveResource
+        && !ShowReadinessState
+        && !IsRefreshingActiveTab
+        && !HasFailures
+        && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
-    public bool ShowPerformanceEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasPerformanceEntries && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
+    public bool ShowPerformanceEmptyState => HasActiveResource
+        && !ShowReadinessState
+        && !IsRefreshingActiveTab
+        && !HasPerformanceEntries
+        && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
-    public bool ShowAvailabilityEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasAvailabilityResults && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
+    public bool ShowAvailabilityEmptyState => HasActiveResource
+        && !ShowReadinessState
+        && !IsRefreshingActiveTab
+        && !HasAvailabilityResults
+        && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
-    public bool ShowLogsEmptyState => HasActiveResource && !IsRefreshingActiveTab && !HasLogRows && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
+    public bool ShowLogsEmptyState => HasActiveResource
+        && !ShowReadinessState
+        && !IsRefreshingActiveTab
+        && !HasLogRows
+        && string.IsNullOrWhiteSpace(ActiveTabErrorMessage);
 
     public bool ShowSavedQueriesEmptyState => !HasSavedQueries;
 
-    public bool ShowDependencyEmptyState => !IsRefreshingActiveTab && !HasDependencyHealth;
+    public bool ShowDependencyEmptyState => !ShowReadinessState && !IsRefreshingActiveTab && !HasDependencyHealth;
 
-    public bool ShowDimensionEmptyState => !IsRefreshingActiveTab && !HasDimensionBreakdowns;
+    public bool ShowDimensionEmptyState => !ShowReadinessState && !IsRefreshingActiveTab && !HasDimensionBreakdowns;
 
     public Visibility ResourceErrorVisibility => string.IsNullOrWhiteSpace(ResourceErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility ActiveTabErrorVisibility => string.IsNullOrWhiteSpace(ActiveTabErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility ResourceWorkspaceVisibility => HasActiveResource ? Visibility.Visible : Visibility.Collapsed;
+    public bool ShowReadinessState => !string.IsNullOrWhiteSpace(ReadinessMessage);
 
-    public Visibility EmptyStateVisibility => HasActiveResource ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility ResourceWorkspaceVisibility => HasActiveResource && !ShowReadinessState ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility EmptyStateVisibility => HasActiveResource || ShowReadinessState ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility GuidedModeVisibility => UseGuidedLogsMode ? Visibility.Visible : Visibility.Collapsed;
 
@@ -624,6 +654,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     [RelayCommand]
     private Task RefreshAsync() => RefreshCurrentTabAsync(force: true);
+
+    [RelayCommand]
+    private Task OpenSettingsAsync()
+    {
+        _navigation.NavigateTo("settings");
+        return Task.CompletedTask;
+    }
 
     [RelayCommand]
     private Task ApplySelectedPresetAsync()
@@ -992,6 +1029,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         IsLoadingResources = true;
         ResourceErrorMessage = null;
+        ActiveTabErrorMessage = null;
+        ClearReadinessState();
         DiscoverySummary = _appState.UseDemoData
             ? "Loading sample Application Insights resources for demo mode."
             : "Scanning accessible subscriptions for Application Insights resources.";
@@ -1040,15 +1079,28 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         catch (Exception ex)
         {
             _logger.LogError(ex, "Observability resource discovery failed.");
-            ResourceErrorMessage = ex.Message;
-            DiscoverySummary = "Observability resource discovery failed.";
-            _notifications.ShowError("Observability resource discovery failed", ex: ex);
+
+            if (WorkspaceReadinessFormatter.TryFormatObservability(ex, resourceName: null, out var readinessState))
+            {
+                ResourceErrorMessage = null;
+                ReadinessTitle = readinessState.Title;
+                ReadinessMessage = readinessState.Message;
+                DiscoverySummary = "Observability resource discovery needs Azure authentication.";
+                ActiveTabStatusText = "Sign in with Azure outside SwebKit, then refresh resources.";
+            }
+            else
+            {
+                ResourceErrorMessage = ex.Message;
+                DiscoverySummary = "Observability resource discovery failed.";
+                _notifications.ShowError("Observability resource discovery failed", ex: ex);
+            }
         }
         finally
         {
             IsLoadingResources = false;
             OnPropertyChanged(nameof(ResourceErrorVisibility));
             OnPropertyChanged(nameof(ShowNoResourcesState));
+            OnPropertyChanged(nameof(ShowReadinessState));
             RefreshConnectionSummary();
         }
     }
@@ -1063,6 +1115,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         var refreshStarted = false;
         IsActivatingResource = true;
         ActiveTabErrorMessage = null;
+        ClearReadinessState();
         ActiveTabStatusText = $"Activating {resource.Name} for {SelectedTabLabel}.";
         await Task.Yield();
 
@@ -1110,6 +1163,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         IsRefreshingActiveTab = true;
         ActiveTabErrorMessage = null;
+        ClearReadinessState();
         await Task.Yield();
 
         try
@@ -1141,14 +1195,26 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         catch (Exception ex)
         {
             _logger.LogError(ex, "Observability tab refresh failed for {Tab}.", SelectedTabLabel);
-            ActiveTabErrorMessage = ex.Message;
-            ActiveTabStatusText = $"{SelectedTabLabel} refresh failed.";
-            _notifications.ShowError($"Observability {SelectedTabLabel.ToLowerInvariant()} refresh failed", ex: ex);
+
+            if (WorkspaceReadinessFormatter.TryFormatObservability(ex, ActiveResource?.Name, out var readinessState))
+            {
+                ActiveTabErrorMessage = null;
+                ReadinessTitle = readinessState.Title;
+                ReadinessMessage = readinessState.Message;
+                ActiveTabStatusText = $"{SelectedTabLabel} is waiting for Azure authentication.";
+            }
+            else
+            {
+                ActiveTabErrorMessage = ex.Message;
+                ActiveTabStatusText = $"{SelectedTabLabel} refresh failed.";
+                _notifications.ShowError($"Observability {SelectedTabLabel.ToLowerInvariant()} refresh failed", ex: ex);
+            }
         }
         finally
         {
             IsRefreshingActiveTab = false;
             OnPropertyChanged(nameof(ActiveTabErrorVisibility));
+            OnPropertyChanged(nameof(ShowReadinessState));
             OnPropertyChanged(nameof(ShowFailuresEmptyState));
             OnPropertyChanged(nameof(ShowPerformanceEmptyState));
             OnPropertyChanged(nameof(ShowAvailabilityEmptyState));
@@ -1761,6 +1827,21 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     private IObservabilityProvider CreateProvider(string resourceId) =>
         _observabilityProviderFactory.Create(resourceId, _appState.UseDemoData);
 
+    partial void OnReadinessMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(ShowReadinessState));
+        OnPropertyChanged(nameof(ShowNoResourcesState));
+        OnPropertyChanged(nameof(ShowFailuresEmptyState));
+        OnPropertyChanged(nameof(ShowPerformanceEmptyState));
+        OnPropertyChanged(nameof(ShowAvailabilityEmptyState));
+        OnPropertyChanged(nameof(ShowLogsEmptyState));
+        OnPropertyChanged(nameof(ShowDependencyEmptyState));
+        OnPropertyChanged(nameof(ShowDimensionEmptyState));
+        OnPropertyChanged(nameof(ResourceWorkspaceVisibility));
+        OnPropertyChanged(nameof(EmptyStateVisibility));
+        RefreshConnectionSummary();
+    }
+
     private ObservabilityResourceItemViewModel UpsertResource(ObservabilityResourceInfo resource)
     {
         var existing = Resources.FirstOrDefault(candidate => string.Equals(candidate.ResourceId, resource.ResourceId, StringComparison.OrdinalIgnoreCase));
@@ -1791,7 +1872,9 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     {
         if (HasActiveResource)
         {
-            ConnectionSummary = $"{ProviderLabel} bound to {ActiveResourceTitle}. Current tab: {SelectedTabLabel}.";
+            ConnectionSummary = ShowReadinessState
+                ? ReadinessMessage!
+                : $"{ProviderLabel} bound to {ActiveResourceTitle}. Current tab: {SelectedTabLabel}.";
             return;
         }
 
@@ -1807,9 +1890,21 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return;
         }
 
+        if (ShowReadinessState)
+        {
+            ConnectionSummary = ReadinessMessage!;
+            return;
+        }
+
         ConnectionSummary = _appState.UseDemoData
             ? "Demo discovery is ready. Activate one of the sample resources to light up the tabs."
             : "No Application Insights resource is active yet. Run a scan or resolve Azure access for the current credential.";
+    }
+
+    private void ClearReadinessState()
+    {
+        ReadinessTitle = null;
+        ReadinessMessage = null;
     }
 
     private void HookCollectionNotifications<TCollection>(ObservableCollection<TCollection> collection, params string[] propertyNames)

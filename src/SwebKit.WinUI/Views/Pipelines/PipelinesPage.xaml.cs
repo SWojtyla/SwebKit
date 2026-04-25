@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using SwebKit.WinUI.ViewModels.Pipelines;
+using SwebKit.WinUI.Views.Shared;
 
 namespace SwebKit.WinUI.Views.Pipelines;
 
@@ -21,27 +21,12 @@ public sealed partial class PipelinesPage : Page
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-
-        if (_initialLoadScheduled)
-        {
-            return;
-        }
-
-        _initialLoadScheduled = true;
-        Loaded += HandleInitialPageLoadAsync;
+        DeferredPageLoadScheduler.ScheduleOnce(this, ref _initialLoadScheduled, ViewModel.LoadAsync);
     }
 
     protected override async void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         await ViewModel.DisposeAsync();
-    }
-
-    private async void HandleInitialPageLoadAsync(object sender, RoutedEventArgs e)
-    {
-        Loaded -= HandleInitialPageLoadAsync;
-
-        await Task.Yield();
-        await ViewModel.LoadAsync();
     }
 }

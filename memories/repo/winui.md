@@ -1,0 +1,2 @@
+- Validate WinUI host changes with the `build-winui` VS Code task (`dotnet build src/SwebKit.WinUI/SwebKit.WinUI.csproj /p:Configuration=Debug /p:Platform=x64`).
+- WinUI XAML partial pages cannot switch their code-behind base class away from `Page` unless the XAML root type changes too; prefer shared helpers/composition for page lifecycle reuse.

@@ -136,6 +136,25 @@ public sealed class DevOpsClientTests
     Assert.DoesNotContain("https://dev.azure.com/https://", handler.LastRequestUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
   }
 
+  [Theory]
+  [InlineData("https://example.com/otherorg")]
+  [InlineData("http://dev.azure.com/myorg")]
+  [InlineData("ftp://dev.azure.com/myorg")]
+  [InlineData("example.com/otherorg")]
+  [InlineData("example.com")]
+  public void Constructor_RejectsUnsupportedAbsoluteOrganizationUrls(string organizationInput)
+  {
+    var fakeHandler = new FakeHttpMessageHandler();
+    var credentialStore = new FakeCredentialStore();
+    var authHandler = new DevOpsAuthHandler(credentialStore) { InnerHandler = fakeHandler };
+    var factory = new FakeHttpClientFactory(new HttpClient(authHandler));
+    var config = new DevOpsConfig { Organization = organizationInput, PatCredentialKey = "key" };
+
+    var ex = Assert.Throws<InvalidOperationException>(() => new DevOpsClient(factory, config, NullLogger<DevOpsClient>.Instance));
+
+    Assert.Contains("Azure DevOps organization", ex.Message, StringComparison.Ordinal);
+  }
+
   [Fact]
   public void Constructor_WithValidConfig_DoesNotThrow()
   {
@@ -202,6 +221,17 @@ public sealed class DevOpsClientTests
     var result = await client.TestConnectionAsync(CancellationToken.None);
 
     Assert.False(result);
+  }
+
+  [Fact]
+  public async Task TestConnectionAsync_ServerError_ThrowsHttpRequestException()
+  {
+    var (client, handler) = CreateClient();
+    handler.EnqueueJson("{}", HttpStatusCode.BadGateway);
+
+    var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.TestConnectionAsync(CancellationToken.None));
+
+    Assert.Contains("502", ex.Message, StringComparison.Ordinal);
   }
 
   // ── GetProjectsAsync ─────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ public partial class App : Application
             })
             .Build();
 
+        UnhandledException += HandleUnhandledException;
         InitializeComponent();
     }
 
@@ -65,5 +66,11 @@ public partial class App : Application
         {
             logger.LogError(ex, "WinUI app-state initialization failed.");
         }
+    }
+
+    private void HandleUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        var logger = Host.Services.GetRequiredService<ILogger<App>>();
+        logger.LogError(e.Exception, "Unhandled WinUI exception reached App.UnhandledException: {Message}", e.Message);
     }
 }

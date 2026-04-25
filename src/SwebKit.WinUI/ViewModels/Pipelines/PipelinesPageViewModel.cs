@@ -23,6 +23,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private readonly ApprovalAgingPolicy _approvalAgingPolicy;
     private readonly IConnectionStateService _connectionState;
     private readonly OperatorWorkspaceService _workspaceService;
+    private readonly IShellNavigationService _navigation;
     private readonly INotificationService _notifications;
     private readonly ILogger<PipelinesPageViewModel> _logger;
 
@@ -42,6 +43,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ApprovalAgingPolicy approvalAgingPolicy,
         IConnectionStateService connectionState,
         OperatorWorkspaceService workspaceService,
+        IShellNavigationService navigation,
         INotificationService notifications,
         ILogger<PipelinesPageViewModel> logger)
     {
@@ -52,6 +54,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _approvalAgingPolicy = approvalAgingPolicy;
         _connectionState = connectionState;
         _workspaceService = workspaceService;
+        _navigation = navigation;
         _notifications = notifications;
         _logger = logger;
 
@@ -102,6 +105,12 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
+
+    [ObservableProperty]
+    public partial string? ReadinessTitle { get; set; }
+
+    [ObservableProperty]
+    public partial string? ReadinessMessage { get; set; }
 
     [ObservableProperty]
     public partial string? ApprovalRefreshWarning { get; set; }
@@ -175,7 +184,11 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     public bool IsConfigured =>
         _appState.UseDemoData ||
         (_appState.Config.DevOpsConfig is { } config
-         && !string.IsNullOrWhiteSpace(config.Organization));
+         && !string.IsNullOrWhiteSpace(config.Organization)
+         && !string.IsNullOrWhiteSpace(config.PatCredentialKey));
+
+    private bool HasConfigurationIssue => !_appState.UseDemoData
+        && (!IsConfigured || GetConnectionState() == ConnectionState.NotConfigured);
 
     public bool HasProjects => Projects.Count > 0;
 
@@ -187,19 +200,38 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public bool HasApprovals => Approvals.Count > 0;
 
-    public bool ShowNotConfiguredState => !IsRefreshing && !IsConfigured;
+    public bool ShowNotConfiguredState => !IsRefreshing && HasConfigurationIssue;
 
-    public bool ShowNoProjectsState => IsConfigured && !IsRefreshing && !HasProjects && string.IsNullOrWhiteSpace(ErrorMessage);
+    public bool ShowReadinessState => !string.IsNullOrWhiteSpace(ReadinessMessage);
+
+    public bool ShowNoProjectsState => IsConfigured
+        && !HasConfigurationIssue
+        && !ShowReadinessState
+        && !IsRefreshing
+        && !HasProjects
+        && string.IsNullOrWhiteSpace(ErrorMessage);
 
     public bool ShowDemoModeState => _appState.UseDemoData;
 
-    public bool ShowPipelinesEmptyState => IsConfigured && !IsLoadingPipelines && SelectedProject is not null && Pipelines.Count == 0;
+    public bool ShowPipelinesEmptyState => IsConfigured
+        && !HasConfigurationIssue
+        && !ShowReadinessState
+        && !IsLoadingPipelines
+        && SelectedProject is not null
+        && Pipelines.Count == 0;
 
-    public bool ShowActivityEmptyState => IsConfigured && !IsLoadingActivity && SelectedPipeline is not null && ActivityRuns.Count == 0;
+    public bool ShowActivityEmptyState => IsConfigured
+        && !HasConfigurationIssue
+        && !ShowReadinessState
+        && !IsLoadingActivity
+        && SelectedPipeline is not null
+        && ActivityRuns.Count == 0;
 
-    public bool ShowReleasesEmptyState => IsConfigured && Releases.Count == 0;
+    public bool ShowReleasesEmptyState => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && Releases.Count == 0;
 
     public bool ShowApprovalsEmptyState => IsConfigured
+        && !HasConfigurationIssue
+        && !ShowReadinessState
         && !IsLoadingApprovals
         && Approvals.Count == 0
         && string.IsNullOrWhiteSpace(ApprovalRefreshWarning);
@@ -288,7 +320,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility WorkspaceVisibility => IsConfigured && HasProjects ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility WorkspaceVisibility => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && HasProjects ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility SelectedPipelineDetailVisibility => SelectedPipeline is null ? Visibility.Collapsed : Visibility.Visible;
 
@@ -329,6 +361,10 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         && !IsLoadingActivity
         && !IsLoadingApprovals
         && !IsSubmittingApprovalAction;
+
+    public bool CanRefreshWorkspace => CanChangeApprovalAction
+        && !IsLoadingReleaseTags
+        && !IsSubmittingReleaseTag;
 
     public string ApprovalActionConfirmationTitle => ApprovalActionTarget?.IsProduction == true
         ? "Production approval"
@@ -376,6 +412,13 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync(notifySuccess: true);
+
+    [RelayCommand]
+    private Task OpenSettingsAsync()
+    {
+        _navigation.NavigateTo("settings");
+        return Task.CompletedTask;
+    }
 
     [RelayCommand]
     private void StartApproveApproval(PipelinesApprovalItemViewModel? approval) => BeginApprovalAction(approval, isApproving: true);
@@ -669,7 +712,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     private async Task RefreshCoreAsync(bool notifySuccess)
     {
-        if (_isDisposed)
+        if (_isDisposed || IsLoadingReleaseTags || IsSubmittingReleaseTag)
         {
             return;
         }
@@ -684,6 +727,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         IsLoadingActivity = true;
         IsLoadingApprovals = true;
         ErrorMessage = null;
+        ClearReadinessState();
         await Task.WhenAll(_appState.WhenInitializedAsync(), _releaseRepository.LoadAsync());
 
         try
@@ -1211,6 +1255,11 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         }
         catch (InvalidOperationException ex)
         {
+            if (TryApplyReadinessState(ex))
+            {
+                return false;
+            }
+
             ApplyNotConfiguredState(ex.Message);
             return false;
         }
@@ -1220,6 +1269,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     {
         ClearAllData();
         ErrorMessage = null;
+        ClearReadinessState();
         ScopeSummary = "Azure DevOps is not configured for the native Pipelines route.";
         MetricsSummary = "Configure an organization and PAT before loading project data.";
         LastRefreshLabel = detail is null ? LastRefreshLabel : detail;
@@ -1229,6 +1279,13 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         NotifyDerivedStateChanged();
     }
 
+    private ConnectionState GetConnectionState()
+    {
+        return _connectionState.States.TryGetValue(AreaName, out var state)
+            ? state.State
+            : ConnectionState.Unknown;
+    }
+
     private void ClearAllData()
     {
         Projects.Clear();
@@ -1236,6 +1293,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         Releases.Clear();
         SelectedReleaseComponents.Clear();
         ReleaseTagItems.Clear();
+        DismissApprovalAction();
         DismissReleaseTagAction();
         SelectedProject = null;
         SelectedPipeline = null;
@@ -1356,6 +1414,12 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
     private void HandleLoadFailure(string message, Exception ex)
     {
+        if (TryApplyReadinessState(ex))
+        {
+            return;
+        }
+
+        ClearReadinessState();
         _logger.LogError(ex, "Pipelines WinUI baseline load failed.");
         ErrorMessage = ex.Message;
         MetricsSummary = "The native Pipelines baseline hit a load failure.";
@@ -1381,8 +1445,8 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
                         : $"Connected to {_appState.Config.DevOpsConfig.Organization}.";
                 break;
             case ConnectionState.Error:
-                ConnectionStateLabel = "Error";
-                ConnectionSummary = state.ErrorMessage ?? "The Pipelines connection state is in error.";
+                ConnectionStateLabel = ShowReadinessState ? "Needs attention" : "Error";
+                ConnectionSummary = ReadinessMessage ?? state.ErrorMessage ?? "The Pipelines connection state is in error.";
                 break;
             case ConnectionState.NotConfigured:
                 ConnectionStateLabel = "Not configured";
@@ -1397,7 +1461,11 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         NotifyDerivedStateChanged();
     }
 
-    private void HandleConnectionStatesChanged() => RefreshConnectionStateSummary();
+    private void HandleConnectionStatesChanged()
+    {
+        RefreshConnectionStateSummary();
+        NotifyDerivedStateChanged();
+    }
 
     private void HandleCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => NotifyDerivedStateChanged();
 
@@ -1410,6 +1478,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(HasApprovals));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
+        OnPropertyChanged(nameof(ShowReadinessState));
         OnPropertyChanged(nameof(ShowNoProjectsState));
         OnPropertyChanged(nameof(ShowDemoModeState));
         OnPropertyChanged(nameof(ShowPipelinesEmptyState));
@@ -1452,6 +1521,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(ApprovalActionRequiresConfirm));
         OnPropertyChanged(nameof(ApprovalActionVerb));
         OnPropertyChanged(nameof(CanChangeApprovalAction));
+        OnPropertyChanged(nameof(CanRefreshWorkspace));
         OnPropertyChanged(nameof(ApprovalActionConfirmationTitle));
         OnPropertyChanged(nameof(ApprovalActionConfirmationMessage));
         OnPropertyChanged(nameof(CanSubmitApprovalAction));
@@ -1464,6 +1534,12 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(CanSubmitReleaseTag));
         OnPropertyChanged(nameof(ReleaseTagActionVisibility));
         OnPropertyChanged(nameof(ReleaseTagErrorVisibility));
+    }
+
+    private void ClearReadinessState()
+    {
+        ReadinessTitle = null;
+        ReadinessMessage = null;
     }
 
     private string BuildScopeSummary()
@@ -1536,6 +1612,26 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         _releaseTagCts.Dispose();
         _releaseTagCts = new CancellationTokenSource();
         return _releaseTagCts.Token;
+    }
+
+    private bool TryApplyReadinessState(Exception exception)
+    {
+        if (!WorkspaceReadinessFormatter.TryFormatPipelines(exception, _appState.Config.DevOpsConfig?.Organization, out var readinessState))
+        {
+            return false;
+        }
+
+        ClearAllData();
+        ErrorMessage = null;
+        ReadinessTitle = readinessState.Title;
+        ReadinessMessage = readinessState.Message;
+        ScopeSummary = "Azure DevOps access needs attention before the delivery scope can load.";
+        MetricsSummary = "Azure DevOps access needs attention before delivery data can load.";
+        _connectionState.SetError(AreaName, readinessState.Message);
+        _workspaceService.ClearCurrentSnapshot(AreaName);
+        RefreshConnectionStateSummary();
+        NotifyDerivedStateChanged();
+        return true;
     }
 
     private static string FormatTimestamp(DateTimeOffset value) => value.ToString("g");
@@ -1670,8 +1766,8 @@ public sealed class PipelinesRunItemViewModel
             run.Id,
             run.Name,
             status,
-            $"Started {run.CreatedDate.ToLocalTime():g}",
-            $"Branch {run.SourceBranch}",
+            $"Created {run.CreatedDate.ToLocalTime():g}",
+            string.IsNullOrWhiteSpace(run.SourceBranch) ? "Branch unavailable" : run.SourceBranch,
             stages);
     }
 }

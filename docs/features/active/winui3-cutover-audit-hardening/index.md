@@ -4,10 +4,10 @@
 
 title: "Feature Overview - winui3-cutover-audit-hardening"
 owner: ""
-status: "Planned"
+status: "In Progress"
 jira: "not linked"
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-04-25"
 
 ---
 
@@ -55,7 +55,7 @@ The original `winui3-migration` feature now contains three different jobs at onc
 
 ## Dependencies
 
-- Related active feature: `docs/features/active/winui3-migration/`
+- Related archived feature: `docs/features/archive/winui3-migration/`
 - Architecture constraints: `docs/architecture/architecture.md`, `docs/architecture/design.md`, `docs/architecture/codebase-guide.md`
 - Functional baselines: `docs/architecture/functionalities/aks.md`, `docs/architecture/functionalities/redis.md`, `docs/architecture/functionalities/storage.md`, `docs/architecture/functionalities/releases.md`, `docs/architecture/functionalities/observability.md`
 - Pitfall files that apply: `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/azure-sdk.md`
@@ -76,7 +76,7 @@ The original `winui3-migration` feature now contains three different jobs at onc
 
 ## Related documents
 
-- Baseline migration: `docs/features/active/winui3-migration/`
+- Baseline migration: `docs/features/archive/winui3-migration/`
 - Pipelines and releases functionality: `docs/architecture/functionalities/releases.md`
 - Observability functionality: `docs/architecture/functionalities/observability.md`
 

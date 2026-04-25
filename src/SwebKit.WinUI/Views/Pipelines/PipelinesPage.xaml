@@ -51,7 +51,7 @@
                                 <Button
                                     Content="Refresh"
                                     Command="{Binding RefreshCommand}"
-                                    IsEnabled="{Binding CanChangeApprovalAction}"/>
+                                    IsEnabled="{Binding CanRefreshWorkspace}"/>
                             </StackPanel>
                         </Grid>
 
@@ -60,6 +60,18 @@
                             Visibility="{Binding ErrorVisibility}"
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                             TextWrapping="WrapWholeWords"/>
+
+                        <InfoBar
+                            IsOpen="{Binding ShowReadinessState}"
+                            Severity="Warning"
+                            Title="{Binding ReadinessTitle}"
+                            Message="{Binding ReadinessMessage}">
+                            <InfoBar.ActionButton>
+                                <Button
+                                    Content="Open Settings"
+                                    Command="{Binding OpenSettingsCommand}"/>
+                            </InfoBar.ActionButton>
+                        </InfoBar>
 
                         <InfoBar
                             IsOpen="{Binding ShowNotConfiguredState}"

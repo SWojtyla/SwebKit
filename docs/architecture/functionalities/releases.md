@@ -113,6 +113,7 @@ Used by `PipelineDetail.razor` to drive the environments table.
 - The Activity tab loads all runs on activation (no global cache). Auto-refresh is opt-in (30 s).
 - Release records are local to SwebKit and not synced to ADO.
 - The WinUI cutover baseline now includes a native release tag-manager panel inside the Releases tab. `SwebKit.WinUI` reuses `IDevOpsClient.GetTagsAsync`, `GetCommitsAsync`, and `CreateAnnotatedTagAsync` so tag confirmation stays on the existing Azure DevOps seam while the richer release matrix/editor parity is still pending.
+- The native WinUI Pipelines route now treats failed Azure DevOps auth/access validation as an environment-readiness state rather than a generic page error: the page shows actionable guidance plus an `Open Settings` action for organization URL, PAT scope, or permission problems, while transient transport/server failures still fall through to the generic error path.
 
 ## Main code locations
 
