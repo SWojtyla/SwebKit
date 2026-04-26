@@ -241,12 +241,33 @@
 
                         <StackPanel Spacing="16"
                                     Visibility="{x:Bind ViewModel.ServiceBusVisibility, Mode=OneWay}">
+                            <shared:SectionCard Title="Add namespace"
+                                                Description="Provide a connection string to register a new Service Bus namespace. Credentials are stored in Windows Credential Manager.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBox Header="Connection string"
+                                                 PlaceholderText="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                                 Text="{x:Bind ViewModel.ServiceBusConnectionStringInput, Mode=TwoWay}"/>
+
+                                        <TextBlock Text="{x:Bind ViewModel.ServiceBusAddError, Mode=OneWay}"
+                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{x:Bind ViewModel.ServiceBusAddErrorVisibility, Mode=OneWay}"/>
+
+                                        <Button Content="Add namespace"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                HorizontalAlignment="Left"
+                                                Command="{x:Bind ViewModel.AddServiceBusNamespaceCommand}"/>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
+
                             <shared:SectionCard Title="Configured namespaces"
-                                                Description="Service Bus namespace connectivity remains profile-backed, but the native Settings route now surfaces credential health and pinned entities.">
+                                                Description="Review credential health for each registered namespace. Remove namespaces that are no longer needed.">
                                 <shared:SectionCard.BodyContent>
                                     <StackPanel Spacing="12">
                                         <shared:StateView Title="No Service Bus namespaces configured"
-                                                          Message="Add a Service Bus namespace from the messaging workflow or current profile before using Service Bus readiness-driven routes."
+                                                          Message="Add a namespace connection string above to register it with the native Service Bus workspace."
                                                           Glyph="i"
                                                           Visibility="{x:Bind ViewModel.ServiceBusNamespacesEmptyVisibility, Mode=OneWay}"/>
 
@@ -254,19 +275,32 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Style="{StaticResource SwebKitInsetCardStyle}">
-                                                        <StackPanel Spacing="4">
-                                                            <TextBlock Text="{Binding Alias}"
-                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                            <TextBlock Text="{Binding FullyQualifiedNamespace}"
-                                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                            <TextBlock Text="{Binding CredentialStateLabel}"
-                                                                       Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                            <TextBlock Text="{Binding CredentialSummary}"
-                                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                                       TextWrapping="Wrap"/>
-                                                        </StackPanel>
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Text="{Binding Alias}"
+                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                <TextBlock Text="{Binding FullyQualifiedNamespace}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                <TextBlock Text="{Binding CredentialStateLabel}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                                <TextBlock Text="{Binding CredentialSummary}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                           TextWrapping="Wrap"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Remove"
+                                                                    Command="{Binding ViewModel.RemoveServiceBusNamespaceCommand, ElementName=SettingsRootPage}"
+                                                                    CommandParameter="{Binding}"
+                                                                    VerticalAlignment="Top"/>
+                                                        </Grid>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

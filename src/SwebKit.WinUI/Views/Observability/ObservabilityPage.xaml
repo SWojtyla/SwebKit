@@ -128,7 +128,7 @@
         <shared:PageScaffold.BodyContent>
             <Grid>
                 <Grid
-                      ColumnSpacing="16">
+                    ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="320"/>
                         <ColumnDefinition Width="*"/>

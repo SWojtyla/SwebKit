@@ -24,6 +24,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IDevOpsClientFactory _devOpsClientFactory;
     private readonly IStorageClientFactory _storageClientFactory;
     private readonly IRedisClientFactory _redisClientFactory;
+    private readonly IServiceBusClientFactory _serviceBusClientFactory;
 
     private ConfigurationAreaHealth? _currentAreaHealth;
 
@@ -126,13 +127,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         ICredentialStore credentialStore,
         IDevOpsClientFactory devOpsClientFactory,
         IStorageClientFactory storageClientFactory,
-        IRedisClientFactory redisClientFactory)
+        IRedisClientFactory redisClientFactory,
+        IServiceBusClientFactory serviceBusClientFactory)
     {
         _userSettings = userSettings;
         _appState = appState;
         _themeCoordinator = themeCoordinator;
         _configurationHealth = configurationHealth;
         _configurationProbes = configurationProbes;
+        _serviceBusClientFactory = serviceBusClientFactory;
         _credentialStore = credentialStore;
         _devOpsClientFactory = devOpsClientFactory;
         _storageClientFactory = storageClientFactory;
@@ -143,7 +146,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         Sections =
         [
             new(SettingsSections.Appearance, "Appearance", "Theme, startup warmup, demo mode, and production safety defaults."),
-            new(SettingsSections.ServiceBus, "Service Bus", "Namespace credential health and pinned entity links."),
+            new(SettingsSections.ServiceBus, "Service Bus", "Add or remove namespace connections, review credential health, and manage pinned entity links."),
             new(SettingsSections.Aks, "AKS", "Kubeconfig defaults and namespace bootstrap settings."),
             new(SettingsSections.Redis, "Redis", "Active cache selection, connection profiles, and namespace separator."),
             new(SettingsSections.DevOps, "Azure DevOps", "Organization, PAT, and pipeline readiness configuration."),
@@ -156,6 +159,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
     public ObservableCollection<SettingsSectionOption> Sections { get; } = [];
+
+    [ObservableProperty]
+    public partial string ServiceBusConnectionStringInput { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string? ServiceBusAddError { get; set; }
+
+    public Visibility ServiceBusAddErrorVisibility => ToVisibility(!string.IsNullOrWhiteSpace(ServiceBusAddError));
 
     public ObservableCollection<ServiceBusNamespaceStatusItem> ServiceBusNamespaces { get; } = [];
 
@@ -249,6 +260,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshReadiness();
     }
 
+    partial void OnServiceBusAddErrorChanged(string? value) => OnPropertyChanged(nameof(ServiceBusAddErrorVisibility));
+
     partial void OnIsRunningLiveCheckChanged(bool value) => OnPropertyChanged(nameof(RunLiveCheckButtonLabel));
 
     partial void OnHasStoredDevOpsPatChanged(bool value) => OnPropertyChanged(nameof(StoredDevOpsPatVisibility));
@@ -330,6 +343,65 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         _appState.Config.ServiceBusEntityLinks.Remove(item.Link);
         await PersistConfigAsync("Pinned Service Bus entity removed.");
+    }
+
+    [RelayCommand]
+    private async Task AddServiceBusNamespaceAsync()
+    {
+        var raw = ServiceBusConnectionStringInput.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            ServiceBusAddError = "Connection string is required.";
+            return;
+        }
+
+        string fullyQualifiedNamespace;
+        try
+        {
+            fullyQualifiedNamespace = _serviceBusClientFactory.ParseFullyQualifiedNamespace(raw);
+        }
+        catch (Exception ex)
+        {
+            ServiceBusAddError = $"Invalid connection string: {ex.Message}";
+            return;
+        }
+
+        if (_appState.ServiceBusNamespaces.Any(ns => string.Equals(ns.FullyQualifiedNamespace, fullyQualifiedNamespace, StringComparison.OrdinalIgnoreCase)))
+        {
+            ServiceBusAddError = "This namespace is already added.";
+            return;
+        }
+
+        ServiceBusAddError = null;
+
+        var credentialKey = $"sb:ns:{Guid.NewGuid()}";
+        _credentialStore.Save(credentialKey, raw);
+
+        var serviceBusNamespace = new ServiceBusNamespace
+        {
+            Alias = fullyQualifiedNamespace.Split('.')[0],
+            FullyQualifiedNamespace = fullyQualifiedNamespace,
+            CredentialKey = credentialKey,
+        };
+
+        await _appState.AddServiceBusNamespaceAsync(serviceBusNamespace);
+        ServiceBusConnectionStringInput = string.Empty;
+        LoadServiceBusState();
+        SetStatus("Namespace added.");
+    }
+
+    [RelayCommand]
+    private async Task RemoveServiceBusNamespaceAsync(ServiceBusNamespaceStatusItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        _credentialStore.Delete(item.CredentialKey);
+        await _appState.RemoveServiceBusNamespaceAsync(item.Namespace.Id);
+        LoadServiceBusState();
+        SetStatus("Namespace removed.");
     }
 
     [RelayCommand]

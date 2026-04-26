@@ -8,6 +8,8 @@ using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.WinUI.Services;
 using SwebKit.WinUI.ViewModels.ServiceBus;
+using SwebKit.WinUI.ViewModels.Settings;
+using SwebKit.WinUI.Views.Settings;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace SwebKit.WinUI.Views.ServiceBus;
@@ -45,6 +47,13 @@ public sealed partial class ServiceBusPage : Page
     {
         base.OnNavigatedFrom(e);
         await ViewModel.DisposeAsync();
+    }
+
+    private void ManageNamespaces_Click(object sender, RoutedEventArgs e)
+    {
+        App.Current.Services
+            .GetRequiredService<IShellNavigationService>()
+            .NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.ServiceBus));
     }
 
     private async void SendActiveMessage_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

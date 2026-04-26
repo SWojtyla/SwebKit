@@ -761,7 +761,6 @@ public sealed class ServiceBusPageViewModelTests
         var viewModel = new ServiceBusPageViewModel(
             appState,
             new TestCredentialStore(),
-            new TestServiceBusClientFactory(),
             bootstrapper ?? new TestServiceBusNamespaceBootstrapper(),
             scheduledRepository,
             uiStateRepository,

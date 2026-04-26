@@ -21,7 +21,6 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
 
     private readonly AppStateService _appState;
     private readonly ICredentialStore _credentialStore;
-    private readonly IServiceBusClientFactory _serviceBusClientFactory;
     private readonly IServiceBusNamespaceBootstrapper _bootstrapper;
     private readonly ScheduledMessageRepository _scheduledMessageRepository;
     private readonly UiStateRepository _uiState;
@@ -36,15 +35,15 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
-    public partial string ConnectionStringInput { get; set; } = string.Empty;
-
-    [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
 
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
     [ObservableProperty]
     public partial ServiceBusTabViewModel? ActiveTab { get; set; }
+
+    [ObservableProperty]
+    public partial ServiceBusNamespaceItemViewModel? SelectedNamespace { get; set; }
 
     public ObservableCollection<ServiceBusNamespaceItemViewModel> Namespaces { get; } = [];
 
@@ -81,7 +80,6 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     public ServiceBusPageViewModel(
         AppStateService appState,
         ICredentialStore credentialStore,
-        IServiceBusClientFactory serviceBusClientFactory,
         IServiceBusNamespaceBootstrapper bootstrapper,
         ScheduledMessageRepository scheduledMessageRepository,
         UiStateRepository uiState,
@@ -89,7 +87,6 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     {
         _appState = appState;
         _credentialStore = credentialStore;
-        _serviceBusClientFactory = serviceBusClientFactory;
         _bootstrapper = bootstrapper;
         _scheduledMessageRepository = scheduledMessageRepository;
         _uiState = uiState;
@@ -101,6 +98,11 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         {
             OnPropertyChanged(nameof(HasNamespaces));
             OnPropertyChanged(nameof(ShowEmptyState));
+
+            if (SelectedNamespace is null || !Namespaces.Contains(SelectedNamespace))
+            {
+                SelectedNamespace = Namespaces.Count > 0 ? Namespaces[0] : null;
+            }
         };
 
         Tabs.CollectionChanged += (_, _) =>
@@ -171,7 +173,16 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
                 .Where(namespaceItem => namespaceItem.IsConnecting)
                 .Select(namespaceItem => ConnectNamespaceAsync(namespaceItem, _loadCts.Token));
 
-            await Task.WhenAll(connectTasks);
+            var demoEntityTasks = Namespaces
+                .Where(namespaceItem => !namespaceItem.IsConnecting && namespaceItem.Client is not null)
+                .Select(namespaceItem => LoadNamespaceEntitiesAsync(namespaceItem, _loadCts.Token));
+
+            await Task.WhenAll(connectTasks.Concat(demoEntityTasks));
+
+            if (SelectedNamespace is null && Namespaces.Count > 0)
+            {
+                SelectedNamespace = Namespaces[0];
+            }
         }
         catch (OperationCanceledException)
         {
@@ -184,66 +195,6 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         finally
         {
             IsLoading = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task AddNamespaceAsync()
-    {
-        var raw = ConnectionStringInput.Trim();
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            ErrorMessage = "Connection string is required.";
-            return;
-        }
-
-        string fullyQualifiedNamespace;
-        try
-        {
-            fullyQualifiedNamespace = _serviceBusClientFactory.ParseFullyQualifiedNamespace(raw);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Invalid connection string: {ex.Message}";
-            return;
-        }
-
-        if (_appState.ServiceBusNamespaces.Any(ns => string.Equals(ns.FullyQualifiedNamespace, fullyQualifiedNamespace, StringComparison.OrdinalIgnoreCase)))
-        {
-            ErrorMessage = "This namespace is already added.";
-            return;
-        }
-
-        IsBusy = true;
-        ErrorMessage = null;
-
-        try
-        {
-            var credentialKey = $"sb:ns:{Guid.NewGuid()}";
-            _credentialStore.Save(credentialKey, raw);
-
-            var serviceBusNamespace = new ServiceBusNamespace
-            {
-                Alias = fullyQualifiedNamespace.Split('.')[0],
-                FullyQualifiedNamespace = fullyQualifiedNamespace,
-                CredentialKey = credentialKey,
-            };
-
-            await _appState.AddServiceBusNamespaceAsync(serviceBusNamespace);
-
-            var namespaceItem = new ServiceBusNamespaceItemViewModel(serviceBusNamespace, OpenScheduledNamespaceAsync, RemoveNamespaceAsync)
-            {
-                IsConnecting = true,
-            };
-
-            Namespaces.Add(namespaceItem);
-
-            ConnectionStringInput = string.Empty;
-            await ConnectNamespaceAsync(namespaceItem, _loadCts.Token);
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 
