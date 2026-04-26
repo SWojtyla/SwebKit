@@ -116,6 +116,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
@@ -138,16 +139,20 @@
                                     IsActive="{Binding IsLoadingContainers}"/>
                             </Grid>
 
+                            <TextBox Grid.Row="1"
+                                     PlaceholderText="Filter containers"
+                                     Text="{Binding ContainerFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
                             <InfoBar
-                                Grid.Row="1"
+                                Grid.Row="2"
                                 IsOpen="{Binding ShowContainerEmptyState}"
                                 Severity="Informational"
                                 Title="No containers found"
                                 Message="The selected account returned no containers, or the current credential cannot enumerate them."/>
 
-                            <ScrollViewer Grid.Row="2"
+                            <ScrollViewer Grid.Row="3"
                                           VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding Containers}">
+                                <ItemsControl ItemsSource="{Binding FilteredContainers}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="viewModels:StorageContainerItemViewModel">
                                             <Border
@@ -224,11 +229,21 @@
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
                                     </StackPanel>
 
-                                    <Button
-                                        Grid.Column="1"
-                                        Content="Refresh current folder"
-                                        Command="{Binding RefreshBlobsCommand}"
-                                        IsEnabled="{Binding CanRefreshCurrentFolder}"/>
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Content="Copy container SAS"
+                                                Command="{Binding CopySelectedContainerSasUrlCommand}"
+                                                Visibility="{Binding ContainerSasActionVisibility}"
+                                                IsEnabled="{Binding CanCopySelectedContainerSas}"/>
+                                        <Button Content="Refresh current folder"
+                                                Command="{Binding RefreshBlobsCommand}"
+                                                IsEnabled="{Binding CanRefreshCurrentFolder}"/>
+                                        <Button Content="Upload"
+                                                Click="UploadBlob_Click"
+                                                Visibility="{Binding UploadActionVisibility}"
+                                                IsEnabled="{Binding CanUploadToSelectedContainer}"/>
+                                    </StackPanel>
                                 </Grid>
 
                                 <StackPanel Visibility="{Binding DownloadVisibility}"
@@ -311,34 +326,36 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                        <StackPanel Grid.Row="3"
-                                            Spacing="8">
-                                        <StackPanel Orientation="Horizontal"
+                                    <StackPanel Grid.Row="3"
                                                 Spacing="8">
+                                        <TextBox PlaceholderText="Filter blobs"
+                                                 Text="{Binding BlobFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
                                             <Button Content="{Binding SelectionModeButtonLabel}"
-                                                Command="{Binding ToggleSelectionModeCommand}"
-                                                IsEnabled="{Binding CanToggleSelectionMode}"/>
+                                                    Command="{Binding ToggleSelectionModeCommand}"
+                                                    IsEnabled="{Binding CanToggleSelectionMode}"/>
                                             <Button Content="Select loaded"
-                                                Visibility="{Binding BulkToolbarVisibility}"
-                                                Command="{Binding SelectAllLoadedBlobsCommand}"
-                                                IsEnabled="{Binding CanSelectAllLoadedBlobs}"/>
+                                                    Visibility="{Binding BulkToolbarVisibility}"
+                                                    Command="{Binding SelectAllLoadedBlobsCommand}"
+                                                    IsEnabled="{Binding CanSelectAllLoadedBlobs}"/>
                                             <Button Content="Clear"
-                                                Visibility="{Binding BulkToolbarVisibility}"
-                                                Command="{Binding ClearSelectedBlobsCommand}"
-                                                IsEnabled="{Binding CanClearSelectedBlobs}"/>
+                                                    Visibility="{Binding BulkToolbarVisibility}"
+                                                    Command="{Binding ClearSelectedBlobsCommand}"
+                                                    IsEnabled="{Binding CanClearSelectedBlobs}"/>
                                             <Button Content="{Binding BulkDownloadButtonLabel}"
-                                                Visibility="{Binding BulkToolbarVisibility}"
-                                                Command="{Binding DownloadSelectedBlobsZipCommand}"
-                                                IsEnabled="{Binding CanDownloadSelectedBlobs}"/>
+                                                    Visibility="{Binding BulkToolbarVisibility}"
+                                                    Command="{Binding DownloadSelectedBlobsZipCommand}"
+                                                    IsEnabled="{Binding CanDownloadSelectedBlobs}"/>
                                         </StackPanel>
 
                                         <TextBlock Text="{Binding BulkSelectionSummaryText}"
-                                               Visibility="{Binding BulkSelectionSummaryVisibility}"
-                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                               TextWrapping="WrapWholeWords"/>
-                                        </StackPanel>
+                                                   Visibility="{Binding BulkSelectionSummaryVisibility}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="WrapWholeWords"/>
+                                    </StackPanel>
 
-                                        <ScrollViewer Grid.Row="4"
+                                    <ScrollViewer Grid.Row="4"
                                                   VerticalScrollBarVisibility="Auto">
                                         <StackPanel Spacing="10">
                                             <InfoBar
@@ -347,7 +364,7 @@
                                                 Title="No items in this folder"
                                                 Message="Try another container, move back up the breadcrumb trail, or refresh the current folder."/>
 
-                                            <ItemsControl ItemsSource="{Binding Blobs}">
+                                            <ItemsControl ItemsSource="{Binding FilteredBlobs}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="viewModels:StorageBlobEntryViewModel">
                                                         <Border
@@ -378,7 +395,7 @@
                                                                                Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
                                                                 </StackPanel>
 
-                                                                    <ToggleButton Grid.Column="1"
+                                                                <ToggleButton Grid.Column="1"
                                                                               Content="{x:Bind SelectionActionLabel}"
                                                                               IsChecked="{x:Bind IsBatchSelected, Mode=OneWay}"
                                                                               Visibility="{x:Bind SelectionToggleVisibility, Mode=OneWay}"
@@ -386,13 +403,13 @@
                                                                               Command="{Binding ViewModel.ToggleBlobSelectionCommand, ElementName=PageRoot}"
                                                                               CommandParameter="{x:Bind}"/>
 
-                                                                    <Button Grid.Column="2"
+                                                                <Button Grid.Column="2"
                                                                         Content="{x:Bind PrimaryActionLabel}"
                                                                         IsEnabled="{Binding ViewModel.CanInteractWithBlobEntries, ElementName=PageRoot}"
                                                                         Command="{Binding ViewModel.OpenBlobEntryCommand, ElementName=PageRoot}"
                                                                         CommandParameter="{x:Bind}"/>
 
-                                                                    <Button Grid.Column="3"
+                                                                <Button Grid.Column="3"
                                                                         Content="Download"
                                                                         Visibility="{x:Bind DownloadVisibility, Mode=OneWay}"
                                                                         IsEnabled="{Binding ViewModel.CanInteractWithBlobEntries, ElementName=PageRoot}"
@@ -406,7 +423,7 @@
                                         </StackPanel>
                                     </ScrollViewer>
 
-                                        <Button Grid.Row="5"
+                                    <Button Grid.Row="5"
                                             Content="Load more"
                                             Visibility="{Binding LoadMoreVisibility}"
                                             Command="{Binding LoadMoreCommand}"/>
@@ -438,8 +455,6 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Grid.Column="0"
@@ -455,15 +470,25 @@
                                                            TextWrapping="WrapWholeWords"/>
                                             </StackPanel>
 
-                                            <Button Grid.Column="1"
-                                                    Content="Download"
-                                                    Command="{Binding DownloadSelectedBlobCommand}"/>
-                                            <Button Grid.Column="2"
-                                                    Content="Copy URL"
-                                                    Command="{Binding CopySelectedBlobUrlCommand}"/>
-                                            <Button Grid.Column="3"
-                                                    Content="Copy SAS URL"
-                                                    Command="{Binding CopySelectedBlobSasCommand}"/>
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        VerticalAlignment="Top">
+                                                <Button Content="Download"
+                                                        Command="{Binding DownloadSelectedBlobCommand}"/>
+                                                <Button Content="Copy URL"
+                                                        Command="{Binding CopySelectedBlobUrlCommand}"/>
+                                                <Button Content="Copy SAS URL"
+                                                        Command="{Binding CopySelectedBlobSasCommand}"/>
+                                                <Button Content="Copy path"
+                                                        Command="{Binding CopySelectedBlobPathCommand}"
+                                                        Visibility="{Binding CopyBlobPathActionVisibility}"
+                                                        IsEnabled="{Binding CanCopySelectedBlobPath}"/>
+                                                <Button Content="Copy blob"
+                                                        Click="CopyBlob_Click"
+                                                        Visibility="{Binding CopyBlobActionVisibility}"
+                                                        IsEnabled="{Binding CanCopySelectedBlob}"/>
+                                            </StackPanel>
                                         </Grid>
 
                                         <TextBlock Text="{Binding BlobDetailErrorMessage}"
@@ -504,8 +529,21 @@
 
                                         <Border Style="{StaticResource SwebKitInsetCardStyle}">
                                             <StackPanel Spacing="10">
-                                                <TextBlock Text="Metadata"
-                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="Metadata"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Edit metadata"
+                                                            Click="EditMetadata_Click"
+                                                            Visibility="{Binding EditMetadataActionVisibility}"
+                                                            IsEnabled="{Binding CanEditSelectedBlobMetadata}"/>
+                                                </Grid>
                                                 <TextBlock Text="No metadata recorded for this blob."
                                                            Visibility="{Binding MetadataEmptyVisibility}"
                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
@@ -573,10 +611,17 @@
                                                     <TextBlock Grid.Column="0"
                                                                Text="Content preview"
                                                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                    <Button Grid.Column="1"
-                                                            Content="Load full preview"
-                                                            Visibility="{Binding LoadExpandedPreviewVisibility}"
-                                                            Command="{Binding LoadFullPreviewCommand}"/>
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                Spacing="8">
+                                                        <Button Content="Copy preview"
+                                                                Visibility="{Binding CopyPreviewActionVisibility}"
+                                                                Command="{Binding CopyPreviewContentCommand}"
+                                                                IsEnabled="{Binding CanCopyPreviewContent}"/>
+                                                        <Button Content="Load full preview"
+                                                                Visibility="{Binding LoadExpandedPreviewVisibility}"
+                                                                Command="{Binding LoadFullPreviewCommand}"/>
+                                                    </StackPanel>
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding PreviewInfoMessage}"

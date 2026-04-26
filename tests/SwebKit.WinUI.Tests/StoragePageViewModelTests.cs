@@ -203,6 +203,70 @@ public sealed class StoragePageViewModelTests
         }
     }
 
+    [Fact]
+    public async Task UploadBlobAsync_UsesSelectedContainerAndReportsSuccess()
+    {
+        var harness = CreateHarness();
+
+        await LoadContainerAsync(harness.ViewModel);
+        await using var source = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"uploaded\":true}"));
+
+        var result = await harness.ViewModel.UploadBlobAsync("uploaded.json", source, overwrite: true, contentType: "application/json");
+
+        Assert.True(result.Success);
+        Assert.NotNull(harness.Client.LastUploadOptions);
+        Assert.Equal("configs", harness.Client.LastUploadOptions!.ContainerName);
+        Assert.Equal("uploaded.json", harness.Client.LastUploadOptions.BlobName);
+        Assert.True(harness.Client.LastUploadOptions.Overwrite);
+        Assert.Equal("application/json", harness.Client.LastUploadOptions.ContentType);
+        Assert.Contains("Uploaded to configs/uploaded.json", harness.ViewModel.BlobDetailStatusText, StringComparison.Ordinal);
+        Assert.Contains(harness.Notifications.All, notification => notification.Severity == NotificationSeverity.Success && string.Equals(notification.Message, "Blob uploaded", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CopySelectedBlobAsync_UsesSelectedBlobAndDestination()
+    {
+        var harness = CreateHarness();
+
+        await LoadBlobAsync(harness.ViewModel);
+
+        var result = await harness.ViewModel.CopySelectedBlobAsync("archive", "app-settings-copy.json", overwrite: true);
+
+        Assert.True(result.Success);
+        Assert.NotNull(harness.Client.LastCopyOptions);
+        Assert.Equal("configs", harness.Client.LastCopyOptions!.SourceContainer);
+        Assert.Equal("app-settings.json", harness.Client.LastCopyOptions.SourceBlobName);
+        Assert.Equal("archive", harness.Client.LastCopyOptions.DestinationContainer);
+        Assert.Equal("app-settings-copy.json", harness.Client.LastCopyOptions.DestinationBlobName);
+        Assert.True(harness.Client.LastCopyOptions.Overwrite);
+        Assert.Contains("Copied to archive/app-settings-copy.json", harness.ViewModel.BlobDetailStatusText, StringComparison.Ordinal);
+        Assert.Contains(harness.Notifications.All, notification => notification.Severity == NotificationSeverity.Success && string.Equals(notification.Message, "Blob copied", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaveSelectedBlobMetadataAsync_UsesCurrentEtagAndRefreshesMetadataRows()
+    {
+        var harness = CreateHarness();
+
+        await LoadBlobAsync(harness.ViewModel);
+
+        var result = await harness.ViewModel.SaveSelectedBlobMetadataAsync(new Dictionary<string, string>
+        {
+            ["owner"] = "ops",
+            ["environment"] = "prod"
+        });
+
+        Assert.True(result.Success);
+        Assert.Equal("\"etag-1\"", harness.Client.LastMetadataIfMatchEtag);
+        Assert.NotNull(harness.Client.LastSavedMetadata);
+        Assert.Equal("ops", harness.Client.LastSavedMetadata!["owner"]);
+        Assert.Equal("prod", harness.Client.LastSavedMetadata["environment"]);
+        Assert.Contains(harness.ViewModel.MetadataRows, row => string.Equals(row.Key, "owner", StringComparison.Ordinal) && string.Equals(row.Value, "ops", StringComparison.Ordinal));
+        Assert.Contains(harness.ViewModel.MetadataRows, row => string.Equals(row.Key, "environment", StringComparison.Ordinal) && string.Equals(row.Value, "prod", StringComparison.Ordinal));
+        Assert.Contains("Blob metadata updated", harness.ViewModel.BlobDetailStatusText, StringComparison.Ordinal);
+        Assert.Contains(harness.Notifications.All, notification => notification.Severity == NotificationSeverity.Success && string.Equals(notification.Message, "Metadata saved", StringComparison.Ordinal));
+    }
+
     private static async Task LoadBlobAsync(StoragePageViewModel viewModel)
     {
         await LoadContainerAsync(viewModel);
@@ -325,7 +389,20 @@ public sealed class StoragePageViewModelTests
 
         public string? LastDownloadPath { get; private set; }
 
+        public BlobUploadOptions? LastUploadOptions { get; private set; }
+
+        public BlobCopyOptions? LastCopyOptions { get; private set; }
+
+        public IReadOnlyDictionary<string, string>? LastSavedMetadata { get; private set; }
+
+        public string? LastMetadataIfMatchEtag { get; private set; }
+
         public List<string> DownloadedBlobNames { get; } = [];
+
+        private Dictionary<string, string> CurrentMetadata { get; } = new(StringComparer.Ordinal)
+        {
+            ["environment"] = "test"
+        };
 
         public StorageCapabilities Capabilities { get; set; } = new(
             VersioningEnabled: true,
@@ -364,7 +441,7 @@ public sealed class StoragePageViewModelTests
                 null,
                 null,
                 null,
-                new Dictionary<string, string> { ["environment"] = "test" },
+                new Dictionary<string, string>(CurrentMetadata, StringComparer.Ordinal),
                 new Dictionary<string, string> { ["feature"] = "storage" }));
 
         public Task<StorageBlobContent> GetBlobContentAsync(string containerName, string blobName, int maxBytes = 524_288, CancellationToken ct = default)
@@ -400,14 +477,31 @@ public sealed class StoragePageViewModelTests
         public Task<StorageCapabilities> GetStorageCapabilitiesAsync(CancellationToken ct = default) =>
             Task.FromResult(Capabilities);
 
-        public Task<BlobMutationResult> UploadBlobAsync(BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default) =>
-            Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}"));
+        public Task<BlobMutationResult> UploadBlobAsync(BlobUploadOptions options, Stream source, IProgress<long>? progress = null, CancellationToken ct = default)
+        {
+            LastUploadOptions = options;
+            return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.ContainerName}/{options.BlobName}"));
+        }
 
-        public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default) =>
-            Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}"));
+        public Task<BlobMutationResult> CopyBlobAsync(BlobCopyOptions options, CancellationToken ct = default)
+        {
+            LastCopyOptions = options;
+            return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{options.DestinationContainer}/{options.DestinationBlobName}"));
+        }
 
-        public Task<BlobMutationResult> SetBlobMetadataAsync(string containerName, string blobName, IDictionary<string, string> metadata, string? ifMatchEtag = null, CancellationToken ct = default) =>
-            Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}"));
+        public Task<BlobMutationResult> SetBlobMetadataAsync(string containerName, string blobName, IDictionary<string, string> metadata, string? ifMatchEtag = null, CancellationToken ct = default)
+        {
+            LastMetadataIfMatchEtag = ifMatchEtag;
+            LastSavedMetadata = new Dictionary<string, string>(metadata, StringComparer.Ordinal);
+            CurrentMetadata.Clear();
+
+            foreach (var pair in metadata)
+            {
+                CurrentMetadata[pair.Key] = pair.Value;
+            }
+
+            return Task.FromResult(new BlobMutationResult(true, ResultBlobPath: $"{containerName}/{blobName}"));
+        }
 
         public Task<BlobVersionComparison> GetVersionComparisonAsync(string containerName, string blobName, string baseVersionId, string? compareVersionId = null, CancellationToken ct = default)
         {

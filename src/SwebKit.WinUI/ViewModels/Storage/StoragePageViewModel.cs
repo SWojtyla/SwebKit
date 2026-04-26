@@ -31,6 +31,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     private CancellationTokenSource _downloadCts = new();
     private IStorageClient? _client;
     private StorageCapabilities? _storageCapabilities;
+    private BlobProperties? _selectedBlobProperties;
     private readonly HashSet<string> _selectedBlobNames = new(StringComparer.Ordinal);
     private bool _loaded;
     private bool _isDisposed;
@@ -65,12 +66,14 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         {
             OnPropertyChanged(nameof(ContainerCountLabel));
             OnPropertyChanged(nameof(ShowContainerEmptyState));
+            OnPropertyChanged(nameof(FilteredContainers));
         };
 
         Blobs.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(BlobCountLabel));
             OnPropertyChanged(nameof(ShowBlobEmptyState));
+            OnPropertyChanged(nameof(FilteredBlobs));
             RefreshBulkSelectionState();
         };
 
@@ -137,6 +140,12 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     [ObservableProperty]
     public partial bool IsBulkDownloading { get; set; }
+
+    [ObservableProperty]
+    public partial string ContainerFilterText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string BlobFilterText { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string BulkSelectionSummaryText { get; set; } = "No loaded blobs selected for ZIP download.";
@@ -240,6 +249,26 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     public bool AllowMutations => SelectedAccount?.Config.AllowMutations == true;
 
+    public bool CanUploadToSelectedContainer => AllowMutations && SelectedContainer is not null;
+
+    public bool CanCopySelectedContainerSas => SelectedContainer is not null;
+
+    public bool CanCopySelectedBlob => AllowMutations && SelectedBlob is not null;
+
+    public bool CanEditSelectedBlobMetadata => AllowMutations && SelectedBlob is not null && _selectedBlobProperties is not null && !IsLoadingBlobDetail;
+
+    public bool CanCopySelectedBlobPath => SelectedBlob is not null;
+
+    public bool CanCopyPreviewContent => HasSelectedBlob && !PreviewIsBinary && !string.IsNullOrWhiteSpace(PreviewContent);
+
+    public IReadOnlyList<StorageContainerItemViewModel> FilteredContainers => string.IsNullOrWhiteSpace(ContainerFilterText)
+        ? [.. Containers]
+        : [.. Containers.Where(container => container.Name.Contains(ContainerFilterText, StringComparison.OrdinalIgnoreCase))];
+
+    public IReadOnlyList<StorageBlobEntryViewModel> FilteredBlobs => string.IsNullOrWhiteSpace(BlobFilterText)
+        ? [.. Blobs]
+        : [.. Blobs.Where(blob => blob.FullName.Contains(BlobFilterText, StringComparison.OrdinalIgnoreCase))];
+
     public bool CanRestoreVersions => AllowMutations && (_storageCapabilities?.CanRestore == true || HasBlobVersions);
 
     public bool ShowNotConfiguredState => !IsRefreshing && !HasAccounts && !_appState.UseDemoData;
@@ -275,6 +304,30 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     public Visibility BlobDetailErrorVisibility => string.IsNullOrWhiteSpace(BlobDetailErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility PreviewVisibility => HasSelectedBlob && !IsLoadingBlobDetail && !PreviewIsBinary && PreviewContent is not null
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility UploadActionVisibility => CanUploadToSelectedContainer
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility ContainerSasActionVisibility => CanCopySelectedContainerSas
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility CopyBlobActionVisibility => CanCopySelectedBlob
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility EditMetadataActionVisibility => CanEditSelectedBlobMetadata
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility CopyBlobPathActionVisibility => CanCopySelectedBlobPath
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility CopyPreviewActionVisibility => CanCopyPreviewContent
         ? Visibility.Visible
         : Visibility.Collapsed;
 
@@ -351,6 +404,164 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         _loaded = true;
         await ReloadAsync();
         await _workspaceService.ApplyPendingRestoreAsync("storage");
+    }
+
+    public async Task<BlobMutationResult> UploadBlobAsync(
+        string blobName,
+        Stream source,
+        bool overwrite,
+        string? contentType = null,
+        CancellationToken ct = default)
+    {
+        if (_client is null || SelectedContainer is null)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Select a container before uploading a blob.");
+        }
+
+        if (!AllowMutations)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Mutations are disabled for the selected storage account.");
+        }
+
+        var trimmedBlobName = blobName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedBlobName))
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Enter a blob name before uploading.");
+        }
+
+        try
+        {
+            var result = await _client.UploadBlobAsync(
+                new BlobUploadOptions(SelectedContainer.Name, trimmedBlobName, overwrite, contentType),
+                source,
+                ct: ct);
+
+            HandleMutationFeedback(
+                result,
+                successTitle: "Blob uploaded",
+                successStatus: $"Uploaded to {result.ResultBlobPath ?? $"{SelectedContainer.Name}/{trimmedBlobName}"}.",
+                failureStatusPrefix: "Upload failed");
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage upload failed for container {ContainerName} and blob {BlobName}.", SelectedContainer.Name, trimmedBlobName);
+            return HandleMutationException("Blob upload failed", "Upload failed", ex);
+        }
+    }
+
+    public async Task<BlobMutationResult> CopySelectedBlobAsync(
+        string destinationContainer,
+        string destinationBlobName,
+        bool overwrite,
+        string? sourceVersionId = null,
+        CancellationToken ct = default)
+    {
+        if (_client is null || SelectedContainer is null || SelectedBlob is null)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Select a blob before copying it.");
+        }
+
+        if (!AllowMutations)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Mutations are disabled for the selected storage account.");
+        }
+
+        var trimmedDestinationContainer = destinationContainer?.Trim();
+        var trimmedDestinationBlobName = destinationBlobName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedDestinationContainer))
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Choose a destination container before copying the blob.");
+        }
+
+        if (string.IsNullOrWhiteSpace(trimmedDestinationBlobName))
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Enter a destination blob name before copying the blob.");
+        }
+
+        try
+        {
+            var result = await _client.CopyBlobAsync(
+                new BlobCopyOptions(
+                    SelectedContainer.Name,
+                    SelectedBlob.FullName,
+                    trimmedDestinationContainer,
+                    trimmedDestinationBlobName,
+                    sourceVersionId,
+                    overwrite),
+                ct);
+
+            HandleMutationFeedback(
+                result,
+                successTitle: "Blob copied",
+                successStatus: $"Copied to {result.ResultBlobPath ?? $"{trimmedDestinationContainer}/{trimmedDestinationBlobName}"}.",
+                failureStatusPrefix: "Copy failed");
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage copy failed for blob {BlobName}.", SelectedBlob.FullName);
+            return HandleMutationException("Blob copy failed", "Copy failed", ex);
+        }
+    }
+
+    public async Task<BlobMutationResult> SaveSelectedBlobMetadataAsync(
+        IDictionary<string, string> metadata,
+        CancellationToken ct = default)
+    {
+        if (_client is null || SelectedContainer is null || SelectedBlob is null)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Select a blob before updating metadata.");
+        }
+
+        if (!AllowMutations)
+        {
+            return new BlobMutationResult(false, ErrorMessage: "Mutations are disabled for the selected storage account.");
+        }
+
+        try
+        {
+            var etag = _selectedBlobProperties?.ETag;
+            var result = await _client.SetBlobMetadataAsync(
+                SelectedContainer.Name,
+                SelectedBlob.FullName,
+                metadata,
+                etag,
+                ct);
+
+            if (result.Success)
+            {
+                var refreshedProperties = await _client.GetBlobPropertiesAsync(SelectedContainer.Name, SelectedBlob.FullName, ct);
+                ApplyProperties(refreshedProperties);
+            }
+
+            HandleMutationFeedback(
+                result,
+                successTitle: "Metadata saved",
+                successStatus: "Blob metadata updated.",
+                failureStatusPrefix: "Metadata save failed");
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage metadata update failed for blob {BlobName}.", SelectedBlob.FullName);
+            return HandleMutationException("Metadata save failed", "Metadata save failed", ex);
+        }
     }
 
     [RelayCommand]
@@ -682,6 +893,38 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     }
 
     [RelayCommand]
+    private async Task CopySelectedContainerSasUrlAsync()
+    {
+        if (_client is null || SelectedContainer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var sasUrl = await _client.GetContainerSasUrlAsync(SelectedContainer.Name, TimeSpan.FromHours(24), _refreshCts.Token);
+            StorageClipboardHelper.CopyText(sasUrl);
+            _notifications.ShowSuccess("Container SAS copied", SelectedContainer.Name);
+            ConnectionSummary = "Copied a 24-hour container SAS URL to the clipboard.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Storage container SAS copy failed for {ContainerName}.", SelectedContainer.Name);
+            _notifications.ShowError("Container SAS copy failed", ex: ex);
+            ConnectionSummary = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private Task CopySelectedBlobPathAsync() => CopyToClipboardAsync(() => SelectedBlob?.FullName, "Blob path copied");
+
+    [RelayCommand]
+    private Task CopyPreviewContentAsync() => CopyToClipboardAsync(() => PreviewContent, "Preview content copied");
+
+    [RelayCommand]
     private async Task LoadFullPreviewAsync()
     {
         if (_client is null || SelectedContainer is null || SelectedBlob is null || !CanLoadExpandedPreview)
@@ -868,6 +1111,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     partial void OnSelectedAccountChanged(StorageAccountItemViewModel? value)
     {
         OnPropertyChanged(nameof(AllowMutations));
+        NotifyMutationActionStateChanged();
         OnPropertyChanged(nameof(CanRestoreVersions));
 
         if (_isDisposed || _suppressAccountSelectionSideEffects || !_loaded || value is null)
@@ -881,6 +1125,9 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     partial void OnSelectedContainerChanged(StorageContainerItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedContainer));
+        NotifyMutationActionStateChanged();
+        OnPropertyChanged(nameof(CanCopySelectedContainerSas));
+        OnPropertyChanged(nameof(ContainerSasActionVisibility));
         OnPropertyChanged(nameof(CanRefreshCurrentFolder));
         OnPropertyChanged(nameof(BlobWorkspaceVisibility));
         OnPropertyChanged(nameof(SelectContainerHintVisibility));
@@ -892,6 +1139,10 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     partial void OnSelectedBlobChanged(StorageBlobEntryViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedBlob));
+        NotifyMutationActionStateChanged();
+        NotifyPreviewActionStateChanged();
+        OnPropertyChanged(nameof(CanCopySelectedBlobPath));
+        OnPropertyChanged(nameof(CopyBlobPathActionVisibility));
         OnPropertyChanged(nameof(BlobDetailVisibility));
         OnPropertyChanged(nameof(BlobDetailPlaceholderVisibility));
         OnPropertyChanged(nameof(PreviewVisibility));
@@ -927,9 +1178,17 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         OnPropertyChanged(nameof(BlobDetailErrorVisibility));
     }
 
+    partial void OnIsLoadingBlobDetailChanged(bool value)
+    {
+        NotifyMutationActionStateChanged();
+        OnPropertyChanged(nameof(PreviewVisibility));
+        OnPropertyChanged(nameof(BinaryPreviewVisibility));
+    }
+
     partial void OnPreviewContentChanged(string? value)
     {
         OnPropertyChanged(nameof(PreviewVisibility));
+        NotifyPreviewActionStateChanged();
     }
 
     partial void OnPreviewInfoMessageChanged(string? value)
@@ -941,6 +1200,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     {
         OnPropertyChanged(nameof(PreviewVisibility));
         OnPropertyChanged(nameof(BinaryPreviewVisibility));
+        NotifyPreviewActionStateChanged();
     }
 
     partial void OnCanLoadExpandedPreviewChanged(bool value)
@@ -979,17 +1239,21 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         OnPropertyChanged(nameof(ShowContainerEmptyState));
     }
 
+    partial void OnContainerFilterTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(FilteredContainers));
+    }
+
+    partial void OnBlobFilterTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(FilteredBlobs));
+    }
+
     partial void OnIsLoadingBlobsChanged(bool value)
     {
         OnPropertyChanged(nameof(LoadMoreVisibility));
         OnPropertyChanged(nameof(ShowBlobEmptyState));
         RefreshBulkSelectionState();
-    }
-
-    partial void OnIsLoadingBlobDetailChanged(bool value)
-    {
-        OnPropertyChanged(nameof(PreviewVisibility));
-        OnPropertyChanged(nameof(BinaryPreviewVisibility));
     }
 
     partial void OnIsDownloadingBlobChanged(bool value)
@@ -1299,7 +1563,9 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
             return;
         }
 
+        _selectedBlobProperties = null;
         MarkSelectedBlob(blob.FullName);
+        NotifyMutationActionStateChanged();
         BlobDetailErrorMessage = null;
         IsLoadingBlobDetail = true;
         BlobDetailStatusText = "Loading blob properties and preview...";
@@ -1343,6 +1609,8 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
 
     private void ApplyProperties(BlobProperties properties)
     {
+        _selectedBlobProperties = properties;
+        NotifyMutationActionStateChanged();
         BlobPropertyRows.Clear();
         MetadataRows.Clear();
         TagRows.Clear();
@@ -1696,6 +1964,7 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     private void ClearBlobDetailState()
     {
         SelectedBlob = null;
+        _selectedBlobProperties = null;
         MarkSelectedBlob(null);
         BlobPropertyRows.Clear();
         MetadataRows.Clear();
@@ -1709,6 +1978,34 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
         SelectedBlobTitle = "Select a blob";
         SelectedBlobSubtitle = "Preview text-friendly content and inspect blob properties from here.";
         BlobDetailStatusText = "Select a blob to inspect properties, metadata, tags, and content preview.";
+    }
+
+    private void HandleMutationFeedback(
+        BlobMutationResult result,
+        string successTitle,
+        string successStatus,
+        string failureStatusPrefix)
+    {
+        if (result.Success)
+        {
+            BlobDetailStatusText = successStatus;
+            _notifications.ShowSuccess(successTitle, result.ResultBlobPath);
+            return;
+        }
+
+        var failureMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
+            ? failureStatusPrefix
+            : $"{failureStatusPrefix}: {result.ErrorMessage}";
+
+        BlobDetailStatusText = failureMessage;
+        _notifications.ShowError(failureStatusPrefix, detail: result.ErrorMessage);
+    }
+
+    private BlobMutationResult HandleMutationException(string notificationTitle, string statusPrefix, Exception ex)
+    {
+        BlobDetailStatusText = $"{statusPrefix}: {ex.Message}";
+        _notifications.ShowError(notificationTitle, ex: ex);
+        return new BlobMutationResult(false, ErrorMessage: ex.Message);
     }
 
     private void MarkSelectedContainer(string? containerName)
@@ -2151,6 +2448,25 @@ public sealed partial class StoragePageViewModel : ObservableObject, IAsyncDispo
     {
         OnPropertyChanged(nameof(CanRestoreVersions));
         OnPropertyChanged(nameof(RestoreVersionActionVisibility));
+    }
+
+    private void NotifyMutationActionStateChanged()
+    {
+        OnPropertyChanged(nameof(CanUploadToSelectedContainer));
+        OnPropertyChanged(nameof(CanCopySelectedBlob));
+        OnPropertyChanged(nameof(CanEditSelectedBlobMetadata));
+        OnPropertyChanged(nameof(CanCopySelectedBlobPath));
+        OnPropertyChanged(nameof(UploadActionVisibility));
+        OnPropertyChanged(nameof(ContainerSasActionVisibility));
+        OnPropertyChanged(nameof(CopyBlobActionVisibility));
+        OnPropertyChanged(nameof(EditMetadataActionVisibility));
+        OnPropertyChanged(nameof(CopyBlobPathActionVisibility));
+    }
+
+    private void NotifyPreviewActionStateChanged()
+    {
+        OnPropertyChanged(nameof(CanCopyPreviewContent));
+        OnPropertyChanged(nameof(CopyPreviewActionVisibility));
     }
 
     private static string BuildVersionComparisonSummary(BlobVersionComparison comparison)

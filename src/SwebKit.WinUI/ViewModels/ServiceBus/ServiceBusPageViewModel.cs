@@ -1,13 +1,17 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
 using SwebKit.Core.Services;
+using SwebKit.WinUI.Services;
 
 namespace SwebKit.WinUI.ViewModels.ServiceBus;
 
@@ -21,6 +25,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     private readonly IServiceBusNamespaceBootstrapper _bootstrapper;
     private readonly ScheduledMessageRepository _scheduledMessageRepository;
     private readonly UiStateRepository _uiState;
+    private readonly OperatorWorkspaceService _workspaceService;
     private CancellationTokenSource _loadCts = new();
     private bool _loaded;
 
@@ -77,7 +82,8 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         IServiceBusClientFactory serviceBusClientFactory,
         IServiceBusNamespaceBootstrapper bootstrapper,
         ScheduledMessageRepository scheduledMessageRepository,
-        UiStateRepository uiState)
+        UiStateRepository uiState,
+        OperatorWorkspaceService workspaceService)
     {
         _appState = appState;
         _credentialStore = credentialStore;
@@ -85,6 +91,9 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         _bootstrapper = bootstrapper;
         _scheduledMessageRepository = scheduledMessageRepository;
         _uiState = uiState;
+        _workspaceService = workspaceService;
+
+        _workspaceService.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
 
         Namespaces.CollectionChanged += (_, _) =>
         {
@@ -112,6 +121,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         await _scheduledMessageRepository.LoadAsync();
         _loaded = true;
         await ReloadAsync();
+        await _workspaceService.ApplyPendingRestoreAsync("service-bus");
     }
 
     [RelayCommand]
@@ -310,6 +320,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
 
     public async ValueTask DisposeAsync()
     {
+        _workspaceService.UnregisterRestoreHandler("service-bus");
         await CancelLoadAsync();
         await DisposeClientsAsync();
     }
@@ -365,6 +376,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         if (tab is not null)
         {
             ActiveTab = tab;
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
         }
     }
 
@@ -381,6 +393,8 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         {
             ActiveTab = Tabs.LastOrDefault();
         }
+
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 
     [RelayCommand]
@@ -571,6 +585,34 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         };
     }
 
+    public ServiceBusComposeDraft CreateComposeDraftFromMessage(SbMessage message, bool scheduleForLater = false)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        var draft = CreateComposeDraft();
+        draft.MessageId = string.IsNullOrWhiteSpace(message.MessageId) ? draft.MessageId : message.MessageId;
+        draft.Subject = message.Subject ?? string.Empty;
+        draft.CorrelationId = message.CorrelationId ?? string.Empty;
+        draft.ContentType = message.ContentType ?? draft.ContentType;
+        draft.Body = message.Body;
+        draft.PropertiesText = SerializeProperties(
+            message.ApplicationProperties.ToDictionary(
+                static pair => pair.Key,
+                static pair => pair.Value?.ToString() ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase));
+        draft.IsScheduled = scheduleForLater;
+        return draft;
+    }
+
+    public ServiceBusComposeDraft CreateReplayDraftFromMessage(SbMessage message)
+    {
+        var draft = CreateComposeDraftFromMessage(message);
+        draft.MessageId = Guid.NewGuid().ToString();
+        draft.IsReplay = true;
+        draft.TargetEntityPath = ActiveTab?.EntityPath ?? string.Empty;
+        return draft;
+    }
+
     public void ApplyTemplateToComposeDraft(ServiceBusComposeDraft draft, SbMessageTemplate template)
     {
         ArgumentNullException.ThrowIfNull(draft);
@@ -612,6 +654,172 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         await _appState.SaveMessageTemplateAsync(template);
         OnPropertyChanged(nameof(MessageTemplates));
         return template;
+    }
+
+    public Task<ServiceBusComposeResult> ExecuteComposeDraftAsync(ServiceBusComposeDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        return draft.IsReplay
+            ? ReplayMessageAsync(draft)
+            : SendOrScheduleActiveMessageAsync(draft);
+    }
+
+    public async Task<BatchOperationResult> ReplaySelectedDeadLettersAsync(ServiceBusBatchReplayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (ActiveTab is null || !ActiveTab.IsDlq)
+        {
+            throw new InvalidOperationException("A dead-letter workspace is required to replay selected messages.");
+        }
+
+        var targetEntityPath = string.IsNullOrWhiteSpace(request.TargetEntityPath)
+            ? ActiveTab.EntityPath
+            : request.TargetEntityPath.Trim();
+        if (string.IsNullOrWhiteSpace(targetEntityPath))
+        {
+            throw new InvalidOperationException("Replay target entity is required.");
+        }
+
+        var selectedSequenceNumbers = ActiveTab.SelectedMessages
+            .Where(message => message.SequenceNumber is not null)
+            .Select(message => message.SequenceNumber!.Value.ToString())
+            .ToList();
+        if (selectedSequenceNumbers.Count == 0)
+        {
+            throw new InvalidOperationException("Select at least one dead-letter message with a sequence number to replay.");
+        }
+
+        var result = new BatchOperationResult
+        {
+            Skipped = ActiveTab.SelectedMessages.Count - selectedSequenceNumbers.Count,
+        };
+        var remapRules = BuildReplayRemapRules(
+            request.OverrideSubject,
+            request.OverrideCorrelationId,
+            request.PropertyRenamesText,
+            request.PropertyRemovalsText);
+
+        IsBusy = true;
+
+        try
+        {
+            foreach (var chunk in selectedSequenceNumbers.Chunk(10))
+            {
+                try
+                {
+                    await ActiveTab.Client.ResubmitDeadLetterAsync(
+                        ActiveTab.EntityPath,
+                        chunk,
+                        string.Equals(targetEntityPath, ActiveTab.EntityPath, StringComparison.OrdinalIgnoreCase) ? null : targetEntityPath,
+                        remapRules,
+                        _loadCts.Token);
+                    result.Succeeded += chunk.Length;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    result.Failed += chunk.Length;
+                    result.Errors.Add(new BatchOperationItemError
+                    {
+                        MessageId = $"chunk of {chunk.Length}",
+                        Reason = ex.Message.Length > 120 ? ex.Message[..120] + "..." : ex.Message,
+                    });
+                }
+            }
+
+            await LoadTabMessagesAsync(ActiveTab, _loadCts.Token);
+            ActiveTab.ClearSelectedMessages();
+            ActiveTab.SelectedMessage = null;
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public async Task<int> DeleteFilteredMessagesAsync()
+    {
+        if (ActiveTab is null || !ActiveTab.IsMessageTab)
+        {
+            throw new InvalidOperationException("An active message workspace is required to delete filtered messages.");
+        }
+
+        var sequenceNumbers = ActiveTab.GetVisibleMessageSequenceNumbers();
+        if (sequenceNumbers.Count == 0)
+        {
+            throw new InvalidOperationException("No filtered messages are available for deletion.");
+        }
+
+        IsBusy = true;
+
+        try
+        {
+            var deleted = 0;
+            if (ActiveTab.IsDlq)
+            {
+                await ActiveTab.Client.CompleteDeadLetterAsync(
+                    ActiveTab.EntityPath,
+                    sequenceNumbers.Select(sequenceNumber => sequenceNumber.ToString(CultureInfo.InvariantCulture)).ToList(),
+                    _loadCts.Token);
+                deleted = sequenceNumbers.Count;
+            }
+            else
+            {
+                deleted = await ActiveTab.Client.CompleteMessagesAsync(ActiveTab.EntityPath, sequenceNumbers, _loadCts.Token);
+            }
+
+            ActiveTab.ClearSelectedMessages();
+            ActiveTab.SelectedMessage = null;
+            await LoadTabMessagesAsync(ActiveTab, _loadCts.Token);
+            return deleted;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public async Task<int> PurgeActiveTabMessagesAsync()
+    {
+        if (ActiveTab is null || !ActiveTab.IsMessageTab)
+        {
+            throw new InvalidOperationException("An active message workspace is required to purge messages.");
+        }
+
+        IsBusy = true;
+
+        try
+        {
+            var deleted = await ActiveTab.Client.PurgeMessagesAsync(ActiveTab.EntityPath, ActiveTab.IsDlq, _loadCts.Token);
+            ActiveTab.ClearSelectedMessages();
+            ActiveTab.SelectedMessage = null;
+            await LoadTabMessagesAsync(ActiveTab, _loadCts.Token);
+            return deleted;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public string ExportVisibleMessagesAsJson()
+    {
+        if (ActiveTab is null || !ActiveTab.IsMessageTab)
+        {
+            throw new InvalidOperationException("An active message workspace is required to export messages.");
+        }
+
+        return System.Text.Json.JsonSerializer.Serialize(
+            ActiveTab.GetVisibleMessages(),
+            new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+            });
     }
 
     public async Task<ServiceBusComposeResult> SendOrScheduleActiveMessageAsync(ServiceBusComposeDraft draft)
@@ -672,6 +880,62 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
             await _scheduledMessageRepository.AddAsync(scheduledEntry);
             RefreshScheduledTabForNamespace(ActiveTab.NamespaceId);
             return ServiceBusComposeResult.Scheduled(message.MessageId, sequenceNumber, scheduledEntry);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task<ServiceBusComposeResult> ReplayMessageAsync(ServiceBusComposeDraft draft)
+    {
+        if (ActiveTab is null || ActiveTab.IsScheduled)
+        {
+            throw new InvalidOperationException("An active or dead-letter workspace is required to replay a message.");
+        }
+
+        var targetEntityPath = string.IsNullOrWhiteSpace(draft.TargetEntityPath)
+            ? ActiveTab.EntityPath
+            : draft.TargetEntityPath.Trim();
+        if (string.IsNullOrWhiteSpace(targetEntityPath))
+        {
+            throw new InvalidOperationException("Replay target entity is required.");
+        }
+
+        var targetClient = ResolveReplayTargetClient(draft.TargetNamespaceId);
+        var applicationProperties = ParseProperties(draft.PropertiesText)
+            .ToDictionary(static pair => pair.Key, static pair => (object)pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        var message = new SbMessage
+        {
+            MessageId = string.IsNullOrWhiteSpace(draft.MessageId) ? Guid.NewGuid().ToString() : draft.MessageId.Trim(),
+            CorrelationId = NormalizeOptional(draft.CorrelationId),
+            Subject = NormalizeOptional(draft.Subject),
+            ContentType = NormalizeOptional(draft.ContentType),
+            Body = draft.Body,
+            ApplicationProperties = applicationProperties,
+        };
+
+        ApplyReplayRemapRules(message, BuildReplayRemapRules(
+            draft.ReplayOverrideSubject,
+            draft.ReplayOverrideCorrelationId,
+            draft.ReplayPropertyRenamesText,
+            draft.ReplayPropertyRemovalsText));
+
+        IsBusy = true;
+
+        try
+        {
+            await targetClient.SendMessageAsync(targetEntityPath, message, _loadCts.Token);
+
+            if (!ActiveTab.IsDlq
+                && ReferenceEquals(targetClient, ActiveTab.Client)
+                && string.Equals(targetEntityPath, ActiveTab.EntityPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await LoadTabMessagesAsync(ActiveTab, _loadCts.Token);
+            }
+
+            return ServiceBusComposeResult.Sent(message.MessageId);
         }
         finally
         {
@@ -817,6 +1081,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         if (existing is not null)
         {
             ActiveTab = existing;
+            _ = PublishWorkspaceSnapshotAsync(recordRecent: true);
             return;
         }
 
@@ -824,6 +1089,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         Tabs.Add(tab);
         ActiveTab = tab;
         await LoadTabMessagesAsync(tab, _loadCts.Token);
+        await PublishWorkspaceSnapshotAsync(recordRecent: true);
     }
 
     private async Task OpenScheduledNamespaceAsync(ServiceBusNamespaceItemViewModel namespaceItem)
@@ -839,6 +1105,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         {
             ActiveTab = existing;
             await RefreshScheduledMessagesAsync(existing);
+            await PublishWorkspaceSnapshotAsync(recordRecent: true);
             return;
         }
 
@@ -846,6 +1113,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         Tabs.Add(tab);
         ActiveTab = tab;
         await RefreshScheduledMessagesAsync(tab);
+        await PublishWorkspaceSnapshotAsync(recordRecent: true);
     }
 
     private async Task LoadTabMessagesAsync(ServiceBusTabViewModel tab, CancellationToken cancellationToken)
@@ -940,6 +1208,190 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         {
             ActiveTab = Tabs.LastOrDefault();
         }
+
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private async Task PublishWorkspaceSnapshotAsync(bool recordRecent)
+    {
+        var snapshot = BuildWorkspaceSnapshot();
+        if (snapshot is null)
+        {
+            _workspaceService.ClearCurrentSnapshot("service-bus");
+            return;
+        }
+
+        await _workspaceService.PublishSnapshotAsync(snapshot, recordRecent);
+    }
+
+    private WorkspaceSnapshot? BuildWorkspaceSnapshot()
+    {
+        if (ActiveTab is null)
+        {
+            return null;
+        }
+
+        return new WorkspaceSnapshot
+        {
+            Resource = new OperatorResourceReference
+            {
+                Key = $"service-bus:{ActiveTab.Id}",
+                Area = "service-bus",
+                Kind = ActiveTab.IsScheduled ? "scheduled" : "entity",
+                DisplayName = ActiveTab.Title,
+                DisplayPath = string.IsNullOrWhiteSpace(ActiveTab.EntityPath)
+                    ? ActiveTab.NamespaceAlias
+                    : $"{ActiveTab.NamespaceAlias}/{ActiveTab.EntityPath}",
+                Summary = ActiveTab.NamespaceAlias,
+                Icon = "📨",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["namespaceId"] = ActiveTab.NamespaceId.ToString("D"),
+                    ["entityPath"] = ActiveTab.EntityPath,
+                    ["mode"] = ActiveTab.IsScheduled ? "scheduled" : ActiveTab.IsDlq ? "dlq" : "active",
+                },
+            },
+            RestoreState = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["activeTabId"] = ActiveTab.Id,
+                ["namespaceId"] = ActiveTab.NamespaceId.ToString("D"),
+                ["entityPath"] = ActiveTab.EntityPath,
+                ["mode"] = ActiveTab.IsScheduled ? "scheduled" : ActiveTab.IsDlq ? "dlq" : "active",
+                ["tabType"] = ActiveTab.IsScheduled ? "scheduled" : "entity",
+                ["tabs"] = System.Text.Json.JsonSerializer.Serialize(Tabs.Select(CreateWorkspaceTabState).ToList()),
+            },
+        };
+    }
+
+    private ServiceBusWorkspaceTabState CreateWorkspaceTabState(ServiceBusTabViewModel tab)
+    {
+        return new ServiceBusWorkspaceTabState
+        {
+            NamespaceId = tab.NamespaceId,
+            EntityPath = tab.EntityPath,
+            Title = tab.Title,
+            Mode = tab.IsScheduled ? "scheduled" : tab.IsDlq ? "dlq" : "active",
+            TabType = tab.IsScheduled ? "scheduled" : "entity",
+        };
+    }
+
+    private async Task RestoreWorkspaceAsync(WorkspaceSnapshot snapshot)
+    {
+        Tabs.Clear();
+        ActiveTab = null;
+
+        if (snapshot.RestoreState.TryGetValue("tabs", out var tabsJson))
+        {
+            var tabStates = System.Text.Json.JsonSerializer.Deserialize<List<ServiceBusWorkspaceTabState>>(tabsJson) ?? [];
+            foreach (var tabState in tabStates)
+            {
+                if (!TryCreateRestoredTab(tabState, out var tab))
+                {
+                    continue;
+                }
+
+                Tabs.Add(tab);
+                if (tab.IsScheduled)
+                {
+                    await RefreshScheduledMessagesAsync(tab);
+                }
+                else
+                {
+                    await LoadTabMessagesAsync(tab, _loadCts.Token);
+                }
+            }
+
+            if (snapshot.RestoreState.TryGetValue("activeTabId", out var activeTabId))
+            {
+                ActiveTab = Tabs.FirstOrDefault(tab => string.Equals(tab.Id, activeTabId, StringComparison.Ordinal));
+            }
+        }
+
+        ActiveTab ??= Tabs.FirstOrDefault();
+
+        if (ActiveTab is null
+            && snapshot.RestoreState.TryGetValue("namespaceId", out var namespaceText)
+            && Guid.TryParse(namespaceText, out var namespaceId))
+        {
+            var entityPath = snapshot.RestoreState.TryGetValue("entityPath", out var restoredEntityPath)
+                ? restoredEntityPath
+                : string.Empty;
+            var mode = snapshot.RestoreState.TryGetValue("mode", out var restoredMode)
+                ? restoredMode
+                : "active";
+            var tabType = snapshot.RestoreState.TryGetValue("tabType", out var restoredTabType)
+                ? restoredTabType
+                : "entity";
+
+            if (TryCreateRestoredTab(new ServiceBusWorkspaceTabState
+                {
+                    NamespaceId = namespaceId,
+                    EntityPath = entityPath,
+                    Title = snapshot.Resource.DisplayName,
+                    Mode = mode,
+                    TabType = tabType,
+                }, out var restoredTab))
+            {
+                Tabs.Add(restoredTab);
+                ActiveTab = restoredTab;
+                if (restoredTab.IsScheduled)
+                {
+                    await RefreshScheduledMessagesAsync(restoredTab);
+                }
+                else
+                {
+                    await LoadTabMessagesAsync(restoredTab, _loadCts.Token);
+                }
+            }
+        }
+
+        await PublishWorkspaceSnapshotAsync(recordRecent: false);
+    }
+
+    private bool TryCreateRestoredTab(ServiceBusWorkspaceTabState state, out ServiceBusTabViewModel tab)
+    {
+        tab = null!;
+
+        var namespaceItem = Namespaces.FirstOrDefault(candidate => candidate.Namespace.Id == state.NamespaceId);
+        if (namespaceItem?.Client is null)
+        {
+            return false;
+        }
+
+        if (string.Equals(state.TabType, "scheduled", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state.Mode, "scheduled", StringComparison.OrdinalIgnoreCase))
+        {
+            tab = ServiceBusTabViewModel.CreateScheduled(namespaceItem, _uiState);
+            return true;
+        }
+
+        var title = string.IsNullOrWhiteSpace(state.Title)
+            ? ExtractEntityTitle(state.EntityPath)
+            : state.Title;
+        var entity = new SbEntityInfo
+        {
+            Name = title,
+            EntityPath = state.EntityPath,
+        };
+
+        tab = new ServiceBusTabViewModel(
+            namespaceItem,
+            entity,
+            isDlq: string.Equals(state.Mode, "dlq", StringComparison.OrdinalIgnoreCase),
+            _uiState,
+            PeekCount);
+        return true;
+    }
+
+    private static string ExtractEntityTitle(string entityPath)
+    {
+        if (string.IsNullOrWhiteSpace(entityPath))
+        {
+            return "Workspace";
+        }
+
+        return entityPath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault()
+               ?? entityPath;
     }
 
     private static string CreateTabId(Guid namespaceId, string entityPath, bool isDlq) =>
@@ -979,6 +1431,148 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         LoadMoreActiveTabCommand.NotifyCanExecuteChanged();
         ResubmitSelectedDeadLetterCommand.NotifyCanExecuteChanged();
         CompleteSelectedDeadLetterCommand.NotifyCanExecuteChanged();
+    }
+
+    private IServiceBusClient ResolveReplayTargetClient(Guid? targetNamespaceId)
+    {
+        if (ActiveTab is null)
+        {
+            throw new InvalidOperationException("An active workspace is required to resolve the replay target.");
+        }
+
+        if (targetNamespaceId is null || targetNamespaceId == ActiveTab.NamespaceId)
+        {
+            return ActiveTab.Client;
+        }
+
+        var namespaceClient = Namespaces.FirstOrDefault(namespaceItem =>
+            namespaceItem.Namespace.Id == targetNamespaceId.Value
+            && namespaceItem.Client is not null)?.Client;
+
+        return namespaceClient
+            ?? throw new InvalidOperationException("The selected replay target namespace is not connected.");
+    }
+
+    private static RemapRules? BuildReplayRemapRules(
+        string? overrideSubject,
+        string? overrideCorrelationId,
+        string? propertyRenamesText,
+        string? propertyRemovalsText)
+    {
+        var rules = new RemapRules
+        {
+            OverrideSubject = NormalizeOptional(overrideSubject),
+            OverrideCorrelationId = NormalizeOptional(overrideCorrelationId),
+            PropertyRenames = ParseReplayPropertyRenames(propertyRenamesText),
+            PropertyRemoves = ParseReplayPropertyRemoves(propertyRemovalsText),
+        };
+
+        return rules.IsEmpty ? null : rules;
+    }
+
+    private static Dictionary<string, string> ParseReplayPropertyRenames(string? propertyRenamesText)
+    {
+        var propertyRenames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(propertyRenamesText))
+        {
+            return propertyRenames;
+        }
+
+        var lines = propertyRenamesText
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Select((line, index) => (Line: line, Number: index + 1));
+
+        foreach (var (line, lineNumber) in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf('=');
+            if (separatorIndex <= 0)
+            {
+                throw new InvalidOperationException($"Replay property renames must use 'oldKey=newKey' format. Check line {lineNumber}.");
+            }
+
+            var oldKey = line[..separatorIndex].Trim();
+            var newKey = line[(separatorIndex + 1)..].Trim();
+
+            if (string.IsNullOrWhiteSpace(oldKey) || string.IsNullOrWhiteSpace(newKey))
+            {
+                throw new InvalidOperationException($"Replay property rename keys are required on line {lineNumber}.");
+            }
+
+            if (!propertyRenames.TryAdd(oldKey, newKey))
+            {
+                throw new InvalidOperationException($"Replay property rename key '{oldKey}' is duplicated.");
+            }
+        }
+
+        return propertyRenames;
+    }
+
+    private static HashSet<string> ParseReplayPropertyRemoves(string? propertyRemovesText)
+    {
+        var propertyRemoves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(propertyRemovesText))
+        {
+            return propertyRemoves;
+        }
+
+        var lines = propertyRemovesText
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Select((line, index) => (Line: line, Number: index + 1));
+
+        foreach (var (line, lineNumber) in lines)
+        {
+            var key = line.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            if (!propertyRemoves.Add(key))
+            {
+                throw new InvalidOperationException($"Replay property remove key '{key}' is duplicated on line {lineNumber}.");
+            }
+        }
+
+        return propertyRemoves;
+    }
+
+    private static void ApplyReplayRemapRules(SbMessage message, RemapRules? rules)
+    {
+        if (rules is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideSubject))
+        {
+            message.Subject = rules.OverrideSubject;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rules.OverrideCorrelationId))
+        {
+            message.CorrelationId = rules.OverrideCorrelationId;
+        }
+
+        foreach (var propertyRename in rules.PropertyRenames)
+        {
+            if (!message.ApplicationProperties.TryGetValue(propertyRename.Key, out var propertyValue))
+            {
+                continue;
+            }
+
+            message.ApplicationProperties.Remove(propertyRename.Key);
+            message.ApplicationProperties[propertyRename.Value] = propertyValue;
+        }
+
+        foreach (var propertyKey in rules.PropertyRemoves)
+        {
+            message.ApplicationProperties.Remove(propertyKey);
+        }
     }
 
     private static Dictionary<string, string> ParseProperties(string? propertiesText)
@@ -1067,6 +1661,20 @@ public sealed class ServiceBusComposeDraft
 
     public string PropertiesText { get; set; } = string.Empty;
 
+    public bool IsReplay { get; set; }
+
+    public Guid? TargetNamespaceId { get; set; }
+
+    public string TargetEntityPath { get; set; } = string.Empty;
+
+    public string ReplayOverrideSubject { get; set; } = string.Empty;
+
+    public string ReplayOverrideCorrelationId { get; set; } = string.Empty;
+
+    public string ReplayPropertyRenamesText { get; set; } = string.Empty;
+
+    public string ReplayPropertyRemovalsText { get; set; } = string.Empty;
+
     public bool IsScheduled { get; set; }
 
     public DateTimeOffset ScheduledDate { get; set; } = DateTimeOffset.Now;
@@ -1097,6 +1705,19 @@ public sealed class ServiceBusComposeResult
 
     public static ServiceBusComposeResult Scheduled(string messageId, long sequenceNumber, ScheduledMessageEntry scheduledEntry) =>
         new(true, messageId, sequenceNumber, scheduledEntry);
+}
+
+public sealed class ServiceBusBatchReplayRequest
+{
+    public string TargetEntityPath { get; set; } = string.Empty;
+
+    public string OverrideSubject { get; set; } = string.Empty;
+
+    public string OverrideCorrelationId { get; set; } = string.Empty;
+
+    public string PropertyRenamesText { get; set; } = string.Empty;
+
+    public string PropertyRemovalsText { get; set; } = string.Empty;
 }
 
 public sealed partial class ServiceBusNamespaceItemViewModel : ObservableObject
@@ -1340,10 +1961,34 @@ public sealed partial class ServiceBusEntityItemViewModel : ObservableObject
 
 public sealed partial class ServiceBusTabViewModel : ObservableObject
 {
+    private const string FieldApplicationProperty = "application-property";
+    private const string FieldEnqueuedTime = "enqueued-time";
+    private const string FieldDeliveryCount = "delivery-count";
+    private const string FieldSequenceNumber = "sequence-number";
+
+    private const string OperatorContains = "contains";
+    private const string OperatorEquals = "equals";
+    private const string OperatorNotEquals = "not-equals";
+    private const string OperatorRegex = "regex";
+    private const string OperatorBefore = "before";
+    private const string OperatorOnOrBefore = "on-or-before";
+    private const string OperatorAfter = "after";
+    private const string OperatorOnOrAfter = "on-or-after";
+    private const string OperatorGreaterThan = "gt";
+    private const string OperatorGreaterThanOrEqual = "gte";
+    private const string OperatorLessThan = "lt";
+    private const string OperatorLessThanOrEqual = "lte";
+
     private const string ColumnEnqueued = "enqueued";
     private const string ColumnMessageId = "message-id";
     private const string ColumnCorrelationId = "correlation-id";
     private const string ColumnSubject = "subject";
+    private const string ColumnDelivery = "delivery";
+    private const string ColumnExpires = "expires";
+    private const string ColumnContentType = "content-type";
+    private const string ColumnSession = "session";
+    private const string ColumnPartitionKey = "partition-key";
+    private const string ColumnDeadLetterReason = "dead-letter-reason";
 
     private readonly UiStateRepository _uiState;
     private readonly int _pageSize;
@@ -1369,9 +2014,15 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
     public ObservableCollection<SbMessage> Messages { get; } = [];
 
-    public ObservableCollection<SbMessage> VisibleMessages { get; } = [];
+    public ObservableCollection<ServiceBusVisibleMessageItemViewModel> VisibleMessages { get; } = [];
+
+    public ObservableCollection<SbMessage> SelectedMessages { get; } = [];
 
     public ObservableCollection<SavedFilter> SavedFilters { get; } = [];
+
+    public ObservableCollection<AdvancedFilterRuleViewModel> AdvancedRules { get; } = [];
+
+    public ObservableCollection<string> CustomPropertyColumns { get; } = [];
 
     public ObservableCollection<ScheduledMessageItemViewModel> ScheduledMessages { get; } = [];
 
@@ -1400,6 +2051,18 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     public partial string PendingFilterName { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial bool FiltersEnabled { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool AdvancedFilterEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial string NewCustomPropertyColumn { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string RowDensity { get; set; } = "default";
+
+    [ObservableProperty]
     public partial SavedFilter? SelectedSavedFilter { get; set; }
 
     [ObservableProperty]
@@ -1413,6 +2076,24 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool ShowEnqueuedField { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool ShowDeliveryField { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool ShowExpiresField { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool ShowContentTypeField { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool ShowSessionField { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool ShowPartitionKeyField { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowDeadLetterReasonField { get; set; } = true;
 
     [ObservableProperty]
     public partial long? TotalAvailableCount { get; set; }
@@ -1439,6 +2120,18 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
     public bool HasSavedFilters => SavedFilters.Count > 0;
 
+    public bool HasAdvancedRules => AdvancedRules.Count > 0;
+
+    public bool CanAddCustomPropertyColumn => !string.IsNullOrWhiteSpace(NewCustomPropertyColumn);
+
+    public bool HasTextFilter => !string.IsNullOrWhiteSpace(FilterText);
+
+    public bool HasEnabledAdvancedRules => AdvancedRules.Any(rule => rule.Enabled && IsRuleConfigured(rule));
+
+    public bool HasAnySavedCriteria => HasTextFilter || AdvancedRules.Any(IsRuleConfigured);
+
+    public bool IsFilteringActive => FiltersEnabled && (HasTextFilter || (AdvancedFilterEnabled && HasEnabledAdvancedRules));
+
     public bool HasSelectedSavedFilter => SelectedSavedFilter is not null;
 
     public bool ShowEmptyState => !IsLoading && !HasItems && string.IsNullOrWhiteSpace(ErrorMessage);
@@ -1453,6 +2146,12 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
     public bool HasSelectedMessage => SelectedMessage is not null;
 
+    public int BatchSelectionCount => SelectedMessages.Count;
+
+    public bool HasBatchSelection => BatchSelectionCount > 0;
+
+    public bool CanBatchReplayDeadLetter => IsDlq && HasBatchSelection;
+
     public bool ShowNoSelectionState => !HasSelectedMessage;
 
     public bool HasSelectedScheduledMessage => SelectedScheduledMessage is not null;
@@ -1460,8 +2159,8 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     public bool ShowNoScheduledSelectionState => IsScheduled && !HasSelectedScheduledMessage;
 
     public bool CanSaveCurrentFilter => IsMessageTab
-        && !string.IsNullOrWhiteSpace(FilterText)
-        && !string.IsNullOrWhiteSpace(PendingFilterName);
+        && !string.IsNullOrWhiteSpace(PendingFilterName)
+        && HasAnySavedCriteria;
 
     public bool CanLoadMore => IsMessageTab
         && !IsLoading
@@ -1470,11 +2169,20 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
     public Visibility MessageIdVisibility => ShowMessageIdField ? Visibility.Visible : Visibility.Collapsed;
 
+    public ListViewSelectionMode MessageSelectionMode => IsDlq ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Single;
+
     public Visibility SubjectVisibility => ShowSubjectField ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility CorrelationIdVisibility => ShowCorrelationIdField ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility EnqueuedVisibility => ShowEnqueuedField ? Visibility.Visible : Visibility.Collapsed;
+
+    public Thickness MessageCardPadding => RowDensity switch
+    {
+        "compact" => new Thickness(10, 6, 10, 6),
+        "comfort" => new Thickness(12, 14, 12, 14),
+        _ => new Thickness(10)
+    };
 
     public Visibility LoadMoreVisibility => CanLoadMore ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1500,6 +2208,10 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     public string SelectedMessageCorrelationId => SelectedMessage?.CorrelationId ?? string.Empty;
 
     public string SelectedMessageSessionId => SelectedMessage?.SessionId ?? string.Empty;
+
+    public bool HasSelectedMessageSessionId => !string.IsNullOrWhiteSpace(SelectedMessage?.SessionId);
+
+    public bool SupportsReplay => !IsDlq;
 
     public string SelectedMessageBody => SelectedMessage?.Body ?? string.Empty;
 
@@ -1528,6 +2240,19 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     public string MessageCountSummary => IsScheduled
         ? (HasScheduledMessages ? $"Showing {ScheduledMessages.Count} scheduled message(s)" : "No scheduled messages loaded")
         : BuildMessageCountSummary();
+
+    public string BatchSelectionSummary => HasBatchSelection
+        ? $"{BatchSelectionCount} message(s) selected"
+        : "No messages selected";
+
+    public IReadOnlyList<string> SuggestedCustomPropertyColumns => Messages
+        .SelectMany(message => message.ApplicationProperties.Keys)
+        .Where(static key => !string.IsNullOrWhiteSpace(key))
+        .Select(static key => key.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Where(key => CustomPropertyColumns.All(existing => !string.Equals(existing, key, StringComparison.OrdinalIgnoreCase)))
+        .Take(6)
+        .ToList();
 
     public ServiceBusTabViewModel(
         ServiceBusNamespaceItemViewModel namespaceItem,
@@ -1594,6 +2319,29 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
             OnPropertyChanged(nameof(MessageCountSummary));
         };
 
+        SelectedMessages.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(BatchSelectionCount));
+            OnPropertyChanged(nameof(HasBatchSelection));
+            OnPropertyChanged(nameof(CanBatchReplayDeadLetter));
+            OnPropertyChanged(nameof(BatchSelectionSummary));
+        };
+
+        AdvancedRules.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasAdvancedRules));
+            OnPropertyChanged(nameof(HasEnabledAdvancedRules));
+            OnPropertyChanged(nameof(HasAnySavedCriteria));
+            OnPropertyChanged(nameof(IsFilteringActive));
+            SaveCurrentFilterCommand.NotifyCanExecuteChanged();
+        };
+
+        CustomPropertyColumns.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(SuggestedCustomPropertyColumns));
+            RefreshVisibleMessages();
+        };
+
         if (IsMessageTab)
         {
             ReloadSavedFilters();
@@ -1616,6 +2364,7 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     partial void OnSelectedMessageChanged(SbMessage? value)
     {
         OnPropertyChanged(nameof(HasSelectedMessage));
+        OnPropertyChanged(nameof(HasSelectedMessageSessionId));
         OnPropertyChanged(nameof(ShowNoSelectionState));
         OnPropertyChanged(nameof(SelectedMessageId));
         OnPropertyChanged(nameof(SelectedMessageSubject));
@@ -1667,11 +2416,16 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     partial void OnFilterTextChanged(string value)
     {
         RefreshVisibleMessages();
+        OnPropertyChanged(nameof(CanSaveCurrentFilter));
+        OnPropertyChanged(nameof(HasTextFilter));
+        OnPropertyChanged(nameof(HasAnySavedCriteria));
+        OnPropertyChanged(nameof(IsFilteringActive));
         SaveCurrentFilterCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnPendingFilterNameChanged(string value)
     {
+        OnPropertyChanged(nameof(CanSaveCurrentFilter));
         SaveCurrentFilterCommand.NotifyCanExecuteChanged();
     }
 
@@ -1680,6 +2434,39 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedSavedFilter));
         ApplySelectedSavedFilterCommand.NotifyCanExecuteChanged();
         DeleteSelectedSavedFilterCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnFiltersEnabledChanged(bool value)
+    {
+        RefreshVisibleMessages();
+        OnPropertyChanged(nameof(CanSaveCurrentFilter));
+        OnPropertyChanged(nameof(IsFilteringActive));
+        SaveCurrentFilterCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnAdvancedFilterEnabledChanged(bool value)
+    {
+        if (value && AdvancedRules.Count == 0)
+        {
+            AddAdvancedRule();
+        }
+
+        RefreshVisibleMessages();
+        OnPropertyChanged(nameof(CanSaveCurrentFilter));
+        OnPropertyChanged(nameof(IsFilteringActive));
+        SaveCurrentFilterCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnNewCustomPropertyColumnChanged(string value)
+    {
+        AddCustomPropertyColumnCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnRowDensityChanged(string value)
+    {
+        OnPropertyChanged(nameof(MessageCardPadding));
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
     }
 
     partial void OnShowMessageIdFieldChanged(bool value)
@@ -1704,6 +2491,42 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(EnqueuedVisibility));
         PersistManagedPreferences();
+    }
+
+    partial void OnShowDeliveryFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
+    }
+
+    partial void OnShowExpiresFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
+    }
+
+    partial void OnShowContentTypeFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
+    }
+
+    partial void OnShowSessionFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
+    }
+
+    partial void OnShowPartitionKeyFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
+    }
+
+    partial void OnShowDeadLetterReasonFieldChanged(bool value)
+    {
+        PersistManagedPreferences();
+        RefreshVisibleMessages();
     }
 
     partial void OnTotalAvailableCountChanged(long? value)
@@ -1753,6 +2576,24 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
                 case ColumnEnqueued:
                     ShowEnqueuedField = isVisible;
                     break;
+                case ColumnDelivery:
+                    ShowDeliveryField = isVisible;
+                    break;
+                case ColumnExpires:
+                    ShowExpiresField = isVisible;
+                    break;
+                case ColumnContentType:
+                    ShowContentTypeField = isVisible;
+                    break;
+                case ColumnSession:
+                    ShowSessionField = isVisible;
+                    break;
+                case ColumnPartitionKey:
+                    ShowPartitionKeyField = isVisible;
+                    break;
+                case ColumnDeadLetterReason:
+                    ShowDeadLetterReasonField = isVisible;
+                    break;
                 default:
                     return;
             }
@@ -1781,8 +2622,122 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
     {
         Messages.Clear();
         VisibleMessages.Clear();
+        SelectedMessages.Clear();
         SelectedMessage = null;
         TotalAvailableCount = null;
+    }
+
+    public void SetSelectedMessages(IEnumerable<SbMessage> messages)
+    {
+        SelectedMessages.Clear();
+        foreach (var message in messages)
+        {
+            SelectedMessages.Add(message);
+        }
+    }
+
+    public void ClearSelectedMessages() => SelectedMessages.Clear();
+
+    public IReadOnlyList<SbMessage> GetVisibleMessages() => VisibleMessages.Select(item => item.Message).ToList();
+
+    public IReadOnlyList<long> GetVisibleMessageSequenceNumbers() => VisibleMessages
+        .Select(item => item.Message.SequenceNumber)
+        .Where(static sequenceNumber => sequenceNumber is not null)
+        .Select(static sequenceNumber => sequenceNumber!.Value)
+        .ToList();
+
+    [RelayCommand]
+    private void ToggleFiltersEnabled() => FiltersEnabled = !FiltersEnabled;
+
+    [RelayCommand]
+    private void ToggleAdvancedFilterEnabled()
+    {
+        if (!FiltersEnabled)
+        {
+            return;
+        }
+
+        AdvancedFilterEnabled = !AdvancedFilterEnabled;
+    }
+
+    [RelayCommand]
+    private void AddAdvancedRule()
+    {
+        var rule = new AdvancedFilterRuleViewModel();
+        AttachAdvancedRule(rule);
+        AdvancedRules.Add(rule);
+        RefreshVisibleMessages();
+    }
+
+    [RelayCommand]
+    private void RemoveAdvancedRule(AdvancedFilterRuleViewModel? rule)
+    {
+        if (rule is null)
+        {
+            return;
+        }
+
+        DetachAdvancedRule(rule);
+        AdvancedRules.Remove(rule);
+        RefreshVisibleMessages();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanAddCustomPropertyColumn))]
+    private async Task AddCustomPropertyColumnAsync()
+    {
+        var normalized = NormalizeCustomPropertyColumnName(NewCustomPropertyColumn);
+        if (normalized is null)
+        {
+            return;
+        }
+
+        if (CustomPropertyColumns.Any(existing => string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            NewCustomPropertyColumn = string.Empty;
+            return;
+        }
+
+        CustomPropertyColumns.Add(normalized);
+        NewCustomPropertyColumn = string.Empty;
+        await PersistMessageListPreferencesAsync();
+    }
+
+    [RelayCommand]
+    private async Task RemoveCustomPropertyColumnAsync(string? columnName)
+    {
+        var normalized = NormalizeCustomPropertyColumnName(columnName);
+        if (normalized is null)
+        {
+            return;
+        }
+
+        var removed = false;
+        for (var index = CustomPropertyColumns.Count - 1; index >= 0; index--)
+        {
+            if (!string.Equals(CustomPropertyColumns[index], normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            CustomPropertyColumns.RemoveAt(index);
+            removed = true;
+        }
+
+        if (removed)
+        {
+            await PersistMessageListPreferencesAsync();
+        }
+    }
+
+    [RelayCommand]
+    private void SetRowDensity(string? density)
+    {
+        if (density is not "compact" and not "default" and not "comfort")
+        {
+            return;
+        }
+
+        RowDensity = density;
     }
 
     public void SetScheduledMessages(IEnumerable<ScheduledMessageItemViewModel> messages)
@@ -1814,9 +2769,9 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         {
             Name = PendingFilterName.Trim(),
             Value = FilterText,
-            FiltersEnabled = true,
-            AdvancedFilterEnabled = false,
-            AdvancedRules = []
+            FiltersEnabled = FiltersEnabled,
+            AdvancedFilterEnabled = AdvancedFilterEnabled,
+            AdvancedRules = AdvancedRules.Select(ToSavedRule).ToList(),
         };
 
         await _uiState.SaveFilterAsync(FilterScopeKey, filter);
@@ -1833,6 +2788,9 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         }
 
         FilterText = SelectedSavedFilter.Value;
+        FiltersEnabled = SelectedSavedFilter.FiltersEnabled;
+        AdvancedFilterEnabled = SelectedSavedFilter.AdvancedFilterEnabled;
+        ReplaceAdvancedRules(SelectedSavedFilter.AdvancedRules.Select(FromSavedRule));
     }
 
     [RelayCommand(CanExecute = nameof(HasSelectedSavedFilter))]
@@ -1867,7 +2825,7 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
             return "No messages loaded";
         }
 
-        if (!string.IsNullOrWhiteSpace(FilterText))
+        if (IsFilteringActive)
         {
             return TotalAvailableCount is long total && total > Messages.Count
                 ? $"Showing {VisibleMessages.Count} filtered of {Messages.Count} loaded ({total} total)"
@@ -1887,22 +2845,57 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         }
 
         var previousSelection = SelectedMessage;
-        var filteredMessages = string.IsNullOrWhiteSpace(FilterText)
-            ? Messages.ToList()
-            : Messages.Where(MatchesTextFilter).ToList();
+        var filteredMessages = ApplyFilters(Messages);
 
         VisibleMessages.Clear();
         foreach (var message in filteredMessages)
         {
-            VisibleMessages.Add(message);
+            VisibleMessages.Add(CreateVisibleMessageItem(message));
         }
 
         SelectedMessage = previousSelection is null
-            ? VisibleMessages.FirstOrDefault()
-            : VisibleMessages.FirstOrDefault(message => IsSameMessage(message, previousSelection)) ?? VisibleMessages.FirstOrDefault();
+            ? VisibleMessages.FirstOrDefault()?.Message
+            : VisibleMessages.FirstOrDefault(message => IsSameMessage(message.Message, previousSelection))?.Message ?? VisibleMessages.FirstOrDefault()?.Message;
 
         OnPropertyChanged(nameof(ShowFilteredEmptyState));
         OnPropertyChanged(nameof(MessageCountSummary));
+    }
+
+    public ServiceBusVisibleMessageItemViewModel CreateVisibleMessageItem(SbMessage message)
+    {
+        return new ServiceBusVisibleMessageItemViewModel(
+            message,
+            BuildAdditionalFieldText(message),
+            BuildCustomPropertyText(message));
+    }
+
+    private List<SbMessage> ApplyFilters(IReadOnlyList<SbMessage> source)
+    {
+        if (!FiltersEnabled)
+        {
+            return source.ToList();
+        }
+
+        IEnumerable<SbMessage> query = source;
+
+        if (HasTextFilter)
+        {
+            query = query.Where(MatchesTextFilter);
+        }
+
+        if (AdvancedFilterEnabled)
+        {
+            var enabledRules = AdvancedRules
+                .Where(rule => rule.Enabled && IsRuleConfigured(rule))
+                .ToList();
+
+            if (enabledRules.Count > 0)
+            {
+                query = query.Where(message => enabledRules.All(rule => MatchesAdvancedRule(message, rule)));
+            }
+        }
+
+        return query.ToList();
     }
 
     private bool MatchesTextFilter(SbMessage message)
@@ -1912,6 +2905,352 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
             || message.Subject?.Contains(FilterText, StringComparison.OrdinalIgnoreCase) == true
             || message.Body.Contains(FilterText, StringComparison.OrdinalIgnoreCase);
     }
+
+    private string BuildAdditionalFieldText(SbMessage message)
+    {
+        var lines = new List<string>();
+
+        if (ShowDeliveryField)
+        {
+            lines.Add($"Delivery: {message.DeliveryCount}");
+        }
+
+        if (ShowExpiresField && message.SystemProperties.ExpiresAt is not null)
+        {
+            lines.Add($"Expires: {message.SystemProperties.ExpiresAt:O}");
+        }
+
+        if (ShowContentTypeField && !string.IsNullOrWhiteSpace(message.ContentType))
+        {
+            lines.Add($"Content-Type: {message.ContentType}");
+        }
+
+        if (ShowSessionField && !string.IsNullOrWhiteSpace(message.SessionId))
+        {
+            lines.Add($"Session: {message.SessionId}");
+        }
+
+        if (ShowPartitionKeyField && !string.IsNullOrWhiteSpace(message.SystemProperties.PartitionKey))
+        {
+            lines.Add($"Partition key: {message.SystemProperties.PartitionKey}");
+        }
+
+        if (ShowDeadLetterReasonField && !string.IsNullOrWhiteSpace(message.DeadLetterReason))
+        {
+            lines.Add($"DLQ reason: {message.DeadLetterReason}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string BuildCustomPropertyText(SbMessage message)
+    {
+        if (CustomPropertyColumns.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = CustomPropertyColumns
+            .Select(column => $"{column}: {GetCustomPropertyValue(message, column)}")
+            .ToList();
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string? NormalizeCustomPropertyColumnName(string? columnName)
+    {
+        return string.IsNullOrWhiteSpace(columnName)
+            ? null
+            : columnName.Trim();
+    }
+
+    private static string GetCustomPropertyValue(SbMessage message, string propertyName)
+    {
+        if (message.ApplicationProperties.TryGetValue(propertyName, out var directValue))
+        {
+            return Convert.ToString(directValue, CultureInfo.InvariantCulture) ?? "-";
+        }
+
+        foreach (var property in message.ApplicationProperties)
+        {
+            if (!string.Equals(property.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return Convert.ToString(property.Value, CultureInfo.InvariantCulture) ?? "-";
+        }
+
+        return "-";
+    }
+
+    private static bool IsRuleConfigured(AdvancedFilterRuleViewModel rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule.Value))
+        {
+            return false;
+        }
+
+        return !RequiresPropertyName(rule.Field) || !string.IsNullOrWhiteSpace(rule.PropertyName);
+    }
+
+    private bool MatchesAdvancedRule(SbMessage message, AdvancedFilterRuleViewModel rule)
+    {
+        var rawValue = rule.Value.Trim();
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return true;
+        }
+
+        switch (rule.Field)
+        {
+            case FieldApplicationProperty:
+                if (!TryGetApplicationPropertyValue(message, rule.PropertyName.Trim(), out var propertyValue))
+                {
+                    return false;
+                }
+
+                return EvaluateTextOperator(propertyValue, rawValue, rule.Operator);
+
+            case FieldDeliveryCount:
+                if (!TryParseLong(rawValue, out var expectedDeliveryCount))
+                {
+                    return false;
+                }
+
+                return EvaluateNumericOperator(message.DeliveryCount, expectedDeliveryCount, rule.Operator);
+
+            case FieldSequenceNumber:
+                if (message.SequenceNumber is not long sequenceNumber || !TryParseLong(rawValue, out var expectedSequenceNumber))
+                {
+                    return false;
+                }
+
+                return EvaluateNumericOperator(sequenceNumber, expectedSequenceNumber, rule.Operator);
+
+            case FieldEnqueuedTime:
+                if (!TryParseDate(rawValue, out var expectedTime))
+                {
+                    return false;
+                }
+
+                return EvaluateDateOperator(message.EnqueuedAt, expectedTime, rule.Operator);
+
+            default:
+                return true;
+        }
+    }
+
+    private static bool TryGetApplicationPropertyValue(SbMessage message, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        if (message.ApplicationProperties.TryGetValue(propertyName, out var directValue))
+        {
+            value = Convert.ToString(directValue, CultureInfo.InvariantCulture) ?? string.Empty;
+            return true;
+        }
+
+        foreach (var property in message.ApplicationProperties)
+        {
+            if (!string.Equals(property.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            value = Convert.ToString(property.Value, CultureInfo.InvariantCulture) ?? string.Empty;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool EvaluateTextOperator(string actual, string expected, string @operator)
+    {
+        return @operator switch
+        {
+            OperatorEquals => string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
+            OperatorNotEquals => !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
+            OperatorRegex => SafeRegexMatch(actual, expected),
+            _ => actual.Contains(expected, StringComparison.OrdinalIgnoreCase),
+        };
+    }
+
+    private static bool SafeRegexMatch(string value, string pattern)
+    {
+        try
+        {
+            return Regex.IsMatch(value, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(150));
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private static bool EvaluateNumericOperator(long actual, long expected, string @operator)
+    {
+        return @operator switch
+        {
+            OperatorEquals => actual == expected,
+            OperatorNotEquals => actual != expected,
+            OperatorGreaterThan => actual > expected,
+            OperatorGreaterThanOrEqual => actual >= expected,
+            OperatorLessThan => actual < expected,
+            OperatorLessThanOrEqual => actual <= expected,
+            _ => false,
+        };
+    }
+
+    private static bool TryParseLong(string value, out long parsed) =>
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed);
+
+    private static bool TryParseDate(string value, out DateTimeOffset parsed)
+    {
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
+                   DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+                   out parsed)
+               || DateTimeOffset.TryParse(value, CultureInfo.CurrentCulture,
+                   DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+                   out parsed);
+    }
+
+    private static bool EvaluateDateOperator(DateTimeOffset actual, DateTimeOffset expected, string @operator)
+    {
+        return @operator switch
+        {
+            OperatorEquals => actual.UtcDateTime == expected.UtcDateTime,
+            OperatorBefore => actual.UtcDateTime < expected.UtcDateTime,
+            OperatorOnOrBefore => actual.UtcDateTime <= expected.UtcDateTime,
+            OperatorAfter => actual.UtcDateTime > expected.UtcDateTime,
+            OperatorOnOrAfter => actual.UtcDateTime >= expected.UtcDateTime,
+            _ => false,
+        };
+    }
+
+    private void AttachAdvancedRule(AdvancedFilterRuleViewModel rule)
+    {
+        rule.PropertyChanged += OnAdvancedRulePropertyChanged;
+    }
+
+    private void DetachAdvancedRule(AdvancedFilterRuleViewModel rule)
+    {
+        rule.PropertyChanged -= OnAdvancedRulePropertyChanged;
+    }
+
+    private void ReplaceAdvancedRules(IEnumerable<AdvancedFilterRuleViewModel> rules)
+    {
+        foreach (var existingRule in AdvancedRules.ToList())
+        {
+            DetachAdvancedRule(existingRule);
+        }
+
+        AdvancedRules.Clear();
+        foreach (var rule in rules)
+        {
+            AttachAdvancedRule(rule);
+            AdvancedRules.Add(rule);
+        }
+
+        RefreshVisibleMessages();
+        SaveCurrentFilterCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnAdvancedRulePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        RefreshVisibleMessages();
+        OnPropertyChanged(nameof(HasEnabledAdvancedRules));
+        OnPropertyChanged(nameof(HasAnySavedCriteria));
+        OnPropertyChanged(nameof(IsFilteringActive));
+        SaveCurrentFilterCommand.NotifyCanExecuteChanged();
+    }
+
+    private static bool RequiresPropertyName(string field) => field == FieldApplicationProperty;
+
+    private static AdvancedFilterRuleViewModel FromSavedRule(SavedAdvancedFilterRule savedRule)
+    {
+        var field = NormalizeField(savedRule.Field);
+        return new AdvancedFilterRuleViewModel
+        {
+            Enabled = savedRule.Enabled,
+            Field = field,
+            Operator = NormalizeOperator(field, savedRule.Operator),
+            PropertyName = savedRule.PropertyName ?? string.Empty,
+            Value = savedRule.Value ?? string.Empty,
+        };
+    }
+
+    private static SavedAdvancedFilterRule ToSavedRule(AdvancedFilterRuleViewModel rule)
+    {
+        return new SavedAdvancedFilterRule
+        {
+            Enabled = rule.Enabled,
+            Field = rule.Field,
+            Operator = rule.Operator,
+            PropertyName = string.IsNullOrWhiteSpace(rule.PropertyName) ? null : rule.PropertyName.Trim(),
+            Value = string.IsNullOrWhiteSpace(rule.Value) ? null : rule.Value.Trim(),
+        };
+    }
+
+    private static string NormalizeField(string? field) => field switch
+    {
+        FieldEnqueuedTime => FieldEnqueuedTime,
+        FieldDeliveryCount => FieldDeliveryCount,
+        FieldSequenceNumber => FieldSequenceNumber,
+        _ => FieldApplicationProperty,
+    };
+
+    private static string NormalizeOperator(string field, string? @operator)
+    {
+        var allowedOperators = GetOperatorOptions(field).Select(option => option.Value).ToHashSet(StringComparer.Ordinal);
+        if (@operator is not null && allowedOperators.Contains(@operator))
+        {
+            return @operator;
+        }
+
+        return field switch
+        {
+            FieldEnqueuedTime => OperatorAfter,
+            FieldDeliveryCount => OperatorGreaterThanOrEqual,
+            FieldSequenceNumber => OperatorGreaterThanOrEqual,
+            _ => OperatorContains,
+        };
+    }
+
+    public static IReadOnlyList<ServiceBusFilterOperatorOption> GetOperatorOptions(string field) => field switch
+    {
+        FieldEnqueuedTime =>
+        [
+            new ServiceBusFilterOperatorOption(OperatorEquals, "Equals"),
+            new ServiceBusFilterOperatorOption(OperatorBefore, "Before"),
+            new ServiceBusFilterOperatorOption(OperatorOnOrBefore, "On or before"),
+            new ServiceBusFilterOperatorOption(OperatorAfter, "After"),
+            new ServiceBusFilterOperatorOption(OperatorOnOrAfter, "On or after"),
+        ],
+        FieldDeliveryCount or FieldSequenceNumber =>
+        [
+            new ServiceBusFilterOperatorOption(OperatorEquals, "Equals"),
+            new ServiceBusFilterOperatorOption(OperatorNotEquals, "Not equals"),
+            new ServiceBusFilterOperatorOption(OperatorGreaterThan, ">"),
+            new ServiceBusFilterOperatorOption(OperatorGreaterThanOrEqual, ">="),
+            new ServiceBusFilterOperatorOption(OperatorLessThan, "<"),
+            new ServiceBusFilterOperatorOption(OperatorLessThanOrEqual, "<="),
+        ],
+        _ =>
+        [
+            new ServiceBusFilterOperatorOption(OperatorContains, "Contains"),
+            new ServiceBusFilterOperatorOption(OperatorEquals, "Equals"),
+            new ServiceBusFilterOperatorOption(OperatorNotEquals, "Not equals"),
+            new ServiceBusFilterOperatorOption(OperatorRegex, "Regex"),
+        ],
+    };
 
     private void ReloadSavedFilters(string? selectedFilterName = null)
     {
@@ -1941,9 +3280,14 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         try
         {
             var visibleColumns = CreateDefaultManagedColumnVisibility();
+            var customPropertyColumns = new List<string>();
+            var rowDensity = "default";
             if (!string.IsNullOrWhiteSpace(PreferenceScopeKey))
             {
                 var preference = _uiState.GetMessageListPreferences(PreferenceScopeKey);
+                rowDensity = preference.RowDensity is "compact" or "default" or "comfort"
+                    ? preference.RowDensity
+                    : "default";
                 foreach (var kvp in preference.BuiltInColumns)
                 {
                     if (visibleColumns.ContainsKey(kvp.Key))
@@ -1951,12 +3295,32 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
                         visibleColumns[kvp.Key] = kvp.Value;
                     }
                 }
+
+                customPropertyColumns = preference.CustomPropertyColumns
+                    .Select(NormalizeCustomPropertyColumnName)
+                    .Where(static column => column is not null)
+                    .Select(static column => column!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
 
+            RowDensity = rowDensity;
             ShowMessageIdField = visibleColumns[ColumnMessageId];
             ShowSubjectField = visibleColumns[ColumnSubject];
             ShowCorrelationIdField = visibleColumns[ColumnCorrelationId];
             ShowEnqueuedField = visibleColumns[ColumnEnqueued];
+            ShowDeliveryField = visibleColumns[ColumnDelivery];
+            ShowExpiresField = visibleColumns[ColumnExpires];
+            ShowContentTypeField = visibleColumns[ColumnContentType];
+            ShowSessionField = visibleColumns[ColumnSession];
+            ShowPartitionKeyField = visibleColumns[ColumnPartitionKey];
+            ShowDeadLetterReasonField = visibleColumns[ColumnDeadLetterReason];
+
+            CustomPropertyColumns.Clear();
+            foreach (var column in customPropertyColumns)
+            {
+                CustomPropertyColumns.Add(column);
+            }
         }
         finally
         {
@@ -1993,9 +3357,9 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
 
         await _uiState.SaveMessageListPreferencesAsync(PreferenceScopeKey, new MessageListPreferences
         {
-            RowDensity = existingPreference.RowDensity,
+            RowDensity = RowDensity,
             BuiltInColumns = builtInColumns,
-            CustomPropertyColumns = existingPreference.CustomPropertyColumns?.ToList() ?? []
+            CustomPropertyColumns = CustomPropertyColumns.ToList()
         });
     }
 
@@ -2004,7 +3368,13 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         [ColumnEnqueued] = true,
         [ColumnMessageId] = true,
         [ColumnCorrelationId] = true,
-        [ColumnSubject] = true
+        [ColumnSubject] = true,
+        [ColumnDelivery] = true,
+        [ColumnExpires] = true,
+        [ColumnContentType] = true,
+        [ColumnSession] = true,
+        [ColumnPartitionKey] = false,
+        [ColumnDeadLetterReason] = true,
     };
 
     private Dictionary<string, bool> BuildManagedColumnVisibility() => new(StringComparer.Ordinal)
@@ -2012,7 +3382,13 @@ public sealed partial class ServiceBusTabViewModel : ObservableObject
         [ColumnEnqueued] = ShowEnqueuedField,
         [ColumnMessageId] = ShowMessageIdField,
         [ColumnCorrelationId] = ShowCorrelationIdField,
-        [ColumnSubject] = ShowSubjectField
+        [ColumnSubject] = ShowSubjectField,
+        [ColumnDelivery] = ShowDeliveryField,
+        [ColumnExpires] = ShowExpiresField,
+        [ColumnContentType] = ShowContentTypeField,
+        [ColumnSession] = ShowSessionField,
+        [ColumnPartitionKey] = ShowPartitionKeyField,
+        [ColumnDeadLetterReason] = ShowDeadLetterReasonField,
     };
 
     private static bool IsSameMessage(SbMessage left, SbMessage right)
@@ -2108,4 +3484,114 @@ public sealed class ScheduledMessageItemViewModel
     public string DisplaySubject => string.IsNullOrWhiteSpace(Subject) ? "—" : Subject;
 
     public string DisplayCorrelationId => string.IsNullOrWhiteSpace(CorrelationId) ? "—" : CorrelationId;
+}
+
+public sealed class ServiceBusWorkspaceTabState
+{
+    public Guid NamespaceId { get; set; }
+
+    public string EntityPath { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string Mode { get; set; } = "active";
+
+    public string TabType { get; set; } = "entity";
+}
+
+public sealed partial class AdvancedFilterRuleViewModel : ObservableObject
+{
+    private static readonly IReadOnlyList<ServiceBusFilterFieldOption> _availableFields =
+    [
+        new ServiceBusFilterFieldOption("application-property", "Application property"),
+        new ServiceBusFilterFieldOption("enqueued-time", "Enqueued time"),
+        new ServiceBusFilterFieldOption("delivery-count", "Delivery count"),
+        new ServiceBusFilterFieldOption("sequence-number", "Sequence number"),
+    ];
+
+    [ObservableProperty]
+    public partial Guid Id { get; set; } = Guid.NewGuid();
+
+    [ObservableProperty]
+    public partial bool Enabled { get; set; } = true;
+
+    [ObservableProperty]
+    public partial string Field { get; set; } = "application-property";
+
+    [ObservableProperty]
+    public partial string Operator { get; set; } = "contains";
+
+    [ObservableProperty]
+    public partial string PropertyName { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string Value { get; set; } = string.Empty;
+
+    public IReadOnlyList<ServiceBusFilterFieldOption> AvailableFields => _availableFields;
+
+    public IReadOnlyList<ServiceBusFilterOperatorOption> AvailableOperators => ServiceBusTabViewModel.GetOperatorOptions(Field);
+
+    public bool RequiresPropertyName => string.Equals(Field, "application-property", StringComparison.Ordinal);
+
+    public Visibility PropertyNameVisibility => RequiresPropertyName ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ValuePlaceholder => Field switch
+    {
+        "enqueued-time" => "2025-01-31T18:30:00Z",
+        "delivery-count" => "3",
+        "sequence-number" => "42",
+        _ => "Match value",
+    };
+
+    partial void OnFieldChanged(string value)
+    {
+        Operator = value switch
+        {
+            "enqueued-time" => "after",
+            "delivery-count" or "sequence-number" => "gte",
+            _ => "contains",
+        };
+
+        if (!RequiresPropertyName)
+        {
+            PropertyName = string.Empty;
+        }
+
+        OnPropertyChanged(nameof(AvailableOperators));
+        OnPropertyChanged(nameof(RequiresPropertyName));
+        OnPropertyChanged(nameof(PropertyNameVisibility));
+        OnPropertyChanged(nameof(ValuePlaceholder));
+    }
+}
+
+public sealed record ServiceBusFilterOperatorOption(string Value, string Label);
+
+public sealed record ServiceBusFilterFieldOption(string Value, string Label);
+
+public sealed class ServiceBusVisibleMessageItemViewModel
+{
+    public ServiceBusVisibleMessageItemViewModel(SbMessage message, string additionalFieldsText, string customPropertyText)
+    {
+        Message = message;
+        AdditionalFieldsText = additionalFieldsText;
+        CustomPropertyText = customPropertyText;
+    }
+
+    public SbMessage Message { get; }
+
+    public string MessageId => Message.MessageId;
+
+    public string Subject => Message.Subject ?? string.Empty;
+
+    public string CorrelationId => Message.CorrelationId ?? string.Empty;
+
+    public DateTimeOffset EnqueuedAt => Message.EnqueuedAt;
+
+    public string AdditionalFieldsText { get; }
+
+    public bool HasAdditionalFieldsText => !string.IsNullOrWhiteSpace(AdditionalFieldsText);
+
+    public string CustomPropertyText { get; }
+
+    public bool HasCustomPropertyText => !string.IsNullOrWhiteSpace(CustomPropertyText);
 }

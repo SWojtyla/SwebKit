@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
@@ -74,6 +75,39 @@ public sealed class RedisPageViewModelTests
         Assert.NotEmpty(viewModel.PubSubChannels);
         Assert.Contains("Loaded", viewModel.SlowLogSummaryText, StringComparison.Ordinal);
         Assert.Contains("channel", viewModel.PubSubSummaryText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RefreshSelectedKey_StartsTtlCountdownAndShowsProgress()
+    {
+        var fakeClient = TestRedisClient.CreateDefault();
+        var viewModel = CreateViewModel(fakeClient, isProduction: false);
+
+        try
+        {
+            await viewModel.LoadAsync();
+
+            viewModel.SelectedKey = "app:cache:2";
+            await viewModel.RefreshSelectedKeyCommand.ExecuteAsync(null);
+
+            Assert.Equal(Visibility.Visible, viewModel.SelectedTtlProgressVisibility);
+            Assert.Equal(Visibility.Visible, viewModel.SelectedTtlHealthyProgressVisibility);
+
+            var initialTtlText = viewModel.SelectedTtlText;
+            var initialProgress = viewModel.SelectedTtlProgressValue;
+
+            await WaitForConditionAsync(
+                () => viewModel.SelectedTtlProgressValue < initialProgress,
+                attempts: 80,
+                delayMs: 25);
+
+            Assert.NotEqual(initialTtlText, viewModel.SelectedTtlText);
+            Assert.True(viewModel.SelectedTtlProgressValue < initialProgress);
+        }
+        finally
+        {
+            await viewModel.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -225,16 +259,16 @@ public sealed class RedisPageViewModelTests
         return new RedisPageHarness(viewModel, appState);
     }
 
-    private static async Task WaitForConditionAsync(Func<bool> predicate)
+    private static async Task WaitForConditionAsync(Func<bool> predicate, int attempts = 20, int delayMs = 25)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             if (predicate())
             {
                 return;
             }
 
-            await Task.Delay(25);
+            await Task.Delay(delayMs);
         }
 
         Assert.True(predicate());

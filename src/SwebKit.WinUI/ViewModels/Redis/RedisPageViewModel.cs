@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
@@ -21,11 +23,14 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     private const int ItemPageSize = 100;
     private const string DemoCacheId = "demo-cache";
     private const string DemoCacheDisplayName = "Demo cache";
+    private const int TtlServerRefreshTickBudget = 30;
+    private static readonly TimeSpan TtlCountdownInterval = TimeSpan.FromSeconds(1);
 
     private readonly AppStateService _appState;
     private readonly IRedisClientFactory _redisClientFactory;
     private readonly INotificationService _notifications;
     private readonly OperatorWorkspaceService _workspaceService;
+    private readonly DispatcherQueue? _dispatcherQueue;
     private readonly ILogger<RedisPageViewModel> _logger;
     private readonly RedisScanPageAccumulator _scanAccumulator = new(ScanPageSize);
     private readonly List<string> _keys = [];
@@ -42,6 +47,10 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     private bool _loaded;
     private bool _isDisposed;
     private bool _suppressSelectionSideEffects;
+    private CancellationTokenSource _ttlCountdownCts = new();
+    private string? _ttlTrackedKey;
+    private TimeSpan? _ttlOriginal;
+    private TimeSpan? _ttlDisplayed;
 
     public RedisPageViewModel(
         AppStateService appState,
@@ -57,6 +66,14 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         _notifications = notifications;
         _workspaceService = workspaceService;
         _logger = logger;
+        try
+        {
+            _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        }
+        catch (COMException)
+        {
+            _dispatcherQueue = null;
+        }
         _appState.DemoModeChanged += OnDemoModeChanged;
 
         CacheEntries.CollectionChanged += (_, _) => RefreshConnectionState();
@@ -214,7 +231,28 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
 
     public string SelectedTypeText => SelectedKeyInfo?.Type ?? "Unavailable";
 
-    public string SelectedTtlText => FormatTtl(SelectedKeyInfo?.Ttl);
+    public string SelectedTtlText => TtlFormatter.FormatHuman(_ttlDisplayed);
+
+    public double SelectedTtlProgressValue => TtlFormatter.GetBarWidthPercent(_ttlDisplayed, _ttlOriginal);
+
+    public Visibility SelectedTtlProgressVisibility => _ttlDisplayed is { } ttl && ttl > TimeSpan.Zero
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility SelectedTtlHealthyProgressVisibility => SelectedTtlProgressVisibility == Visibility.Visible
+        && GetSelectedTtlVisualState() == TtlVisualState.Success
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility SelectedTtlWarningProgressVisibility => SelectedTtlProgressVisibility == Visibility.Visible
+        && GetSelectedTtlVisualState() == TtlVisualState.Warning
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility SelectedTtlCriticalProgressVisibility => SelectedTtlProgressVisibility == Visibility.Visible
+        && GetSelectedTtlVisualState() == TtlVisualState.Critical
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public string SelectedMemoryText => FormatBytes(SelectedKeyInfo?.MemoryBytes);
 
@@ -903,6 +941,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         await CancelTokenAsync(_loadCts);
         await CancelTokenAsync(_detailCts);
         await CancelTokenAsync(_insightsCts);
+        ResetTtlCountdownToken(recreateToken: false);
         DisposeClient();
         _loadCts.Dispose();
         _detailCts.Dispose();
@@ -955,6 +994,10 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
     {
         IsDeleteConfirmationArmed = false;
         RenameInput = value ?? string.Empty;
+        _ttlTrackedKey = value;
+        _ttlOriginal = null;
+        _ttlDisplayed = null;
+        ResetTtlCountdownToken();
         ClearDetailCollections();
         RefreshDetailState();
         RebuildTree();
@@ -969,6 +1012,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
 
     partial void OnSelectedKeyInfoChanged(RedisKeyInfo? value)
     {
+        SyncSelectedTtlState(value);
         RefreshDetailState();
     }
 
@@ -1631,6 +1675,144 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         return string.IsNullOrWhiteSpace(trimmed) ? "-" : trimmed;
     }
 
+    private void SyncSelectedTtlState(RedisKeyInfo? value)
+    {
+        if (string.IsNullOrWhiteSpace(SelectedKey) || value is null)
+        {
+            _ttlDisplayed = null;
+            if (string.IsNullOrWhiteSpace(SelectedKey))
+            {
+                _ttlTrackedKey = null;
+                _ttlOriginal = null;
+            }
+
+            ResetTtlCountdownToken();
+            RefreshTtlVisualizationState();
+            return;
+        }
+
+        if (!string.Equals(_ttlTrackedKey, SelectedKey, StringComparison.Ordinal))
+        {
+            _ttlTrackedKey = SelectedKey;
+            _ttlOriginal = value.Ttl;
+        }
+        else if (_ttlOriginal is null && value.Ttl is not null)
+        {
+            _ttlOriginal = value.Ttl;
+        }
+
+        _ttlDisplayed = value.Ttl;
+        RestartTtlCountdown();
+        RefreshTtlVisualizationState();
+    }
+
+    private void RestartTtlCountdown()
+    {
+        ResetTtlCountdownToken();
+
+        if (_isDisposed || string.IsNullOrWhiteSpace(_ttlTrackedKey) || _ttlDisplayed is not { } ttl || ttl <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var trackedKey = _ttlTrackedKey;
+        var cancellationToken = _ttlCountdownCts.Token;
+        _ = RunTtlCountdownAsync(trackedKey, cancellationToken);
+    }
+
+    private async Task RunTtlCountdownAsync(string trackedKey, CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TtlCountdownInterval);
+        var ticksUntilRefresh = TtlServerRefreshTickBudget;
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                ExecuteOnUiThread(() =>
+                {
+                    if (_isDisposed || cancellationToken.IsCancellationRequested || !string.Equals(trackedKey, SelectedKey, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    if (_ttlDisplayed is { } ttl && ttl > TimeSpan.Zero)
+                    {
+                        var nextTtl = ttl - TtlCountdownInterval;
+                        _ttlDisplayed = nextTtl > TimeSpan.Zero ? nextTtl : TimeSpan.Zero;
+                        RefreshTtlVisualizationState();
+                    }
+                });
+
+                ticksUntilRefresh--;
+                if (ticksUntilRefresh <= 0)
+                {
+                    ticksUntilRefresh = TtlServerRefreshTickBudget;
+                    ExecuteOnUiThread(() =>
+                    {
+                        if (_isDisposed || cancellationToken.IsCancellationRequested || !string.Equals(trackedKey, SelectedKey, StringComparison.Ordinal) || IsWorking)
+                        {
+                            return;
+                        }
+
+                        _ = RefreshSelectedKeyAsync();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ResetTtlCountdownToken(bool recreateToken = true)
+    {
+        try
+        {
+            if (!_ttlCountdownCts.IsCancellationRequested)
+            {
+                _ttlCountdownCts.Cancel();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        _ttlCountdownCts.Dispose();
+        if (recreateToken)
+        {
+            _ttlCountdownCts = new CancellationTokenSource();
+        }
+    }
+
+    private TtlVisualState GetSelectedTtlVisualState() => TtlFormatter.GetVisualState(_ttlDisplayed, _ttlOriginal);
+
+    private void RefreshTtlVisualizationState()
+    {
+        OnPropertyChanged(nameof(SelectedTtlText));
+        OnPropertyChanged(nameof(SelectedTtlProgressValue));
+        OnPropertyChanged(nameof(SelectedTtlProgressVisibility));
+        OnPropertyChanged(nameof(SelectedTtlHealthyProgressVisibility));
+        OnPropertyChanged(nameof(SelectedTtlWarningProgressVisibility));
+        OnPropertyChanged(nameof(SelectedTtlCriticalProgressVisibility));
+    }
+
+    private void ExecuteOnUiThread(Action action)
+    {
+        if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
+        {
+            action();
+            return;
+        }
+
+        _dispatcherQueue.TryEnqueue(() => action());
+    }
+
     private static string FormatTtl(TimeSpan? ttl)
     {
         if (ttl is null)
@@ -1764,7 +1946,7 @@ public sealed partial class RedisPageViewModel : ObservableObject, IAsyncDisposa
         OnPropertyChanged(nameof(DetailTitle));
         OnPropertyChanged(nameof(DetailStatusText));
         OnPropertyChanged(nameof(SelectedTypeText));
-        OnPropertyChanged(nameof(SelectedTtlText));
+        RefreshTtlVisualizationState();
         OnPropertyChanged(nameof(SelectedMemoryText));
         OnPropertyChanged(nameof(SelectedEncodingText));
         OnPropertyChanged(nameof(SelectedFrequencyText));

@@ -7,7 +7,7 @@ owner: ""
 status: "In Progress"
 jira: "not linked"
 created: "2026-04-25"
-updated: "2026-04-25"
+updated: "2026-04-26"
 
 ---
 
@@ -17,7 +17,7 @@ Close the remaining AKS parity gap in the native WinUI workspace so operators ca
 
 ## Value
 
-The WinUI AKS route already proves native browsing, logs, port-forwarding, and shell launch. The remaining parity work is broader resource coverage plus the diagnostic-card language that MAUI accumulated for health, events, and operational insight. This feature isolates that higher-pressure refactor work.
+The WinUI AKS route already proves native browsing, logs, port-forwarding, and shell launch. The current slice closes broader resource coverage, current diagnostic and operational language, and the content-first native page layout needed to keep the explorer and detail workspace as the main visual focus, while leaving deeper MAUI-only evidence panels and live-cluster validation as explicit follow-up.
 
 ## Scope
 

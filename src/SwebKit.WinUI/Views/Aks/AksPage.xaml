@@ -9,108 +9,146 @@
     DataContext="{x:Bind ViewModel, Mode=OneWay}"
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
-    <shared:PageScaffold Title="AKS">
+    <shared:PageScaffold Title="AKS"
+                         IsHeaderCompact="True">
+        <shared:PageScaffold.HeaderContent>
+            <StackPanel Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                <ProgressRing Width="18"
+                              Height="18"
+                              IsActive="{Binding IsLoading}"/>
+                <Button Content="{Binding ToggleEventsButtonText}"
+                        Command="{Binding ToggleEventsCommand}"/>
+                <Button Content="Refresh"
+                        Command="{Binding ReloadCommand}"/>
+            </StackPanel>
+        </shared:PageScaffold.HeaderContent>
+
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitInsetCardStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="{Binding ConnectionSummary}"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               TextWrapping="WrapWholeWords"/>
+
+                    <TextBlock Text="{Binding ErrorMessage}"
+                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                               TextWrapping="WrapWholeWords"/>
+
+                    <InfoBar IsOpen="{Binding ShowNotConfiguredState}"
+                             Severity="Informational"
+                             Title="AKS is not configured"
+                             Message="Configure kubeconfig path, context, and default namespace in Settings before opening the AKS workspace.">
+                        <InfoBar.ActionButton>
+                            <Button Content="Open Settings"
+                                    Command="{Binding OpenSettingsCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <Grid ColumnSpacing="12"
+                          RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="0"
+                                    Spacing="6">
+                            <TextBlock Text="Context"
+                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox ItemsSource="{Binding ContextOptions}"
+                                      SelectedItem="{Binding SelectedContext, Mode=TwoWay}"
+                                      PlaceholderText="Select context"
+                                      IsEnabled="{Binding HasContextOptions}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="1"
+                                    Spacing="6">
+                            <TextBlock Text="Namespace"
+                                       Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox ItemsSource="{Binding NamespaceOptions}"
+                                      SelectedItem="{Binding SelectedNamespace, Mode=TwoWay}"
+                                      PlaceholderText="Select namespace"
+                                      IsEnabled="{Binding HasNamespaceOptions}"/>
+                        </StackPanel>
+
+                        <Grid Grid.Row="1"
+                              Grid.ColumnSpan="2"
+                              ColumnSpacing="8"
+                              RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Pods"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding PodMetricValueText}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding PodMetricDetailText}"
+                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                               TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Workloads"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding WorkloadMetricValueText}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding WorkloadMetricDetailText}"
+                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                               TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Network"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding NetworkMetricValueText}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding NetworkMetricDetailText}"
+                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                               TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="3"
+                                    Style="{StaticResource SwebKitInsetCardStyle}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Current view"
+                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding FocusMetricValueText}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding FocusMetricDetailText}"
+                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                               TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+
         <shared:PageScaffold.BodyContent>
             <StackPanel Spacing="12">
-                <shared:SectionCard Title="Cluster connection"
-                                    Description="{Binding ConnectionSummary}">
-                    <shared:SectionCard.HeaderContent>
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="12"
-                                    VerticalAlignment="Center">
-                            <ProgressRing Width="20"
-                                          Height="20"
-                                          IsActive="{Binding IsLoading}"/>
-                            <Button Content="Refresh"
-                                    Command="{Binding ReloadCommand}"/>
-                        </StackPanel>
-                    </shared:SectionCard.HeaderContent>
-
-                    <shared:SectionCard.BodyContent>
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="{Binding ErrorMessage}"
-                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                       TextWrapping="WrapWholeWords"/>
-
-                            <InfoBar IsOpen="{Binding ShowNotConfiguredState}"
-                                     Severity="Informational"
-                                     Title="AKS is not configured"
-                                     Message="Configure kubeconfig path, context, and default namespace in Settings before opening the AKS workspace.">
-                                <InfoBar.ActionButton>
-                                    <Button Content="Open Settings"
-                                            Command="{Binding OpenSettingsCommand}"/>
-                                </InfoBar.ActionButton>
-                            </InfoBar>
-
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0"
-                                            Spacing="6">
-                                    <TextBlock Text="Context"
-                                               Style="{StaticResource CaptionTextBlockStyle}"/>
-                                    <ComboBox ItemsSource="{Binding ContextOptions}"
-                                              SelectedItem="{Binding SelectedContext, Mode=TwoWay}"
-                                              PlaceholderText="Select context"
-                                              IsEnabled="{Binding HasContextOptions}"/>
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="1"
-                                            Spacing="6">
-                                    <TextBlock Text="Namespace"
-                                               Style="{StaticResource CaptionTextBlockStyle}"/>
-                                    <ComboBox ItemsSource="{Binding NamespaceOptions}"
-                                              SelectedItem="{Binding SelectedNamespace, Mode=TwoWay}"
-                                              PlaceholderText="Select namespace"
-                                              IsEnabled="{Binding HasNamespaceOptions}"/>
-                                </StackPanel>
-                            </Grid>
-                        </StackPanel>
-                    </shared:SectionCard.BodyContent>
-                </shared:SectionCard>
-
-                <Grid ColumnSpacing="12"
-                      RowSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <shared:MetricCard Grid.Row="0"
-                                       Grid.Column="0"
-                                       Title="Pods"
-                                       ValueText="{Binding PodMetricValueText}"
-                                       ValueLabel="Pods loaded"
-                                       DetailText="{Binding PodMetricDetailText}"/>
-
-                    <shared:MetricCard Grid.Row="0"
-                                       Grid.Column="1"
-                                       Title="Workloads"
-                                       ValueText="{Binding WorkloadMetricValueText}"
-                                       ValueLabel="Workloads and batch"
-                                       DetailText="{Binding WorkloadMetricDetailText}"/>
-
-                    <shared:MetricCard Grid.Row="1"
-                                       Grid.Column="0"
-                                       Title="Network"
-                                       ValueText="{Binding NetworkMetricValueText}"
-                                       ValueLabel="Service and edge resources"
-                                       DetailText="{Binding NetworkMetricDetailText}"/>
-
-                    <shared:MetricCard Grid.Row="1"
-                                       Grid.Column="1"
-                                       Title="Current view"
-                                       ValueText="{Binding FocusMetricValueText}"
-                                       ValueLabel="{Binding FocusMetricValueLabel}"
-                                       DetailText="{Binding FocusMetricDetailText}"/>
-                </Grid>
 
                 <shared:SectionCard Title="Resource explorer"
                                     Description="{Binding ResourceExplorerDescription}">
@@ -243,92 +281,7 @@
                                                           Visibility="{Binding SelectedResourceEmptyStateVisibility}"/>
 
                                         <StackPanel Spacing="12"
-                                                    Visibility="{Binding SelectedResourceContentVisibility}">
-                                            <Border Style="{StaticResource SwebKitInsetCardStyle}"
-                                                    Visibility="{Binding SelectedResourceActionBarVisibility}">
-                                                <StackPanel Spacing="10">
-                                                    <TextBlock Text="Actions"
-                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
-
-                                                    <TextBlock Text="{Binding SelectedResourceActionErrorMessage}"
-                                                               Visibility="{Binding SelectedResourceActionErrorVisibility}"
-                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                               TextWrapping="WrapWholeWords"/>
-
-                                                    <InfoBar IsOpen="{Binding ShowSelectedResourceConfirmMessage}"
-                                                             Severity="Warning"
-                                                             Title="Production confirmation required"
-                                                             Message="{Binding SelectedResourceConfirmationMessage}"/>
-
-                                                    <TextBox Text="{Binding SelectedResourceConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             Visibility="{Binding SelectedResourceConfirmVisibility}"
-                                                             PlaceholderText="Type CONFIRM to continue"/>
-
-                                                    <StackPanel Orientation="Horizontal"
-                                                                Spacing="8">
-                                                        <Button Content="{Binding SelectedResourceYamlButtonText}"
-                                                                Command="{Binding OpenSelectedResourceYamlCommand}"
-                                                                IsEnabled="{Binding CanOpenSelectedResourceYaml}"/>
-                                                        <Button Content="Edit YAML"
-                                                                Command="{Binding EditSelectedResourceYamlCommand}"
-                                                                Visibility="{Binding SelectedResourceYamlEditVisibility}"
-                                                                IsEnabled="{Binding CanStartSelectedResourceYamlEdit}"/>
-                                                        <Button Content="{Binding SelectedResourceAnalyzeLabel}"
-                                                                Command="{Binding AnalyzeSelectedResourceCommand}"
-                                                                Visibility="{Binding SelectedResourceAnalyzeVisibility}"
-                                                                IsEnabled="{Binding CanAnalyzeSelectedResource}"/>
-                                                    </StackPanel>
-
-                                                    <StackPanel Orientation="Horizontal"
-                                                                Spacing="8">
-                                                        <Button Content="Restart"
-                                                                Command="{Binding RestartSelectedResourceCommand}"
-                                                                Visibility="{Binding SelectedResourceRestartVisibility}"
-                                                                IsEnabled="{Binding CanRestartSelectedResource}"/>
-                                                        <Button Content="Trigger CronJob"
-                                                                Command="{Binding TriggerSelectedResourceCommand}"
-                                                                Visibility="{Binding SelectedResourceTriggerVisibility}"
-                                                                IsEnabled="{Binding CanTriggerSelectedResource}"/>
-                                                        <Button Content="Rerun Job"
-                                                                Command="{Binding RerunSelectedResourceCommand}"
-                                                                Visibility="{Binding SelectedResourceRerunVisibility}"
-                                                                IsEnabled="{Binding CanRerunSelectedResource}"/>
-                                                    </StackPanel>
-
-                                                    <StackPanel Spacing="8"
-                                                                Visibility="{Binding SelectedResourceScaleVisibility}">
-                                                        <TextBlock Text="Scale workload"
-                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                                        <Grid ColumnSpacing="8">
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="140"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                            </Grid.ColumnDefinitions>
-
-                                                            <TextBox Grid.Column="0"
-                                                                     Text="{Binding SelectedResourceScaleReplicaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                     InputScope="Number"
-                                                                     PlaceholderText="Desired replicas"/>
-                                                            <Button Grid.Column="1"
-                                                                    Content="Apply scale"
-                                                                    Command="{Binding ScaleSelectedResourceCommand}"
-                                                                    IsEnabled="{Binding CanScaleSelectedResource}"/>
-                                                            <TextBlock Grid.Column="2"
-                                                                       Text="{Binding SelectedResourceScaleHint}"
-                                                                       VerticalAlignment="Center"
-                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                                       TextWrapping="WrapWholeWords"/>
-                                                        </Grid>
-
-                                                        <TextBlock Text="{Binding SelectedResourceScaleErrorMessage}"
-                                                                   Visibility="{Binding SelectedResourceScaleErrorVisibility}"
-                                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                                   TextWrapping="WrapWholeWords"/>
-                                                    </StackPanel>
-                                                </StackPanel>
-                                            </Border>
-
+                                                Visibility="{Binding SelectedResourceContentVisibility}">
                                             <ItemsControl ItemsSource="{Binding SelectedResourceFacts}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="viewModels:AksResourceFactItemViewModel">
@@ -351,6 +304,155 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                                        Visibility="{Binding SelectedResourceActionBarVisibility}">
+                                                    <StackPanel Spacing="10">
+                                                        <TextBlock Text="Actions"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                                                        <TextBlock Text="{Binding SelectedResourceActionErrorMessage}"
+                                                               Visibility="{Binding SelectedResourceActionErrorVisibility}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+
+                                                        <InfoBar IsOpen="{Binding ShowSelectedResourceConfirmMessage}"
+                                                             Severity="Warning"
+                                                             Title="Production confirmation required"
+                                                             Message="{Binding SelectedResourceConfirmationMessage}"/>
+
+                                                        <TextBox Text="{Binding SelectedResourceConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             Visibility="{Binding SelectedResourceConfirmVisibility}"
+                                                             PlaceholderText="Type CONFIRM to continue"/>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="{Binding SelectedResourceYamlButtonText}"
+                                                            Command="{Binding OpenSelectedResourceYamlCommand}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceYaml}"/>
+                                                        <Button Content="Edit YAML"
+                                                            Command="{Binding EditSelectedResourceYamlCommand}"
+                                                            Visibility="{Binding SelectedResourceYamlEditVisibility}"
+                                                            IsEnabled="{Binding CanStartSelectedResourceYamlEdit}"/>
+                                                        <Button Content="{Binding SelectedResourceAnalyzeLabel}"
+                                                            Command="{Binding AnalyzeSelectedResourceCommand}"
+                                                            Visibility="{Binding SelectedResourceAnalyzeVisibility}"
+                                                            IsEnabled="{Binding CanAnalyzeSelectedResource}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="Open URL"
+                                                            Command="{Binding OpenSelectedResourceUrlCommand}"
+                                                            Visibility="{Binding SelectedResourceOpenUrlVisibility}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceUrl}"/>
+                                                        <Button Content="Copy URL"
+                                                            Command="{Binding CopySelectedResourceUrlCommand}"
+                                                            Visibility="{Binding SelectedResourceCopyUrlVisibility}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceUrl}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="Namespace quotas"
+                                                            Command="{Binding OpenSelectedResourceNamespaceQuotasCommand}"
+                                                            Visibility="{Binding SelectedResourceNamespaceQuotaVisibility}"
+                                                            IsEnabled="{Binding CanLoadSelectedResourceNamespaceQuotas}"/>
+                                                        <Button Content="Disruption budgets"
+                                                            Command="{Binding OpenSelectedResourcePodDisruptionBudgetsCommand}"
+                                                            Visibility="{Binding SelectedResourcePodDisruptionBudgetVisibility}"
+                                                            IsEnabled="{Binding CanLoadSelectedResourcePodDisruptionBudgets}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="Probe failures"
+                                                            Command="{Binding OpenSelectedResourceProbeFailuresCommand}"
+                                                            Visibility="{Binding SelectedResourceProbeFailuresVisibility}"
+                                                            IsEnabled="{Binding CanLoadSelectedResourceProbeFailures}"/>
+                                                        <Button Content="Placement"
+                                                            Command="{Binding OpenSelectedResourcePlacementCommand}"
+                                                            Visibility="{Binding SelectedResourcePlacementVisibility}"
+                                                            IsEnabled="{Binding CanLoadSelectedResourcePlacement}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="History"
+                                                            Command="{Binding OpenSelectedResourceHelmHistoryCommand}"
+                                                            Visibility="{Binding SelectedResourceHelmHistoryVisibility}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceHelmHistory}"/>
+                                                        <Button Content="Values"
+                                                            Command="{Binding OpenSelectedResourceHelmValuesCommand}"
+                                                            Visibility="{Binding SelectedResourceHelmValuesVisibility}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceHelmValues}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="Upgrade preview"
+                                                            Command="{Binding PreviewSelectedResourceHelmUpgradeCommand}"
+                                                            Visibility="{Binding SelectedResourceHelmPreviewVisibility}"
+                                                            IsEnabled="{Binding CanPreviewSelectedResourceHelmUpgrade}"/>
+                                                        <Button Content="Rollback"
+                                                            Command="{Binding OpenSelectedResourceHelmRollbackCommand}"
+                                                            Visibility="{Binding SelectedResourceHelmRollbackVisibility}"
+                                                            IsEnabled="{Binding CanOpenSelectedResourceHelmRollback}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal"
+                                                            Spacing="8">
+                                                        <Button Content="Restart"
+                                                            Command="{Binding RestartSelectedResourceCommand}"
+                                                            Visibility="{Binding SelectedResourceRestartVisibility}"
+                                                            IsEnabled="{Binding CanRestartSelectedResource}"/>
+                                                        <Button Content="Delete pod"
+                                                            Command="{Binding DeleteSelectedResourceCommand}"
+                                                            Visibility="{Binding SelectedResourceDeleteVisibility}"
+                                                            IsEnabled="{Binding CanDeleteSelectedResource}"/>
+                                                        <Button Content="Trigger CronJob"
+                                                            Command="{Binding TriggerSelectedResourceCommand}"
+                                                            Visibility="{Binding SelectedResourceTriggerVisibility}"
+                                                            IsEnabled="{Binding CanTriggerSelectedResource}"/>
+                                                        <Button Content="Rerun Job"
+                                                            Command="{Binding RerunSelectedResourceCommand}"
+                                                            Visibility="{Binding SelectedResourceRerunVisibility}"
+                                                            IsEnabled="{Binding CanRerunSelectedResource}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Spacing="8"
+                                                            Visibility="{Binding SelectedResourceScaleVisibility}">
+                                                        <TextBlock Text="Scale workload"
+                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBox Grid.Column="0"
+                                                                 Text="{Binding SelectedResourceScaleReplicaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 InputScope="Number"
+                                                                 PlaceholderText="Desired replicas"/>
+                                                            <Button Grid.Column="1"
+                                                                Content="Apply scale"
+                                                                Command="{Binding ScaleSelectedResourceCommand}"
+                                                                IsEnabled="{Binding CanScaleSelectedResource}"/>
+                                                            <TextBlock Grid.Column="2"
+                                                                   Text="{Binding SelectedResourceScaleHint}"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                   TextWrapping="WrapWholeWords"/>
+                                                        </Grid>
+
+                                                        <TextBlock Text="{Binding SelectedResourceScaleErrorMessage}"
+                                                               Visibility="{Binding SelectedResourceScaleErrorVisibility}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    </Border>
 
                                             <Border Style="{StaticResource SwebKitInsetCardStyle}"
                                                     Visibility="{Binding SelectedResourceHighlightsVisibility}">
@@ -504,6 +606,107 @@
                                                             </ItemsControl>
                                                         </StackPanel>
                                                     </Border>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                                    Visibility="{Binding SelectedResourceHelmHistoryPanelVisibility}">
+                                                <StackPanel Spacing="10">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{Binding SelectedResourceHelmHistoryTitle}"
+                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock Text="{Binding SelectedResourceHelmHistorySummary}"
+                                                                       Visibility="{Binding SelectedResourceHelmHistorySummaryVisibility}"
+                                                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="8"
+                                                                    VerticalAlignment="Top">
+                                                            <ProgressRing Width="20"
+                                                                          Height="20"
+                                                                          IsActive="{Binding IsSelectedResourceHelmHistoryLoading}"/>
+                                                            <Button Content="Close"
+                                                                    Command="{Binding CloseSelectedResourceHelmHistoryCommand}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <TextBlock Text="{Binding SelectedResourceHelmHistoryErrorMessage}"
+                                                               Visibility="{Binding SelectedResourceHelmHistoryErrorVisibility}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextWrapping="WrapWholeWords"/>
+
+                                                    <InfoBar IsOpen="{Binding ShowSelectedResourceHelmHistoryEmptyState}"
+                                                             Severity="Informational"
+                                                             Title="No Helm revisions available"
+                                                             Message="The selected release does not currently surface any matching Helm history."/>
+
+                                                    <ListView ItemsSource="{Binding SelectedResourceHelmHistoryItems}"
+                                                              Visibility="{Binding SelectedResourceHelmHistoryContentVisibility}"
+                                                              SelectionMode="None"
+                                                              MinHeight="180"
+                                                              MaxHeight="320">
+                                                        <ListView.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:AksHelmRevisionItemViewModel">
+                                                                <Border Margin="0,0,0,8"
+                                                                        Style="{StaticResource SwebKitInsetCardStyle}">
+                                                                    <StackPanel Spacing="10">
+                                                                        <Grid ColumnSpacing="12">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <TextBlock Text="{x:Bind Revision}"
+                                                                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                       VerticalAlignment="Top"/>
+
+                                                                            <StackPanel Grid.Column="1"
+                                                                                        Spacing="4">
+                                                                                <TextBlock Text="{x:Bind Status}"
+                                                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind Chart}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind AppVersion}"
+                                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind UpdatedText}"
+                                                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                                <TextBlock Text="{x:Bind Description}"
+                                                                                           TextWrapping="WrapWholeWords"/>
+                                                                            </StackPanel>
+
+                                                                            <StackPanel Grid.Column="2"
+                                                                                        Orientation="Horizontal"
+                                                                                        Spacing="8"
+                                                                                        Visibility="{Binding ViewModel.SelectedResourceHelmRollbackActionVisibility, ElementName=PageRoot}">
+                                                                                <Button Content="Preview"
+                                                                                        Command="{Binding ViewModel.PreviewSelectedResourceHelmRollbackRevisionCommand, ElementName=PageRoot}"
+                                                                                        CommandParameter="{x:Bind}"
+                                                                                        IsEnabled="{x:Bind CanRollbackTarget}"/>
+                                                                                <Button Content="Rollback"
+                                                                                        Command="{Binding ViewModel.RollbackSelectedResourceHelmRevisionCommand, ElementName=PageRoot}"
+                                                                                        CommandParameter="{x:Bind}"
+                                                                                        IsEnabled="{x:Bind CanRollbackTarget}"/>
+                                                                            </StackPanel>
+                                                                        </Grid>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ListView.ItemTemplate>
+                                                    </ListView>
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -765,6 +968,77 @@
                                 </StackPanel>
                             </Border>
                         </Grid>
+                    </shared:SectionCard.BodyContent>
+                </shared:SectionCard>
+
+                <shared:SectionCard Title="Recent events"
+                                    Description="{Binding EventsSummary}"
+                                    Visibility="{Binding EventsSectionVisibility}">
+                    <shared:SectionCard.BodyContent>
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="{Binding EventsErrorMessage}"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Visibility="{Binding EventsErrorVisibility}"
+                                       TextWrapping="WrapWholeWords"/>
+
+                            <InfoBar IsOpen="{Binding ShowEventsEmptyState}"
+                                     Severity="Informational"
+                                     Title="No recent events"
+                                     Message="Select a namespace with event activity and refresh the AKS workspace to inspect recent cluster signals here."/>
+
+                            <ListView ItemsSource="{Binding Events}"
+                                      SelectionMode="None"
+                                      MinHeight="180">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:AksClusterEventItemViewModel">
+                                        <Border Margin="0,0,0,8"
+                                                CornerRadius="6"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="12,10">
+                                            <StackPanel Spacing="8">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="{x:Bind Reason}"
+                                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                   TextWrapping="WrapWholeWords"/>
+                                                        <TextBlock Text="{x:Bind InvolvedObject}"
+                                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                   TextWrapping="WrapWholeWords"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{x:Bind Type}"
+                                                               VerticalAlignment="Top"/>
+                                                </Grid>
+
+                                                <TextBlock Text="{x:Bind Message}"
+                                                           TextWrapping="WrapWholeWords"/>
+
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Text="{x:Bind CountLabel}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{x:Bind TimestampText}"
+                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
                     </shared:SectionCard.BodyContent>
                 </shared:SectionCard>
             </StackPanel>

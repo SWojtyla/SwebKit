@@ -12,8 +12,11 @@ public sealed partial class AksPageViewModel
     private const string ResourceKindPods = "Pods";
     private const string ResourceKindDeployments = "Deployments";
     private const string ResourceKindStatefulSets = "StatefulSets";
+    private const string ResourceKindConfigMaps = "ConfigMaps";
+    private const string ResourceKindSecrets = "Secrets";
     private const string ResourceKindJobs = "Jobs";
     private const string ResourceKindCronJobs = "CronJobs";
+    private const string ResourceKindHelm = "Helm";
     private const string ResourceKindServices = "Services";
     private const string ResourceKindIngresses = "Ingresses";
     private const string ResourceKindGatewayClasses = "GatewayClasses";
@@ -25,8 +28,11 @@ public sealed partial class AksPageViewModel
         ResourceKindPods,
         ResourceKindDeployments,
         ResourceKindStatefulSets,
+        ResourceKindConfigMaps,
+        ResourceKindSecrets,
         ResourceKindJobs,
         ResourceKindCronJobs,
+        ResourceKindHelm,
         ResourceKindServices,
         ResourceKindIngresses,
         ResourceKindGatewayClasses,
@@ -119,10 +125,11 @@ public sealed partial class AksPageViewModel
         (GetResourceCount(ResourceKindDeployments)
          + GetResourceCount(ResourceKindStatefulSets)
          + GetResourceCount(ResourceKindJobs)
-         + GetResourceCount(ResourceKindCronJobs)).ToString("N0", CultureInfo.CurrentCulture);
+         + GetResourceCount(ResourceKindCronJobs)
+         + GetResourceCount(ResourceKindHelm)).ToString("N0", CultureInfo.CurrentCulture);
 
     public string WorkloadMetricDetailText =>
-        $"{GetResourceCount(ResourceKindDeployments):N0} deployments · {GetResourceCount(ResourceKindStatefulSets):N0} statefulsets · {GetResourceCount(ResourceKindJobs) + GetResourceCount(ResourceKindCronJobs):N0} batch resources";
+        $"{GetResourceCount(ResourceKindDeployments):N0} deployments · {GetResourceCount(ResourceKindStatefulSets):N0} statefulsets · {GetResourceCount(ResourceKindJobs) + GetResourceCount(ResourceKindCronJobs):N0} batch resources · {GetResourceCount(ResourceKindHelm):N0} Helm releases";
 
     public string NetworkMetricValueText =>
         (GetResourceCount(ResourceKindServices)
@@ -170,6 +177,7 @@ public sealed partial class AksPageViewModel
 
     partial void OnSelectedResourceItemChanged(AksResourceBrowseItemViewModel? value)
     {
+        InvalidateSelectedResourceActionToken();
         ResetSelectedResourceActionState(value);
         SelectedResourceFacts = value?.DetailFacts ?? [];
         SelectedResourceHighlights = value?.Highlights ?? [];
@@ -266,6 +274,11 @@ public sealed partial class AksPageViewModel
         }
 
         var loadWarnings = new List<string>();
+        var podMetricsByPod = new Dictionary<(string Namespace, string PodName), PodMetrics>();
+        var hpasByTarget = new Dictionary<(string Namespace, string TargetKind, string TargetName), HpaInfo>();
+        var clusterEvents = new List<KubernetesEvent>();
+
+        EventsErrorMessage = null;
 
         var podResult = await LoadAcrossNamespacesAsync(
             namespaces,
@@ -282,6 +295,16 @@ public sealed partial class AksPageViewModel
             ResourceKindStatefulSets,
             (ns, token) => Client.GetStatefulSetsAsync(ns, token),
             ct);
+        var configMapResult = await LoadAcrossNamespacesAsync(
+            namespaces,
+            ResourceKindConfigMaps,
+            (ns, token) => Client.GetConfigMapsAsync(ns, token),
+            ct);
+        var secretResult = await LoadAcrossNamespacesAsync(
+            namespaces,
+            ResourceKindSecrets,
+            (ns, token) => Client.GetSecretsAsync(ns, token),
+            ct);
         var jobResult = await LoadAcrossNamespacesAsync(
             namespaces,
             ResourceKindJobs,
@@ -291,6 +314,11 @@ public sealed partial class AksPageViewModel
             namespaces,
             ResourceKindCronJobs,
             (ns, token) => Client.GetCronJobsAsync(ns, token),
+            ct);
+        var helmResult = await LoadAcrossNamespacesAsync(
+            namespaces,
+            ResourceKindHelm,
+            (ns, token) => Client.GetHelmReleasesAsync(ns, token),
             ct);
         var serviceResult = await LoadAcrossNamespacesAsync(
             namespaces,
@@ -317,11 +345,76 @@ public sealed partial class AksPageViewModel
             (ns, token) => Client.GetHttpRoutesAsync(ns, token),
             ct);
 
+        if (namespaces.Count == 1)
+        {
+            var diagnosticsNamespace = namespaces[0];
+
+            try
+            {
+                clusterEvents = (await Client.GetEventsAsync(diagnosticsNamespace, null, ct))
+                    .OrderByDescending(clusterEvent => clusterEvent.LastTimestamp ?? DateTimeOffset.MinValue)
+                    .Take(50)
+                    .ToList();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                EventsErrorMessage = ex.Message;
+                _logger.LogWarning(ex, "AKS events load failed for namespace {Namespace}.", diagnosticsNamespace);
+            }
+
+            try
+            {
+                var podMetrics = await Client.GetPodMetricsAsync(diagnosticsNamespace, ct);
+                foreach (var metrics in podMetrics)
+                {
+                    podMetricsByPod[(metrics.Namespace, metrics.PodName)] = metrics;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "AKS pod metrics load failed for namespace {Namespace}.", diagnosticsNamespace);
+            }
+
+            try
+            {
+                var hpas = await Client.GetHpasAsync(diagnosticsNamespace, ct);
+                foreach (var hpa in hpas)
+                {
+                    hpasByTarget[(hpa.Namespace, hpa.TargetKind, hpa.TargetName)] = hpa;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "AKS HPA load failed for namespace {Namespace}.", diagnosticsNamespace);
+            }
+        }
+
+        Events.Clear();
+        foreach (var clusterEvent in clusterEvents)
+        {
+            Events.Add(new AksClusterEventItemViewModel(clusterEvent));
+        }
+
         TrackResourceLoadFailures(loadWarnings, ResourceKindPods, podResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindDeployments, deploymentResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindStatefulSets, statefulSetResult.FailedNamespaces);
+        TrackResourceLoadFailures(loadWarnings, ResourceKindConfigMaps, configMapResult.FailedNamespaces);
+        TrackResourceLoadFailures(loadWarnings, ResourceKindSecrets, secretResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindJobs, jobResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindCronJobs, cronJobResult.FailedNamespaces);
+        TrackResourceLoadFailures(loadWarnings, ResourceKindHelm, helmResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindServices, serviceResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindIngresses, ingressResult.FailedNamespaces);
         TrackResourceLoadFailures(loadWarnings, ResourceKindGatewayClasses, gatewayClassResult.FailedNamespaces);
@@ -340,19 +433,37 @@ public sealed partial class AksPageViewModel
         }
 
         _resourceBrowseCache[ResourceKindPods] = podItems
-            .Select(CreatePodBrowseItem)
+            .Select(pod => CreatePodBrowseItem(
+                pod,
+                podMetricsByPod.TryGetValue((pod.Namespace, pod.Name), out var metrics) ? metrics : null))
             .ToList();
 
         _resourceBrowseCache[ResourceKindDeployments] = deploymentResult.Items
             .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(CreateDeploymentBrowseItem)
+            .Select(item => CreateDeploymentBrowseItem(
+                item,
+                hpasByTarget.TryGetValue((item.Namespace, "Deployment", item.Name), out var hpa) ? hpa : null))
             .ToList();
 
         _resourceBrowseCache[ResourceKindStatefulSets] = statefulSetResult.Items
             .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(CreateStatefulSetBrowseItem)
+            .Select(item => CreateStatefulSetBrowseItem(
+                item,
+                hpasByTarget.TryGetValue((item.Namespace, "StatefulSet", item.Name), out var hpa) ? hpa : null))
+            .ToList();
+
+        _resourceBrowseCache[ResourceKindConfigMaps] = configMapResult.Items
+            .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CreateConfigMapBrowseItem)
+            .ToList();
+
+        _resourceBrowseCache[ResourceKindSecrets] = secretResult.Items
+            .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CreateSecretBrowseItem)
             .ToList();
 
         _resourceBrowseCache[ResourceKindJobs] = jobResult.Items
@@ -365,6 +476,12 @@ public sealed partial class AksPageViewModel
             .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(CreateCronJobBrowseItem)
+            .ToList();
+
+        _resourceBrowseCache[ResourceKindHelm] = helmResult.Items
+            .OrderBy(item => item.Namespace, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CreateHelmBrowseItem)
             .ToList();
 
         _resourceBrowseCache[ResourceKindServices] = serviceResult.Items
@@ -410,6 +527,8 @@ public sealed partial class AksPageViewModel
         SelectedResourceFacts = [];
         SelectedResourceHighlights = [];
         SelectedResourceItem = null;
+        Events.Clear();
+        EventsErrorMessage = null;
         _failedResourceKinds.Clear();
         ResourceLoadMessage = null;
         _resourceBrowseCache.Clear();
@@ -646,8 +765,11 @@ public sealed partial class AksPageViewModel
         {
             ResourceKindDeployments => plural ? "deployments" : "deployment",
             ResourceKindStatefulSets => plural ? "statefulsets" : "statefulset",
+            ResourceKindConfigMaps => plural ? "configmaps" : "configmap",
+            ResourceKindSecrets => plural ? "secrets" : "secret",
             ResourceKindJobs => plural ? "jobs" : "job",
             ResourceKindCronJobs => plural ? "cronjobs" : "cronjob",
+            ResourceKindHelm => plural ? "Helm releases" : "Helm release",
             ResourceKindServices => plural ? "services" : "service",
             ResourceKindIngresses => plural ? "ingresses" : "ingress",
             ResourceKindGatewayClasses => plural ? "gateway classes" : "gateway class",
@@ -662,7 +784,7 @@ public sealed partial class AksPageViewModel
         return count == 1 ? $"1 {name}" : $"{count:N0} {name}";
     }
 
-    private static AksResourceBrowseItemViewModel CreatePodBrowseItem(AksPodItemViewModel pod)
+    private static AksResourceBrowseItemViewModel CreatePodBrowseItem(AksPodItemViewModel pod, PodMetrics? podMetrics)
         => new(
             Kind: ResourceKindPods,
             ApiKind: "Pod",
@@ -671,10 +793,10 @@ public sealed partial class AksPageViewModel
             StatusLabel: pod.Health,
             NamespaceLabel: $"Namespace · {pod.Namespace}",
             SummaryLine: $"{pod.Status} · Ready {pod.Ready}",
-            SecondaryLine: $"Restarts {pod.Restarts} · Node {pod.Node}",
+            SecondaryLine: $"Restarts {pod.Restarts} · CPU {FormatPodCpu(podMetrics)} · Memory {FormatPodMemory(podMetrics)}",
             DetailSubtitle: $"{pod.Namespace} · {pod.Status}",
             ActionLabel: "Logs",
-            SearchText: string.Join(' ', pod.Namespace, pod.Name, pod.Health, pod.Status, pod.Ready, pod.Node, string.Join(' ', pod.Containers)),
+            SearchText: string.Join(' ', pod.Namespace, pod.Name, pod.Health, pod.Status, pod.Ready, pod.Node, FormatPodCpu(podMetrics), FormatPodMemory(podMetrics), string.Join(' ', pod.Containers)),
             DetailFacts:
             [
                 new AksResourceFactItemViewModel("Health", pod.Health),
@@ -682,24 +804,33 @@ public sealed partial class AksPageViewModel
                 new AksResourceFactItemViewModel("Ready", pod.Ready),
                 new AksResourceFactItemViewModel("Restarts", pod.Restarts),
                 new AksResourceFactItemViewModel("Node", pod.Node),
+                new AksResourceFactItemViewModel("CPU", FormatPodCpu(podMetrics)),
+                new AksResourceFactItemViewModel("Memory", FormatPodMemory(podMetrics)),
                 new AksResourceFactItemViewModel("Containers", pod.Containers.Count.ToString(CultureInfo.CurrentCulture)),
             ],
             Highlights: pod.Containers.Select(container => $"Container · {container}").ToList(),
             CanAnalyzeNetworkPolicies: true,
             NetworkPolicyKind: "Pod",
+            CanDelete: true,
             PodItem: pod);
 
-    private static AksResourceBrowseItemViewModel CreateDeploymentBrowseItem(DeploymentInfo deployment)
+    private static AksResourceBrowseItemViewModel CreateDeploymentBrowseItem(DeploymentInfo deployment, HpaInfo? hpa)
     {
         var selectorSummary = BuildSelectorSummary(deployment.SelectorLabels);
         var status = string.IsNullOrWhiteSpace(deployment.Status)
             ? deployment.ReadyReplicas >= deployment.Replicas ? "Ready" : "Degraded"
             : deployment.Status;
+        var hpaSummary = BuildHpaSummary(hpa);
 
         var highlights = BuildDictionaryHighlights("Selector", deployment.SelectorLabels);
         if (!string.IsNullOrWhiteSpace(selectorSummary))
         {
             highlights.Add($"Selector summary · {selectorSummary}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(hpaSummary))
+        {
+            highlights.Add($"HPA · {hpaSummary}");
         }
 
         return new AksResourceBrowseItemViewModel(
@@ -710,10 +841,16 @@ public sealed partial class AksPageViewModel
             StatusLabel: status,
             NamespaceLabel: $"Namespace · {deployment.Namespace}",
             SummaryLine: $"Ready {deployment.ReadyReplicas}/{deployment.Replicas}",
-            SecondaryLine: string.IsNullOrWhiteSpace(selectorSummary) ? "No selector labels were surfaced for this workload." : selectorSummary,
+            SecondaryLine: string.Join(
+                " · ",
+                new[]
+                {
+                    string.IsNullOrWhiteSpace(selectorSummary) ? null : selectorSummary,
+                    string.IsNullOrWhiteSpace(hpaSummary) ? null : hpaSummary,
+                }.Where(value => value is not null)),
             DetailSubtitle: $"{deployment.Namespace} · deployment",
             ActionLabel: "Inspect",
-            SearchText: string.Join(' ', deployment.Namespace, deployment.Name, status, selectorSummary),
+            SearchText: string.Join(' ', deployment.Namespace, deployment.Name, status, selectorSummary, hpaSummary),
             DetailFacts:
             [
                 new AksResourceFactItemViewModel("Status", status),
@@ -721,6 +858,7 @@ public sealed partial class AksPageViewModel
                 new AksResourceFactItemViewModel("Ready replicas", deployment.ReadyReplicas.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Desired replicas", deployment.Replicas.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Selector labels", deployment.SelectorLabels.Count.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("HPA", hpaSummary),
             ],
             Highlights: highlights,
             CanEditYaml: true,
@@ -730,10 +868,11 @@ public sealed partial class AksPageViewModel
             ScaleReplicaCount: deployment.Replicas);
     }
 
-    private static AksResourceBrowseItemViewModel CreateStatefulSetBrowseItem(StatefulSetInfo statefulSet)
+    private static AksResourceBrowseItemViewModel CreateStatefulSetBrowseItem(StatefulSetInfo statefulSet, HpaInfo? hpa)
     {
         var selectorSummary = BuildSelectorSummary(statefulSet.SelectorLabels);
         var status = statefulSet.ReadyReplicas >= statefulSet.Replicas ? "Ready" : "Degraded";
+        var hpaSummary = BuildHpaSummary(hpa);
 
         var revisionSummary = string.Join(
             " · ",
@@ -749,6 +888,11 @@ public sealed partial class AksPageViewModel
             highlights.Add($"Revisions · {revisionSummary}");
         }
 
+        if (!string.IsNullOrWhiteSpace(hpaSummary))
+        {
+            highlights.Add($"HPA · {hpaSummary}");
+        }
+
         return new AksResourceBrowseItemViewModel(
             Kind: ResourceKindStatefulSets,
             ApiKind: "StatefulSet",
@@ -757,12 +901,17 @@ public sealed partial class AksPageViewModel
             StatusLabel: status,
             NamespaceLabel: $"Namespace · {statefulSet.Namespace}",
             SummaryLine: $"Ready {statefulSet.ReadyReplicas}/{statefulSet.Replicas}",
-            SecondaryLine: string.IsNullOrWhiteSpace(revisionSummary)
-                ? (string.IsNullOrWhiteSpace(selectorSummary) ? "No revision metadata was surfaced for this statefulset." : selectorSummary)
-                : revisionSummary,
+            SecondaryLine: string.Join(
+                " · ",
+                new[]
+                {
+                    string.IsNullOrWhiteSpace(revisionSummary) ? null : revisionSummary,
+                    string.IsNullOrWhiteSpace(selectorSummary) ? null : selectorSummary,
+                    string.IsNullOrWhiteSpace(hpaSummary) ? null : hpaSummary,
+                }.Where(value => value is not null)),
             DetailSubtitle: $"{statefulSet.Namespace} · statefulset",
             ActionLabel: "Inspect",
-            SearchText: string.Join(' ', statefulSet.Namespace, statefulSet.Name, status, selectorSummary, revisionSummary),
+            SearchText: string.Join(' ', statefulSet.Namespace, statefulSet.Name, status, selectorSummary, revisionSummary, hpaSummary),
             DetailFacts:
             [
                 new AksResourceFactItemViewModel("Status", status),
@@ -771,6 +920,7 @@ public sealed partial class AksPageViewModel
                 new AksResourceFactItemViewModel("Desired replicas", statefulSet.Replicas.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Current revision", statefulSet.CurrentRevision ?? "—"),
                 new AksResourceFactItemViewModel("Update revision", statefulSet.UpdateRevision ?? "—"),
+                new AksResourceFactItemViewModel("HPA", hpaSummary),
             ],
             Highlights: highlights,
             CanEditYaml: true,
@@ -778,6 +928,75 @@ public sealed partial class AksPageViewModel
             NetworkPolicyKind: "StatefulSet",
             CanRestart: true,
             ScaleReplicaCount: statefulSet.Replicas);
+    }
+
+    private static AksResourceBrowseItemViewModel CreateConfigMapBrowseItem(ConfigMapInfo configMap)
+    {
+        var keyCount = configMap.Data.Count;
+        var secondaryLine = keyCount == 0
+            ? "No data keys were surfaced for this configmap."
+            : string.Join(", ", configMap.Data.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).Take(3));
+
+        var highlights = configMap.Data
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => $"Key · {pair.Key} = {pair.Value}")
+            .ToList();
+        highlights.AddRange(BuildDictionaryHighlights("Label", configMap.Labels));
+
+        return new AksResourceBrowseItemViewModel(
+            Kind: ResourceKindConfigMaps,
+            ApiKind: "ConfigMap",
+            Name: configMap.Name,
+            Namespace: configMap.Namespace,
+            StatusLabel: keyCount == 1 ? "1 key" : $"{keyCount:N0} keys",
+            NamespaceLabel: $"Namespace · {configMap.Namespace}",
+            SummaryLine: keyCount == 0 ? "No keys were reported for this configmap." : secondaryLine,
+            SecondaryLine: configMap.Labels.Count == 0
+                ? "No labels were surfaced for this configmap."
+                : $"Labels {configMap.Labels.Count:N0}",
+            DetailSubtitle: $"{configMap.Namespace} · configmap",
+            ActionLabel: "Inspect",
+            SearchText: string.Join(' ', configMap.Namespace, configMap.Name, string.Join(' ', configMap.Data.Keys), string.Join(' ', configMap.Data.Values)),
+            DetailFacts:
+            [
+                new AksResourceFactItemViewModel("Namespace", configMap.Namespace),
+                new AksResourceFactItemViewModel("Keys", keyCount.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("Labels", configMap.Labels.Count.ToString(CultureInfo.CurrentCulture)),
+            ],
+            Highlights: highlights);
+    }
+
+    private static AksResourceBrowseItemViewModel CreateSecretBrowseItem(SecretInfo secret)
+    {
+        var keyCount = secret.Keys.Count;
+        var highlights = secret.Keys
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .Select(key => $"Key · {key}")
+            .ToList();
+        highlights.AddRange(BuildDictionaryHighlights("Label", secret.Labels));
+
+        return new AksResourceBrowseItemViewModel(
+            Kind: ResourceKindSecrets,
+            ApiKind: "Secret",
+            Name: secret.Name,
+            Namespace: secret.Namespace,
+            StatusLabel: string.IsNullOrWhiteSpace(secret.Type) ? "Opaque" : secret.Type,
+            NamespaceLabel: $"Namespace · {secret.Namespace}",
+            SummaryLine: keyCount == 0
+                ? "No secret keys were surfaced for this secret."
+                : string.Join(", ", secret.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).Take(3)),
+            SecondaryLine: keyCount == 1 ? "1 key is available for on-demand reveal." : $"{keyCount:N0} keys are available for on-demand reveal.",
+            DetailSubtitle: $"{secret.Namespace} · secret",
+            ActionLabel: "Inspect",
+            SearchText: string.Join(' ', secret.Namespace, secret.Name, secret.Type, string.Join(' ', secret.Keys)),
+            DetailFacts:
+            [
+                new AksResourceFactItemViewModel("Type", string.IsNullOrWhiteSpace(secret.Type) ? "Opaque" : secret.Type),
+                new AksResourceFactItemViewModel("Namespace", secret.Namespace),
+                new AksResourceFactItemViewModel("Keys", keyCount.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("Labels", secret.Labels.Count.ToString(CultureInfo.CurrentCulture)),
+            ],
+            Highlights: highlights);
     }
 
     private static AksResourceBrowseItemViewModel CreateJobBrowseItem(JobInfo job)
@@ -859,6 +1078,66 @@ public sealed partial class AksPageViewModel
             CanTrigger: true);
     }
 
+    private static AksResourceBrowseItemViewModel CreateHelmBrowseItem(HelmReleaseInfo helmRelease)
+    {
+        var chartLabel = string.IsNullOrWhiteSpace(helmRelease.Chart)
+            ? "Chart not reported"
+            : helmRelease.Chart!;
+        var versionLabel = string.IsNullOrWhiteSpace(helmRelease.ChartVersion)
+            ? chartLabel
+            : $"{chartLabel} · {helmRelease.ChartVersion}";
+        var secondaryLine = string.Join(
+            " · ",
+            new[]
+            {
+                string.IsNullOrWhiteSpace(helmRelease.AppVersion) ? null : $"App {helmRelease.AppVersion}",
+                $"Revision {helmRelease.Revision}",
+                $"Updated {FormatTimestamp(helmRelease.Updated)}",
+            }.Where(value => value is not null));
+
+        var highlights = new List<string>();
+        if (!string.IsNullOrWhiteSpace(helmRelease.Chart))
+        {
+            highlights.Add($"Chart · {helmRelease.Chart}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(helmRelease.ChartVersion))
+        {
+            highlights.Add($"Chart version · {helmRelease.ChartVersion}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(helmRelease.AppVersion))
+        {
+            highlights.Add($"App version · {helmRelease.AppVersion}");
+        }
+
+        highlights.Add($"Revision · {helmRelease.Revision}");
+
+        return new AksResourceBrowseItemViewModel(
+            Kind: ResourceKindHelm,
+            ApiKind: "Helm",
+            Name: helmRelease.Name,
+            Namespace: helmRelease.Namespace,
+            StatusLabel: string.IsNullOrWhiteSpace(helmRelease.Status) ? "unknown" : helmRelease.Status,
+            NamespaceLabel: $"Namespace · {helmRelease.Namespace}",
+            SummaryLine: versionLabel,
+            SecondaryLine: secondaryLine,
+            DetailSubtitle: $"{helmRelease.Namespace} · Helm release",
+            ActionLabel: "Inspect",
+            SearchText: string.Join(' ', helmRelease.Namespace, helmRelease.Name, helmRelease.Status, chartLabel, helmRelease.ChartVersion, helmRelease.AppVersion),
+            DetailFacts:
+            [
+                new AksResourceFactItemViewModel("Status", string.IsNullOrWhiteSpace(helmRelease.Status) ? "unknown" : helmRelease.Status),
+                new AksResourceFactItemViewModel("Namespace", helmRelease.Namespace),
+                new AksResourceFactItemViewModel("Chart", chartLabel),
+                new AksResourceFactItemViewModel("Chart version", helmRelease.ChartVersion ?? "—"),
+                new AksResourceFactItemViewModel("App version", helmRelease.AppVersion ?? "—"),
+                new AksResourceFactItemViewModel("Revision", helmRelease.Revision.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("Updated", FormatTimestamp(helmRelease.Updated)),
+            ],
+            Highlights: highlights);
+    }
+
     private static AksResourceBrowseItemViewModel CreateServiceBrowseItem(ServiceInfo service)
     {
         var portsSummary = BuildServicePortsSummary(service.Ports);
@@ -899,6 +1178,9 @@ public sealed partial class AksPageViewModel
             ? "No ingress addresses were reported yet."
             : string.Join(" · ", ingress.Addresses);
         var status = ingress.Addresses.Count == 0 ? "Pending" : "Ready";
+        var primaryUrl = ResolveExternalUrl(ingress.Rules
+            .Select(rule => rule.Host)
+            .FirstOrDefault(host => !string.IsNullOrWhiteSpace(host)));
 
         var highlights = BuildIngressHighlights(ingress);
 
@@ -923,10 +1205,12 @@ public sealed partial class AksPageViewModel
                 new AksResourceFactItemViewModel("Ingress class", string.IsNullOrWhiteSpace(ingress.IngressClass) ? "—" : ingress.IngressClass),
                 new AksResourceFactItemViewModel("Rules", ingress.Rules.Count.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Addresses", ingress.Addresses.Count.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("Primary URL", primaryUrl ?? "—"),
             ],
             Highlights: highlights,
             CanEditYaml: true,
-            CanAnalyzeIngress: true);
+            CanAnalyzeIngress: true,
+            PrimaryUrl: primaryUrl);
     }
 
     private static AksResourceBrowseItemViewModel CreateGatewayClassBrowseItem(GatewayClassInfo gatewayClass)
@@ -1012,6 +1296,7 @@ public sealed partial class AksPageViewModel
         var parentSummary = httpRoute.ParentRefs.Count == 0
             ? "No parent refs were surfaced."
             : string.Join(" · ", httpRoute.ParentRefs.Take(2));
+        var primaryUrl = ResolveExternalUrl(httpRoute.Hostnames.FirstOrDefault(host => !string.IsNullOrWhiteSpace(host)));
         var highlights = new List<string>();
         highlights.AddRange(httpRoute.Hostnames.Select(hostname => $"Hostname · {hostname}"));
         highlights.AddRange(httpRoute.ParentRefs.Select(parent => $"Parent · {parent}"));
@@ -1037,8 +1322,28 @@ public sealed partial class AksPageViewModel
                 new AksResourceFactItemViewModel("Hostnames", httpRoute.Hostnames.Count.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Parents", httpRoute.ParentRefs.Count.ToString(CultureInfo.CurrentCulture)),
                 new AksResourceFactItemViewModel("Backends", httpRoute.BackendRefs.Count.ToString(CultureInfo.CurrentCulture)),
+                new AksResourceFactItemViewModel("Primary URL", primaryUrl ?? "—"),
             ],
-            Highlights: highlights);
+            Highlights: highlights,
+            PrimaryUrl: primaryUrl);
+    }
+
+    private static string? ResolveExternalUrl(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return null;
+        }
+
+        if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return host;
+        }
+
+        return System.Net.IPAddress.TryParse(host, out _)
+            ? $"http://{host}"
+            : $"https://{host}";
     }
 
     private static string BuildSelectorSummary(IReadOnlyDictionary<string, string> labels)
@@ -1052,6 +1357,57 @@ public sealed partial class AksPageViewModel
             .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .Take(3)
             .Select(pair => $"{pair.Key}={pair.Value}"));
+    }
+
+    private static string BuildHpaSummary(HpaInfo? hpa)
+    {
+        if (hpa is null)
+        {
+            return "—";
+        }
+
+        var cpuSummary = hpa.CurrentCpuUtilizationPercent.HasValue
+            ? hpa.TargetCpuUtilizationPercent.HasValue
+                ? $"CPU {hpa.CurrentCpuUtilizationPercent:F0}%/{hpa.TargetCpuUtilizationPercent:F0}%"
+                : $"CPU {hpa.CurrentCpuUtilizationPercent:F0}%"
+            : null;
+
+        return string.Join(
+            " · ",
+            new[]
+            {
+                $"{hpa.CurrentReplicas}/{hpa.MaxReplicas} replicas",
+                cpuSummary,
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string FormatPodCpu(PodMetrics? podMetrics)
+    {
+        if (podMetrics is null || podMetrics.Containers.Count == 0)
+        {
+            return "—";
+        }
+
+        var totalMillicores = podMetrics.Containers.Sum(container => container.CpuCores) * 1000d;
+        return $"{totalMillicores:F0}m";
+    }
+
+    private static string FormatPodMemory(PodMetrics? podMetrics)
+    {
+        if (podMetrics is null || podMetrics.Containers.Count == 0)
+        {
+            return "—";
+        }
+
+        var totalBytes = podMetrics.Containers.Sum(container => container.MemoryBytes);
+        var gibibytes = totalBytes / (1024d * 1024d * 1024d);
+        if (gibibytes >= 1)
+        {
+            return $"{gibibytes:F1} GiB";
+        }
+
+        var mebibytes = totalBytes / (1024d * 1024d);
+        return $"{mebibytes:F0} MiB";
     }
 
     private static string BuildServicePortsSummary(IReadOnlyList<ServicePortInfo> ports)
@@ -1163,9 +1519,11 @@ public sealed class AksResourceBrowseItemViewModel
         bool CanAnalyzeNetworkPolicies = false,
         string? NetworkPolicyKind = null,
         bool CanRestart = false,
+        bool CanDelete = false,
         int? ScaleReplicaCount = null,
         bool CanTrigger = false,
         bool CanRerun = false,
+        string? PrimaryUrl = null,
         AksPodItemViewModel? PodItem = null)
     {
         this.Kind = Kind;
@@ -1186,9 +1544,11 @@ public sealed class AksResourceBrowseItemViewModel
         this.CanAnalyzeNetworkPolicies = CanAnalyzeNetworkPolicies;
         this.NetworkPolicyKind = NetworkPolicyKind;
         this.CanRestart = CanRestart;
+        this.CanDelete = CanDelete;
         this.ScaleReplicaCount = ScaleReplicaCount;
         this.CanTrigger = CanTrigger;
         this.CanRerun = CanRerun;
+        this.PrimaryUrl = PrimaryUrl;
         this.PodItem = PodItem;
     }
 
@@ -1228,6 +1588,8 @@ public sealed class AksResourceBrowseItemViewModel
 
     public bool CanRestart { get; }
 
+    public bool CanDelete { get; }
+
     public int? ScaleReplicaCount { get; }
 
     public bool CanScale => ScaleReplicaCount is not null;
@@ -1235,6 +1597,8 @@ public sealed class AksResourceBrowseItemViewModel
     public bool CanTrigger { get; }
 
     public bool CanRerun { get; }
+
+    public string? PrimaryUrl { get; }
 
     public AksPodItemViewModel? PodItem { get; }
 

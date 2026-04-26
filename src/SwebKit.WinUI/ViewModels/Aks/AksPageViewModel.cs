@@ -47,6 +47,14 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             OnPropertyChanged(nameof(PodCountLabel));
             OnPropertyChanged(nameof(ShowPodEmptyState));
         };
+        Events.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasEvents));
+            OnPropertyChanged(nameof(WarningEventCount));
+            OnPropertyChanged(nameof(EventsSummary));
+            OnPropertyChanged(nameof(ToggleEventsButtonText));
+            OnPropertyChanged(nameof(ShowEventsEmptyState));
+        };
 
         InitializePortForwardState();
     }
@@ -56,6 +64,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     public ObservableCollection<string> NamespaceOptions { get; } = [];
 
     public ObservableCollection<AksPodItemViewModel> Pods { get; } = [];
+
+    public ObservableCollection<AksClusterEventItemViewModel> Events { get; } = [];
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -75,6 +85,12 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     [ObservableProperty]
     public partial IAksClient? Client { get; set; }
 
+    [ObservableProperty]
+    public partial bool ShowEvents { get; set; }
+
+    [ObservableProperty]
+    public partial string? EventsErrorMessage { get; set; }
+
     public bool IsConfigured => _appState.UseDemoData || _appState.Config.AksConfig is not null;
 
     public bool IsConnected => Client is not null;
@@ -83,11 +99,38 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
     public bool HasNamespaceOptions => NamespaceOptions.Count > 0;
 
+    public bool HasEvents => Events.Count > 0;
+
+    public int WarningEventCount => Events.Count(item => item.IsWarning);
+
     public bool ShowNotConfiguredState => !IsLoading && !IsConfigured;
 
     public bool ShowPodEmptyState => IsConnected && !IsLoading && Pods.Count == 0 && ErrorMessage is null;
 
     public string PodCountLabel => Pods.Count == 1 ? "1 pod" : $"{Pods.Count} pods";
+
+    public string EventsSummary => Events.Count switch
+    {
+        0 when string.IsNullOrWhiteSpace(SelectedNamespace) => "No namespace selected for event inspection.",
+        0 when string.Equals(SelectedNamespace, "*", StringComparison.Ordinal) => "Recent events load only after selecting a specific namespace.",
+        0 => "No recent events were surfaced for the current namespace.",
+        1 => WarningEventCount == 1 ? "1 recent event · 1 warning" : "1 recent event",
+        _ => WarningEventCount == 0 ? $"{Events.Count:N0} recent events" : $"{Events.Count:N0} recent events · {WarningEventCount:N0} warning",
+    };
+
+    public string ToggleEventsButtonText => ShowEvents
+        ? WarningEventCount == 0 ? "Hide events" : $"Hide events ({WarningEventCount})"
+        : WarningEventCount == 0 ? "Show events" : $"Show events ({WarningEventCount})";
+
+    public Microsoft.UI.Xaml.Visibility EventsSectionVisibility => ShowEvents
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility EventsErrorVisibility => string.IsNullOrWhiteSpace(EventsErrorMessage)
+        ? Microsoft.UI.Xaml.Visibility.Collapsed
+        : Microsoft.UI.Xaml.Visibility.Visible;
+
+    public bool ShowEventsEmptyState => ShowEvents && !IsLoading && string.IsNullOrWhiteSpace(EventsErrorMessage) && Events.Count == 0;
 
     public async Task LoadAsync()
     {
@@ -129,6 +172,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             Client = null;
             ConnectionSummary = "No AKS configuration found. Configure kubeconfig settings in Settings before opening this workspace.";
             ErrorMessage = null;
+            EventsErrorMessage = null;
+            Events.Clear();
             ContextOptions.Clear();
             NamespaceOptions.Clear();
             Pods.Clear();
@@ -239,6 +284,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
     partial void OnSelectedNamespaceChanged(string value)
     {
+        OnPropertyChanged(nameof(EventsSummary));
+
         if (_suppressSelectionSideEffects || !_loaded || string.IsNullOrWhiteSpace(value))
         {
             return;
@@ -262,8 +309,29 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
         if (value is null)
         {
+            Events.Clear();
+            EventsErrorMessage = null;
             ClearResourceExplorerState();
         }
+    }
+
+    partial void OnShowEventsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EventsSectionVisibility));
+        OnPropertyChanged(nameof(ToggleEventsButtonText));
+        OnPropertyChanged(nameof(ShowEventsEmptyState));
+    }
+
+    partial void OnEventsErrorMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(EventsErrorVisibility));
+        OnPropertyChanged(nameof(ShowEventsEmptyState));
+    }
+
+    [RelayCommand]
+    private void ToggleEvents()
+    {
+        ShowEvents = !ShowEvents;
     }
 
     private void ApplyBootstrapResult(AksClientBootstrapResult result)
@@ -454,4 +522,36 @@ public sealed class AksPodItemViewModel
 
         return "Unknown";
     }
+}
+
+public sealed class AksClusterEventItemViewModel
+{
+    public AksClusterEventItemViewModel(KubernetesEvent clusterEvent)
+    {
+        Type = string.IsNullOrWhiteSpace(clusterEvent.Type) ? "Normal" : clusterEvent.Type;
+        Reason = string.IsNullOrWhiteSpace(clusterEvent.Reason) ? "Event" : clusterEvent.Reason;
+        Message = string.IsNullOrWhiteSpace(clusterEvent.Message) ? "No event message was surfaced." : clusterEvent.Message;
+        InvolvedObject = string.IsNullOrWhiteSpace(clusterEvent.InvolvedObjectKind)
+            ? clusterEvent.InvolvedObjectName ?? "Unknown target"
+            : string.IsNullOrWhiteSpace(clusterEvent.InvolvedObjectName)
+                ? clusterEvent.InvolvedObjectKind
+                : $"{clusterEvent.InvolvedObjectKind}/{clusterEvent.InvolvedObjectName}";
+        CountLabel = clusterEvent.Count <= 1 ? "1 occurrence" : $"{clusterEvent.Count:N0} occurrences";
+        TimestampText = clusterEvent.LastTimestamp?.ToLocalTime().ToString("g") ?? "Timestamp unavailable";
+        IsWarning = string.Equals(Type, "Warning", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public string Type { get; }
+
+    public string Reason { get; }
+
+    public string Message { get; }
+
+    public string InvolvedObject { get; }
+
+    public string CountLabel { get; }
+
+    public string TimestampText { get; }
+
+    public bool IsWarning { get; }
 }

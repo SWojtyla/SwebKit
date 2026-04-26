@@ -4,27 +4,27 @@
 
 title: "Feature Overview - winui3-service-bus-parity"
 owner: ""
-status: "In Progress"
+status: "Review"
 jira: "not linked"
 created: "2026-04-25"
-updated: "2026-04-25"
+updated: "2026-04-26"
 
 ---
 
 ## Goal
 
-Bring the highest-value remaining MAUI Service Bus operator workflows onto native WinUI so scheduled work, compose/template reuse, and core destructive message operations no longer require the Blazor host, while keeping the remaining advanced-rule/custom-column and restore-hardening gaps explicit.
+Finish migrating the remaining non-incident MAUI Service Bus operator workflows onto native WinUI so replay, batch DLQ replay, richer list tooling, and workspace restore behavior no longer require the Blazor host.
 
 ## Value
 
-The WinUI Service Bus page now covers the main native parity baseline: scheduled-message management, compose/template reuse with scheduled send, richer message-list controls, and confirmation-gated destructive actions. Deferred follow-up still tracked under this feature includes the hosted-only advanced filter/export/purge/row-density/custom-column/full-template-management workflows plus workspace-restore hardening and page-level WinUI coverage.
+The WinUI Service Bus page now covers the earlier native baseline plus the remaining non-incident parity lift: replay target selection, batch DLQ replay, advanced list tooling, and workspace favorite or restore behavior are available natively. Incident investigation and trace pivots are explicitly excluded from this feature because that surface is being removed rather than migrated.
 
 ## Scope
 
-- In scope for the landed native baseline: scheduled message manager tabs, template save/apply/reuse flows, compose send-or-schedule parity, text-filter and list-preference persistence, and destructive safety cues.
-- Deferred follow-up still tracked here: hosted-only filter/export/purge/row-density/custom-column/template-management parity, workspace-restore hardening, and page-level WinUI coverage.
+- In scope: complete the remaining non-incident MAUI-owned Service Bus workflows, including batch send, selected-message quick actions, replay parity, richer list controls, batch DLQ replay, and workspace restore or favorite behavior.
+- In scope for the work completed in this pass: replay target selection, batch DLQ replay, multi-rule list filtering, filtered delete, purge, export JSON, row density, custom application-property columns, and shell workspace snapshot parity.
 - In scope: page-local adoption of the current shared layout primitives and Settings repair contract where Service Bus needs them.
-- Out of scope: new broker workflows that do not already exist in MAUI, backend Azure Service Bus redesign, and Incident Timeline integration.
+- Out of scope: incident investigation or trace-pivot parity, new broker workflows that do not already exist in MAUI, and backend Azure Service Bus redesign.
 
 ## Source surfaces
 
@@ -50,6 +50,8 @@ The WinUI Service Bus page now covers the main native parity baseline: scheduled
   Mitigation: treat bulk confirmations and safety copy as parity-critical, not polish.
 - Risk: template and filter state drift from the current workspace-restore behavior.  
   Mitigation: validate save, restore, and reload paths explicitly.
+- Risk: repo-wide WinUI validation can be blocked by unrelated feature work in the same project.  
+  Mitigation: keep focused Service Bus page tests green and call out external build blockers explicitly in `status.md` and `test-plan.md`.
 
 ## Related documents
 

@@ -1,5 +1,12 @@
 namespace SwebKit.Core.Services;
 
+public enum TtlVisualState
+{
+    Success,
+    Warning,
+    Critical,
+}
+
 /// <summary>
 /// Formats Redis TTL (TimeSpan?) values for human-readable display and progress-bar visualisation.
 /// </summary>
@@ -41,26 +48,39 @@ public static class TtlFormatter
     }
 
     /// <summary>
+    /// Returns the severity bucket to use for TTL visualisation.
+    /// When the original TTL is known, uses percentage thresholds; otherwise uses absolute thresholds.
+    /// </summary>
+    public static TtlVisualState GetVisualState(TimeSpan? remaining, TimeSpan? original)
+    {
+        if (!remaining.HasValue || remaining.Value <= TimeSpan.Zero)
+            return TtlVisualState.Critical;
+
+        if (original.HasValue && original.Value > TimeSpan.Zero)
+        {
+            var pct = remaining.Value.TotalSeconds / original.Value.TotalSeconds;
+            return pct > 0.20 ? TtlVisualState.Success
+                 : pct > 0.05 ? TtlVisualState.Warning
+                 : TtlVisualState.Critical;
+        }
+
+        return remaining.Value.TotalMinutes > 5 ? TtlVisualState.Success
+             : remaining.Value.TotalMinutes > 1 ? TtlVisualState.Warning
+             : TtlVisualState.Critical;
+    }
+
+    /// <summary>
     /// Returns the CSS color variable to use for a TTL value.
     /// When the original TTL is known, uses percentage thresholds; otherwise uses absolute thresholds.
     /// </summary>
     public static string GetColor(TimeSpan? remaining, TimeSpan? original)
     {
-        if (!remaining.HasValue || remaining.Value <= TimeSpan.Zero)
-            return "var(--color-error)";
-
-        if (original.HasValue && original.Value > TimeSpan.Zero)
+        return GetVisualState(remaining, original) switch
         {
-            var pct = remaining.Value.TotalSeconds / original.Value.TotalSeconds;
-            return pct > 0.20 ? "var(--color-success)"
-                 : pct > 0.05 ? "var(--color-warning)"
-                 : "var(--color-error)";
-        }
-
-        // Absolute thresholds when original TTL is not known
-        return remaining.Value.TotalMinutes > 5 ? "var(--color-success)"
-             : remaining.Value.TotalMinutes > 1 ? "var(--color-warning)"
-             : "var(--color-error)";
+            TtlVisualState.Success => "var(--color-success)",
+            TtlVisualState.Warning => "var(--color-warning)",
+            _ => "var(--color-error)",
+        };
     }
 
     /// <summary>

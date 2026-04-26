@@ -13,17 +13,26 @@ public sealed class ServiceBusPagePresentationTests
     [Fact]
     public void ComposeDialogState_TracksTemplateSummaryAndScheduledMode()
     {
-        var sendState = ServiceBusPagePresentation.BuildComposeDialogState("orders", templateCount: 0, isScheduled: false);
-        var scheduledState = ServiceBusPagePresentation.BuildComposeDialogState("orders", templateCount: 2, isScheduled: true);
+        var sendState = ServiceBusPagePresentation.BuildComposeDialogState("orders", templateCount: 0, isScheduled: false, isReplay: false);
+        var scheduledState = ServiceBusPagePresentation.BuildComposeDialogState("orders", templateCount: 2, isScheduled: true, isReplay: false);
+        var replayState = ServiceBusPagePresentation.BuildComposeDialogState("archive/orders", templateCount: 1, isScheduled: false, isReplay: true);
 
+        Assert.Equal("Compose message", sendState.DialogTitle);
         Assert.Equal("Target entity: orders", sendState.TargetEntityText);
         Assert.Equal("No saved templates yet.", sendState.TemplateSummaryText);
         Assert.Equal("Send", sendState.PrimaryButtonText);
         Assert.Equal(Visibility.Collapsed, sendState.SchedulePanelVisibility);
+        Assert.Equal(Visibility.Collapsed, sendState.ReplayPanelVisibility);
 
         Assert.Equal("2 saved template(s) available.", scheduledState.TemplateSummaryText);
         Assert.Equal("Schedule", scheduledState.PrimaryButtonText);
         Assert.Equal(Visibility.Visible, scheduledState.SchedulePanelVisibility);
+
+        Assert.Equal("Replay message", replayState.DialogTitle);
+        Assert.Equal("Replay target: archive/orders", replayState.TargetEntityText);
+        Assert.Equal("Replay", replayState.PrimaryButtonText);
+        Assert.Equal(Visibility.Visible, replayState.ReplayPanelVisibility);
+        Assert.Equal(Visibility.Collapsed, replayState.SchedulePanelVisibility);
     }
 
     [Fact]
@@ -83,6 +92,18 @@ public sealed class ServiceBusPagePresentationTests
         Assert.Contains("Click=\"RemoveScheduledMessage_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ActiveTab.SelectedScheduledMessageId}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ActiveTab.SelectedScheduledStatus}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Replay\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ReplaySelectedMessage_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Batch Replay DLQ\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"BatchReplaySelectedDeadLetters_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionChanged=\"VisibleMessages_SelectionChanged\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Delete filtered\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"DeleteFilteredMessages_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Purge all\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"PurgeAllMessages_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Export JSON\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ExportVisibleMessages_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Advanced rules\"", xaml, StringComparison.Ordinal);
     }
 
     private static ServiceBusTabViewModel CreateTab(bool isDlq)

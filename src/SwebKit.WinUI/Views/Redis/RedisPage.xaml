@@ -442,11 +442,34 @@
                                                 </StackPanel>
 
                                                 <StackPanel Grid.Column="1"
-                                                            Spacing="4">
+                                                            Spacing="6">
                                                     <TextBlock Text="TTL"
                                                                Style="{StaticResource CaptionTextBlockStyle}"/>
                                                     <TextBlock Text="{Binding SelectedTtlText}"
                                                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
+
+                                                    <Grid Visibility="{Binding SelectedTtlProgressVisibility}">
+                                                        <ProgressBar Minimum="0"
+                                                                     Maximum="100"
+                                                                     Value="{Binding SelectedTtlProgressValue}"
+                                                                     Height="8"
+                                                                     Visibility="{Binding SelectedTtlHealthyProgressVisibility}"
+                                                                     Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+
+                                                        <ProgressBar Minimum="0"
+                                                                     Maximum="100"
+                                                                     Value="{Binding SelectedTtlProgressValue}"
+                                                                     Height="8"
+                                                                     Visibility="{Binding SelectedTtlWarningProgressVisibility}"
+                                                                     Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+
+                                                        <ProgressBar Minimum="0"
+                                                                     Maximum="100"
+                                                                     Value="{Binding SelectedTtlProgressValue}"
+                                                                     Height="8"
+                                                                     Visibility="{Binding SelectedTtlCriticalProgressVisibility}"
+                                                                     Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                                    </Grid>
                                                 </StackPanel>
 
                                                 <StackPanel Grid.Column="2"

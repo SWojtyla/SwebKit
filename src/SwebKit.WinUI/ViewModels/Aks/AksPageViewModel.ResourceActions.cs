@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using SwebKit.Core.Models;
+using Windows.ApplicationModel.DataTransfer;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 
@@ -68,6 +70,27 @@ public sealed partial class AksPageViewModel
     [ObservableProperty]
     public partial string? SelectedResourceActionErrorMessage { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsSelectedResourceHelmHistoryPanelOpen { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSelectedResourceHelmHistoryLoading { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSelectedResourceHelmRollbackMode { get; set; }
+
+    [ObservableProperty]
+    public partial string SelectedResourceHelmHistoryTitle { get; set; } = "Helm history";
+
+    [ObservableProperty]
+    public partial string SelectedResourceHelmHistorySummary { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial IReadOnlyList<AksHelmRevisionItemViewModel> SelectedResourceHelmHistoryItems { get; set; } = [];
+
+    [ObservableProperty]
+    public partial string? SelectedResourceHelmHistoryErrorMessage { get; set; }
+
     public Visibility SelectedResourceActionBarVisibility => SelectedResourceItem is null ? Visibility.Collapsed : Visibility.Visible;
 
     public string SelectedResourceYamlButtonText => IsSelectedResourceYamlPanelOpen ? "Reload YAML" : "Load YAML";
@@ -128,6 +151,71 @@ public sealed partial class AksPageViewModel
 
     public Visibility SelectedResourceAnalyzeVisibility => CanAnalyzeSelectedResource ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility SelectedResourceOpenUrlVisibility => CanOpenSelectedResourceUrl ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool CanOpenSelectedResourceUrl => !string.IsNullOrWhiteSpace(SelectedResourceItem?.PrimaryUrl);
+
+    public Visibility SelectedResourceCopyUrlVisibility => CanOpenSelectedResourceUrl ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility SelectedResourceNamespaceQuotaVisibility => SelectedResourceItem is not null
+        && !string.IsNullOrWhiteSpace(SelectedResourceItem.Namespace)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanLoadSelectedResourceNamespaceQuotas => SelectedResourceItem is not null
+        && !string.IsNullOrWhiteSpace(SelectedResourceItem.Namespace)
+        && Client is not null
+        && !IsSelectedResourceDiagnosticsLoading;
+
+    public Visibility SelectedResourcePodDisruptionBudgetVisibility => SelectedResourceNamespaceQuotaVisibility;
+
+    public bool CanLoadSelectedResourcePodDisruptionBudgets => CanLoadSelectedResourceNamespaceQuotas;
+
+    public Visibility SelectedResourceProbeFailuresVisibility => CanInspectSelectedResourceProbeFailures
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanLoadSelectedResourceProbeFailures => CanInspectSelectedResourceProbeFailures && !IsSelectedResourceDiagnosticsLoading;
+
+    public Visibility SelectedResourcePlacementVisibility => CanInspectSelectedResourcePlacement
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanLoadSelectedResourcePlacement => CanInspectSelectedResourcePlacement && !IsSelectedResourceDiagnosticsLoading;
+
+    public Visibility SelectedResourceHelmValuesVisibility => IsSelectedResourceHelmRelease
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanOpenSelectedResourceHelmValues => IsSelectedResourceHelmRelease
+        && Client is not null
+        && !IsSelectedResourceDiagnosticsLoading;
+
+    public Visibility SelectedResourceHelmHistoryVisibility => IsSelectedResourceHelmRelease
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanOpenSelectedResourceHelmHistory => IsSelectedResourceHelmRelease
+        && Client is not null
+        && !IsSelectedResourceHelmHistoryLoading;
+
+    public Visibility SelectedResourceHelmPreviewVisibility => IsSelectedResourceHelmRelease
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanPreviewSelectedResourceHelmUpgrade => IsSelectedResourceHelmRelease
+        && Client is not null
+        && !IsSelectedResourceDiagnosticsLoading;
+
+    public Visibility SelectedResourceHelmRollbackVisibility => IsSelectedResourceHelmRelease
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanOpenSelectedResourceHelmRollback => IsSelectedResourceHelmRelease
+        && Client is not null
+        && !IsSelectedResourceHelmHistoryLoading
+        && !IsSelectedResourceMutationRunning;
+
     public Visibility SelectedResourceDiagnosticsPanelVisibility =>
         IsSelectedResourceDiagnosticsPanelOpen || IsSelectedResourceDiagnosticsLoading || !string.IsNullOrWhiteSpace(SelectedResourceDiagnosticsErrorMessage)
             ? Visibility.Visible
@@ -150,6 +238,14 @@ public sealed partial class AksPageViewModel
         : Visibility.Collapsed;
 
     public bool CanRestartSelectedResource => SelectedResourceItem?.CanRestart == true
+        && !IsSelectedResourceMutationRunning
+        && CanExecuteSelectedResourceMutation;
+
+    public Visibility SelectedResourceDeleteVisibility => SelectedResourceItem?.CanDelete == true
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanDeleteSelectedResource => SelectedResourceItem?.CanDelete == true
         && !IsSelectedResourceMutationRunning
         && CanExecuteSelectedResourceMutation;
 
@@ -189,9 +285,11 @@ public sealed partial class AksPageViewModel
     public bool SelectedResourceActionRequiresConfirm => _appState.Config.IsProduction
         && SelectedResourceItem is not null
         && (SelectedResourceItem.CanRestart
+            || SelectedResourceItem.CanDelete
             || SelectedResourceItem.CanScale
             || SelectedResourceItem.CanTrigger
             || SelectedResourceItem.CanRerun
+            || IsSelectedResourceHelmRollbackMode
             || IsSelectedResourceYamlEditorOpen);
 
     public Visibility SelectedResourceConfirmVisibility => SelectedResourceActionRequiresConfirm
@@ -210,6 +308,42 @@ public sealed partial class AksPageViewModel
     public Visibility SelectedResourceActionErrorVisibility => string.IsNullOrWhiteSpace(SelectedResourceActionErrorMessage)
         ? Visibility.Collapsed
         : Visibility.Visible;
+
+    public Visibility SelectedResourceHelmHistoryPanelVisibility =>
+        IsSelectedResourceHelmHistoryPanelOpen || IsSelectedResourceHelmHistoryLoading || !string.IsNullOrWhiteSpace(SelectedResourceHelmHistoryErrorMessage)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility SelectedResourceHelmHistoryErrorVisibility => string.IsNullOrWhiteSpace(SelectedResourceHelmHistoryErrorMessage)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility SelectedResourceHelmHistorySummaryVisibility => string.IsNullOrWhiteSpace(SelectedResourceHelmHistorySummary)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility SelectedResourceHelmHistoryContentVisibility => SelectedResourceHelmHistoryItems.Count == 0
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public bool ShowSelectedResourceHelmHistoryEmptyState => IsSelectedResourceHelmHistoryPanelOpen
+        && !IsSelectedResourceHelmHistoryLoading
+        && string.IsNullOrWhiteSpace(SelectedResourceHelmHistoryErrorMessage)
+        && SelectedResourceHelmHistoryItems.Count == 0;
+
+    public Visibility SelectedResourceHelmRollbackActionVisibility => IsSelectedResourceHelmRollbackMode
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    private bool IsSelectedResourceHelmRelease => SelectedResourceItem is not null
+        && string.Equals(SelectedResourceItem.Kind, "Helm", StringComparison.Ordinal);
+
+    private bool CanInspectSelectedResourceProbeFailures => SelectedResourceItem is not null
+        && Client is not null
+        && (string.Equals(SelectedResourceItem.ApiKind, "Deployment", StringComparison.Ordinal)
+            || string.Equals(SelectedResourceItem.ApiKind, "StatefulSet", StringComparison.Ordinal));
+
+    private bool CanInspectSelectedResourcePlacement => CanInspectSelectedResourceProbeFailures;
 
     partial void OnSelectedResourceYamlTextChanged(string value) => NotifySelectedResourceActionStateChanged();
 
@@ -242,6 +376,71 @@ public sealed partial class AksPageViewModel
     partial void OnSelectedResourceConfirmTextChanged(string value) => NotifySelectedResourceActionStateChanged();
 
     partial void OnSelectedResourceActionErrorMessageChanged(string? value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnIsSelectedResourceHelmHistoryPanelOpenChanged(bool value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnIsSelectedResourceHelmHistoryLoadingChanged(bool value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnIsSelectedResourceHelmRollbackModeChanged(bool value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnSelectedResourceHelmHistoryTitleChanged(string value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnSelectedResourceHelmHistorySummaryChanged(string value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnSelectedResourceHelmHistoryItemsChanged(IReadOnlyList<AksHelmRevisionItemViewModel> value) => NotifySelectedResourceActionStateChanged();
+
+    partial void OnSelectedResourceHelmHistoryErrorMessageChanged(string? value) => NotifySelectedResourceActionStateChanged();
+
+    [RelayCommand]
+    private Task OpenSelectedResourceUrlAsync()
+    {
+        var url = SelectedResourceItem?.PrimaryUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+            _notifications.ShowSuccess("AKS URL opened", url);
+        }
+        catch (Exception ex)
+        {
+            _notifications.ShowError("AKS URL open failed", ex.Message, ex);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private Task CopySelectedResourceUrlAsync()
+    {
+        var url = SelectedResourceItem?.PrimaryUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(url);
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            _notifications.ShowSuccess("AKS URL copied", url);
+        }
+        catch (Exception ex)
+        {
+            _notifications.ShowError("AKS URL copy failed", ex.Message, ex);
+        }
+
+        return Task.CompletedTask;
+    }
 
     [RelayCommand]
     private async Task OpenSelectedResourceYamlAsync()
@@ -396,14 +595,7 @@ public sealed partial class AksPageViewModel
             return;
         }
 
-        var actionToken = _selectedResourceActionCts.Token;
-
-        SelectedResourceDiagnosticsErrorMessage = null;
-        SelectedResourceDiagnosticsSummary = string.Empty;
-        SelectedResourceDiagnosticsFacts = [];
-        SelectedResourceDiagnosticsHighlights = [];
-        IsSelectedResourceDiagnosticsPanelOpen = true;
-        IsSelectedResourceDiagnosticsLoading = true;
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
 
         try
         {
@@ -437,6 +629,352 @@ public sealed partial class AksPageViewModel
             if (!_isDisposed)
             {
                 IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourceNamespaceQuotasAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || string.IsNullOrWhiteSpace(resource.Namespace))
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var quotasTask = Client.GetResourceQuotasAsync(resource.Namespace, actionToken);
+            var limitRangesTask = Client.GetLimitRangesAsync(resource.Namespace, actionToken);
+            await Task.WhenAll(quotasTask, limitRangesTask);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyNamespaceQuotaDiagnostics(resource.Namespace, quotasTask.Result, limitRangesTask.Result);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS namespace quota load failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourcePodDisruptionBudgetsAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || string.IsNullOrWhiteSpace(resource.Namespace))
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var budgets = await Client.GetPodDisruptionBudgetsAsync(resource.Namespace, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyPodDisruptionBudgetDiagnostics(resource.Namespace, budgets);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS pod disruption budget load failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourceProbeFailuresAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !CanInspectSelectedResourceProbeFailures)
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var summary = await Client.GetProbeFailureSummaryAsync(resource.Namespace, resource.ApiKind, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyProbeFailureDiagnostics(resource, summary);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS probe failure load failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourcePlacementAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !CanInspectSelectedResourcePlacement)
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var analysis = await Client.GetPlacementAnalysisAsync(resource.Namespace, resource.ApiKind, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyPlacementDiagnostics(resource, analysis);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS placement analysis failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourceHelmValuesAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !IsSelectedResourceHelmRelease)
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var values = await Client.GetHelmReleaseValuesAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyHelmValuesDiagnostics(resource, values);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS Helm values load failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task PreviewSelectedResourceHelmUpgradeAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !IsSelectedResourceHelmRelease)
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var preview = await Client.PreviewHelmUpgradeAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyHelmPreviewDiagnostics(resource, preview, $"Upgrade preview · {resource.Name}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS Helm preview failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourceHelmHistoryAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !IsSelectedResourceHelmRelease)
+        {
+            return;
+        }
+
+        await LoadSelectedResourceHelmHistoryAsync(resource, rollbackMode: false);
+    }
+
+    [RelayCommand]
+    private async Task OpenSelectedResourceHelmRollbackAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !IsSelectedResourceHelmRelease)
+        {
+            return;
+        }
+
+        await LoadSelectedResourceHelmHistoryAsync(resource, rollbackMode: true);
+    }
+
+    [RelayCommand]
+    private void CloseSelectedResourceHelmHistory()
+    {
+        IsSelectedResourceHelmHistoryPanelOpen = false;
+        IsSelectedResourceHelmHistoryLoading = false;
+        IsSelectedResourceHelmRollbackMode = false;
+        SelectedResourceHelmHistoryTitle = "Helm history";
+        SelectedResourceHelmHistorySummary = string.Empty;
+        SelectedResourceHelmHistoryItems = [];
+        SelectedResourceHelmHistoryErrorMessage = null;
+    }
+
+    [RelayCommand]
+    private async Task PreviewSelectedResourceHelmRollbackRevisionAsync(AksHelmRevisionItemViewModel? revision)
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || revision is null || !IsSelectedResourceHelmRelease)
+        {
+            return;
+        }
+
+        var actionToken = BeginSelectedResourceDiagnosticsLoad();
+
+        try
+        {
+            var preview = await Client.PreviewHelmRollbackAsync(resource.Namespace, resource.Name, revision.Revision, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            ApplyHelmPreviewDiagnostics(resource, preview, $"Rollback preview · {resource.Name} → rev {revision.Revision}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceDiagnosticsErrorMessage = ex.Message;
+                _notifications.ShowError("AKS Helm rollback preview failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceDiagnosticsLoading = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task RollbackSelectedResourceHelmRevisionAsync(AksHelmRevisionItemViewModel? revision)
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || revision is null || !IsSelectedResourceHelmRelease || !revision.CanRollbackTarget)
+        {
+            return;
+        }
+
+        var actionToken = _selectedResourceActionCts.Token;
+
+        if (!CanExecuteSelectedResourceMutation)
+        {
+            SelectedResourceActionErrorMessage = "Type CONFIRM before running a production AKS action.";
+            return;
+        }
+
+        SelectedResourceActionErrorMessage = null;
+        IsSelectedResourceMutationRunning = true;
+
+        try
+        {
+            await Client.RollbackHelmReleaseAsync(resource.Namespace, resource.Name, revision.Revision, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            SelectedResourceConfirmText = string.Empty;
+            _notifications.ShowSuccess("Helm rollback complete", $"{resource.Name} -> revision {revision.Revision}");
+            await LoadResourceScopeAsync(actionToken);
+            await LoadSelectedResourceHelmHistoryAsync(resource, rollbackMode: true);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("Helm rollback failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
             }
         }
     }
@@ -498,6 +1036,54 @@ public sealed partial class AksPageViewModel
             {
                 SelectedResourceActionErrorMessage = ex.Message;
                 _notifications.ShowError("AKS workload restart failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceMutationRunning = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteSelectedResourceAsync()
+    {
+        var resource = SelectedResourceItem;
+        if (resource is null || Client is null || !resource.CanDelete)
+        {
+            return;
+        }
+
+        var actionToken = _selectedResourceActionCts.Token;
+
+        if (!CanExecuteSelectedResourceMutation)
+        {
+            SelectedResourceActionErrorMessage = "Type CONFIRM before running a production AKS action.";
+            return;
+        }
+
+        SelectedResourceActionErrorMessage = null;
+        IsSelectedResourceMutationRunning = true;
+
+        try
+        {
+            await Client.DeletePodAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            SelectedResourceConfirmText = string.Empty;
+            _notifications.ShowSuccess("AKS pod deleted", resource.Name);
+            await LoadResourceScopeAsync(actionToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceActionErrorMessage = ex.Message;
+                _notifications.ShowError("AKS pod delete failed", ex.Message, ex);
             }
         }
         finally
@@ -673,7 +1259,24 @@ public sealed partial class AksPageViewModel
         IsSelectedResourceYamlLoading = false;
         IsSelectedResourceYamlApplying = false;
         IsSelectedResourceDiagnosticsLoading = false;
+        IsSelectedResourceHelmHistoryLoading = false;
         IsSelectedResourceMutationRunning = false;
+    }
+
+    private void InvalidateSelectedResourceActionToken()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (!_selectedResourceActionCts.IsCancellationRequested)
+        {
+            _selectedResourceActionCts.Cancel();
+        }
+
+        _selectedResourceActionCts.Dispose();
+        _selectedResourceActionCts = new CancellationTokenSource();
     }
 
     private void ResetSelectedResourceActionState(AksResourceBrowseItemViewModel? resource)
@@ -693,6 +1296,14 @@ public sealed partial class AksPageViewModel
         SelectedResourceDiagnosticsFacts = [];
         SelectedResourceDiagnosticsHighlights = [];
         SelectedResourceDiagnosticsErrorMessage = null;
+
+        IsSelectedResourceHelmHistoryPanelOpen = false;
+        IsSelectedResourceHelmHistoryLoading = false;
+        IsSelectedResourceHelmRollbackMode = false;
+        SelectedResourceHelmHistoryTitle = "Helm history";
+        SelectedResourceHelmHistorySummary = string.Empty;
+        SelectedResourceHelmHistoryItems = [];
+        SelectedResourceHelmHistoryErrorMessage = null;
 
         IsSelectedResourceMutationRunning = false;
         SelectedResourceScaleReplicaText = resource?.ScaleReplicaCount?.ToString(CultureInfo.CurrentCulture) ?? string.Empty;
@@ -772,6 +1383,190 @@ public sealed partial class AksPageViewModel
         SelectedResourceDiagnosticsHighlights = highlights;
     }
 
+    private void ApplyNamespaceQuotaDiagnostics(
+        string resourceNamespace,
+        IReadOnlyList<ResourceQuotaInfo> quotas,
+        IReadOnlyList<LimitRangeInfo> limitRanges)
+    {
+        SelectedResourceDiagnosticsTitle = $"Namespace quotas · {resourceNamespace}";
+        SelectedResourceDiagnosticsSummary = quotas.Count == 0 && limitRanges.Count == 0
+            ? "No resource quotas or limit ranges are defined for this namespace."
+            : $"{quotas.Count} resource quota object(s) and {limitRanges.Count} limit range object(s) are currently defined.";
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", resourceNamespace),
+            new AksResourceFactItemViewModel("Resource quotas", quotas.Count.ToString(CultureInfo.CurrentCulture)),
+            new AksResourceFactItemViewModel("Limit ranges", limitRanges.Count.ToString(CultureInfo.CurrentCulture)),
+        ];
+
+        var highlights = new List<string>();
+        foreach (var quota in quotas)
+        {
+            if (quota.HardLimits.Count == 0)
+            {
+                highlights.Add($"Quota · {quota.Name} has no surfaced hard limits.");
+                continue;
+            }
+
+            foreach (var hardLimit in quota.HardLimits)
+            {
+                var used = quota.Used.FirstOrDefault(item => string.Equals(item.Resource, hardLimit.Resource, StringComparison.Ordinal));
+                highlights.Add($"Quota · {quota.Name} · {hardLimit.Resource}: {used?.Used ?? "—"} / {hardLimit.Hard ?? "—"}");
+            }
+        }
+
+        foreach (var limitRange in limitRanges)
+        {
+            foreach (var item in limitRange.Limits)
+            {
+                highlights.Add($"LimitRange · {limitRange.Name} ({item.Type})");
+                foreach (var request in item.DefaultRequests.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    highlights.Add($"Default request · {request.Key}={request.Value}");
+                }
+
+                foreach (var limit in item.DefaultLimits.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    highlights.Add($"Default limit · {limit.Key}={limit.Value}");
+                }
+            }
+        }
+
+        SelectedResourceDiagnosticsHighlights = highlights;
+    }
+
+    private void ApplyPodDisruptionBudgetDiagnostics(string resourceNamespace, IReadOnlyList<PodDisruptionBudgetInfo> budgets)
+    {
+        SelectedResourceDiagnosticsTitle = $"Pod disruption budgets · {resourceNamespace}";
+        SelectedResourceDiagnosticsSummary = budgets.Count == 0
+            ? "No pod disruption budgets were found for this namespace."
+            : $"{budgets.Count} disruption budget(s) currently shape planned workload disruption in this namespace.";
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", resourceNamespace),
+            new AksResourceFactItemViewModel("Budgets", budgets.Count.ToString(CultureInfo.CurrentCulture)),
+            new AksResourceFactItemViewModel(
+                "Disruptions allowed",
+                budgets.Count(budget => budget.DisruptionsAllowed && budget.AllowedDisruptions > 0).ToString(CultureInfo.CurrentCulture)),
+        ];
+
+        var highlights = new List<string>();
+        foreach (var budget in budgets)
+        {
+            var threshold = !string.IsNullOrWhiteSpace(budget.MinAvailable)
+                ? $"MinAvailable {budget.MinAvailable}"
+                : !string.IsNullOrWhiteSpace(budget.MaxUnavailable)
+                    ? $"MaxUnavailable {budget.MaxUnavailable}"
+                    : "No threshold surfaced";
+            highlights.Add($"Budget · {budget.Name} · {threshold} · Healthy {budget.CurrentHealthy}/{budget.ExpectedPods} · Allowed disruptions {budget.AllowedDisruptions}");
+            highlights.AddRange(budget.SelectorLabels.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(pair => $"Selector · {pair.Key}={pair.Value}"));
+        }
+
+        SelectedResourceDiagnosticsHighlights = highlights;
+    }
+
+    private void ApplyProbeFailureDiagnostics(AksResourceBrowseItemViewModel resource, ProbeFailureSummary summary)
+    {
+        SelectedResourceDiagnosticsTitle = $"Probe failures · {resource.Name}";
+        SelectedResourceDiagnosticsSummary = summary.Findings.Count == 0
+            ? $"Observed {summary.TotalPods} pod(s); {summary.PodsWithRestarts} pod(s) reported restarts in the current summary window."
+            : string.Join(" ", summary.Findings);
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", summary.Namespace),
+            new AksResourceFactItemViewModel("Workload", $"{summary.WorkloadKind} {summary.WorkloadName}"),
+            new AksResourceFactItemViewModel("Pods", summary.TotalPods.ToString(CultureInfo.CurrentCulture)),
+            new AksResourceFactItemViewModel("Pods with restarts", summary.PodsWithRestarts.ToString(CultureInfo.CurrentCulture)),
+            new AksResourceFactItemViewModel("Recent probe events", summary.RecentProbeEvents.Count.ToString(CultureInfo.CurrentCulture)),
+        ];
+
+        var highlights = new List<string>();
+        foreach (var pod in summary.Pods)
+        {
+            var termination = string.IsNullOrWhiteSpace(pod.LastTerminationReason)
+                ? "No last termination surfaced"
+                : pod.LastTerminationReason;
+            highlights.Add($"Pod · {pod.PodName} · Restarts {pod.RestartCount} · Ready {(pod.Ready ? "yes" : "no")} · Liveness {(pod.LivenessProbeConfigured ? "configured" : "missing")} · Readiness {(pod.ReadinessProbeConfigured ? "configured" : "missing")} · Last termination {termination}");
+            if (!string.IsNullOrWhiteSpace(pod.LastTerminationMessage))
+            {
+                highlights.Add($"Termination detail · {pod.LastTerminationMessage}");
+            }
+        }
+
+        highlights.AddRange(summary.RecentProbeEvents.Select(probeEvent => $"Probe event · {probeEvent}"));
+        highlights.AddRange(summary.Findings.Select(finding => $"Finding · {finding}"));
+        highlights.Add($"Limitation · {summary.Limitation}");
+        SelectedResourceDiagnosticsHighlights = highlights;
+    }
+
+    private void ApplyPlacementDiagnostics(AksResourceBrowseItemViewModel resource, PlacementAnalysis analysis)
+    {
+        SelectedResourceDiagnosticsTitle = $"Placement · {resource.Name}";
+        SelectedResourceDiagnosticsSummary = analysis.Findings.Count == 0
+            ? "Review declared node, affinity, toleration, and topology spread constraints together with recent scheduling failures."
+            : string.Join(" ", analysis.Findings);
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", analysis.Namespace),
+            new AksResourceFactItemViewModel("Workload", $"{analysis.WorkloadKind} {analysis.WorkloadName}"),
+            new AksResourceFactItemViewModel("Node selector", analysis.HasNodeSelector ? "Yes" : "No"),
+            new AksResourceFactItemViewModel("Node affinity", analysis.HasNodeAffinity ? "Yes" : "No"),
+            new AksResourceFactItemViewModel("Pod affinity", analysis.HasPodAffinity ? "Yes" : "No"),
+            new AksResourceFactItemViewModel("Pod anti-affinity", analysis.HasPodAntiAffinity ? "Yes" : "No"),
+            new AksResourceFactItemViewModel("Tolerations", analysis.HasTolerations ? "Yes" : "No"),
+            new AksResourceFactItemViewModel("Topology spread", analysis.HasTopologySpreadConstraints ? "Yes" : "No"),
+        ];
+
+        var highlights = new List<string>();
+        highlights.AddRange(analysis.NodeSelector.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => $"Node selector · {pair.Key}={pair.Value}"));
+        highlights.AddRange(analysis.Tolerations.Select(toleration => $"Toleration · {toleration}"));
+        highlights.AddRange(analysis.TopologySpreadKeys.Select(key => $"Topology spread · {key}"));
+        highlights.AddRange(analysis.RecentSchedulingFailureEvents.Select(schedulingEvent => $"Scheduling event · {schedulingEvent}"));
+        highlights.AddRange(analysis.Findings.Select(finding => $"Finding · {finding}"));
+        highlights.Add($"Limitation · {analysis.Limitation}");
+        SelectedResourceDiagnosticsHighlights = highlights;
+    }
+
+    private void ApplyHelmValuesDiagnostics(AksResourceBrowseItemViewModel resource, string values)
+    {
+        var normalizedValues = values.ReplaceLineEndings("\n");
+        SelectedResourceDiagnosticsTitle = $"Helm values · {resource.Name}";
+        SelectedResourceDiagnosticsSummary = "Values snapshot for the selected Helm release.";
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", resource.Namespace),
+            new AksResourceFactItemViewModel("Release", resource.Name),
+            new AksResourceFactItemViewModel("Lines", normalizedValues.Split('\n').Length.ToString(CultureInfo.CurrentCulture)),
+        ];
+        SelectedResourceDiagnosticsHighlights = BuildHelmTextHighlights(normalizedValues, "Values");
+    }
+
+    private void ApplyHelmPreviewDiagnostics(AksResourceBrowseItemViewModel resource, HelmDiffPreview preview, string title)
+    {
+        SelectedResourceDiagnosticsTitle = title;
+        SelectedResourceDiagnosticsSummary = string.IsNullOrWhiteSpace(preview.CapabilityNote)
+            ? "Helm preview returned without a capability note. Review findings and diff output below."
+            : preview.CapabilityNote;
+        SelectedResourceDiagnosticsFacts =
+        [
+            new AksResourceFactItemViewModel("Namespace", resource.Namespace),
+            new AksResourceFactItemViewModel("Release", resource.Name),
+            new AksResourceFactItemViewModel("Capability", preview.Capability.ToString()),
+            new AksResourceFactItemViewModel("Findings", preview.Findings.Count.ToString(CultureInfo.CurrentCulture)),
+        ];
+
+        var highlights = new List<string>();
+        highlights.AddRange(preview.Findings.Select(finding => $"Finding · {finding}"));
+        if (!string.IsNullOrWhiteSpace(preview.DiffText))
+        {
+            highlights.AddRange(BuildHelmTextHighlights(preview.DiffText.ReplaceLineEndings("\n"), "Diff"));
+        }
+
+        SelectedResourceDiagnosticsHighlights = highlights;
+    }
+
     private bool TryParseSelectedResourceScaleReplica(out int replicas, out string? error)
     {
         replicas = 0;
@@ -811,12 +1606,39 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanAnalyzeSelectedResource));
         OnPropertyChanged(nameof(SelectedResourceAnalyzeLabel));
         OnPropertyChanged(nameof(SelectedResourceAnalyzeVisibility));
+        OnPropertyChanged(nameof(SelectedResourceOpenUrlVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceUrl));
+        OnPropertyChanged(nameof(SelectedResourceCopyUrlVisibility));
+        OnPropertyChanged(nameof(SelectedResourceNamespaceQuotaVisibility));
+        OnPropertyChanged(nameof(CanLoadSelectedResourceNamespaceQuotas));
+        OnPropertyChanged(nameof(SelectedResourcePodDisruptionBudgetVisibility));
+        OnPropertyChanged(nameof(CanLoadSelectedResourcePodDisruptionBudgets));
+        OnPropertyChanged(nameof(SelectedResourceProbeFailuresVisibility));
+        OnPropertyChanged(nameof(CanLoadSelectedResourceProbeFailures));
+        OnPropertyChanged(nameof(SelectedResourcePlacementVisibility));
+        OnPropertyChanged(nameof(CanLoadSelectedResourcePlacement));
+        OnPropertyChanged(nameof(SelectedResourceHelmValuesVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceHelmValues));
+        OnPropertyChanged(nameof(SelectedResourceHelmHistoryVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceHelmHistory));
+        OnPropertyChanged(nameof(SelectedResourceHelmPreviewVisibility));
+        OnPropertyChanged(nameof(CanPreviewSelectedResourceHelmUpgrade));
+        OnPropertyChanged(nameof(SelectedResourceHelmRollbackVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceHelmRollback));
         OnPropertyChanged(nameof(SelectedResourceDiagnosticsPanelVisibility));
         OnPropertyChanged(nameof(SelectedResourceDiagnosticsErrorVisibility));
         OnPropertyChanged(nameof(SelectedResourceDiagnosticsSummaryVisibility));
         OnPropertyChanged(nameof(SelectedResourceDiagnosticsHighlightsVisibility));
+        OnPropertyChanged(nameof(SelectedResourceHelmHistoryPanelVisibility));
+        OnPropertyChanged(nameof(SelectedResourceHelmHistoryErrorVisibility));
+        OnPropertyChanged(nameof(SelectedResourceHelmHistorySummaryVisibility));
+        OnPropertyChanged(nameof(SelectedResourceHelmHistoryContentVisibility));
+        OnPropertyChanged(nameof(ShowSelectedResourceHelmHistoryEmptyState));
+        OnPropertyChanged(nameof(SelectedResourceHelmRollbackActionVisibility));
         OnPropertyChanged(nameof(SelectedResourceRestartVisibility));
         OnPropertyChanged(nameof(CanRestartSelectedResource));
+        OnPropertyChanged(nameof(SelectedResourceDeleteVisibility));
+        OnPropertyChanged(nameof(CanDeleteSelectedResource));
         OnPropertyChanged(nameof(SelectedResourceScaleVisibility));
         OnPropertyChanged(nameof(CanScaleSelectedResource));
         OnPropertyChanged(nameof(SelectedResourceScaleHint));
@@ -861,4 +1683,102 @@ public sealed partial class AksPageViewModel
 
     private static string FormatResourceScope(AksResourceBrowseItemViewModel resource)
         => string.IsNullOrWhiteSpace(resource.Namespace) ? "cluster scope" : $"namespace {resource.Namespace}";
+
+    private CancellationToken BeginSelectedResourceDiagnosticsLoad()
+    {
+        SelectedResourceActionErrorMessage = null;
+        SelectedResourceDiagnosticsErrorMessage = null;
+        SelectedResourceDiagnosticsSummary = string.Empty;
+        SelectedResourceDiagnosticsFacts = [];
+        SelectedResourceDiagnosticsHighlights = [];
+        IsSelectedResourceDiagnosticsPanelOpen = true;
+        IsSelectedResourceDiagnosticsLoading = true;
+        return _selectedResourceActionCts.Token;
+    }
+
+    private async Task LoadSelectedResourceHelmHistoryAsync(AksResourceBrowseItemViewModel resource, bool rollbackMode)
+    {
+        var actionToken = _selectedResourceActionCts.Token;
+
+        SelectedResourceActionErrorMessage = null;
+        SelectedResourceHelmHistoryErrorMessage = null;
+        SelectedResourceHelmHistoryItems = [];
+        SelectedResourceHelmHistoryTitle = rollbackMode ? $"Rollback · {resource.Name}" : $"History · {resource.Name}";
+        SelectedResourceHelmHistorySummary = rollbackMode
+            ? "Pick a superseded revision to preview or roll back."
+            : "Review release revisions, status, and chart metadata without leaving the native AKS workspace.";
+        IsSelectedResourceHelmRollbackMode = rollbackMode;
+        IsSelectedResourceHelmHistoryPanelOpen = true;
+        IsSelectedResourceHelmHistoryLoading = true;
+
+        try
+        {
+            var history = await Client!.GetHelmReleaseHistoryAsync(resource.Namespace, resource.Name, actionToken);
+            ThrowIfSelectedResourceActionCanceled(actionToken);
+            SelectedResourceHelmHistoryItems = history
+                .OrderByDescending(item => item.Revision)
+                .Select(item => new AksHelmRevisionItemViewModel(item))
+                .ToList();
+
+            if (rollbackMode && !SelectedResourceHelmHistoryItems.Any(item => item.CanRollbackTarget))
+            {
+                SelectedResourceHelmHistoryErrorMessage = $"No previous revisions are available for \"{resource.Name}\".";
+            }
+
+            SelectedResourceHelmHistorySummary = rollbackMode
+                ? $"{SelectedResourceHelmHistoryItems.Count(item => item.CanRollbackTarget)} rollback target revision(s) are currently available."
+                : $"{SelectedResourceHelmHistoryItems.Count} revision(s) are currently recorded for this release.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                SelectedResourceHelmHistoryErrorMessage = ex.Message;
+                _notifications.ShowError("AKS Helm history load failed", ex.Message, ex);
+            }
+        }
+        finally
+        {
+            if (!_isDisposed)
+            {
+                IsSelectedResourceHelmHistoryLoading = false;
+            }
+        }
+    }
+
+    private static IReadOnlyList<string> BuildHelmTextHighlights(string text, string label)
+        => text
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => $"{label} · {line}")
+            .ToList();
+}
+
+public sealed class AksHelmRevisionItemViewModel
+{
+    public AksHelmRevisionItemViewModel(HelmRevisionInfo revision)
+    {
+        Revision = revision.Revision;
+        Status = string.IsNullOrWhiteSpace(revision.Status) ? "unknown" : revision.Status;
+        Chart = revision.Chart ?? "—";
+        AppVersion = revision.AppVersion ?? "—";
+        UpdatedText = revision.Updated?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "—";
+        Description = string.IsNullOrWhiteSpace(revision.Description) ? "—" : revision.Description!;
+    }
+
+    public int Revision { get; }
+
+    public string Status { get; }
+
+    public string Chart { get; }
+
+    public string AppVersion { get; }
+
+    public string UpdatedText { get; }
+
+    public string Description { get; }
+
+    public bool CanRollbackTarget => string.Equals(Status, "superseded", StringComparison.OrdinalIgnoreCase);
 }

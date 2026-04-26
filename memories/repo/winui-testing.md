@@ -1,0 +1,2 @@
+- WinUI view models created under the xUnit host may not have a dispatcher; DispatcherQueue.GetForCurrentThread() can throw COMException instead of returning null, so optional dispatcher lookups should be guarded.
+- Normal WinUI regression command: VS Code task build-winui for src/SwebKit.WinUI/SwebKit.WinUI.csproj.

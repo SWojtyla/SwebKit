@@ -5,13 +5,16 @@ namespace SwebKit.WinUI.Views.ServiceBus;
 
 internal static class ServiceBusPagePresentation
 {
-    internal static ServiceBusComposeDialogState BuildComposeDialogState(string? entityPath, int templateCount, bool isScheduled)
+    internal static ServiceBusComposeDialogState BuildComposeDialogState(string? entityPath, int templateCount, bool isScheduled, bool isReplay)
     {
         return new ServiceBusComposeDialogState(
-            $"Target entity: {entityPath ?? string.Empty}",
+            isReplay ? "Replay message" : "Compose message",
+            $"{(isReplay ? "Replay target" : "Target entity")}: {entityPath ?? string.Empty}",
             templateCount == 0 ? "No saved templates yet." : $"{templateCount} saved template(s) available.",
-            isScheduled ? "Schedule" : "Send",
-            isScheduled ? Visibility.Visible : Visibility.Collapsed);
+            isReplay ? "Replay" : isScheduled ? "Schedule" : "Send",
+            !isReplay && isScheduled ? Visibility.Visible : Visibility.Collapsed,
+            isReplay ? Visibility.Visible : Visibility.Collapsed,
+            isReplay ? Visibility.Collapsed : Visibility.Visible);
     }
 
     internal static ServiceBusConfirmationRequest BuildResubmitDeadLetterConfirmation(ServiceBusTabViewModel activeTab)
@@ -70,10 +73,13 @@ internal static class ServiceBusPagePresentation
 }
 
 internal sealed record ServiceBusComposeDialogState(
+    string DialogTitle,
     string TargetEntityText,
     string TemplateSummaryText,
     string PrimaryButtonText,
-    Visibility SchedulePanelVisibility);
+    Visibility SchedulePanelVisibility,
+    Visibility ReplayPanelVisibility,
+    Visibility ScheduleToggleVisibility);
 
 internal sealed record ServiceBusConfirmationRequest(
     string Title,

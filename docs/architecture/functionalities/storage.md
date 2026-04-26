@@ -11,9 +11,13 @@
 - Inline content preview for text, JSON, and XML blobs.
   - JSON pretty-printed via `System.Text.Json`; fallback to raw text on malformed input.
   - Size-gated: warn at 512 KB; hard cap at 2 MB with "Load anyway" escape.
+- Mutation-gated upload, in-account blob copy, and metadata edit workflows when the selected storage profile allows mutations.
 - Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
 - Download the currently loaded blob selection in the active folder as a ZIP archive in the user's Downloads folder.
 - Browse blob version history, compare a historical version against the current blob, and restore a selected version of the blob when the storage profile allows mutations.
+- Container and blob filtering inside the active account workspace.
+- Copy the selected blob path and the currently loaded text preview to the clipboard.
+- Copy the active container SAS URL to the clipboard.
 - Copy blob direct URL to clipboard (no SAS expiry).
 - Copy SAS URL with 24-hour expiry generated client-side via the SDK.
 - Shared shell workspace snapshots for the selected account, container, and blob so recent/favorite items and named favorites can reopen Storage context.
@@ -30,8 +34,9 @@
 7. The native detail pane also loads storage capabilities and blob versions; because the data-plane SDK cannot prove account-level versioning, version-history workflows stay enabled and the per-blob list determines whether restore should be offered.
 8. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
 9. Bulk ZIP download streams the currently loaded selection into a ZIP archive in Downloads; selection stays local to the active folder view.
-10. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
-11. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
+10. Mutation-enabled workflows call `UploadBlobAsync`, `CopyBlobAsync`, and `SetBlobMetadataAsync`; the UI keeps those actions gated behind the selected profile's `AllowMutations` flag.
+11. SAS URL generation via `GetBlobSasUrlAsync` and `GetContainerSasUrlAsync`; failures surfaced inline or through the native status surfaces.
+12. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.
 
 ## Credential Modes
 
@@ -58,7 +63,7 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 
 ## Important Notes
 
-- Storage remains primarily read-oriented. Version restore follows the available version list and the per-profile `AllowMutations` toggle because the current data-plane SDK cannot prove account-level versioning up front.
+- Storage remains browse-first, but mutation-enabled profiles can now upload blobs, copy blobs within the same account, edit metadata, and restore historical versions. Version restore still follows the available version list and the per-profile `AllowMutations` toggle because the current data-plane SDK cannot prove account-level versioning up front.
 - Pagination: `ListBlobsAsync` returns one page (default 100 items) with a continuation token. "Load more" appends the next page in the UI.
 - ZIP download works over the blobs currently loaded in the active folder view. Operators must page in additional blobs before selecting them for the archive.
 - Deleted-blob recovery is not currently first-class in either surface because the workspace list does not yet enumerate soft-deleted blobs.
@@ -71,3 +76,4 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 
 - `tests/SwebKit.Azure.Tests/AzureStorageClientTests.cs` — constructor-guard tests
 - `tests/SwebKit.Core.Tests/StorageConfigTests.cs` — JSON serialization round-trip tests
+- `tests/SwebKit.WinUI.Tests/StoragePageViewModelTests.cs` — WinUI version, ZIP download, upload, copy, and metadata-edit page-state coverage
