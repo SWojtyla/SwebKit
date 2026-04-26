@@ -41,6 +41,8 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     [ObservableProperty]
     public partial string? ErrorMessage { get; set; }
 
+    public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
+
     [ObservableProperty]
     public partial ServiceBusTabViewModel? ActiveTab { get; set; }
 
@@ -109,6 +111,11 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
             OnPropertyChanged(nameof(CanLoadMoreActiveTab));
             LoadMoreActiveTabCommand.NotifyCanExecuteChanged();
         };
+    }
+
+    partial void OnErrorMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(ErrorVisibility));
     }
 
     public async Task LoadAsync()
@@ -1324,13 +1331,13 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
                 : "entity";
 
             if (TryCreateRestoredTab(new ServiceBusWorkspaceTabState
-                {
-                    NamespaceId = namespaceId,
-                    EntityPath = entityPath,
-                    Title = snapshot.Resource.DisplayName,
-                    Mode = mode,
-                    TabType = tabType,
-                }, out var restoredTab))
+            {
+                NamespaceId = namespaceId,
+                EntityPath = entityPath,
+                Title = snapshot.Resource.DisplayName,
+                Mode = mode,
+                TabType = tabType,
+            }, out var restoredTab))
             {
                 Tabs.Add(restoredTab);
                 ActiveTab = restoredTab;
@@ -3591,7 +3598,11 @@ public sealed class ServiceBusVisibleMessageItemViewModel
 
     public bool HasAdditionalFieldsText => !string.IsNullOrWhiteSpace(AdditionalFieldsText);
 
+    public Visibility AdditionalFieldsVisibility => HasAdditionalFieldsText ? Visibility.Visible : Visibility.Collapsed;
+
     public string CustomPropertyText { get; }
 
     public bool HasCustomPropertyText => !string.IsNullOrWhiteSpace(CustomPropertyText);
+
+    public Visibility CustomPropertyVisibility => HasCustomPropertyText ? Visibility.Visible : Visibility.Collapsed;
 }

@@ -115,6 +115,7 @@ Used by `PipelineDetail.razor` to drive the environments table.
 - The WinUI cutover baseline now includes a native release tag-manager panel inside the Releases tab. `SwebKit.WinUI` reuses `IDevOpsClient.GetTagsAsync`, `GetCommitsAsync`, and `CreateAnnotatedTagAsync` so tag confirmation stays on the existing Azure DevOps seam while the richer release matrix/editor parity is still pending.
 - The WinUI Pipelines route now keeps Releases-specific selection, scoped-component summaries, and tag-manager orchestration in `PipelinesReleaseWorkspaceViewModel`, leaving `PipelinesPageViewModel` responsible for route readiness, project and pipeline scope, approvals, and workspace snapshot publishing.
 - The native WinUI Pipelines route now treats failed Azure DevOps auth/access validation as an environment-readiness state rather than a generic page error: the page shows actionable guidance plus an `Open Settings` action for organization URL, PAT scope, or permission problems, while transient transport/server failures still fall through to the generic error path.
+- The native WinUI Pipelines route now uses the shared compact scaffold/context band so readiness, scope, and summary metrics stay visible without pushing the project tree and workspace detail panes below the fold.
 
 ## Main code locations
 

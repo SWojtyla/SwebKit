@@ -16,7 +16,7 @@ Validate that the native Service Bus workspace reaches the requested non-inciden
 
 ## Scope
 
-- In scope: scheduled manager baseline, template save/apply plus scheduled send, native batch send, selected-message quick actions, replay target selection, batch DLQ replay, advanced filter and preference persistence, filtered delete, purge, export JSON, row density, custom property columns, and shell workspace restore
+- In scope: scheduled manager baseline, template save/apply plus scheduled send, native batch send, selected-message quick actions, replay target selection, batch DLQ replay, advanced filter and preference persistence, filtered delete, purge, export JSON, row density, custom property columns, shell workspace restore, and the compact content-first WinUI page layout for the Service Bus workspace
 - Out of scope: new backend broker capabilities and unrelated UI polish
 - Out of scope: incident investigation and trace pivots, which are being removed rather than ported into WinUI
 
@@ -36,7 +36,6 @@ Validate that the native Service Bus workspace reaches the requested non-inciden
 - Build validation: `build-winui` must stay green.
 - Unit tests: expand `tests/SwebKit.WinUI.Tests/` for Service Bus view-model state and any template or filter persistence logic.
 - Current automated slice: `ServiceBusPageViewModelTests` covers template persistence, scheduled send plus local scheduled-history storage, replay remap behavior, batch DLQ replay, advanced-rule filter persistence, list preferences, filtered delete, and workspace snapshot publish or restore; `ServiceBusBatchSendWorkflowTests` covers native batch-send parsing and chunked send behavior; `ServiceBusPagePresentationTests` covers compose-dialog presentation state, confirmation copy, scheduled-workspace wiring, and the native list-tooling action surface.
-- Current automated blocker: broader WinUI build or test execution is blocked by an unrelated `GetEventsAsync` compile error in the AKS page resources file.
 - Regression target: rerun relevant domain tests if shared Service Bus or configuration behavior changes.
 
 ## Test data and setup
@@ -54,6 +53,7 @@ Validate that the native Service Bus workspace reaches the requested non-inciden
 - Check: advanced list tooling parity. Steps: enable advanced filtering, combine rules, save and restore the rule set, add a custom property column, switch row density, export visible messages, then run filtered delete or purge with confirmation.
 - Check: workspace restore parity. Steps: open more than one Service Bus tab, switch the active tab, trigger a shell recent or favorite reopen, and verify the tab set and active workspace rehydrate after navigation.
 - Check: destructive safety. Steps: attempt DLQ resubmit/complete, filtered delete, purge, and scheduled destructive actions and confirm the page presents the expected confirmation dialog before execution.
+- Check: layout parity. Steps: open the native Service Bus route with at least one namespace connected and verify the compact context band keeps setup and error state visible while the namespace and message workspace appears without a tall top-of-page preamble.
 
 ## Regression risks & mitigations
 
@@ -66,16 +66,16 @@ Validate that the native Service Bus workspace reaches the requested non-inciden
 
 - The MAUI-only Service Bus workflows that this feature explicitly marks complete are available natively.
 - Destructive actions preserve or improve safety cues.
-- Focused WinUI tests cover the new state logic, and broader `build-winui` validation can be rerun once the unrelated AKS compile error is cleared.
+- Focused WinUI tests cover the new state logic, broader `build-winui` validation stays green, and the compact context-band layout keeps the workspace content-first.
 - Incident-timeline actions remain explicitly out of scope rather than being implied as parity gaps.
 
 ## Validation status
 
-- Automated: `get_errors` passed on the touched WinUI Service Bus files and focused Service Bus test files. Broader `build-winui`, the focused `dotnet test` rerun, and wider WinUI test execution are currently blocked by the unrelated AKS compile error.
-- Manual: Replay targeting, batch DLQ replay, advanced list tooling, and workspace restore still need live WinUI verification against a representative namespace once the shared build blocker is removed.
+- Automated: `get_errors` passed on the touched WinUI Service Bus page after the compact layout pass, and `build-winui` passed on the current repo state. Focused Service Bus tests were not rerun for this XAML-only sweep.
+- Manual: Replay targeting, batch DLQ replay, advanced list tooling, workspace restore, and the new content-first layout still need live WinUI verification against a representative namespace.
 
 ## Sign-off
 
 - **Approved by:**
 - **Date:** 2026-04-26
-- **Conditions (if any):** Feature can leave active status after the unrelated AKS compile blocker is cleared and a broader WinUI validation pass confirms the focused Service Bus results on the full project build.
+- **Conditions (if any):** Feature can leave active status after representative live Service Bus validation confirms the shipped workflows and compact layout on the native route.

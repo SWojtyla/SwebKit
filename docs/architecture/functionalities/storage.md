@@ -71,6 +71,7 @@ SAS URL generation requires shared key access (`allowSharedKeyAccess = true`). I
 - Tags require a separate `GetTagsAsync` call (not included in `GetPropertiesAsync`). The current client fetches properties first and then fetches tags from the same blob client.
 - Download progress is local to the initiating surface; there is no background transfer manager or cross-page download queue.
 - Workspace restore is semantic and lightweight. Storage reopens the selected account/container/blob context rather than trying to preserve a live client object.
+- The native WinUI Storage route now keeps account selection, connection summary, and route actions in the shared compact scaffold context band so the container and blob workspace starts earlier on desktop.
 
 ## Validation Pointers
 

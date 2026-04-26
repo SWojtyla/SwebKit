@@ -12,127 +12,122 @@
 
     <shared:PageScaffold
         Title="Observability"
-        Subtitle="Discover Application Insights resources, activate a provider, and inspect overview, failures, performance, logs, and availability from one native WinUI baseline.">
+        Subtitle="Discover Application Insights resources, activate a provider, and inspect overview, failures, performance, logs, and availability from one native WinUI baseline."
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <StackPanel Spacing="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Resource discovery and provider activation"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding ConnectionSummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                            <TextBlock
+                                Text="{Binding DiscoverySummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Top">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsLoadingResources}"/>
+                            <Button
+                                Content="Refresh resources"
+                                Command="{Binding ReloadResourcesCommand}"/>
+                            <Button
+                                Content="Refresh tab"
+                                Command="{Binding RefreshCommand}"
+                                IsEnabled="{Binding HasActiveResource}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock
+                        Text="{Binding ResourceErrorMessage}"
+                        Visibility="{Binding ResourceErrorVisibility}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="WrapWholeWords"/>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowReadinessState}"
+                        Severity="Warning"
+                        Title="{Binding ReadinessTitle}"
+                        Message="{Binding ReadinessMessage}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Open Settings"
+                                Command="{Binding OpenSettingsCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="{Binding ActiveResourceTitle}"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding ActiveResourceSubtitle}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Provider"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock Text="{Binding ProviderLabel}"/>
+                            <TextBlock
+                                Text="{Binding LastRefreshLabel}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Spacing="6"
+                                    MinWidth="200">
+                            <TextBlock
+                                Text="Time range"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox
+                                ItemsSource="{Binding TimeRangeOptions}"
+                                SelectedItem="{Binding SelectedTimeRangeOption, Mode=TwoWay}"
+                                DisplayMemberPath="Label"
+                                HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock
+                        Text="{Binding ActiveTabErrorMessage}"
+                        Visibility="{Binding ActiveTabErrorVisibility}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="WrapWholeWords"/>
+                </StackPanel>
+            </Border>
+        </shared:PageScaffold.ContextContent>
         <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="16">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <Border
-                    Grid.Row="0"
-                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Resource discovery and provider activation"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ConnectionSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                                <TextBlock
-                                    Text="{Binding DiscoverySummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="12"
-                                        VerticalAlignment="Top">
-                                <ProgressRing
-                                    Width="20"
-                                    Height="20"
-                                    IsActive="{Binding IsLoadingResources}"/>
-                                <Button
-                                    Content="Refresh resources"
-                                    Command="{Binding ReloadResourcesCommand}"/>
-                                <Button
-                                    Content="Refresh tab"
-                                    Command="{Binding RefreshCommand}"
-                                    IsEnabled="{Binding HasActiveResource}"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock
-                            Text="{Binding ResourceErrorMessage}"
-                            Visibility="{Binding ResourceErrorVisibility}"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            TextWrapping="WrapWholeWords"/>
-
-                        <InfoBar
-                            IsOpen="{Binding ShowReadinessState}"
-                            Severity="Warning"
-                            Title="{Binding ReadinessTitle}"
-                            Message="{Binding ReadinessMessage}">
-                            <InfoBar.ActionButton>
-                                <Button
-                                    Content="Open Settings"
-                                    Command="{Binding OpenSettingsCommand}"/>
-                            </InfoBar.ActionButton>
-                        </InfoBar>
-
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="2*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="{Binding ActiveResourceTitle}"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ActiveResourceSubtitle}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Provider"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBlock Text="{Binding ProviderLabel}"/>
-                                <TextBlock
-                                    Text="{Binding LastRefreshLabel}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2"
-                                        Spacing="6"
-                                        MinWidth="200">
-                                <TextBlock
-                                    Text="Time range"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <ComboBox
-                                    ItemsSource="{Binding TimeRangeOptions}"
-                                    SelectedItem="{Binding SelectedTimeRangeOption, Mode=TwoWay}"
-                                    DisplayMemberPath="Label"
-                                    HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock
-                            Text="{Binding ActiveTabErrorMessage}"
-                            Visibility="{Binding ActiveTabErrorVisibility}"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            TextWrapping="WrapWholeWords"/>
-                    </StackPanel>
-                </Border>
-
-                <Grid Grid.Row="1"
+            <Grid>
+                <Grid
                       ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="320"/>

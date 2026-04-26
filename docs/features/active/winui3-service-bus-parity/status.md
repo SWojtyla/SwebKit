@@ -18,7 +18,7 @@ The native Service Bus workspace now covers the full non-incident parity bar req
 
 **Jira:** not linked
 
-**Current focus:** hold the feature in review while the repo-level WinUI build blocker outside Service Bus is resolved and the updated docs stay aligned with the delivered native behavior.
+**Current focus:** hold the feature in review while the compact native layout pass and broader project validation stay aligned with the delivered Service Bus operator workflows.
 
 ## Progress checklist
 
@@ -56,11 +56,12 @@ The native Service Bus workspace now covers the full non-incident parity bar req
 - Added focused `ServiceBusPageViewModelTests` coverage for template persistence, scheduled send/local history, filtering, and preference persistence.
 - Added focused WinUI coverage for batch-send parsing and batching plus compose-draft seeding from an existing message.
 - Added `ServiceBusPagePresentationTests` coverage for compose-dialog presentation state, confirmation copy, scheduled-workspace wiring, and the new list-tooling action surface.
+- Moved the top-level namespace setup card into the shared compact scaffold context band so the namespace and message workspace reaches the viewport earlier while keeping setup and error state visible.
 
 ## Remaining
 
 - Incident investigation and trace-pivot actions remain outside this feature and are expected to disappear with incident-timeline removal rather than be ported into WinUI.
-- Broader repo-level WinUI validation is blocked by unrelated compile work in the AKS surface.
+- Live Service Bus validation against a representative namespace is still the remaining non-doc follow-up before archive.
 
 ## Close-out checklist
 
@@ -68,17 +69,17 @@ The native Service Bus workspace now covers the full non-incident parity bar req
 - [x] Close batch DLQ replay parity.
 - [x] Close advanced list-tooling parity.
 - [x] Close Service Bus workspace favorite and restore parity.
-- [ ] Clear unrelated WinUI project blockers and rerun broader build or test coverage if required before archive.
+- [x] Clear unrelated WinUI project blockers and rerun broader build validation.
 
 ## Blockers
 
-- Unrelated validation blocker: the WinUI project currently fails in `src/SwebKit.WinUI/ViewModels/Aks/AksPageViewModel.Resources.cs` because `GetEventsAsync` is being called with a named `cancellationToken` argument that the current overload does not accept. That blocks broader project-level `dotnet test` and `build-winui` validation for this feature.
+- No current source-level blocker remains inside or outside the Service Bus-owned surface. Remaining review work is live validation against a representative namespace rather than repo build health.
 
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: touched Service Bus source and focused test files are diagnostics-clean after the replay, list-tooling, and workspace parity lift. Broader WinUI project validation, including rerunning the focused `dotnet test` command, is currently blocked by the unrelated AKS compile error noted above.
-- Automated checks: `get_errors` on the touched WinUI Service Bus files and focused test files passed; the broader WinUI project build and current `dotnet test` reruns are blocked by the unrelated AKS error.
+- Validation status: the compact layout pass left the touched Service Bus page diagnostics-clean, and `build-winui` is currently green again. Focused Service Bus tests were not rerun for this XAML-only sweep; the previous focused Service Bus test evidence remains the latest domain-level validation.
+- Automated checks: `get_errors` on the touched WinUI Service Bus page passed after the compact layout pass, and `build-winui` passed on the current repo state.
 
 ## Notes
 

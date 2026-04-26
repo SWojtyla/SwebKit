@@ -100,6 +100,7 @@ The native WinUI Service Bus workspace now covers the non-incident operator surf
 - Demo namespaces and cached reconnect semantics are composed through `IServiceBusNamespaceBootstrapper`; `ServiceBusPage` preserves the visible namespace list and per-row progress while the background reconnect fan-out runs.
 - Local scheduled-message metadata now persists through the same atomic write and `.bak` recovery path used by the other app-data repositories, so a partial write does not wipe the scheduled-message history list.
 - Service Bus settings remain reachable from shell navigation and unconfigured-state CTAs; the main route header no longer reserves space for a one-off Settings button.
+- The native WinUI Service Bus route now uses the shared compact scaffold/context band pattern so namespace setup, error state, and refresh actions stay visible without pushing the namespace and message workspace below the fold.
 
 ## Validation Pointers
 

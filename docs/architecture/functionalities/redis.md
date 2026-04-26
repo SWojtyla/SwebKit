@@ -72,6 +72,7 @@
 - Namespace separator is persisted in `RedisConfig.NamespaceSeparator` and saved via `AppStateService.SaveConfigAsync()`.
 - Page navigation (Redis and AKS) uses non-blocking async loading to avoid UI freeze; Redis intentionally keeps the currently loaded match page bounded so large keyspaces do not saturate the render path.
 - If Redis returns more keys than requested for one `SCAN COUNT`, the page shows only one loaded-match page immediately and carries the overflow forward to the next `Load more matches` action.
+- The native WinUI Redis route now keeps cache selection, scan controls, and bulk-status messaging in the shared compact scaffold context band so the tree and detail workspace stays above the fold.
 - Set-member paging is source-backed: `RedisClient.GetSetMembersPageAsync()` issues raw `SSCAN`, `RedisScanResponseParser` preserves the returned cursor, and `SetScanResult.Cursor` must be treated as opaque source state instead of a fabricated offset.
 - `SetScanResult.IsComplete` becomes `true` only when Redis returns cursor `0`.
 - Health findings are invalidated on scans and key mutations to prevent stale risk output.

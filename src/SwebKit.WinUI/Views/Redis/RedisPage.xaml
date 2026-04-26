@@ -53,320 +53,313 @@
     </Page.Resources>
 
     <shared:PageScaffold
-        Title="Redis">
+        Title="Redis"
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="84"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0"
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Cache"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox
+                                ItemsSource="{Binding CacheEntries}"
+                                SelectedItem="{Binding SelectedCache, Mode=TwoWay}"
+                                DisplayMemberPath="DisplayName"
+                                PlaceholderText="Select cache"
+                                IsEnabled="{Binding CanChangeCache}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Pattern"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBox
+                                Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="*"
+                                IsEnabled="{Binding CanEditPatternInput}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Group by"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBox
+                                Text="{Binding SeparatorInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                MaxLength="4"
+                                PlaceholderText="-"
+                                IsEnabled="{Binding CanEditSeparatorInput}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Bottom">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsWorking}"/>
+
+                            <Button
+                                Content="Refresh"
+                                Command="{Binding ReloadCommand}"
+                                IsEnabled="{Binding CanReload}"
+                                Style="{StaticResource RedisToolbarButtonStyle}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1"
+                          ColumnSpacing="12"
+                          Visibility="{Binding HeaderStatusRowVisibility}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock
+                            Grid.Column="0"
+                            Text="{Binding ScanSummary}"
+                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                            TextWrapping="WrapWholeWords"
+                            VerticalAlignment="Center"/>
+
+                        <Button
+                            Grid.Column="1"
+                            Content="{Binding LoadMoreKeysLabel}"
+                            Command="{Binding LoadMoreKeysCommand}"
+                            Visibility="{Binding LoadMoreKeysVisibility}"
+                            IsEnabled="{Binding CanLoadMoreKeys}"
+                            Style="{StaticResource RedisToolbarButtonStyle}"
+                            VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="2"
+                                  Visibility="{Binding HeaderBulkToolbarVisibility}"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="8">
+                            <Button Content="{Binding SelectionModeButtonLabel}"
+                                    Command="{Binding ToggleSelectionModeCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    IsEnabled="{Binding CanToggleSelectionMode}"/>
+
+                            <Button Content="Select all loaded"
+                                    Command="{Binding SelectAllLoadedCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    IsEnabled="{Binding CanSelectAllLoaded}"/>
+
+                            <Button Content="Clear selection"
+                                    Command="{Binding ClearSelectionCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    IsEnabled="{Binding CanClearSelection}"/>
+
+                            <Button Content="Export JSON"
+                                    Command="{Binding ExportLoadedKeysCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    IsEnabled="{Binding CanExportLoadedKeys}"/>
+
+                            <Button Content="{Binding DeleteSelectedKeysLabel}"
+                                    Command="{Binding DeleteSelectedKeysCommand}"
+                                    Style="{StaticResource RedisToolbarButtonStyle}"
+                                    IsEnabled="{Binding CanDeleteSelectedKeys}"/>
+
+                            <TextBlock Text="{Binding SelectionSummaryText}"
+                                       Visibility="{Binding SelectionSummaryVisibility}"
+                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="3"
+                                Spacing="6"
+                                Visibility="{Binding HeaderMessagesVisibility}">
+                        <InfoBar
+                            IsOpen="{Binding ShowBulkDeleteConfirmation}"
+                            Severity="Warning"
+                            Title="Production bulk delete confirmation"
+                            Message="Type CONFIRM before deleting selected keys from a production profile."/>
+
+                        <TextBox
+                            Text="{Binding BulkDeleteConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Type CONFIRM"
+                            Visibility="{Binding BulkDeleteConfirmationVisibility}"/>
+
+                        <TextBlock
+                            Text="{Binding ErrorMessage}"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Visibility="{Binding ErrorVisibility}"
+                            TextWrapping="WrapWholeWords"/>
+
+                        <InfoBar
+                            IsOpen="{Binding ShowNotConfiguredState}"
+                            Severity="Informational"
+                            Title="Redis is not configured"
+                            Message="Configure at least one Redis cache connection in Settings before opening this workspace."/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </shared:PageScaffold.ContextContent>
         <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="320"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
                 <Border
-                    Grid.Row="0"
+                    Grid.Column="0"
                     Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <Grid RowSpacing="8">
+                    <Grid RowSpacing="12">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="180"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="84"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Text="Key browser"
+                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
 
-                            <StackPanel Grid.Column="0"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Cache"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <ComboBox
-                                    ItemsSource="{Binding CacheEntries}"
-                                    SelectedItem="{Binding SelectedCache, Mode=TwoWay}"
-                                    DisplayMemberPath="DisplayName"
-                                    PlaceholderText="Select cache"
-                                    IsEnabled="{Binding CanChangeCache}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Pattern"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBox
-                                    Text="{Binding PatternInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="*"
-                                    IsEnabled="{Binding CanEditPatternInput}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Group by"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBox
-                                    Text="{Binding SeparatorInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    MaxLength="4"
-                                    PlaceholderText="-"
-                                    IsEnabled="{Binding CanEditSeparatorInput}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="3"
-                                        Orientation="Horizontal"
-                                        Spacing="8"
-                                        VerticalAlignment="Bottom">
-                                <ProgressRing
-                                    Width="20"
-                                    Height="20"
-                                    IsActive="{Binding IsWorking}"/>
-
-                                <Button
-                                    Content="Refresh"
-                                    Command="{Binding ReloadCommand}"
-                                    IsEnabled="{Binding CanReload}"
-                                    Style="{StaticResource RedisToolbarButtonStyle}"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <Grid Grid.Row="1"
-                              ColumnSpacing="12"
-                              Visibility="{Binding HeaderStatusRowVisibility}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock
-                                Grid.Column="0"
-                                Text="{Binding ScanSummary}"
-                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                TextWrapping="WrapWholeWords"
-                                VerticalAlignment="Center"/>
-
-                            <Button
-                                Grid.Column="1"
-                                Content="{Binding LoadMoreKeysLabel}"
-                                Command="{Binding LoadMoreKeysCommand}"
-                                Visibility="{Binding LoadMoreKeysVisibility}"
-                                IsEnabled="{Binding CanLoadMoreKeys}"
-                                Style="{StaticResource RedisToolbarButtonStyle}"
-                                VerticalAlignment="Center"/>
-                        </Grid>
+                        <InfoBar
+                            Grid.Row="1"
+                            IsOpen="{Binding ShowTreeEmptyState}"
+                            Severity="Informational"
+                            Title="No keys found"
+                            Message="Refresh with a broader pattern or verify that the selected cache contains keys."/>
 
                         <ScrollViewer Grid.Row="2"
-                                      Visibility="{Binding HeaderBulkToolbarVisibility}"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled">
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="8">
-                                <Button Content="{Binding SelectionModeButtonLabel}"
-                                        Command="{Binding ToggleSelectionModeCommand}"
-                                        Style="{StaticResource RedisToolbarButtonStyle}"
-                                        IsEnabled="{Binding CanToggleSelectionMode}"/>
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding TreeRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:RedisTreeRowViewModel">
+                                        <Border
+                                            Margin="0,0,0,8"
+                                            CornerRadius="10"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,7">
+                                            <Grid ColumnSpacing="8"
+                                                  Margin="{x:Bind IndentMargin}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="28"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
 
-                                <Button Content="Select all loaded"
-                                        Command="{Binding SelectAllLoadedCommand}"
-                                        Style="{StaticResource RedisToolbarButtonStyle}"
-                                        IsEnabled="{Binding CanSelectAllLoaded}"/>
+                                                <Button Grid.Column="0"
+                                                        Content="{x:Bind ExpandGlyph}"
+                                                        Visibility="{x:Bind ExpandVisibility}"
+                                                        Command="{Binding ViewModel.ToggleTreeRowCommand, ElementName=PageRoot}"
+                                                        CommandParameter="{x:Bind}"
+                                                        Style="{StaticResource RedisTreeGlyphButtonStyle}"/>
 
-                                <Button Content="Clear selection"
-                                        Command="{Binding ClearSelectionCommand}"
-                                        Style="{StaticResource RedisToolbarButtonStyle}"
-                                        IsEnabled="{Binding CanClearSelection}"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{x:Bind DisplayName}"
+                                                           TextWrapping="WrapWholeWords"
+                                                           VerticalAlignment="Center"/>
 
-                                <Button Content="Export JSON"
-                                        Command="{Binding ExportLoadedKeysCommand}"
-                                        Style="{StaticResource RedisToolbarButtonStyle}"
-                                        IsEnabled="{Binding CanExportLoadedKeys}"/>
+                                                <TextBlock Grid.Column="2"
+                                                           Text="Selected"
+                                                           Visibility="{x:Bind SelectedVisibility}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           VerticalAlignment="Center"/>
 
-                                <Button Content="{Binding DeleteSelectedKeysLabel}"
-                                        Command="{Binding DeleteSelectedKeysCommand}"
-                                        Style="{StaticResource RedisToolbarButtonStyle}"
-                                        IsEnabled="{Binding CanDeleteSelectedKeys}"/>
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{x:Bind SelectionStatusText}"
+                                                           Visibility="{x:Bind SelectionStatusVisibility}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           VerticalAlignment="Center"
+                                                           TextWrapping="WrapWholeWords"/>
 
-                                <TextBlock Text="{Binding SelectionSummaryText}"
-                                           Visibility="{Binding SelectionSummaryVisibility}"
-                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                           VerticalAlignment="Center"
-                                           TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
+                                                <Border Grid.Column="3"
+                                                        Visibility="{x:Bind KeyTypeVisibility}"
+                                                        CornerRadius="999"
+                                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                                        Padding="8,2"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind KeyType}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"/>
+                                                </Border>
+
+                                                <TextBlock Grid.Column="3"
+                                                           Text="{x:Bind PrefixCountLabel}"
+                                                           Visibility="{x:Bind PrefixCountVisibility}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           VerticalAlignment="Center"/>
+
+                                                <Button Grid.Column="4"
+                                                        Content="{x:Bind SelectionActionLabel}"
+                                                        Visibility="{x:Bind SelectionActionVisibility}"
+                                                        Command="{Binding ViewModel.ToggleTreeSelectionCommand, ElementName=PageRoot}"
+                                                        Style="{StaticResource RedisTreeActionButtonStyle}"
+                                                        CommandParameter="{x:Bind}"/>
+
+                                                <Button Grid.Column="4"
+                                                        Style="{StaticResource RedisTreeActionButtonStyle}"
+                                                        Visibility="{x:Bind InspectVisibility}"
+                                                        Command="{Binding ViewModel.SelectTreeKeyCommand, ElementName=PageRoot}"
+                                                        CommandParameter="{x:Bind}">
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="6">
+                                                        <FontIcon Glyph="&#xE8A7;"
+                                                                  FontSize="12"/>
+                                                        <TextBlock Text="Open"/>
+                                                    </StackPanel>
+                                                </Button>
+
+                                                <Button Grid.Column="4"
+                                                        Style="{StaticResource RedisTreeActionButtonStyle}"
+                                                        Visibility="{x:Bind FilterVisibility}"
+                                                        Command="{Binding ViewModel.FilterByPrefixCommand, ElementName=PageRoot}"
+                                                        CommandParameter="{x:Bind}">
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="6">
+                                                        <FontIcon Glyph="&#xE71C;"
+                                                                  FontSize="12"/>
+                                                        <TextBlock Text="Filter"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </ScrollViewer>
 
-                        <StackPanel Grid.Row="3"
-                                    Spacing="6"
-                                    Visibility="{Binding HeaderMessagesVisibility}">
-                            <InfoBar
-                                IsOpen="{Binding ShowBulkDeleteConfirmation}"
-                                Severity="Warning"
-                                Title="Production bulk delete confirmation"
-                                Message="Type CONFIRM before deleting selected keys from a production profile."/>
-
-                            <TextBox
-                                Text="{Binding BulkDeleteConfirmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                PlaceholderText="Type CONFIRM"
-                                Visibility="{Binding BulkDeleteConfirmationVisibility}"/>
-
-                            <TextBlock
-                                Text="{Binding ErrorMessage}"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Visibility="{Binding ErrorVisibility}"
-                                TextWrapping="WrapWholeWords"/>
-
-                            <InfoBar
-                                IsOpen="{Binding ShowNotConfiguredState}"
-                                Severity="Informational"
-                                Title="Redis is not configured"
-                                Message="Configure at least one Redis cache connection in Settings before opening this workspace."/>
-                        </StackPanel>
+                        <Button Grid.Row="3"
+                                Content="{Binding LoadMoreKeysLabel}"
+                                Command="{Binding LoadMoreKeysCommand}"
+                                Style="{StaticResource RedisToolbarButtonStyle}"
+                                Visibility="{Binding LoadMoreKeysVisibility}"
+                                IsEnabled="{Binding CanLoadMoreKeys}"/>
                     </Grid>
                 </Border>
 
-                <Grid Grid.Row="1"
-                      ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Border
-                        Grid.Column="0"
-                        Style="{StaticResource SwebKitSurfaceCardStyle}">
-                        <Grid RowSpacing="12">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock
-                                Text="Key browser"
-                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-
-                            <InfoBar
-                                Grid.Row="1"
-                                IsOpen="{Binding ShowTreeEmptyState}"
-                                Severity="Informational"
-                                Title="No keys found"
-                                Message="Refresh with a broader pattern or verify that the selected cache contains keys."/>
-
-                            <ScrollViewer Grid.Row="2"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding TreeRows}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:RedisTreeRowViewModel">
-                                            <Border
-                                                Margin="0,0,0,8"
-                                                CornerRadius="10"
-                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                BorderThickness="1"
-                                                Padding="10,7">
-                                                <Grid ColumnSpacing="8"
-                                                      Margin="{x:Bind IndentMargin}">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="28"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <Button Grid.Column="0"
-                                                            Content="{x:Bind ExpandGlyph}"
-                                                            Visibility="{x:Bind ExpandVisibility}"
-                                                            Command="{Binding ViewModel.ToggleTreeRowCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}"
-                                                            Style="{StaticResource RedisTreeGlyphButtonStyle}"/>
-
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{x:Bind DisplayName}"
-                                                               TextWrapping="WrapWholeWords"
-                                                               VerticalAlignment="Center"/>
-
-                                                    <TextBlock Grid.Column="2"
-                                                               Text="Selected"
-                                                               Visibility="{x:Bind SelectedVisibility}"
-                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                               VerticalAlignment="Center"/>
-
-                                                    <TextBlock Grid.Column="2"
-                                                               Text="{x:Bind SelectionStatusText}"
-                                                               Visibility="{x:Bind SelectionStatusVisibility}"
-                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                               VerticalAlignment="Center"
-                                                               TextWrapping="WrapWholeWords"/>
-
-                                                    <Border Grid.Column="3"
-                                                            Visibility="{x:Bind KeyTypeVisibility}"
-                                                            CornerRadius="999"
-                                                            Background="{ThemeResource LayerFillColorAltBrush}"
-                                                            Padding="8,2"
-                                                            VerticalAlignment="Center">
-                                                        <TextBlock Text="{x:Bind KeyType}"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"/>
-                                                    </Border>
-
-                                                    <TextBlock Grid.Column="3"
-                                                               Text="{x:Bind PrefixCountLabel}"
-                                                               Visibility="{x:Bind PrefixCountVisibility}"
-                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                               VerticalAlignment="Center"/>
-
-                                                    <Button Grid.Column="4"
-                                                            Content="{x:Bind SelectionActionLabel}"
-                                                            Visibility="{x:Bind SelectionActionVisibility}"
-                                                            Command="{Binding ViewModel.ToggleTreeSelectionCommand, ElementName=PageRoot}"
-                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
-                                                            CommandParameter="{x:Bind}"/>
-
-                                                    <Button Grid.Column="4"
-                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
-                                                            Visibility="{x:Bind InspectVisibility}"
-                                                            Command="{Binding ViewModel.SelectTreeKeyCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}">
-                                                        <StackPanel Orientation="Horizontal"
-                                                                    Spacing="6">
-                                                            <FontIcon Glyph="&#xE8A7;"
-                                                                      FontSize="12"/>
-                                                            <TextBlock Text="Open"/>
-                                                        </StackPanel>
-                                                    </Button>
-
-                                                    <Button Grid.Column="4"
-                                                            Style="{StaticResource RedisTreeActionButtonStyle}"
-                                                            Visibility="{x:Bind FilterVisibility}"
-                                                            Command="{Binding ViewModel.FilterByPrefixCommand, ElementName=PageRoot}"
-                                                            CommandParameter="{x:Bind}">
-                                                        <StackPanel Orientation="Horizontal"
-                                                                    Spacing="6">
-                                                            <FontIcon Glyph="&#xE71C;"
-                                                                      FontSize="12"/>
-                                                            <TextBlock Text="Filter"/>
-                                                        </StackPanel>
-                                                    </Button>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-
-                            <Button Grid.Row="3"
-                                    Content="{Binding LoadMoreKeysLabel}"
-                                    Command="{Binding LoadMoreKeysCommand}"
-                                    Style="{StaticResource RedisToolbarButtonStyle}"
-                                    Visibility="{Binding LoadMoreKeysVisibility}"
-                                    IsEnabled="{Binding CanLoadMoreKeys}"/>
-                        </Grid>
-                    </Border>
-
-                    <Border
+                <Border
                         Grid.Column="1"
                         Style="{StaticResource SwebKitSurfaceCardStyle}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1197,7 +1190,7 @@
                         </ScrollViewer>
                     </Border>
                 </Grid>
-            </Grid>
+
         </shared:PageScaffold.BodyContent>
     </shared:PageScaffold>
 </Page>

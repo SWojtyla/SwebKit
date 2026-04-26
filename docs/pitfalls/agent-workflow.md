@@ -106,4 +106,14 @@ See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting w
 
 ---
 
+## AW-10 — Silent WinUI XAML compiler failure hides the real page and can desync editor versus disk state
+
+**Symptom:** `build-winui` fails with `MSB3073` or `XamlCompiler.exe` exit code `1`, `get_errors` reports nothing useful, and `output.json` is missing or stale.
+
+**Cause:** The failing page can be a different XAML file than the last surfaced warning, and editor-backed file reads may not match the compiler-visible on-disk file after repeated XAML edits. In the reused PowerShell session, a failed `XmlReader` pass can also leave the file handle open and block rewrites.
+
+**Fix:** Treat `output.json` as valid only if the current failing build regenerated it. Validate suspect XAML files on disk with `System.Xml.XmlReader`, fix raw tag mismatches first, and if the terminal shell itself is holding the file open after an exception, clear the reader variable and force GC before retrying the write.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

@@ -12,56 +12,113 @@
 
     <shared:PageScaffold
         Title="Service Bus"
-        Subtitle="Connect namespaces, explore queues and subscriptions, and open active or DLQ workspaces from one native WinUI surface.">
-        <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="16">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+        Subtitle="Connect namespaces, explore queues and subscriptions, and open active or DLQ workspaces from one native WinUI surface."
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <Grid RowSpacing="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <Border
-                    Grid.Row="0"
-                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <StackPanel Spacing="12">
-                        <TextBlock
-                            Text="Add namespace"
-                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                        <TextBox
-                            PlaceholderText="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                            Text="{Binding ConnectionStringInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                            IsEnabled="{Binding CanMutate}"/>
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
+                        <StackPanel Grid.Column="0"
+                                    Spacing="4">
                             <TextBlock
-                                Grid.Column="0"
-                                Text="{Binding ErrorMessage}"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                TextWrapping="Wrap"/>
+                                Text="Namespace setup"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                            <TextBlock
+                                Text="Connect namespaces, refresh entity state, and reopen active or DLQ workspaces without leaving the native operator surface."
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
 
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Top">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsLoading}"/>
                             <Button
-                                Grid.Column="1"
                                 Content="Refresh"
                                 Command="{Binding ReloadCommand}"
                                 IsEnabled="{Binding CanMutate}"/>
-
                             <Button
-                                Grid.Column="2"
                                 Content="Add"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Command="{Binding AddNamespaceCommand}"
                                 IsEnabled="{Binding CanMutate}"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                        </StackPanel>
+                    </Grid>
 
-                <Grid Grid.Row="1"
-                      ColumnSpacing="16">
+                    <Grid Grid.Row="1"
+                          ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="140"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0"
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Connection string"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBox
+                                PlaceholderText="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                Text="{Binding ConnectionStringInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                IsEnabled="{Binding CanMutate}"/>
+                        </StackPanel>
+
+                        <Border Grid.Column="1"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Padding="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    Text="Namespaces"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding Namespaces.Count}"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Padding="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    Text="Workspaces"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding Tabs.Count}"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock
+                        Grid.Row="2"
+                        Text="{Binding ErrorMessage}"
+                        Visibility="{Binding ErrorVisibility}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="WrapWholeWords"/>
+                </Grid>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+        <shared:PageScaffold.BodyContent>
+            <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="360"/>
                         <ColumnDefinition Width="*"/>
@@ -974,12 +1031,12 @@
                                                                            Visibility="{Binding DataContext.ActiveTab.EnqueuedVisibility, ElementName=PageRoot}"/>
                                                                 <TextBlock Text="{x:Bind AdditionalFieldsText}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                           TextWrapping="Wrap"
-                                                                           Visibility="{x:Bind HasAdditionalFieldsText, Mode=OneWay}"/>
+                                                                           Visibility="{x:Bind AdditionalFieldsVisibility}"
+                                                                           TextWrapping="Wrap"/>
                                                                 <TextBlock Text="{x:Bind CustomPropertyText}"
                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                           TextWrapping="Wrap"
-                                                                           Visibility="{x:Bind HasCustomPropertyText, Mode=OneWay}"/>
+                                                                           Visibility="{x:Bind CustomPropertyVisibility}"
+                                                                           TextWrapping="Wrap"/>
                                                             </StackPanel>
                                                         </Border>
                                                     </DataTemplate>
@@ -1032,16 +1089,16 @@
                                                             Content="Replay"
                                                             Click="ReplaySelectedMessage_Click"
                                                             IsEnabled="{Binding ActiveTab.SupportsReplay}"/>
-                                                        <Button Grid.Row="0"
+                                                    <Button Grid.Row="0"
                                                             Grid.Column="2"
                                                             Content="Schedule"
                                                             Click="ScheduleSelectedMessage_Click"/>
-                                                        <Button Grid.Row="1"
+                                                    <Button Grid.Row="1"
                                                             Grid.Column="2"
                                                             Content="Save as Template"
                                                             Click="SaveSelectedMessageAsTemplate_Click"/>
 
-                                                        <Button Grid.Row="1"
+                                                    <Button Grid.Row="1"
                                                             Grid.Column="0"
                                                             Content="Copy Body"
                                                             Click="CopySelectedMessageBody_Click"/>
@@ -1049,7 +1106,7 @@
                                                             Grid.Column="1"
                                                             Content="Copy Full Message"
                                                             Click="CopySelectedMessageJson_Click"/>
-                                                        <Button Grid.Row="2"
+                                                    <Button Grid.Row="2"
                                                             Grid.Column="2"
                                                             Grid.ColumnSpan="3"
                                                             Content="Filter to Session"
@@ -1109,7 +1166,6 @@
                             </Grid>
                         </Grid>
                     </Border>
-                </Grid>
             </Grid>
         </shared:PageScaffold.BodyContent>
     </shared:PageScaffold>

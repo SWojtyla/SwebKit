@@ -11,494 +11,414 @@
 
     <shared:PageScaffold
         Title="Pipelines"
-        Subtitle="Track pipeline health, recent delivery activity, scoped releases, and pending approvals in the native workspace baseline.">
-        <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="16">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+        Subtitle="Track pipeline health, recent delivery activity, scoped releases, and pending approvals in the native workspace baseline."
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <StackPanel Spacing="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                <Border
-                    Grid.Row="0"
-                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Delivery scope"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding ScopeSummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
 
-                            <StackPanel Grid.Column="0"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Delivery scope"
-                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ScopeSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Top">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsRefreshing}"/>
+                            <Button
+                                Content="Refresh"
+                                Command="{Binding RefreshCommand}"
+                                IsEnabled="{Binding CanRefreshWorkspace}"/>
+                        </StackPanel>
+                    </Grid>
 
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="12"
-                                        VerticalAlignment="Top">
-                                <ProgressRing
-                                    Width="20"
-                                    Height="20"
-                                    IsActive="{Binding IsRefreshing}"/>
-                                <Button
-                                    Content="Refresh"
-                                    Command="{Binding RefreshCommand}"
-                                    IsEnabled="{Binding CanRefreshWorkspace}"/>
-                            </StackPanel>
-                        </Grid>
+                    <TextBlock
+                        Text="{Binding ErrorMessage}"
+                        Visibility="{Binding ErrorVisibility}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="WrapWholeWords"/>
 
-                        <TextBlock
-                            Text="{Binding ErrorMessage}"
-                            Visibility="{Binding ErrorVisibility}"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            TextWrapping="WrapWholeWords"/>
+                    <InfoBar
+                        IsOpen="{Binding ShowReadinessState}"
+                        Severity="Warning"
+                        Title="{Binding ReadinessTitle}"
+                        Message="{Binding ReadinessMessage}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Open Settings"
+                                Command="{Binding OpenSettingsCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
 
-                        <InfoBar
-                            IsOpen="{Binding ShowReadinessState}"
-                            Severity="Warning"
-                            Title="{Binding ReadinessTitle}"
-                            Message="{Binding ReadinessMessage}">
-                            <InfoBar.ActionButton>
-                                <Button
-                                    Content="Open Settings"
-                                    Command="{Binding OpenSettingsCommand}"/>
-                            </InfoBar.ActionButton>
-                        </InfoBar>
+                    <InfoBar
+                        IsOpen="{Binding ShowNotConfiguredState}"
+                        Severity="Informational"
+                        Title="Azure DevOps is not configured"
+                        Message="Configure an organization and personal access token before loading projects, pipelines, releases, and approvals in this native route."/>
 
-                        <InfoBar
-                            IsOpen="{Binding ShowNotConfiguredState}"
-                            Severity="Informational"
-                            Title="Azure DevOps is not configured"
-                            Message="Configure an organization and personal access token before loading projects, pipelines, releases, and approvals in this native route."/>
+                    <InfoBar
+                        IsOpen="{Binding ShowNoProjectsState}"
+                        Severity="Warning"
+                        Title="No projects returned"
+                        Message="The current DevOps scope returned no projects. Check pinned-project configuration or connection access."/>
 
-                        <InfoBar
-                            IsOpen="{Binding ShowNoProjectsState}"
-                            Severity="Warning"
-                            Title="No projects returned"
-                            Message="The current DevOps scope returned no projects. Check pinned-project configuration or connection access."/>
+                    <InfoBar
+                        IsOpen="{Binding ShowDemoModeState}"
+                        Severity="Success"
+                        Title="Demo mode"
+                        Message="This baseline is using the in-memory demo Azure DevOps client."/>
 
-                        <InfoBar
-                            IsOpen="{Binding ShowDemoModeState}"
-                            Severity="Success"
-                            Title="Demo mode"
-                            Message="This baseline is using the in-memory demo Azure DevOps client."/>
+                    <Grid ColumnSpacing="12"
+                          RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <Grid ColumnSpacing="12"
-                              RowSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="2*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <StackPanel Grid.Row="0"
-                                        Grid.Column="0"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Project"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <ComboBox
-                                    ItemsSource="{Binding Projects}"
-                                    SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
-                                    DisplayMemberPath="DisplayLabel"
-                                    PlaceholderText="No project loaded"
-                                    IsEnabled="{Binding CanChangeApprovalAction}"/>
-                                <TextBlock
-                                    Text="{Binding SelectedProjectSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="0"
-                                        Grid.Column="1"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Connection"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ConnectionStateLabel}"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding ConnectionSummary}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="0"
-                                        Grid.Column="2"
-                                        Spacing="4">
-                                <TextBlock
-                                    Text="Workspace"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <TextBlock
-                                    Text="{Binding MetricsSummary}"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    TextWrapping="WrapWholeWords"/>
-                                <TextBlock
-                                    Text="{Binding LastRefreshLabel}"
-                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                    TextWrapping="WrapWholeWords"/>
-                            </StackPanel>
-
-                            <Border Grid.Row="1"
+                        <StackPanel Grid.Row="0"
                                     Grid.Column="0"
-                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                    CornerRadius="8"
-                                    Padding="12">
-                                <StackPanel Spacing="4">
-                                    <TextBlock
-                                        Text="Projects"
-                                        Style="{StaticResource CaptionTextBlockStyle}"/>
-                                    <TextBlock
-                                        Text="{Binding ProjectCountText}"
-                                        Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                </StackPanel>
-                            </Border>
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Project"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox
+                                ItemsSource="{Binding Projects}"
+                                SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
+                                DisplayMemberPath="DisplayLabel"
+                                PlaceholderText="No project loaded"
+                                IsEnabled="{Binding CanChangeApprovalAction}"/>
+                            <TextBlock
+                                Text="{Binding SelectedProjectSummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
 
-                            <Border Grid.Row="1"
+                        <StackPanel Grid.Row="0"
                                     Grid.Column="1"
-                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                    CornerRadius="8"
-                                    Padding="12">
-                                <StackPanel Spacing="4">
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Connection"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding ConnectionStateLabel}"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding ConnectionSummary}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="2"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Workspace"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <TextBlock
+                                Text="{Binding MetricsSummary}"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                TextWrapping="WrapWholeWords"/>
+                            <TextBlock
+                                Text="{Binding LastRefreshLabel}"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+
+                        <Border Grid.Row="1"
+                                Grid.Column="0"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Padding="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    Text="Projects"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding ProjectCountText}"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="1"
+                                Grid.Column="1"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Padding="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    Text="Loaded pipelines"
+                                    Style="{StaticResource CaptionTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="{Binding PipelineCountText}"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="1"
+                                Grid.Column="2"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Padding="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0"
+                                            Spacing="4">
                                     <TextBlock
-                                        Text="Loaded pipelines"
+                                        Text="Releases"
                                         Style="{StaticResource CaptionTextBlockStyle}"/>
                                     <TextBlock
-                                        Text="{Binding PipelineCountText}"
+                                        Text="{Binding ReleaseWorkspace.ReleaseCountText}"
                                         Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                 </StackPanel>
-                            </Border>
 
-                            <Border Grid.Row="1"
-                                    Grid.Column="2"
-                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                    CornerRadius="8"
-                                    Padding="12">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0"
-                                                Spacing="4">
-                                        <TextBlock
-                                            Text="Releases"
-                                            Style="{StaticResource CaptionTextBlockStyle}"/>
-                                        <TextBlock
-                                            Text="{Binding ReleaseWorkspace.ReleaseCountText}"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="1"
-                                                Spacing="4">
-                                        <TextBlock
-                                            Text="Approvals"
-                                            Style="{StaticResource CaptionTextBlockStyle}"/>
-                                        <TextBlock
-                                            Text="{Binding ApprovalCountText}"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <TabView
-                    Grid.Row="1"
-                    Visibility="{Binding WorkspaceVisibility}"
-                    IsEnabled="{Binding CanChangeApprovalAction}"
-                    IsAddTabButtonVisible="False"
-                    SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
-                    <TabViewItem Header="Pipelines">
-                        <Grid ColumnSpacing="16"
-                              Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="360"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0"
-                                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                                <Grid RowSpacing="12">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
-
-                                    <Grid ColumnSpacing="12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0"
-                                                    Spacing="4">
-                                            <TextBlock
-                                                Text="Pipelines in scope"
-                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                            <TextBlock
-                                                Text="{Binding PipelinesSummary}"
-                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                TextWrapping="WrapWholeWords"/>
-                                        </StackPanel>
-
-                                        <ProgressRing
-                                            Grid.Column="1"
-                                            Width="20"
-                                            Height="20"
-                                            IsActive="{Binding IsLoadingPipelines}"/>
-                                    </Grid>
-
-                                    <InfoBar
-                                        Grid.Row="1"
-                                        IsOpen="{Binding ShowPipelinesEmptyState}"
-                                        Severity="Informational"
-                                        Title="No pipelines found"
-                                        Message="The selected project returned no pipelines for the current scope."/>
-
-                                    <ListView Grid.Row="2"
-                                              ItemsSource="{Binding Pipelines}"
-                                              SelectedItem="{Binding SelectedPipeline, Mode=TwoWay}">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="viewModels:PipelinesPipelineItemViewModel">
-                                                <StackPanel Padding="0,8"
-                                                            Spacing="2">
-                                                    <TextBlock
-                                                        Text="{x:Bind Name}"
-                                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind FolderLabel}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
-                                </Grid>
-                            </Border>
-
-                            <Grid Grid.Column="1"
-                                  RowSpacing="16">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-
-                                <Border Grid.Row="0"
-                                        Style="{StaticResource SwebKitSurfaceCardStyle}">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock
-                                            Text="{Binding SelectedPipelineTitle}"
-                                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
-                                            TextWrapping="WrapWholeWords"/>
-                                        <TextBlock
-                                            Text="{Binding SelectedPipelineSubtitle}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="WrapWholeWords"/>
-                                        <TextBlock
-                                            Text="{Binding SelectedPipelineStatusText}"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                            Visibility="{Binding SelectedPipelineDetailVisibility}"/>
-                                        <TextBlock
-                                            Text="{Binding SelectedPipelineRunSummary}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="WrapWholeWords"
-                                            Visibility="{Binding SelectedPipelineDetailVisibility}"/>
-                                        <TextBlock
-                                            Text="{Binding SelectedPipelineStageSummary}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="WrapWholeWords"
-                                            Visibility="{Binding SelectedPipelineDetailVisibility}"/>
-                                        <TextBlock
-                                            Text="Select a pipeline to load recent run activity and stage progression."
-                                            Visibility="{Binding SelectedPipelinePlaceholderVisibility}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="WrapWholeWords"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Grid.Row="1"
-                                        Style="{StaticResource SwebKitSurfaceCardStyle}">
-                                    <Grid RowSpacing="12">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-
-                                            <StackPanel Grid.Column="0"
-                                                        Spacing="4">
-                                                <TextBlock
-                                                    Text="Recent run preview"
-                                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                                <TextBlock
-                                                    Text="{Binding ActivitySummary}"
-                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                    TextWrapping="WrapWholeWords"/>
-                                            </StackPanel>
-
-                                            <ProgressRing
-                                                Grid.Column="1"
-                                                Width="20"
-                                                Height="20"
-                                                IsActive="{Binding IsLoadingActivity}"/>
-                                        </Grid>
-
-                                        <InfoBar
-                                            Grid.Row="1"
-                                            IsOpen="{Binding ShowActivityEmptyState}"
-                                            Severity="Informational"
-                                            Title="No recent runs"
-                                            Message="The selected pipeline returned no recent run activity."/>
-
-                                        <ListView Grid.Row="2"
-                                                  ItemsSource="{Binding ActivityRuns}">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="viewModels:PipelinesRunItemViewModel">
-                                                    <StackPanel Padding="0,8"
-                                                                Spacing="2">
-                                                        <TextBlock
-                                                            Text="{x:Bind StatusSummary}"
-                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                            TextWrapping="WrapWholeWords"/>
-                                                        <TextBlock
-                                                            Text="{x:Bind Name}"
-                                                            TextWrapping="WrapWholeWords"/>
-                                                        <TextBlock
-                                                            Text="{x:Bind CreatedLabel}"
-                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                        <TextBlock
-                                                            Text="{x:Bind BranchLabel}"
-                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                        <TextBlock
-                                                            Text="{x:Bind StageSummary}"
-                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                            TextWrapping="WrapWholeWords"/>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </Grid>
-                    </TabViewItem>
-
-                    <TabViewItem Header="Activity">
-                        <Border Margin="0,8,0,0"
-                                Style="{StaticResource SwebKitSurfaceCardStyle}">
-                            <Grid RowSpacing="12">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0"
-                                                Spacing="4">
-                                        <TextBlock
-                                            Text="Recent run activity"
-                                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
-                                        <TextBlock
-                                            Text="{Binding ActivitySummary}"
-                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                            TextWrapping="WrapWholeWords"/>
-                                    </StackPanel>
-
-                                    <ProgressRing
-                                        Grid.Column="1"
-                                        Width="20"
-                                        Height="20"
-                                        IsActive="{Binding IsLoadingActivity}"/>
-                                </Grid>
-
-                                <InfoBar
-                                    Grid.Row="1"
-                                    IsOpen="{Binding ShowActivityEmptyState}"
-                                    Severity="Informational"
-                                    Title="No activity returned"
-                                    Message="Select a pipeline in the Pipelines tab to populate recent runs here."/>
-
-                                <ListView Grid.Row="2"
-                                          ItemsSource="{Binding ActivityRuns}">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:PipelinesRunItemViewModel">
-                                            <Border Padding="0,10">
-                                                <StackPanel Spacing="4">
-                                                    <TextBlock
-                                                        Text="{x:Bind Name}"
-                                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind StatusSummary}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind CreatedLabel}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind BranchLabel}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind StageSummary}"
-                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                                        TextWrapping="WrapWholeWords"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
+                                <StackPanel Grid.Column="1"
+                                            Spacing="4">
+                                    <TextBlock
+                                        Text="Approvals"
+                                        Style="{StaticResource CaptionTextBlockStyle}"/>
+                                    <TextBlock
+                                        Text="{Binding ApprovalCountText}"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
-                    </TabViewItem>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+        <shared:PageScaffold.BodyContent>
+            <TabView
+                Visibility="{Binding WorkspaceVisibility}"
+                IsEnabled="{Binding CanChangeApprovalAction}"
+                IsAddTabButtonVisible="False"
+                SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                                        <TabViewItem Header="Pipelines">
+                                            <Grid ColumnSpacing="16"
+                                                  Margin="0,8,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="360"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
 
-                    <TabViewItem Header="Releases">
-                        <Grid ColumnSpacing="16"
-                              Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="340"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Style="{StaticResource SwebKitSurfaceCardStyle}">
+                                                    <Grid RowSpacing="12">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="*"/>
+                                                        </Grid.RowDefinitions>
 
-                            <Border Grid.Column="0"
-                                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                                <Grid RowSpacing="12">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
 
-                                    <StackPanel Grid.Row="0"
-                                                Spacing="4">
+                                                            <StackPanel Grid.Column="0"
+                                                                        Spacing="4">
+                                                                <TextBlock
+                                                                    Text="Pipelines in scope"
+                                                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                                <TextBlock
+                                                                    Text="{Binding PipelinesSummary}"
+                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                    TextWrapping="WrapWholeWords"/>
+                                                            </StackPanel>
+
+                                                            <ProgressRing
+                                                                Grid.Column="1"
+                                                                Width="20"
+                                                                Height="20"
+                                                                IsActive="{Binding IsLoadingPipelines}"/>
+                                                        </Grid>
+
+                                                        <InfoBar
+                                                            Grid.Row="1"
+                                                            IsOpen="{Binding ShowPipelinesEmptyState}"
+                                                            Severity="Informational"
+                                                            Title="No pipelines found"
+                                                            Message="The selected project returned no pipelines for the current scope."/>
+
+                                                        <ListView Grid.Row="2"
+                                                                  ItemsSource="{Binding Pipelines}"
+                                                                  SelectedItem="{Binding SelectedPipeline, Mode=TwoWay}">
+                                                            <ListView.ItemTemplate>
+                                                                <DataTemplate x:DataType="viewModels:PipelinesPipelineItemViewModel">
+                                                                    <StackPanel Padding="0,8"
+                                                                                Spacing="2">
+                                                                        <TextBlock
+                                                                            Text="{x:Bind Name}"
+                                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                            TextWrapping="WrapWholeWords"/>
+                                                                        <TextBlock
+                                                                            Text="{x:Bind FolderLabel}"
+                                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                            TextWrapping="WrapWholeWords"/>
+                                                                    </StackPanel>
+                                                                </DataTemplate>
+                                                            </ListView.ItemTemplate>
+                                                        </ListView>
+                                                    </Grid>
+                                                </Border>
+
+                                                <Grid Grid.Column="1"
+                                                      RowSpacing="16">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <Border Grid.Row="0"
+                                                            Style="{StaticResource SwebKitSurfaceCardStyle}">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock
+                                                                Text="{Binding SelectedPipelineTitle}"
+                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                                                                TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock
+                                                                Text="{Binding SelectedPipelineSubtitle}"
+                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock
+                                                                Text="{Binding SelectedPipelineStatusText}"
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Visibility="{Binding SelectedPipelineDetailVisibility}"/>
+                                                            <TextBlock
+                                                                Text="{Binding SelectedPipelineRunSummary}"
+                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                TextWrapping="WrapWholeWords"
+                                                                Visibility="{Binding SelectedPipelineDetailVisibility}"/>
+                                                            <TextBlock
+                                                                Text="{Binding SelectedPipelineStageSummary}"
+                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                TextWrapping="WrapWholeWords"
+                                                                Visibility="{Binding SelectedPipelineDetailVisibility}"/>
+                                                            <TextBlock
+                                                                Text="Select a pipeline to load recent run activity and stage progression."
+                                                                Visibility="{Binding SelectedPipelinePlaceholderVisibility}"
+                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <Border Grid.Row="1"
+                                                            Style="{StaticResource SwebKitSurfaceCardStyle}">
+                                                        <Grid RowSpacing="12">
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="*"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0"
+                                                                            Spacing="4">
+                                                                    <TextBlock
+                                                                        Text="Recent run preview"
+                                                                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                                                    <TextBlock
+                                                                        Text="{Binding ActivitySummary}"
+                                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                        TextWrapping="WrapWholeWords"/>
+                                                                </StackPanel>
+
+                                                                <ProgressRing
+                                                                    Grid.Column="1"
+                                                                    Width="20"
+                                                                    Height="20"
+                                                                    IsActive="{Binding IsLoadingActivity}"/>
+                                                            </Grid>
+
+                                                            <InfoBar
+                                                                Grid.Row="1"
+                                                                IsOpen="{Binding ShowActivityEmptyState}"
+                                                                Severity="Informational"
+                                                                Title="No recent runs"
+                                                                Message="The selected pipeline returned no recent run activity."/>
+
+                                                            <ListView Grid.Row="2"
+                                                                      ItemsSource="{Binding ActivityRuns}">
+                                                                <ListView.ItemTemplate>
+                                                                    <DataTemplate x:DataType="viewModels:PipelinesRunItemViewModel">
+                                                                        <StackPanel Padding="0,8"
+                                                                                    Spacing="2">
+                                                                            <TextBlock
+                                                                                Text="{x:Bind StatusSummary}"
+                                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                                TextWrapping="WrapWholeWords"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind Name}"
+                                                                                TextWrapping="WrapWholeWords"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind CreatedLabel}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind BranchLabel}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                                                            <TextBlock
+                                                                                Text="{x:Bind StageSummary}"
+                                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                                TextWrapping="WrapWholeWords"/>
+                                                                        </StackPanel>
+                                                                    </DataTemplate>
+                                                                </ListView.ItemTemplate>
+                                                            </ListView>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </Grid>
+                                        </TabViewItem>
+
+                                        <TabViewItem Header="Releases">
+                                            <Grid ColumnSpacing="16"
+                                                  Margin="0,8,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="340"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Grid.Column="0"
+                                                        Style="{StaticResource SwebKitSurfaceCardStyle}">
+                                                    <Grid RowSpacing="12">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="*"/>
+                                                        </Grid.RowDefinitions>
+
+                                                        <StackPanel Grid.Row="0"
+                                                                    Spacing="4">
                                         <TextBlock
                                             Text="Scoped releases"
                                             Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
@@ -506,18 +426,18 @@
                                             Text="{Binding ReleaseWorkspace.ReleasesSummary}"
                                             Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                             TextWrapping="WrapWholeWords"/>
-                                    </StackPanel>
+                                                        </StackPanel>
 
-                                    <InfoBar
-                                        Grid.Row="1"
-                                        IsOpen="{Binding ShowReleasesEmptyState}"
-                                        Severity="Informational"
-                                        Title="No releases found"
-                                        Message="The release repository returned no entries that intersect the current delivery scope."/>
+                                                        <InfoBar
+                                                            Grid.Row="1"
+                                                            IsOpen="{Binding ShowReleasesEmptyState}"
+                                                            Severity="Informational"
+                                                            Title="No releases found"
+                                                            Message="The release repository returned no entries that intersect the current delivery scope."/>
 
-                                    <ListView Grid.Row="2"
-                                              ItemsSource="{Binding ReleaseWorkspace.Releases}"
-                                              SelectedItem="{Binding ReleaseWorkspace.SelectedRelease, Mode=TwoWay}">
+                                                        <ListView Grid.Row="2"
+                                                                  ItemsSource="{Binding ReleaseWorkspace.Releases}"
+                                                                  SelectedItem="{Binding ReleaseWorkspace.SelectedRelease, Mode=TwoWay}">
                                         <ListView.ItemTemplate>
                                             <DataTemplate x:DataType="viewModels:PipelinesReleaseItemViewModel">
                                                 <StackPanel Padding="0,8"
@@ -538,12 +458,12 @@
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
-                                    </ListView>
-                                </Grid>
-                            </Border>
+                                                        </ListView>
+                                                    </Grid>
+                                                </Border>
 
-                            <Border Grid.Column="1"
-                                    Style="{StaticResource SwebKitSurfaceCardStyle}">
+                                                <Border Grid.Column="1"
+                                                        Style="{StaticResource SwebKitSurfaceCardStyle}">
                                 <Grid RowSpacing="16">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
@@ -1057,7 +977,7 @@
                         </Border>
                     </TabViewItem>
                 </TabView>
-            </Grid>
+
         </shared:PageScaffold.BodyContent>
     </shared:PageScaffold>
 </Page>

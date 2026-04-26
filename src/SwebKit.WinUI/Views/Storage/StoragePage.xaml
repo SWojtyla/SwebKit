@@ -10,99 +10,94 @@
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold
-        Title="Storage">
-        <shared:PageScaffold.BodyContent>
-            <Grid RowSpacing="12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+        Title="Storage"
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <Border
-                    Grid.Row="0"
-                    Style="{StaticResource SwebKitSurfaceCardStyle}">
-                    <Grid RowSpacing="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="280"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0"
+                                    Spacing="6">
+                            <TextBlock
+                                Text="Account"
+                                Style="{StaticResource CaptionTextBlockStyle}"/>
+                            <ComboBox
+                                ItemsSource="{Binding Accounts}"
+                                SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                                DisplayMemberPath="DisplayLabel"
+                                IsEnabled="{Binding HasMultipleAccounts}"/>
+                        </StackPanel>
 
-                            <StackPanel Grid.Column="0"
-                                        Spacing="6">
-                                <TextBlock
-                                    Text="Account"
-                                    Style="{StaticResource CaptionTextBlockStyle}"/>
-                                <ComboBox
-                                    ItemsSource="{Binding Accounts}"
-                                    SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                                    DisplayMemberPath="DisplayLabel"
-                                    IsEnabled="{Binding HasMultipleAccounts}"/>
-                            </StackPanel>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ConnectionSummary}"
+                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                   TextWrapping="WrapWholeWords"
+                                   VerticalAlignment="Center"/>
 
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding ConnectionSummary}"
-                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
-                                       TextWrapping="WrapWholeWords"
-                                       VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Center">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsRefreshing}"/>
+                            <Button
+                                Content="Refresh"
+                                Command="{Binding ReloadCommand}"/>
+                            <Button
+                                Content="Open Settings"
+                                Command="{Binding OpenSettingsCommand}"/>
+                        </StackPanel>
+                    </Grid>
 
-                            <StackPanel Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        Spacing="12"
-                                        VerticalAlignment="Center">
-                                <ProgressRing
-                                    Width="20"
-                                    Height="20"
-                                    IsActive="{Binding IsRefreshing}"/>
-                                <Button
-                                    Content="Refresh"
-                                    Command="{Binding ReloadCommand}"/>
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal"
+                                Spacing="16">
+                        <TextBlock Text="{Binding AccountCountLabel}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock Text="{Binding ContainerCountLabel}"
+                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2"
+                                Spacing="8">
+                        <TextBlock
+                            Text="{Binding ErrorMessage}"
+                            Visibility="{Binding GlobalErrorVisibility}"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            TextWrapping="WrapWholeWords"/>
+
+                        <InfoBar
+                            IsOpen="{Binding ShowNotConfiguredState}"
+                            Severity="Informational"
+                            Title="Storage is not configured"
+                            Message="Configure at least one Azure Blob Storage account in Settings before opening containers and blob detail views.">
+                            <InfoBar.ActionButton>
                                 <Button
                                     Content="Open Settings"
                                     Command="{Binding OpenSettingsCommand}"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <StackPanel Grid.Row="1"
-                                    Orientation="Horizontal"
-                                    Spacing="16">
-                            <TextBlock Text="{Binding AccountCountLabel}"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                            <TextBlock Text="{Binding ContainerCountLabel}"
-                                       Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="2"
-                                    Spacing="8">
-                            <TextBlock
-                                Text="{Binding ErrorMessage}"
-                                Visibility="{Binding GlobalErrorVisibility}"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                TextWrapping="WrapWholeWords"/>
-
-                            <InfoBar
-                                IsOpen="{Binding ShowNotConfiguredState}"
-                                Severity="Informational"
-                                Title="Storage is not configured"
-                                Message="Configure at least one Azure Blob Storage account in Settings before opening containers and blob detail views.">
-                                <InfoBar.ActionButton>
-                                    <Button
-                                        Content="Open Settings"
-                                        Command="{Binding OpenSettingsCommand}"/>
-                                </InfoBar.ActionButton>
-                            </InfoBar>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Grid Grid.Row="1"
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+        <shared:PageScaffold.BodyContent>
+            <Grid>
+                <Grid
                       ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="300"/>
