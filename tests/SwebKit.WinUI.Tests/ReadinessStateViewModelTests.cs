@@ -94,6 +94,7 @@ public sealed class ReadinessStateViewModelTests
             appState,
             new TestAksBootstrapper(),
             navigation,
+            new TestPodHealthMonitorService(),
             new TestPortForwardSessionService(),
             new TestNotificationService(),
             NullLogger<AksPageViewModel>.Instance);
@@ -365,6 +366,29 @@ public sealed class ReadinessStateViewModelTests
                 string.Empty,
                 "default",
                 "Not configured."));
+    }
+
+    private sealed class TestPodHealthMonitorService : IPodHealthMonitorService
+    {
+        public bool IsMonitoring => false;
+
+        public IReadOnlyList<string> MonitoredNamespaces => [];
+
+        public IReadOnlyList<PodHealthEvent> RecentEvents => [];
+
+        public event Action? MonitoringStateChanged;
+
+        public event Action<PodHealthEvent>? PodHealthDetected;
+
+        public Task StartAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task StopAsync() => Task.CompletedTask;
+
+        public Task AddNamespaceAsync(string ns) => Task.CompletedTask;
+
+        public Task RemoveNamespaceAsync(string ns) => Task.CompletedTask;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class TestPortForwardSessionService : IPortForwardSessionService

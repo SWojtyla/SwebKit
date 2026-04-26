@@ -112,6 +112,7 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
 
         _events.Subscribe<ActivityEvent>(OnActivityReceived);
         _events.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        _monitor.MonitoringStateChanged += OnMonitoringStateChanged;
         _monitor.PodHealthDetected += OnPodHealthDetected;
         _workspaceService.Changed += OnWorkspaceChanged;
         _appState.DemoModeChanged += OnAppStateSignalsChanged;
@@ -291,6 +292,7 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
         _isDisposed = true;
         _events.Unsubscribe<ActivityEvent>(OnActivityReceived);
         _events.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
+        _monitor.MonitoringStateChanged -= OnMonitoringStateChanged;
         _monitor.PodHealthDetected -= OnPodHealthDetected;
         _workspaceService.Changed -= OnWorkspaceChanged;
         _appState.DemoModeChanged -= OnAppStateSignalsChanged;
@@ -388,6 +390,11 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
 
             SyncMonitoringState();
         });
+    }
+
+    private void OnMonitoringStateChanged()
+    {
+        ExecuteOnUiThread(SyncMonitoringState);
     }
 
     private void OnWorkspaceChanged()

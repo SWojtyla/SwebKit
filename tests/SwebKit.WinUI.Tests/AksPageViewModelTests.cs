@@ -135,6 +135,128 @@ public sealed class AksPageViewModelTests
     }
 
     [Fact]
+    public async Task LoadAsync_SyncsExistingMonitoringStateIntoTheNativeAksPage()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var monitor = new TestPodHealthMonitorService
+        {
+            IsMonitoring = true,
+        };
+        await monitor.AddNamespaceAsync("orders");
+        monitor.Emit(new PodHealthEvent(
+            PodName: "orders-api-6d4f9d7b9-jv9qs",
+            Namespace: "orders",
+            ClusterContext: "aks-dev",
+            EventType: PodHealthEventType.PodCrashLoop,
+            PreviousPhase: "Running",
+            CurrentPhase: "CrashLoopBackOff",
+            RestartCount: 4,
+            DetectedAt: DateTimeOffset.UtcNow.AddMinutes(-2),
+            Message: "Back-off restarting failed container."));
+
+        await using var viewModel = CreateViewModel(TestAksClient.CreateDefault(), monitor: monitor);
+
+        await viewModel.LoadAsync();
+
+        Assert.True(viewModel.IsMonitoring);
+        Assert.Equal("Monitor (1)", viewModel.MonitorButtonText);
+        Assert.Single(viewModel.MonitoredNamespaces);
+        Assert.Equal("orders", viewModel.MonitoredNamespaces[0].Name);
+        Assert.Single(viewModel.PodHealthAlerts);
+        Assert.Equal("orders", viewModel.SelectedMonitorNamespace);
+    }
+
+    [Fact]
+    public async Task MonitoringCommands_AddNamespaceAndStartOrStopMonitoringThroughTheSharedService()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var monitor = new TestPodHealthMonitorService();
+        await using var viewModel = CreateViewModel(TestAksClient.CreateDefault(), monitor: monitor);
+
+        await viewModel.LoadAsync();
+
+        viewModel.ToggleMonitorPanelCommand.Execute(null);
+        await viewModel.AddSelectedMonitorNamespaceCommand.ExecuteAsync(null);
+
+        Assert.Single(monitor.MonitoredNamespaces);
+        Assert.Equal("orders", monitor.MonitoredNamespaces[0]);
+        Assert.Single(viewModel.MonitoredNamespaces);
+
+        await viewModel.StartMonitoringCommand.ExecuteAsync(null);
+
+        Assert.True(monitor.IsMonitoring);
+        Assert.True(viewModel.IsMonitoring);
+
+        await viewModel.StopMonitoringCommand.ExecuteAsync(null);
+
+        Assert.False(monitor.IsMonitoring);
+        Assert.False(viewModel.IsMonitoring);
+    }
+
+    [Fact]
+    public async Task ExternalMonitoringStateMutation_RefreshesTheNativeAksMonitorPanel()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var monitor = new TestPodHealthMonitorService();
+        await using var viewModel = CreateViewModel(TestAksClient.CreateDefault(), monitor: monitor);
+
+        await viewModel.LoadAsync();
+
+        await monitor.AddNamespaceAsync("orders");
+        await monitor.StartAsync();
+
+        Assert.True(viewModel.IsMonitoring);
+        Assert.Single(viewModel.MonitoredNamespaces);
+        Assert.Equal("orders", viewModel.MonitoredNamespaces[0].Name);
+
+        await monitor.RemoveNamespaceAsync("orders");
+        await monitor.StopAsync();
+
+        Assert.False(viewModel.IsMonitoring);
+        Assert.Empty(viewModel.MonitoredNamespaces);
+    }
+
+    [Fact]
+    public async Task OpeningWorkloadLogs_StreamsAggregatedDeploymentLogsIntoTheNativeLogSurface()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var fakeClient = TestAksClient.CreateDefault();
+        await using var viewModel = CreateViewModel(fakeClient);
+
+        await viewModel.LoadAsync();
+        viewModel.SelectedResourceKind = "Deployments";
+        var deploymentItem = Assert.Single(viewModel.ResourceItems);
+
+        await viewModel.SelectResourceItemCommand.ExecuteAsync(deploymentItem);
+        await viewModel.OpenSelectedResourceWorkloadLogsCommand.ExecuteAsync(null);
+
+        Assert.Contains("orders/orders-api", viewModel.SelectedWorkloadLogsTitle, StringComparison.Ordinal);
+        Assert.Contains("orders-api-6d4f9d7b9-jv9qs", viewModel.SelectedWorkloadLogsText, StringComparison.Ordinal);
+        Assert.Equal(("orders", "orders-api"), fakeClient.LastDeploymentLogRequest);
+    }
+
+    [Fact]
+    public async Task HandleKeyboardShortcutAsync_OpensNativeWorkloadLogsAndYamlForDeploymentSelection()
+    {
+        using var syncScope = new SynchronizationContextScope();
+        var fakeClient = TestAksClient.CreateDefault();
+        await using var viewModel = CreateViewModel(fakeClient);
+
+        await viewModel.LoadAsync();
+        viewModel.SelectedResourceKind = "Deployments";
+        var deploymentItem = Assert.Single(viewModel.ResourceItems);
+
+        await viewModel.SelectResourceItemCommand.ExecuteAsync(deploymentItem);
+
+        Assert.True(await viewModel.HandleKeyboardShortcutAsync("l"));
+        Assert.Contains("orders-api-6d4f9d7b9-jv9qs", viewModel.SelectedWorkloadLogsText, StringComparison.Ordinal);
+
+        Assert.True(await viewModel.HandleKeyboardShortcutAsync("y"));
+        Assert.True(viewModel.IsSelectedResourceYamlPanelOpen);
+        Assert.Contains("kind: Deployment", viewModel.SelectedResourceYamlText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SelectingIngressAndHttpRoute_ProjectsNativeUrlActions()
     {
         using var syncScope = new SynchronizationContextScope();
@@ -464,6 +586,7 @@ public sealed class AksPageViewModelTests
     private static AksPageViewModel CreateViewModel(
         TestAksClient fakeClient,
         TestShellNavigationService? navigation = null,
+        TestPodHealthMonitorService? monitor = null,
         TestPortForwardSessionService? portForwardSessions = null,
         TestNotificationService? notifications = null)
     {
@@ -482,6 +605,7 @@ public sealed class AksPageViewModelTests
         };
 
         navigation ??= new TestShellNavigationService();
+        monitor ??= new TestPodHealthMonitorService();
         portForwardSessions ??= new TestPortForwardSessionService();
         notifications ??= new TestNotificationService();
 
@@ -489,6 +613,7 @@ public sealed class AksPageViewModelTests
             appState,
             new TestAksBootstrapper(fakeClient),
             navigation,
+            monitor,
             portForwardSessions,
             notifications,
             NullLogger<AksPageViewModel>.Instance);
@@ -569,6 +694,8 @@ public sealed class AksPageViewModelTests
         public List<string> DeletedPods { get; } = [];
 
         public List<(string Namespace, string ReleaseName, int Revision)> RollbackCalls { get; } = [];
+
+        public (string Namespace, string DeploymentName)? LastDeploymentLogRequest { get; private set; }
 
         private TestAksClient(
             List<DeploymentInfo> deployments,
@@ -1116,8 +1243,15 @@ public sealed class AksPageViewModelTests
 
         public async IAsyncEnumerable<AggregatedLogLine> StreamDeploymentLogsAsync(string ns, string deploymentName, LogStreamOptions opts, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
+            LastDeploymentLogRequest = (ns, deploymentName);
+            yield return new AggregatedLogLine
+            {
+                PodName = $"{deploymentName}-6d4f9d7b9-jv9qs",
+                Line = "GET /healthz 200",
+                ReceivedAt = DateTimeOffset.UtcNow,
+            };
+
             await Task.CompletedTask;
-            yield break;
         }
 
         public Task<IReadOnlyList<StatefulSetInfo>> GetStatefulSetsAsync(string ns, CancellationToken ct = default)
@@ -1458,5 +1592,67 @@ public sealed class AksPageViewModelTests
         public Task StopAsync(PortForwardSession session, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task StopAllAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class TestPodHealthMonitorService : IPodHealthMonitorService
+    {
+        private readonly List<string> _monitoredNamespaces = [];
+        private readonly List<PodHealthEvent> _recentEvents = [];
+
+        public bool IsMonitoring { get; set; }
+
+        public IReadOnlyList<string> MonitoredNamespaces => _monitoredNamespaces;
+
+        public IReadOnlyList<PodHealthEvent> RecentEvents => _recentEvents;
+
+        public event Action? MonitoringStateChanged;
+
+        public event Action<PodHealthEvent>? PodHealthDetected;
+
+        public Task StartAsync(CancellationToken ct = default)
+        {
+            IsMonitoring = true;
+            MonitoringStateChanged?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync()
+        {
+            IsMonitoring = false;
+            MonitoringStateChanged?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task AddNamespaceAsync(string ns)
+        {
+            if (!_monitoredNamespaces.Contains(ns, StringComparer.Ordinal))
+            {
+                _monitoredNamespaces.Add(ns);
+                MonitoringStateChanged?.Invoke();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveNamespaceAsync(string ns)
+        {
+            if (_monitoredNamespaces.Remove(ns))
+            {
+                MonitoringStateChanged?.Invoke();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public void Emit(PodHealthEvent evt)
+        {
+            _recentEvents.Insert(0, evt);
+            PodHealthDetected?.Invoke(evt);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
     }
 }

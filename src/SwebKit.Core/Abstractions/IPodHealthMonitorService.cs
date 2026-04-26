@@ -16,5 +16,6 @@ public interface IPodHealthMonitorService : IAsyncDisposable
     Task AddNamespaceAsync(string ns);
     Task RemoveNamespaceAsync(string ns);
 
+    event Action? MonitoringStateChanged;
     event Action<PodHealthEvent>? PodHealthDetected;
 }

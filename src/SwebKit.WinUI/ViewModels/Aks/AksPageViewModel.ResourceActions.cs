@@ -155,6 +155,21 @@ public sealed partial class AksPageViewModel
 
     public bool CanOpenSelectedResourceUrl => !string.IsNullOrWhiteSpace(SelectedResourceItem?.PrimaryUrl);
 
+    public Visibility SelectedResourceWorkloadLogsVisibility => CanSelectedResourceSupportWorkloadLogs
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public bool CanOpenSelectedResourceWorkloadLogs => CanSelectedResourceSupportWorkloadLogs
+        && Client is not null
+        && !IsSelectedWorkloadLogsLoading
+        && !IsLoading;
+
+    public string SelectedResourceWorkloadLogsLabel => SelectedResourceItem?.ApiKind switch
+    {
+        "StatefulSet" => "StatefulSet logs",
+        _ => "All-pod logs"
+    };
+
     public Visibility SelectedResourceCopyUrlVisibility => CanOpenSelectedResourceUrl ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility SelectedResourceNamespaceQuotaVisibility => SelectedResourceItem is not null
@@ -337,6 +352,9 @@ public sealed partial class AksPageViewModel
 
     private bool IsSelectedResourceHelmRelease => SelectedResourceItem is not null
         && string.Equals(SelectedResourceItem.Kind, "Helm", StringComparison.Ordinal);
+
+    private bool CanSelectedResourceSupportWorkloadLogs => SelectedResourceItem is not null
+        && CanResourceSupportWorkloadLogs(SelectedResourceItem);
 
     private bool CanInspectSelectedResourceProbeFailures => SelectedResourceItem is not null
         && Client is not null
@@ -1609,6 +1627,9 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(SelectedResourceOpenUrlVisibility));
         OnPropertyChanged(nameof(CanOpenSelectedResourceUrl));
         OnPropertyChanged(nameof(SelectedResourceCopyUrlVisibility));
+        OnPropertyChanged(nameof(SelectedResourceWorkloadLogsVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceWorkloadLogs));
+        OnPropertyChanged(nameof(SelectedResourceWorkloadLogsLabel));
         OnPropertyChanged(nameof(SelectedResourceNamespaceQuotaVisibility));
         OnPropertyChanged(nameof(CanLoadSelectedResourceNamespaceQuotas));
         OnPropertyChanged(nameof(SelectedResourcePodDisruptionBudgetVisibility));

@@ -102,6 +102,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
         OnPropertyChanged(nameof(PortForwardSelectedPodLabel));
         OnPropertyChanged(nameof(CanOpenSelectedPodShell));
+        NotifyKeyboardShortcutStateChanged();
 
         if (IsPortForwardFormOpen)
         {
@@ -154,6 +155,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(CanStartSelectedPodPortForward));
         OnPropertyChanged(nameof(CanOpenSelectedPodShell));
         OnPropertyChanged(nameof(ResourceEmptyStateVisibility));
+        OnPropertyChanged(nameof(CanOpenSelectedResourceWorkloadLogs));
     }
 
     partial void OnSelectedPodLogsErrorMessageChanged(string? value)

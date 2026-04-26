@@ -16,6 +16,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     private readonly AppStateService _appState;
     private readonly IAksClientBootstrapper _bootstrapper;
     private readonly IShellNavigationService _navigation;
+    private readonly IPodHealthMonitorService _monitor;
     private readonly IPortForwardSessionService _portForwardSessions;
     private readonly INotificationService _notifications;
     private readonly ILogger<AksPageViewModel> _logger;
@@ -29,6 +30,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         AppStateService appState,
         IAksClientBootstrapper bootstrapper,
         IShellNavigationService navigation,
+        IPodHealthMonitorService monitor,
         IPortForwardSessionService portForwardSessions,
         INotificationService notifications,
         ILogger<AksPageViewModel> logger)
@@ -36,6 +38,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         _appState = appState;
         _bootstrapper = bootstrapper;
         _navigation = navigation;
+        _monitor = monitor;
         _portForwardSessions = portForwardSessions;
         _notifications = notifications;
         _logger = logger;
@@ -56,6 +59,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             OnPropertyChanged(nameof(ShowEventsEmptyState));
         };
 
+        InitializeMonitoringState();
         InitializePortForwardState();
     }
 
@@ -164,6 +168,9 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             return;
         }
 
+        SyncMonitoringState();
+        SyncPodHealthAlerts();
+
         OnPropertyChanged(nameof(IsConfigured));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
 
@@ -177,6 +184,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             ContextOptions.Clear();
             NamespaceOptions.Clear();
             Pods.Clear();
+            ClearMonitorNamespaceOptions();
             ClearResourceExplorerState();
             SelectedPod = null;
             SelectedContext = string.Empty;
@@ -186,6 +194,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
 
         await SuspendSelectedPodLogsForReloadAsync("Reloading AKS scope...");
+        await SuspendSelectedWorkloadLogsForReloadAsync("Reloading AKS scope...");
         Pods.Clear();
         OnPropertyChanged(nameof(PodCountLabel));
         OnPropertyChanged(nameof(ShowPodEmptyState));
@@ -257,6 +266,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
         }
 
         _isDisposed = true;
+        DisposeMonitoringState();
         DisposePortForwardState();
         ResetSelectedResourceBusyStateForDispose();
 
@@ -267,8 +277,10 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
         await ResetLoadTokenAsync();
         await ResetLogsTokenAsync();
+        await ResetWorkloadLogsTokenAsync();
         _loadCts.Dispose();
         _logsCts.Dispose();
+        _workloadLogsCts.Dispose();
         _selectedResourceActionCts.Dispose();
     }
 
@@ -285,6 +297,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     partial void OnSelectedNamespaceChanged(string value)
     {
         OnPropertyChanged(nameof(EventsSummary));
+        SyncMonitorNamespaceSelectionFromScope(value);
 
         if (_suppressSelectionSideEffects || !_loaded || string.IsNullOrWhiteSpace(value))
         {
@@ -350,6 +363,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             NamespaceOptions.Add(ns);
         }
 
+        SyncMonitorNamespaceOptions(result.Namespaces, result.CurrentNamespace);
+
         _suppressSelectionSideEffects = true;
         try
         {
@@ -403,6 +418,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             }
 
             await SuspendSelectedPodLogsForReloadAsync("Loading pods for the new namespace...");
+            await SuspendSelectedWorkloadLogsForReloadAsync("Loading pods for the new namespace...");
             Pods.Clear();
             OnPropertyChanged(nameof(PodCountLabel));
             OnPropertyChanged(nameof(ShowPodEmptyState));

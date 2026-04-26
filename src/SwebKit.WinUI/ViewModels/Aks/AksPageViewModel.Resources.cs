@@ -159,6 +159,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(ResourceEmptyTitle));
         OnPropertyChanged(nameof(ResourceEmptyMessage));
         OnPropertyChanged(nameof(FocusMetricValueLabel));
+        NotifyKeyboardShortcutStateChanged();
     }
 
     partial void OnResourceFilterTextChanged(string value)
@@ -173,6 +174,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(ResourceListVisibility));
         OnPropertyChanged(nameof(ResourceEmptyStateVisibility));
         OnPropertyChanged(nameof(FocusMetricValueText));
+        NotifyKeyboardShortcutStateChanged();
     }
 
     partial void OnSelectedResourceItemChanged(AksResourceBrowseItemViewModel? value)
@@ -187,6 +189,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(SelectedResourceEmptyStateVisibility));
         OnPropertyChanged(nameof(SelectedResourceTitle));
         OnPropertyChanged(nameof(SelectedResourceSubtitle));
+        NotifyKeyboardShortcutStateChanged();
 
         if (_suppressResourceSelectionSideEffects || !string.Equals(SelectedResourceKind, ResourceKindPods, StringComparison.Ordinal))
         {

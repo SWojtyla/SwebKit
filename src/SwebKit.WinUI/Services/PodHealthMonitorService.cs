@@ -73,6 +73,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         }
     }
 
+    public event Action? MonitoringStateChanged;
+
     public event Action<PodHealthEvent>? PodHealthDetected;
 
     private void OnAppInitialized()
@@ -112,6 +114,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
                 _ = StartAsync();
             }
         }
+
+        MonitoringStateChanged?.Invoke();
     }
 
     public async Task StartAsync(CancellationToken ct = default)
@@ -159,6 +163,7 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(120));
         _loopTask = Task.Run(() => PollingLoopAsync(_cts.Token));
+        MonitoringStateChanged?.Invoke();
     }
 
     public async Task StopAsync()
@@ -205,6 +210,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
                 await _appState.SaveConfigAsync();
             }
         }
+
+        MonitoringStateChanged?.Invoke();
     }
 
     public async Task AddNamespaceAsync(string ns)
@@ -250,6 +257,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         {
             await TakeBaselineAsync(ns);
         }
+
+        MonitoringStateChanged?.Invoke();
     }
 
     public async Task RemoveNamespaceAsync(string ns)
@@ -275,6 +284,8 @@ public sealed class PodHealthMonitorService : IPodHealthMonitorService
         {
             await _appState.SaveConfigAsync();
         }
+
+        MonitoringStateChanged?.Invoke();
     }
 
     public async ValueTask DisposeAsync()
