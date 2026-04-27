@@ -974,6 +974,11 @@
 
                                         <StackPanel Spacing="8"
                                                     Visibility="{Binding ActiveTab.HasSelectedMessage}">
+                                            <Button Content="Investigate in Incident Timeline"
+                                                    Command="{Binding InvestigateActiveMessageCommand}"
+                                                    IsEnabled="{Binding CanInvestigateActiveMessage}"
+                                                    HorizontalAlignment="Left"/>
+
                                             <Grid ColumnSpacing="8"
                                                   RowSpacing="8">
                                                 <Grid.RowDefinitions>

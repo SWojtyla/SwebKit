@@ -12,8 +12,9 @@
 - Cancellation-first request handling with last-request-wins versioning so rapid refreshes or scope edits do not flash stale evidence.
 - Mapping-backed workload suggestions with a free-text workload name field so AKS-only investigations remain possible even when non-AKS mappings are absent.
 - Shared workspace integration for context, namespace, workload kind/name, time window, and source toggles, allowing recent/favorite reopen and named favorite restore from shell surfaces.
-- Investigation seed launch from Observability, Service Bus, and Pipelines source pages. Each source page carries a typed `IncidentInvestigationSeed` (time range, evidence references, candidate scope) through `IncidentInvestigationLauncher` into the investigation page without implying root cause.
-- `InvestigationSeedBanner` renders on landing after a seed launch, showing source provenance and pending scope assumptions. Operators must confirm or dismiss before evidence is loaded.
+- Native WinUI parity in `src/SwebKit.WinUI` for the same core workbench flow: real route ownership, native Settings repair path, dashboard readiness alignment, and native source-page drill-through.
+- Investigation seed launch from Observability, Service Bus, and Pipelines source pages. MAUI carries the typed `IncidentInvestigationSeed` through `IncidentInvestigationLauncher`; WinUI carries the same seed through `IShellNavigationService` navigation parameters without implying root cause.
+- A seeded landing callout renders after a source-page launch, showing provenance and any pending scope assumptions before evidence is loaded.
 - Investigation seed normalization via `IIncidentInvestigationSeedResolver` maps evidence references (resource IDs, entity paths, pipeline IDs, correlation IDs) to known workload mappings, producing a draft scope and pre-selected source toggles.
 - Snapshot export via `IIncidentSnapshotExporter`: builds a sanitized, bounded export bundle from loaded evidence. Metadata is filtered to an explicit allow-list, values are truncated, and every export includes a source coverage summary and a disclaimer. Exported as JSON or Markdown.
 - Mapping proposals via `IIncidentMappingProposalGenerator`: after each successful refresh, inspects source statuses for `Unmapped` or `NotConfigured` coverage and generates advisory-only candidate proposals. Proposals are never persisted automatically and require explicit operator acceptance through Settings.
@@ -47,6 +48,14 @@
 - `src/SwebKit.App/Components/Layout/LeftNav.razor`
 - `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - `src/SwebKit.App/Components/Layout/StatusBar.razor`
+- `src/SwebKit.WinUI/Views/IncidentTimeline/IncidentTimelinePage.xaml`
+- `src/SwebKit.WinUI/Views/IncidentTimeline/IncidentTimelinePage.xaml.cs`
+- `src/SwebKit.WinUI/ViewModels/IncidentTimeline/IncidentTimelinePageViewModel.cs`
+- `src/SwebKit.WinUI/Views/Settings/SettingsPage.xaml`
+- `src/SwebKit.WinUI/ViewModels/Settings/SettingsViewModel.cs`
+- `src/SwebKit.WinUI/ViewModels/ServiceBus/ServiceBusPageViewModel.cs`
+- `src/SwebKit.WinUI/ViewModels/Pipelines/PipelinesPageViewModel.cs`
+- `src/SwebKit.WinUI/ViewModels/Observability/ObservabilityPageViewModel.cs`
 - `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs`
 - `src/SwebKit.Core/Abstractions/IIncidentInvestigationSeedResolver.cs`
 - `src/SwebKit.Core/Abstractions/IIncidentSnapshotExporter.cs`

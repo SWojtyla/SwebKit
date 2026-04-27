@@ -1,3 +1,5 @@
+using SwebKit.Core.Models;
+
 namespace SwebKit.WinUI.ViewModels.Settings;
 
 public static class SettingsSections
@@ -27,10 +29,23 @@ public static class SettingsSections
 
 public sealed record SettingsNavigationRequest
 {
-    public SettingsNavigationRequest(string? section)
+    public SettingsNavigationRequest(
+        string? section,
+        string? suggestedNamespace = null,
+        IncidentWorkloadKind? suggestedWorkloadKind = null,
+        string? suggestedWorkloadName = null)
     {
         Section = SettingsSections.Normalize(section) ?? SettingsSections.Appearance;
+        SuggestedNamespace = string.IsNullOrWhiteSpace(suggestedNamespace) ? null : suggestedNamespace.Trim();
+        SuggestedWorkloadKind = suggestedWorkloadKind;
+        SuggestedWorkloadName = string.IsNullOrWhiteSpace(suggestedWorkloadName) ? null : suggestedWorkloadName.Trim();
     }
 
     public string Section { get; }
+
+    public string? SuggestedNamespace { get; }
+
+    public IncidentWorkloadKind? SuggestedWorkloadKind { get; }
+
+    public string? SuggestedWorkloadName { get; }
 }

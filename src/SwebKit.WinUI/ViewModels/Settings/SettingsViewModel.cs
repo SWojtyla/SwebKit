@@ -118,6 +118,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial double ObservabilityLatencyRedThresholdMs { get; set; } = 2000;
 
+    [ObservableProperty]
+    public partial string IncidentTimelineSuggestedNamespace { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial IncidentWorkloadKind IncidentTimelineSuggestedWorkloadKind { get; set; } = IncidentWorkloadKind.Deployment;
+
+    [ObservableProperty]
+    public partial string IncidentTimelineSuggestedWorkloadName { get; set; } = string.Empty;
+
     public SettingsViewModel(
         UserSettingsRepository userSettings,
         AppStateService appState,
@@ -152,11 +161,22 @@ public sealed partial class SettingsViewModel : ObservableObject
             new(SettingsSections.DevOps, "Azure DevOps", "Organization, PAT, and pipeline readiness configuration."),
             new(SettingsSections.Storage, "Storage", "Blob account access profiles and mutation safeguards."),
             new(SettingsSections.Observability, "Observability", "Application Insights identity guidance and threshold tuning."),
-            new(SettingsSections.IncidentTimeline, "Incident Timeline", "Deferred in the current WinUI settings parity wave."),
+            new(SettingsSections.IncidentTimeline, "Incident Timeline", "Workload mappings that let Incident Timeline correlate AKS, App Insights, Service Bus, and release evidence safely."),
         ];
+
+        IncidentTimelineMappings.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(IncidentTimelineMappingsEmptyVisibility));
+            OnPropertyChanged(nameof(HasIncidentTimelineSuggestedMapping));
+            OnPropertyChanged(nameof(CanAddSuggestedIncidentTimelineMapping));
+            OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusText));
+            OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusVisibility));
+        };
     }
 
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
+
+    public IReadOnlyList<IncidentWorkloadKind> IncidentTimelineWorkloadKinds { get; } = Enum.GetValues<IncidentWorkloadKind>();
 
     public ObservableCollection<SettingsSectionOption> Sections { get; } = [];
 
@@ -175,6 +195,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ObservableCollection<RedisCacheDisplayItem> RedisCaches { get; } = [];
 
     public ObservableCollection<StorageAccountDisplayItem> StorageAccounts { get; } = [];
+
+    public ObservableCollection<IncidentTimelineMappingEditorItem> IncidentTimelineMappings { get; } = [];
 
     public ObservableCollection<CredentialReferenceHealth> CurrentCredentialReferences { get; } = [];
 
@@ -244,11 +266,34 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public Visibility StoredDevOpsPatVisibility => ToVisibility(HasStoredDevOpsPat);
 
+    public bool HasIncidentTimelineSuggestedScope => !string.IsNullOrWhiteSpace(IncidentTimelineSuggestedNamespace)
+        && !string.IsNullOrWhiteSpace(IncidentTimelineSuggestedWorkloadName);
+
+    public bool HasIncidentTimelineSuggestedMapping => IncidentTimelineMappings.Any(mapping =>
+        mapping.Matches(IncidentTimelineSuggestedNamespace, IncidentTimelineSuggestedWorkloadKind, IncidentTimelineSuggestedWorkloadName));
+
+    public bool CanAddSuggestedIncidentTimelineMapping => HasIncidentTimelineSuggestedScope && !HasIncidentTimelineSuggestedMapping;
+
+    public string IncidentTimelineSuggestedScopeText => HasIncidentTimelineSuggestedScope
+        ? $"{IncidentTimelineSuggestedNamespace} • {IncidentTimelineSuggestedWorkloadKind} • {IncidentTimelineSuggestedWorkloadName}"
+        : string.Empty;
+
+    public string IncidentTimelineSuggestedStatusText => HasIncidentTimelineSuggestedMapping
+        ? "A matching mapping already exists below."
+        : "Use the current incident scope to seed a new mapping card below.";
+
+    public Visibility IncidentTimelineSuggestedScopeVisibility => ToVisibility(HasIncidentTimelineSuggestedScope);
+
+    public Visibility IncidentTimelineSuggestedStatusVisibility => ToVisibility(HasIncidentTimelineSuggestedScope);
+
+    public Visibility IncidentTimelineMappingsEmptyVisibility => ToVisibility(IncidentTimelineMappings.Count == 0);
+
     public async Task LoadAsync(SettingsNavigationRequest? request = null)
     {
         await _appState.WhenInitializedAsync();
         await _userSettings.LoadAsync();
 
+        ApplyIncidentTimelineSuggestion(request);
         LoadFromState();
         SetSelectedSection(request?.Section);
     }
@@ -743,6 +788,56 @@ public sealed partial class SettingsViewModel : ObservableObject
         await PersistConfigAsync("Observability settings saved.");
     }
 
+    [RelayCommand]
+    private void AddIncidentTimelineMapping()
+    {
+        IncidentTimelineMappings.Add(IncidentTimelineMappingEditorItem.CreateBlank());
+        SetStatus("Added a new Incident Timeline mapping card.");
+    }
+
+    [RelayCommand]
+    private void AddSuggestedIncidentTimelineMapping()
+    {
+        if (!CanAddSuggestedIncidentTimelineMapping)
+        {
+            return;
+        }
+
+        IncidentTimelineMappings.Add(IncidentTimelineMappingEditorItem.CreateSuggested(
+            IncidentTimelineSuggestedNamespace,
+            IncidentTimelineSuggestedWorkloadKind,
+            IncidentTimelineSuggestedWorkloadName));
+        SetStatus("Added a mapping for the current incident scope.");
+    }
+
+    [RelayCommand]
+    private void RemoveIncidentTimelineMapping(IncidentTimelineMappingEditorItem? mapping)
+    {
+        if (mapping is null)
+        {
+            return;
+        }
+
+        IncidentTimelineMappings.Remove(mapping);
+        SetStatus("Incident Timeline mapping removed.");
+    }
+
+    [RelayCommand]
+    private async Task SaveIncidentTimelineAsync()
+    {
+        var config = _appState.Config.IncidentTimeline ??= new IncidentTimelineConfig();
+        config.WorkloadMappings = IncidentTimelineMappings
+            .Select(static mapping => mapping.ToDomain())
+            .Where(static mapping => !string.IsNullOrWhiteSpace(mapping.Namespace) && !string.IsNullOrWhiteSpace(mapping.WorkloadName))
+            .OrderBy(static mapping => mapping.Namespace, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static mapping => mapping.WorkloadKind)
+            .ThenBy(static mapping => mapping.WorkloadName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        await PersistConfigAsync("Incident Timeline settings saved.");
+        LoadIncidentTimelineState();
+    }
+
     private void LoadFromState()
     {
         SelectedTheme = _themeCoordinator.NormalizeThemeKey(_userSettings.Settings.Theme);
@@ -756,6 +851,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         LoadDevOpsState();
         LoadStorageState();
         LoadObservabilityState();
+        LoadIncidentTimelineState();
         RefreshReadiness();
     }
 
@@ -826,6 +922,38 @@ public sealed partial class SettingsViewModel : ObservableObject
         ObservabilityFailureRateRedThreshold = config.FailureRateRedThreshold;
         ObservabilityLatencyAmberThresholdMs = config.LatencyAmberThresholdMs;
         ObservabilityLatencyRedThresholdMs = config.LatencyRedThresholdMs;
+    }
+
+    private void LoadIncidentTimelineState()
+    {
+        ReplaceCollection(
+            IncidentTimelineMappings,
+            _appState.Config.IncidentTimeline.WorkloadMappings
+                .OrderBy(static mapping => mapping.Namespace, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static mapping => mapping.WorkloadKind)
+                .ThenBy(static mapping => mapping.WorkloadName, StringComparer.OrdinalIgnoreCase)
+                .Select(IncidentTimelineMappingEditorItem.FromDomain));
+
+        OnPropertyChanged(nameof(IncidentTimelineMappingsEmptyVisibility));
+        OnPropertyChanged(nameof(HasIncidentTimelineSuggestedMapping));
+        OnPropertyChanged(nameof(CanAddSuggestedIncidentTimelineMapping));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusText));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusVisibility));
+    }
+
+    private void ApplyIncidentTimelineSuggestion(SettingsNavigationRequest? request)
+    {
+        IncidentTimelineSuggestedNamespace = request?.SuggestedNamespace ?? string.Empty;
+        IncidentTimelineSuggestedWorkloadKind = request?.SuggestedWorkloadKind ?? IncidentWorkloadKind.Deployment;
+        IncidentTimelineSuggestedWorkloadName = request?.SuggestedWorkloadName ?? string.Empty;
+
+        OnPropertyChanged(nameof(HasIncidentTimelineSuggestedScope));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedScopeText));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedScopeVisibility));
+        OnPropertyChanged(nameof(HasIncidentTimelineSuggestedMapping));
+        OnPropertyChanged(nameof(CanAddSuggestedIncidentTimelineMapping));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusText));
+        OnPropertyChanged(nameof(IncidentTimelineSuggestedStatusVisibility));
     }
 
     private void SetSelectedSection(string? section)

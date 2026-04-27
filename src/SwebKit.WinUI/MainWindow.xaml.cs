@@ -10,6 +10,7 @@ using SwebKit.WinUI.Views.Pipelines;
 using SwebKit.WinUI.Views.Redis;
 using SwebKit.WinUI.Views.ServiceBus;
 using SwebKit.WinUI.Views.Storage;
+using SwebKit.WinUI.Views.IncidentTimeline;
 using SwebKit.WinUI.ViewModels.Shell;
 using SwebKit.WinUI.Views.Settings;
 using SwebKit.WinUI.Views.Shell;
@@ -110,6 +111,7 @@ public sealed partial class MainWindow : Window
         {
             "dashboard" => typeof(DashboardPage),
             "aks" => typeof(AksPage),
+            "incident-timeline" => typeof(IncidentTimelinePage),
             "observability" => typeof(ObservabilityPage),
             "pipelines" => typeof(PipelinesPage),
             "redis" => typeof(RedisPage),

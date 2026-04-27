@@ -1,0 +1,638 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="SwebKit.WinUI.Views.IncidentTimeline.IncidentTimelinePage"
+    x:Name="PageRoot"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
+    xmlns:viewModels="using:SwebKit.WinUI.ViewModels.IncidentTimeline"
+    DataContext="{x:Bind ViewModel, Mode=OneWay}"
+    Background="{ThemeResource SwebKitPageBackgroundBrush}">
+
+    <shared:PageScaffold
+        Title="Incident Timeline"
+        Subtitle="Correlate workload-scoped evidence across AKS, Application Insights, Service Bus, and release activity from one native investigation surface."
+        IsHeaderCompact="True">
+        <shared:PageScaffold.ContextContent>
+            <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
+                <StackPanel Spacing="16">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0"
+                                    Spacing="4">
+                            <TextBlock
+                                Text="Workload scope and source coverage"
+                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                            <TextBlock
+                                Text="Use the AKS context, namespace, workload, and source toggles to keep the native investigation workbench evidence-first. Scope edits stay draft-only until you refresh."
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                TextWrapping="WrapWholeWords"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Top">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                IsActive="{Binding IsBusy}"/>
+                            <Button
+                                Content="Open Settings"
+                                Command="{Binding OpenSettingsCommand}"/>
+                            <Button
+                                Content="Refresh"
+                                Command="{Binding RefreshCommand}"
+                                IsEnabled="{Binding CanRefresh}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnSpacing="12"
+                          RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <ComboBox
+                            Header="AKS context"
+                            ItemsSource="{Binding ContextNames}"
+                            SelectedItem="{Binding SelectedContextName, Mode=TwoWay}"/>
+
+                        <ComboBox
+                            Grid.Column="1"
+                            Header="Namespace"
+                            ItemsSource="{Binding NamespaceOptions}"
+                            SelectedItem="{Binding SelectedNamespaceName, Mode=TwoWay}"/>
+
+                        <ComboBox
+                            Grid.Column="2"
+                            Header="Time window"
+                            ItemsSource="{Binding TimeRangeOptions}"
+                            SelectedItem="{Binding SelectedTimeRangeOption, Mode=TwoWay}"
+                            DisplayMemberPath="Label"/>
+
+                        <ComboBox
+                            Grid.Row="1"
+                            Header="Workload kind"
+                            ItemsSource="{Binding WorkloadKindOptions}"
+                            SelectedItem="{Binding SelectedWorkloadKindOption, Mode=TwoWay}"
+                            DisplayMemberPath="Label"/>
+
+                        <TextBox
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Header="Workload name"
+                            PlaceholderText="orders-api"
+                            Text="{Binding WorkloadName, Mode=TwoWay}"/>
+
+                        <ComboBox
+                            Grid.Row="1"
+                            Grid.Column="2"
+                            Header="Mapped suggestions"
+                            ItemsSource="{Binding SuggestedWorkloads}"
+                            SelectedItem="{Binding SelectedSuggestedWorkload, Mode=TwoWay}"
+                            DisplayMemberPath="DisplayLabel"
+                            PlaceholderText="Select a mapped workload"/>
+                    </Grid>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock
+                            Text="Evidence sources"
+                            Style="{StaticResource CaptionTextBlockStyle}"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="16">
+                            <CheckBox
+                                Content="AKS"
+                                IsChecked="{Binding IsAksSourceSelected, Mode=TwoWay}"
+                                IsEnabled="{Binding CanToggleAksSource}"/>
+                            <CheckBox
+                                Content="App Insights"
+                                IsChecked="{Binding IsObservabilitySourceSelected, Mode=TwoWay}"
+                                IsEnabled="{Binding CanToggleObservabilitySource}"/>
+                            <CheckBox
+                                Content="Service Bus"
+                                IsChecked="{Binding IsServiceBusSourceSelected, Mode=TwoWay}"
+                                IsEnabled="{Binding CanToggleServiceBusSource}"/>
+                            <CheckBox
+                                Content="Releases"
+                                IsChecked="{Binding IsReleasesSourceSelected, Mode=TwoWay}"
+                                IsEnabled="{Binding CanToggleReleasesSource}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock
+                            Text="{Binding ScopeStatusText}"
+                            TextWrapping="WrapWholeWords"/>
+                        <TextBlock
+                            Grid.Column="1"
+                            Text="{Binding LoadedSummaryText}"
+                            TextWrapping="WrapWholeWords"/>
+                        <TextBlock
+                            Grid.Column="2"
+                            Text="{Binding LastRefreshText}"
+                            TextWrapping="WrapWholeWords"/>
+                    </Grid>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowPendingChanges}"
+                        Severity="Informational"
+                        Title="Pending scope changes"
+                        Message="Refresh to replace the current evidence with the edited scope."/>
+                </StackPanel>
+            </Border>
+        </shared:PageScaffold.ContextContent>
+        <shared:PageScaffold.BodyContent>
+            <Grid RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <shared:StateView
+                    Grid.Row="0"
+                    Title="Incident Timeline needs AKS bootstrap settings"
+                    Message="Configure the native AKS settings before loading workload-scoped evidence. Incident Timeline anchors each investigation to the current cluster context and namespace."
+                    Glyph="i"
+                    Visibility="{Binding NotConfiguredVisibility}"/>
+
+                <StackPanel
+                    Grid.Row="0"
+                    Spacing="12"
+                    Visibility="{Binding MessageStackVisibility}">
+                    <InfoBar
+                        IsOpen="{Binding InvestigationDraftVisibility}"
+                        Severity="Informational"
+                        Title="{Binding InvestigationDraftTitle}"
+                        Message="{Binding InvestigationDraftSummary}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Dismiss"
+                                Command="{Binding DismissInvestigationDraftCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <TextBlock
+                        Text="{Binding InvestigationDraftAssumptionsText}"
+                        Visibility="{Binding InvestigationDraftAssumptionsVisibility}"
+                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                        TextWrapping="WrapWholeWords"/>
+
+                    <Button
+                        Content="Open Incident Timeline settings"
+                        Command="{Binding OpenSettingsCommand}"
+                        Visibility="{Binding InvestigationDraftSettingsVisibility}"
+                        HorizontalAlignment="Left"/>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowBootstrapError}"
+                        Severity="Error"
+                        Title="Scope bootstrap failed"
+                        Message="{Binding BootstrapErrorMessage}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Retry"
+                                Command="{Binding RetryBootstrapCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowLoadError}"
+                        Severity="Error"
+                        Title="Evidence load failed"
+                        Message="{Binding LoadErrorMessage}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Retry"
+                                Command="{Binding RefreshCommand}"
+                                IsEnabled="{Binding CanRefresh}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowMappingGuidance}"
+                        Severity="Warning"
+                        Title="Some selected sources still need mapping or setup"
+                        Message="{Binding MappingGuidanceMessage}">
+                        <InfoBar.ActionButton>
+                            <Button
+                                Content="Open Incident Timeline settings"
+                                Command="{Binding OpenSettingsCommand}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <InfoBar
+                        IsOpen="{Binding ShowPartialNotice}"
+                        Severity="Informational"
+                        Title="Evidence is partial"
+                        Message="Review source coverage before deciding what changed in this incident window."/>
+
+                    <Border Style="{StaticResource SwebKitSurfaceCardStyle}"
+                            Visibility="{Binding ProposalsVisibility}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0"
+                                            Spacing="4">
+                                    <TextBlock
+                                        Text="Mapping proposals"
+                                        Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                    <TextBlock
+                                        Text="These are advisory-only suggestions from the loaded evidence. Accept them manually in Settings after reviewing the scope."
+                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                        TextWrapping="WrapWholeWords"/>
+                                </StackPanel>
+
+                                <Button
+                                    Grid.Column="1"
+                                    Content="Open Settings"
+                                    Command="{Binding OpenSettingsCommand}"/>
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding MappingProposals}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:IncidentTimelineProposalItemViewModel">
+                                        <Border
+                                            Margin="0,0,0,10"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock
+                                                    Text="{x:Bind Title}"
+                                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                    TextWrapping="WrapWholeWords"/>
+                                                <TextBlock
+                                                    Text="{x:Bind Rationale}"
+                                                    TextWrapping="WrapWholeWords"/>
+                                                <TextBlock
+                                                    Text="{x:Bind Summary}"
+                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                    TextWrapping="WrapWholeWords"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border
+                    Grid.Row="1"
+                    Style="{StaticResource SwebKitSurfaceCardStyle}"
+                    Visibility="{Binding CoverageVisibility}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="4">
+                                <TextBlock
+                                    Text="Source coverage"
+                                    Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                <TextBlock
+                                    Text="See which sources loaded, degraded, timed out, or still need mapping before you inspect individual evidence rows."
+                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                    TextWrapping="WrapWholeWords"/>
+                            </StackPanel>
+
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="{Binding CoverageHeadline}"
+                                VerticalAlignment="Top"
+                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding CoverageItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:IncidentTimelineCoverageItemViewModel">
+                                    <Border
+                                        Margin="0,0,0,10"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Padding="12">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0"
+                                                        Spacing="4">
+                                                <TextBlock
+                                                    Text="{x:Bind Title}"
+                                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <TextBlock
+                                                    Text="{x:Bind Subtitle}"
+                                                    TextWrapping="WrapWholeWords"/>
+                                                <TextBlock
+                                                    Text="{x:Bind Detail}"
+                                                    Visibility="{x:Bind DetailVisibility, Mode=OneWay}"
+                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                    TextWrapping="WrapWholeWords"/>
+                                            </StackPanel>
+
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Text="{x:Bind BadgeText}"
+                                                Foreground="{x:Bind BadgeBrush, Mode=OneWay}"
+                                                VerticalAlignment="Top"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="2">
+                    <shared:StateView
+                        Title="Choose a workload"
+                        Message="Select a namespace and workload name, then refresh to load incident evidence for that scope."
+                        Glyph="i"
+                        Visibility="{Binding EmptyScopeVisibility}"/>
+
+                    <shared:StateView
+                        Title="Refresh to load evidence"
+                        Message="Incident evidence appears after the first refresh for the selected scope. Changing filters does not auto-query in the native baseline."
+                        Glyph="i"
+                        Visibility="{Binding EmptyPageVisibility}"/>
+
+                    <shared:StateView
+                        Title="No evidence found in this window"
+                        Message="Expand the time window, adjust the workload scope, or review source coverage for unmapped or unavailable signals."
+                        Glyph="i"
+                        Visibility="{Binding EmptyResultsVisibility}"/>
+
+                    <shared:StateView
+                        Title="All selected evidence sources failed"
+                        Message="{Binding GlobalFailureMessage}"
+                        Glyph="!"
+                        Visibility="{Binding GlobalFailureVisibility}"/>
+
+                    <Grid Visibility="{Binding WorkbenchVisibility}"
+                          ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.6*"/>
+                            <ColumnDefinition Width="1.1*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Grid.Column="0"
+                            Style="{StaticResource SwebKitSurfaceCardStyle}">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock
+                                            Text="Evidence timeline"
+                                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                        <TextBlock
+                                            Text="{Binding EvidenceTimelineSubtitle}"
+                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                            TextWrapping="WrapWholeWords"/>
+                                    </StackPanel>
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="{Binding EvidenceCountText}"
+                                        VerticalAlignment="Top"
+                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"/>
+                                </Grid>
+
+                                <ListView
+                                    Grid.Row="1"
+                                    ItemsSource="{Binding EvidenceItems}"
+                                    SelectedItem="{Binding SelectedEvidenceItem, Mode=TwoWay}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:IncidentTimelineEvidenceItemViewModel">
+                                            <Border
+                                                Margin="0,0,0,10"
+                                                CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                Padding="12">
+                                                <StackPanel Spacing="8">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0"
+                                                                    Spacing="4">
+                                                            <TextBlock
+                                                                Text="{x:Bind Title}"
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                TextWrapping="WrapWholeWords"/>
+                                                            <TextBlock
+                                                                Text="{x:Bind Summary}"
+                                                                Visibility="{x:Bind SummaryVisibility, Mode=OneWay}"
+                                                                TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+
+                                                        <TextBlock
+                                                            Grid.Column="1"
+                                                            Text="{x:Bind TimestampLabel}"
+                                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                            VerticalAlignment="Top"/>
+                                                    </Grid>
+
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Spacing="12">
+                                                        <TextBlock Text="{x:Bind SourceLabel}"/>
+                                                        <TextBlock Text="{x:Bind SeverityLabel}"/>
+                                                        <TextBlock Text="{x:Bind RelevanceLabel}"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock
+                                                        Text="{x:Bind ResourceLabel}"
+                                                        Visibility="{x:Bind ResourceVisibility, Mode=OneWay}"
+                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                        TextWrapping="WrapWholeWords"/>
+                                                    <TextBlock
+                                                        Text="{x:Bind ReasonSummary}"
+                                                        Visibility="{x:Bind ReasonSummaryVisibility, Mode=OneWay}"
+                                                        Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                        TextWrapping="WrapWholeWords"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            Grid.Column="1"
+                            Style="{StaticResource SwebKitSurfaceCardStyle}">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0"
+                                                Spacing="4">
+                                        <TextBlock
+                                            Text="Evidence detail"
+                                            Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
+                                        <TextBlock
+                                            Text="Inspect the selected row's linkage, safe metadata, and resource context without leaving the workbench."
+                                            Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                            TextWrapping="WrapWholeWords"/>
+                                    </StackPanel>
+
+                                    <Button
+                                        Grid.Column="1"
+                                        Content="Clear"
+                                        Command="{Binding ClearSelectionCommand}"
+                                        IsEnabled="{Binding HasSelectedEvidenceItem}"/>
+                                </Grid>
+
+                                <shared:StateView
+                                    Grid.Row="1"
+                                    Title="Select an evidence row"
+                                    Message="Choose an evidence item from the timeline to inspect its scope link reasons and safe metadata here."
+                                    Glyph="i"
+                                    Visibility="{Binding EmptySelectionVisibility}"/>
+
+                                <ScrollViewer
+                                    Grid.Row="1"
+                                    Visibility="{Binding SelectedEvidenceVisibility}">
+                                    <StackPanel Spacing="16">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock
+                                                Text="{Binding SelectedEvidenceItem.Title}"
+                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"
+                                                TextWrapping="WrapWholeWords"/>
+                                            <TextBlock
+                                                Text="{Binding SelectedEvidenceItem.DetailSummary}"
+                                                Visibility="{Binding SelectedEvidenceSummaryVisibility}"
+                                                TextWrapping="WrapWholeWords"/>
+                                            <TextBlock
+                                                Text="{Binding SelectedEvidenceItem.DetailMetaLine}"
+                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                TextWrapping="WrapWholeWords"/>
+                                        </StackPanel>
+
+                                        <Border
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    Text="Linked because"
+                                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <ItemsControl ItemsSource="{Binding SelectedEvidenceItem.LinkReasons}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="viewModels:IncidentTimelineReasonItemViewModel">
+                                                            <StackPanel Margin="0,0,0,8"
+                                                                        Spacing="2">
+                                                                <TextBlock Text="{x:Bind Title}"/>
+                                                                <TextBlock
+                                                                    Text="{x:Bind Explanation}"
+                                                                    Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                    TextWrapping="WrapWholeWords"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    Text="Safe metadata"
+                                                    Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <shared:StateView
+                                                    Title="No safe metadata"
+                                                    Message="This evidence row did not publish any display-safe metadata keys."
+                                                    Glyph="i"
+                                                    Visibility="{Binding SelectedEvidenceItem.EmptyMetadataVisibility}"/>
+                                                <ItemsControl ItemsSource="{Binding SelectedEvidenceItem.MetadataEntries}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="viewModels:IncidentTimelineMetadataEntryViewModel">
+                                                            <Grid Margin="0,0,0,8"
+                                                                  ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="160"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock
+                                                                    Text="{x:Bind Key}"
+                                                                    FontWeight="SemiBold"/>
+                                                                <TextBlock
+                                                                    Grid.Column="1"
+                                                                    Text="{x:Bind Value}"
+                                                                    TextWrapping="WrapWholeWords"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </shared:PageScaffold.BodyContent>
+    </shared:PageScaffold>
+</Page>

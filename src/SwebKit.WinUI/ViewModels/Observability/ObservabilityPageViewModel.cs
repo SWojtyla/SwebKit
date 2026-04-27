@@ -330,6 +330,8 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
     public bool HasSelectedPerformanceEntry => SelectedPerformanceEntry is not null;
 
+    public bool CanInvestigateActiveResource => HasActiveResource;
+
     public bool CanSaveQuery => HasActiveResource && LogsWorkspace.CanSaveQueryDraft;
 
     public string SelectedTabLabel => GetTabLabel(SelectedTabIndex);
@@ -674,6 +676,31 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         return Task.CompletedTask;
     }
 
+    [RelayCommand(CanExecute = nameof(CanInvestigateActiveResource))]
+    private Task InvestigateActiveResourceAsync()
+    {
+        if (ActiveResource is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _navigation.NavigateTo(
+            "incident-timeline",
+            new IncidentInvestigationSeed
+            {
+                SourceArea = IncidentInvestigationSourceArea.Observability,
+                LaunchedAtUtc = DateTimeOffset.UtcNow,
+                SelectedRange = SelectedTimeRangeOption?.CreateRange() ?? TimeRange.Last24Hours,
+                EvidenceRef = new IncidentSeedEvidenceRef
+                {
+                    ResourceId = ActiveResource.ResourceInfo.ResourceId,
+                },
+                SuggestedSources = [IncidentTimelineSource.Observability],
+            });
+
+        return Task.CompletedTask;
+    }
+
     [RelayCommand]
     private Task ApplySelectedPresetAsync()
     {
@@ -854,11 +881,13 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     partial void OnActiveResourceChanged(ObservabilityResourceItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasActiveResource));
+        OnPropertyChanged(nameof(CanInvestigateActiveResource));
         OnPropertyChanged(nameof(CanSaveQuery));
         OnPropertyChanged(nameof(ResourceWorkspaceVisibility));
         OnPropertyChanged(nameof(EmptyStateVisibility));
         OnPropertyChanged(nameof(ActiveResourceTitle));
         OnPropertyChanged(nameof(ActiveResourceSubtitle));
+        InvestigateActiveResourceCommand.NotifyCanExecuteChanged();
         RefreshConnectionSummary();
     }
 

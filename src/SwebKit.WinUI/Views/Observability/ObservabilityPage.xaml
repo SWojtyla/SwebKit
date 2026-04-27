@@ -53,6 +53,10 @@
                                 Content="Refresh tab"
                                 Command="{Binding RefreshCommand}"
                                 IsEnabled="{Binding HasActiveResource}"/>
+                            <Button
+                                Content="Investigate"
+                                Command="{Binding InvestigateActiveResourceCommand}"
+                                IsEnabled="{Binding CanInvestigateActiveResource}"/>
                         </StackPanel>
                     </Grid>
 
@@ -289,7 +293,7 @@
                                     Text="Activate a resource to open the native Observability tabs"
                                     Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                                 <TextBlock
-                                    Text="This bounded baseline keeps resource discovery, provider activation, and the five tab shells native to WinUI. Monaco and the broader chart parity wave are still deferred, but the selected-operation performance trend now renders natively."
+                                    Text="This native workspace keeps discovery, provider activation, overview analysis, logs, failures, performance, and availability in one WinUI surface. Advanced logs remains text-first, while overview trends, deployment comparison, SLO status, dimension pivots, and the availability heatmap now render natively."
                                     Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                     TextWrapping="WrapWholeWords"/>
                                 <Button
@@ -1073,6 +1077,7 @@
                                                     <TextBlock Text="Advanced KQL"
                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                                                     <TextBox Text="{Binding LogsWorkspace.AdvancedQueryText, Mode=TwoWay}"
+                                                             KeyDown="OnAdvancedQueryTextBoxKeyDown"
                                                              AcceptsReturn="True"
                                                              TextWrapping="NoWrap"
                                                              FontFamily="Cascadia Mono"
@@ -1217,10 +1222,10 @@
                                                     <TextBlock Text="{Binding MaxRowsSummary}"
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="The current logs experience is intentionally native and text-first. Monaco is deferred until the shared editor host lands for multiple areas."
+                                                    <TextBlock Text="The current logs experience stays native and text-first. Press Ctrl+Enter to run the current KQL, or use presets and saved queries for repeat workflows while Monaco remains deferred to a later shared editor host wave."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="Overview now includes native request and failure charts, while the remaining Availability heatmap parity and broader LiveCharts work continue beyond the current trend and summary slices."
+                                                    <TextBlock Text="Overview and availability now render native request, failure, bar-chart, and hourly heatmap visuals without returning to the MAUI host."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
                                                 </StackPanel>

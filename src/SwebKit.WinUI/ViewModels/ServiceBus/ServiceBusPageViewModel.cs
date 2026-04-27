@@ -25,6 +25,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
     private readonly ScheduledMessageRepository _scheduledMessageRepository;
     private readonly UiStateRepository _uiState;
     private readonly OperatorWorkspaceService _workspaceService;
+    private readonly IShellNavigationService _navigation;
     private CancellationTokenSource _loadCts = new();
     private bool _loaded;
 
@@ -75,6 +76,8 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         ActiveTab.SelectedMessage?.SequenceNumber is not null &&
         !IsBusy;
 
+    public bool CanInvestigateActiveMessage => ActiveTab is { IsScheduled: false, HasSelectedMessage: true };
+
     public IReadOnlyList<SbMessageTemplate> MessageTemplates => _appState.MessageTemplates;
 
     public ServiceBusPageViewModel(
@@ -83,7 +86,8 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         IServiceBusNamespaceBootstrapper bootstrapper,
         ScheduledMessageRepository scheduledMessageRepository,
         UiStateRepository uiState,
-        OperatorWorkspaceService workspaceService)
+        OperatorWorkspaceService workspaceService,
+        IShellNavigationService navigation)
     {
         _appState = appState;
         _credentialStore = credentialStore;
@@ -91,6 +95,7 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         _scheduledMessageRepository = scheduledMessageRepository;
         _uiState = uiState;
         _workspaceService = workspaceService;
+        _navigation = navigation;
 
         _workspaceService.RegisterRestoreHandler("service-bus", RestoreWorkspaceAsync);
 
@@ -291,9 +296,11 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         OnPropertyChanged(nameof(CanSendActiveMessage));
         OnPropertyChanged(nameof(CanResubmitSelectedDeadLetter));
         OnPropertyChanged(nameof(CanCompleteSelectedDeadLetter));
+        OnPropertyChanged(nameof(CanInvestigateActiveMessage));
         LoadMoreActiveTabCommand.NotifyCanExecuteChanged();
         ResubmitSelectedDeadLetterCommand.NotifyCanExecuteChanged();
         CompleteSelectedDeadLetterCommand.NotifyCanExecuteChanged();
+        InvestigateActiveMessageCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnActiveTabChanging(ServiceBusTabViewModel? oldValue, ServiceBusTabViewModel? newValue)
@@ -323,9 +330,38 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         OnPropertyChanged(nameof(CanSendActiveMessage));
         OnPropertyChanged(nameof(CanResubmitSelectedDeadLetter));
         OnPropertyChanged(nameof(CanCompleteSelectedDeadLetter));
+        OnPropertyChanged(nameof(CanInvestigateActiveMessage));
         LoadMoreActiveTabCommand.NotifyCanExecuteChanged();
         ResubmitSelectedDeadLetterCommand.NotifyCanExecuteChanged();
         CompleteSelectedDeadLetterCommand.NotifyCanExecuteChanged();
+        InvestigateActiveMessageCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInvestigateActiveMessage))]
+    private Task InvestigateActiveMessageAsync()
+    {
+        if (ActiveTab is not { IsScheduled: false, SelectedMessage: { } selectedMessage })
+        {
+            return Task.CompletedTask;
+        }
+
+        _navigation.NavigateTo(
+            "incident-timeline",
+            new IncidentInvestigationSeed
+            {
+                SourceArea = IncidentInvestigationSourceArea.ServiceBus,
+                LaunchedAtUtc = DateTimeOffset.UtcNow,
+                SelectedRange = TimeRange.LastHour,
+                EvidenceRef = new IncidentSeedEvidenceRef
+                {
+                    EntityPath = ActiveTab.EntityPath,
+                    MessageId = selectedMessage.MessageId,
+                    CorrelationId = selectedMessage.CorrelationId,
+                },
+                SuggestedSources = [IncidentTimelineSource.ServiceBus],
+            });
+
+        return Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -1386,9 +1422,11 @@ public sealed partial class ServiceBusPageViewModel : ObservableObject, IAsyncDi
         OnPropertyChanged(nameof(CanSendActiveMessage));
         OnPropertyChanged(nameof(CanResubmitSelectedDeadLetter));
         OnPropertyChanged(nameof(CanCompleteSelectedDeadLetter));
+        OnPropertyChanged(nameof(CanInvestigateActiveMessage));
         LoadMoreActiveTabCommand.NotifyCanExecuteChanged();
         ResubmitSelectedDeadLetterCommand.NotifyCanExecuteChanged();
         CompleteSelectedDeadLetterCommand.NotifyCanExecuteChanged();
+        InvestigateActiveMessageCommand.NotifyCanExecuteChanged();
     }
 
     private IServiceBusClient ResolveReplayTargetClient(Guid? targetNamespaceId)

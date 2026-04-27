@@ -66,6 +66,24 @@ public sealed class ObservabilityPageViewModelTests
         Assert.InRange(afterAvailability, 99.6, 99.8);
     }
 
+    [Fact]
+    public async Task InvestigateActiveResourceAsync_NavigatesWithObservabilitySeed()
+    {
+        using var _ = new AppDataSandbox();
+        var harness = CreateHarness();
+
+        await harness.ViewModel.LoadAsync();
+        await harness.ViewModel.ActivateSelectedResourceCommand.ExecuteAsync(null);
+
+        await harness.ViewModel.InvestigateActiveResourceCommand.ExecuteAsync(null);
+
+        Assert.Equal("incident-timeline", harness.Navigation.CurrentArea);
+        var seed = Assert.IsType<IncidentInvestigationSeed>(harness.Navigation.LastParameter);
+        Assert.Equal(IncidentInvestigationSourceArea.Observability, seed.SourceArea);
+        Assert.Equal("/subscriptions/sub/resourceGroups/rg/providers/microsoft.insights/components/prod-ai", seed.EvidenceRef?.ResourceId);
+        Assert.Equal([IncidentTimelineSource.Observability], seed.SuggestedSources);
+    }
+
     private static ObservabilityPageHarness CreateHarness()
     {
         var profileRepository = new ProfileRepository();
@@ -116,7 +134,7 @@ public sealed class ObservabilityPageViewModelTests
             workspaceService,
             NullLogger<ObservabilityPageViewModel>.Instance);
 
-        return new ObservabilityPageHarness(viewModel, releaseRepository, explainer);
+        return new ObservabilityPageHarness(viewModel, releaseRepository, explainer, navigation);
     }
 
     private static void SeedReleaseRepository(ReleaseRepository releaseRepository)
@@ -175,7 +193,8 @@ public sealed class ObservabilityPageViewModelTests
     private sealed record ObservabilityPageHarness(
         ObservabilityPageViewModel ViewModel,
         ReleaseRepository ReleaseRepository,
-        TestObservabilityExplainerService Explainer);
+        TestObservabilityExplainerService Explainer,
+        TestShellNavigationService Navigation);
 
     private sealed class TestObservabilityDiscovery : IObservabilityResourceDiscovery
     {
@@ -336,11 +355,14 @@ public sealed class ObservabilityPageViewModelTests
     {
         public string? CurrentArea { get; private set; }
 
+        public object? LastParameter { get; private set; }
+
         public event Action? NavigationChanged;
 
         public void NavigateTo(string area, object? parameter = null)
         {
             CurrentArea = area;
+            LastParameter = parameter;
             NavigationChanged?.Invoke();
         }
     }

@@ -268,6 +268,8 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ? "Stage progression appears here after run activity loads."
         : ActivityRuns[0].StageSummary;
 
+    public bool CanInvestigateSelectedPipeline => SelectedPipeline is not null && SelectedProject is not null;
+
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility WorkspaceVisibility => IsConfigured && !HasConfigurationIssue && !ShowReadinessState && HasProjects ? Visibility.Visible : Visibility.Collapsed;
@@ -337,6 +339,33 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
     private Task OpenSettingsAsync()
     {
         _navigation.NavigateTo("settings", new SettingsNavigationRequest(SettingsSections.DevOps));
+        return Task.CompletedTask;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInvestigateSelectedPipeline))]
+    private Task InvestigateSelectedPipelineAsync()
+    {
+        if (SelectedPipeline is null || SelectedProject is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _navigation.NavigateTo(
+            "incident-timeline",
+            new IncidentInvestigationSeed
+            {
+                SourceArea = IncidentInvestigationSourceArea.Pipelines,
+                LaunchedAtUtc = DateTimeOffset.UtcNow,
+                SelectedRange = TimeRange.LastHour,
+                EvidenceRef = new IncidentSeedEvidenceRef
+                {
+                    PipelineId = SelectedPipeline.Id,
+                    ProjectName = SelectedProject.Name,
+                    RunDisplayName = SelectedPipeline.Name,
+                },
+                SuggestedSources = [IncidentTimelineSource.Releases],
+            });
+
         return Task.CompletedTask;
     }
 
@@ -1156,6 +1185,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(SelectedPipelineStatusText));
         OnPropertyChanged(nameof(SelectedPipelineRunSummary));
         OnPropertyChanged(nameof(SelectedPipelineStageSummary));
+        OnPropertyChanged(nameof(CanInvestigateSelectedPipeline));
         OnPropertyChanged(nameof(ErrorVisibility));
         OnPropertyChanged(nameof(WorkspaceVisibility));
         OnPropertyChanged(nameof(SelectedPipelineDetailVisibility));
@@ -1173,6 +1203,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         OnPropertyChanged(nameof(ApprovalActionVisibility));
         OnPropertyChanged(nameof(ApprovalActionProdWarningVisibility));
         OnPropertyChanged(nameof(ApprovalActionErrorVisibility));
+        InvestigateSelectedPipelineCommand.NotifyCanExecuteChanged();
     }
 
     private void ClearReadinessState()

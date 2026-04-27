@@ -116,4 +116,22 @@ See `blazor-expert.agent.md` and `dotnet-expert.agent.md` → "Before starting w
 
 ---
 
+## AW-11 — WinUI `dotnet test` used as an inner-loop check
+
+**Symptom:** A small WinUI change triggers a multi-minute `dotnet test tests/SwebKit.WinUI.Tests/SwebKit.WinUI.Tests.csproj ...` run, even when the defect is clearly local to XAML, bindings, or one view-model. Filtered tests still feel slow enough to stall the implementation loop.
+
+**Cause:** The WinUI test project pays for WinUI app/test compilation and Windows test-host startup before any filtered test executes. That makes raw `dotnet test` the wrong inner-loop tool for most WinUI edits.
+
+**Fix:** For WinUI inner-loop validation, use this order:
+
+1. `get_errors` on the touched files.
+2. `build-winui` once the local slice is coherent.
+3. Only after `build-winui` is green, run a final focused `dotnet test ... --filter "<exact tests>" --no-build` pass if the change actually needs unit-test execution.
+
+Do not trigger raw WinUI `dotnet test` in the middle of a patching/debugging loop. If only test harnesses changed, prefer compile diagnostics or a compile-only test-project build before executing tests.
+
+If a previous WinUI test run leaves `SwebKit.WinUI.Tests.dll` locked by `testhost`, stop the stale `testhost` before retrying any build or final test pass. Do not stack another validation command on top of a still-running or half-exited WinUI test host.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md) · [dotnet-csharp.md](dotnet-csharp.md)_

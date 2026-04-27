@@ -18,7 +18,7 @@
   - Advanced -> Guided keeps the existing guided draft (no reverse KQL parsing)
 - Saved queries persisted to `profiles.json`
 - Logs mode preference and guided draft are persisted under `ObservabilityConfig`
-- The WinUI migration host now keeps the Logs experience native and text-first while supporting preset plus saved-query run/save/delete flows over the shared `ObservabilityConfig`; the failures detail pane can also launch a focused trace query from the selected exception sample. Monaco remains deferred to the shared editor host wave
+- The WinUI migration host now keeps the Logs experience native and text-first while supporting preset plus saved-query run/save/delete flows over the shared `ObservabilityConfig`; the failures detail pane can also launch a focused trace query from the selected exception sample, and the advanced KQL editor now mirrors the MAUI Ctrl+Enter run-query shortcut. Monaco remains deferred to the shared editor host wave
 - The WinUI migration host now keeps logs or editor query state in a dedicated child workspace view-model so route-level discovery, tab activation, and readiness-to-settings behavior can evolve without pulling the query surface back into the page seam
 - The WinUI migration host now also uses the shared compact scaffold/context band pattern so discovery, provider, and time-range controls stay visible while the resource list and active analysis tab reach the viewport earlier
 - Full demo mode with realistic in-memory data (no Azure connection required)

@@ -746,6 +746,30 @@ public sealed class ServiceBusPageViewModelTests
         Assert.Single(harness.ViewModel.Tabs);
     }
 
+    [Fact]
+    public async Task InvestigateActiveMessageAsync_NavigatesWithServiceBusSeed()
+    {
+        var harness = CreateHarness();
+        var tab = CreateMessageTab(new UiStateRepository());
+        tab.SelectedMessage = new SbMessage
+        {
+            MessageId = "msg-123",
+            CorrelationId = "corr-456",
+        };
+
+        harness.ViewModel.ActiveTab = tab;
+
+        await harness.ViewModel.InvestigateActiveMessageCommand.ExecuteAsync(null);
+
+        Assert.Equal("incident-timeline", harness.Navigation.CurrentArea);
+        var seed = Assert.IsType<IncidentInvestigationSeed>(harness.Navigation.LastParameter);
+        Assert.Equal(IncidentInvestigationSourceArea.ServiceBus, seed.SourceArea);
+        Assert.Equal("orders", seed.EvidenceRef?.EntityPath);
+        Assert.Equal("msg-123", seed.EvidenceRef?.MessageId);
+        Assert.Equal("corr-456", seed.EvidenceRef?.CorrelationId);
+        Assert.Equal([IncidentTimelineSource.ServiceBus], seed.SuggestedSources);
+    }
+
     private static ServiceBusPageHarness CreateHarness(IServiceBusNamespaceBootstrapper? bootstrapper = null)
     {
         var profileRepository = new ProfileRepository();
@@ -764,7 +788,8 @@ public sealed class ServiceBusPageViewModelTests
             bootstrapper ?? new TestServiceBusNamespaceBootstrapper(),
             scheduledRepository,
             uiStateRepository,
-            workspaceService);
+            workspaceService,
+            navigation);
 
         return new ServiceBusPageHarness(viewModel, workspaceService, navigation, appState);
     }
@@ -870,11 +895,14 @@ public sealed class ServiceBusPageViewModelTests
     {
         public string? CurrentArea { get; set; } = "service-bus";
 
+        public object? LastParameter { get; private set; }
+
         public event Action? NavigationChanged;
 
         public void NavigateTo(string area, object? parameter = null)
         {
             CurrentArea = area;
+            LastParameter = parameter;
             NavigationChanged?.Invoke();
         }
     }

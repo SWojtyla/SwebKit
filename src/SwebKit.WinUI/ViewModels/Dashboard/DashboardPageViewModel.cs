@@ -485,12 +485,9 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
         var visibleAttentionAreas = report.AttentionAreas
             .Where(area => IsVisibleOnWinUiDashboard(area.AreaKey))
             .ToList();
-        var excludedAttentionCount = report.AttentionAreas.Count - visibleAttentionAreas.Count;
 
-        ReadinessSummary = BuildReadinessSummary(report, visibleAttentionAreas.Count, excludedAttentionCount);
-        HealthyReadinessMessage = excludedAttentionCount > 0 && visibleAttentionAreas.Count == 0
-            ? "Incident Timeline remains intentionally outside the current WinUI cutover plan, so this dashboard only tracks the in-scope WinUI migration areas."
-            : "The dashboard is not currently tracking any setup or readiness blockers.";
+        ReadinessSummary = BuildReadinessSummary(report, visibleAttentionAreas.Count);
+        HealthyReadinessMessage = "The dashboard is not currently tracking any setup or readiness blockers.";
         ReadinessLastUpdatedText = report.LastProbeCompletedAt is null
             ? "No live readiness check has been recorded yet."
             : $"Live check completed {report.LastProbeCompletedAt.Value.LocalDateTime:g}.";
@@ -802,30 +799,24 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
         SettingsSections.DevOps => "Open Azure DevOps settings",
         SettingsSections.Storage => "Open Storage settings",
         SettingsSections.Observability => "Open Observability settings",
+        SettingsSections.IncidentTimeline => "Open Incident Timeline settings",
         _ => "Open Settings"
     };
 
     private static string BuildReadinessSummary(
         ConfigurationHealthReport report,
-        int visibleAttentionAreaCount,
-        int excludedAttentionCount)
+        int visibleAttentionAreaCount)
     {
-        if (excludedAttentionCount == 0)
+        if (visibleAttentionAreaCount == 0)
         {
             return report.Summary;
         }
 
-        if (visibleAttentionAreaCount == 0)
-        {
-            return "Core WinUI cutover areas are configured. Incident Timeline remains outside the current WinUI migration scope.";
-        }
-
         var areaLabel = visibleAttentionAreaCount == 1 ? "area" : "areas";
-        return $"{visibleAttentionAreaCount} WinUI cutover {areaLabel} still need attention. Incident Timeline remains outside the current WinUI migration scope.";
+        return $"{visibleAttentionAreaCount} WinUI cutover {areaLabel} still need attention.";
     }
 
-    private static bool IsVisibleOnWinUiDashboard(string areaKey) =>
-        !string.Equals(areaKey, "incident-timeline", StringComparison.OrdinalIgnoreCase);
+    private static bool IsVisibleOnWinUiDashboard(string areaKey) => true;
 
     private static async Task<long> SumDeadLetterAsync(IServiceBusClient client, CancellationToken ct)
     {

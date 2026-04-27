@@ -6,7 +6,7 @@ title: "Test Plan - winui3-observability-parity"
 owner: ""
 status: "Done"
 created: "2026-04-25"
-updated: "2026-04-26"
+updated: "2026-04-27"
 
 ---
 
@@ -24,7 +24,7 @@ Validate that the Observability workspace reaches the agreed native parity slice
 
 1. Scenario: missing Azure credentials are survivable. Expected result: Observability shows readiness guidance and opens the correct native Settings repair surface.
 2. Scenario: operators can complete the richer overview workflow natively. Expected result: deployment comparison, SLO status, and cloud-role or operation pivots render against the active resource and recorded release anchors.
-3. Scenario: the existing native query workflow stays stable while overview parity expands. Expected result: overview changes do not regress discovery, tab activation, saved queries, logs mode state, or the extracted logs-workspace seam.
+3. Scenario: the existing native query workflow stays stable while overview parity expands. Expected result: overview changes do not regress discovery, tab activation, saved queries, logs mode state, the extracted logs-workspace seam, or the Ctrl+Enter run-query shortcut in advanced mode.
 
 ## Automated coverage
 
@@ -42,6 +42,7 @@ Validate that the Observability workspace reaches the agreed native parity slice
 - Check: readiness repair loop. Steps: trigger missing-credential behavior, open Settings from the readiness action, repair the environment, and reload Observability.
 - Check: overview parity. Steps: activate a representative Application Insights resource, confirm cloud-role or operation pivots render, select a recorded release anchor, and verify deployment comparison plus configured SLO status.
 - Check: logs regression. Steps: switch between guided and advanced query modes after using the overview panels and confirm the native logs workflow still behaves correctly.
+- Check: advanced-query shortcut parity. Steps: activate a resource, switch Logs to Advanced mode, press Ctrl+Enter inside the KQL editor, and confirm the current query runs without moving focus to the Run button.
 - Check: layout parity. Steps: open the native Observability route and verify the compact context band keeps discovery, provider, and time-range controls visible while the resource list and active analysis tab appear without a tall preamble.
 
 ## Regression risks & mitigations
@@ -57,7 +58,7 @@ Validate that the Observability workspace reaches the agreed native parity slice
 
 ## Validation status
 
-- Automated: focused Problems checks report no errors on the touched Observability page after the compact layout follow-up, and `build-winui` passed on the current repo state. No focused test rerun was needed for this XAML-only sweep.
+- Automated: `build-winui` passed on the current repo state after the advanced-query shortcut and copy-alignment follow-up. No focused test rerun was needed for this page-local WinUI shortcut sweep.
 - Manual: Final cutover review can still exercise the shipped native baseline, but no remaining manual check blocks close-out of this slice.
 
 ## Sign-off

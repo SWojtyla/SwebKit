@@ -8,14 +8,14 @@ state: "Done"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-25"
-last_updated: "2026-04-26"
+last_updated: "2026-04-27"
 
 ---
 
 ## Quick summary
 
 The native Observability route now carries the richer overview analysis surface that MAUI already exposed: cloud-role and operation pivots, deployment comparison anchored to recorded releases, and SLO status for configured targets. The existing native logs or query baseline stays in place; the remaining work is seam reduction and live validation rather than a missing editor path.
-The first route-local seam reduction slice is now in place as well: logs query or editor state lives in a dedicated child workspace view-model, while discovery, tab refresh, and readiness-to-settings behavior stay on the page VM. Any further seam split and live Azure validation are deferred to future follow-up rather than treated as blockers for this delivered slice.
+The first route-local seam reduction slice is now in place as well: logs query or editor state lives in a dedicated child workspace view-model, while discovery, tab refresh, and readiness-to-settings behavior stay on the page VM. A small follow-up also restored MAUI-style Ctrl+Enter execution for the native advanced query editor and cleaned stale copy that still described the shipped availability heatmap and overview visuals as deferred. Any further seam split and live Azure validation are deferred to future follow-up rather than treated as blockers for this delivered slice.
 
 **Jira:** not linked
 
@@ -43,6 +43,7 @@ The first route-local seam reduction slice is now in place as well: logs query o
 - Added focused WinUI coverage for the richer overview slice and updated the existing readiness tests for the new release-repository dependency.
 - Extracted logs mode, preset, saved-query, and guided-draft state into `ObservabilityLogsWorkspaceViewModel` so the page VM no longer owns both query editing and route-level discovery or tab orchestration.
 - Moved the top-level discovery, provider, and time-range card into the shared compact scaffold context band so the resource list and active analysis tab reach the viewport earlier without dropping route context.
+- Added MAUI-style Ctrl+Enter execution to the native advanced KQL editor and removed stale WinUI notes that still implied the native availability heatmap and overview visuals were deferred.
 
 ## Remaining
 
@@ -64,7 +65,7 @@ The first route-local seam reduction slice is now in place as well: logs query o
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: focused Problems checks reported no errors on the touched Observability page after the compact layout follow-up, and `build-winui` passed on the current repo state. Remaining live Azure validation is still future follow-up rather than a blocker for this closed slice.
+- Validation status: `build-winui` passed again after the advanced-query shortcut follow-up. Remaining live Azure validation is still future follow-up rather than a blocker for this closed slice.
 
 ## Notes
 

@@ -6,6 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:SwebKit.Core.Models"
     xmlns:shared="using:SwebKit.WinUI.Controls.Shared"
+    xmlns:viewModels="using:SwebKit.WinUI.ViewModels.Settings"
     Background="{ThemeResource SwebKitPageBackgroundBrush}">
 
     <shared:PageScaffold
@@ -649,9 +650,155 @@
 
                         <StackPanel Spacing="16"
                                     Visibility="{x:Bind ViewModel.IncidentTimelineVisibility, Mode=OneWay}">
-                            <shared:StateView Title="Incident Timeline remains deferred"
-                                              Message="The current settings parity wave makes the omission visible instead of silent. Incident Timeline configuration still belongs to a separate migration slice and is not part of the native settings close-out here."
-                                              Glyph="i"/>
+                            <shared:SectionCard Title="Evidence mappings"
+                                                Description="Define which App Insights roles, Service Bus entities, and Azure DevOps pipelines belong to a workload. Incident Timeline only loads non-AKS evidence when those mappings exist.">
+                                <shared:SectionCard.BodyContent>
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="Sources marked Not configured still need their base Service Bus, DevOps, or Observability settings on the other tabs."
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                   TextWrapping="Wrap"/>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="12">
+                                            <Button Content="Add mapping"
+                                                    Command="{x:Bind ViewModel.AddIncidentTimelineMappingCommand}"
+                                                    Style="{StaticResource AccentButtonStyle}"/>
+                                            <Button Content="Add mapping for current incident scope"
+                                                    Command="{x:Bind ViewModel.AddSuggestedIncidentTimelineMappingCommand}"
+                                                    IsEnabled="{x:Bind ViewModel.CanAddSuggestedIncidentTimelineMapping, Mode=OneWay}"
+                                                    Visibility="{x:Bind ViewModel.IncidentTimelineSuggestedScopeVisibility, Mode=OneWay}"/>
+                                        </StackPanel>
+
+                                        <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                                Visibility="{x:Bind ViewModel.IncidentTimelineSuggestedScopeVisibility, Mode=OneWay}">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="Current incident scope"
+                                                           Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                <TextBlock Text="{x:Bind ViewModel.IncidentTimelineSuggestedScopeText, Mode=OneWay}"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind ViewModel.IncidentTimelineSuggestedStatusText, Mode=OneWay}"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                           TextWrapping="Wrap"
+                                                           Visibility="{x:Bind ViewModel.IncidentTimelineSuggestedStatusVisibility, Mode=OneWay}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <shared:StateView Title="No workload mappings yet"
+                                                          Message="Add at least one mapping so Incident Timeline can explain which App Insights, Service Bus, and release evidence belongs to a workload."
+                                                          Glyph="i"
+                                                          Visibility="{x:Bind ViewModel.IncidentTimelineMappingsEmptyVisibility, Mode=OneWay}"/>
+
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.IncidentTimelineMappings}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="viewModels:IncidentTimelineMappingEditorItem">
+                                                    <Border Style="{StaticResource SwebKitInsetCardStyle}"
+                                                            Margin="0,0,0,12">
+                                                        <StackPanel Spacing="12">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0"
+                                                                            Spacing="4">
+                                                                    <TextBlock Text="{x:Bind Title}"
+                                                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                                                    <TextBlock Text="{x:Bind ScopeLabel}"
+                                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                                               Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
+                                                                               TextWrapping="Wrap"/>
+                                                                </StackPanel>
+
+                                                                <Button Grid.Column="1"
+                                                                        Content="Remove"
+                                                                        Command="{Binding ViewModel.RemoveIncidentTimelineMappingCommand, ElementName=SettingsRootPage}"
+                                                                        CommandParameter="{Binding}"/>
+                                                            </Grid>
+
+                                                            <Grid ColumnSpacing="12"
+                                                                  RowSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBox Header="Namespace"
+                                                                         Text="{Binding Namespace, Mode=TwoWay}"/>
+                                                                <ComboBox Grid.Column="1"
+                                                                          Header="Workload kind"
+                                                                          ItemsSource="{Binding ViewModel.IncidentTimelineWorkloadKinds, ElementName=SettingsRootPage}"
+                                                                          SelectedItem="{Binding WorkloadKind, Mode=TwoWay}"/>
+                                                                <TextBox Grid.Column="2"
+                                                                         Header="Workload name"
+                                                                         Text="{Binding WorkloadName, Mode=TwoWay}"/>
+                                                                <TextBox Grid.Column="3"
+                                                                         Header="Display name"
+                                                                         Text="{Binding DisplayName, Mode=TwoWay}"/>
+                                                            </Grid>
+
+                                                            <TextBox Header="App Insights resource ID"
+                                                                     Text="{Binding ObservabilityResourceId, Mode=TwoWay}"/>
+
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <TextBox Header="Cloud role names"
+                                                                         AcceptsReturn="True"
+                                                                         MinHeight="100"
+                                                                         TextWrapping="Wrap"
+                                                                         Text="{Binding CloudRoleNamesText, Mode=TwoWay}"
+                                                                         PlaceholderText="One role per line&#x0a;phonotif-api"/>
+
+                                                                <TextBox Grid.Column="1"
+                                                                         Header="Operation names"
+                                                                         AcceptsReturn="True"
+                                                                         MinHeight="100"
+                                                                         TextWrapping="Wrap"
+                                                                         Text="{Binding OperationNamesText, Mode=TwoWay}"
+                                                                         PlaceholderText="One operation per line&#x0a;POST /notifications"/>
+                                                            </Grid>
+
+                                                            <TextBox Header="Service Bus entity bindings"
+                                                                     AcceptsReturn="True"
+                                                                     MinHeight="100"
+                                                                     TextWrapping="Wrap"
+                                                                     Text="{Binding ServiceBusEntitiesText, Mode=TwoWay}"
+                                                                     PlaceholderText="One binding per line in the format namespaceId|entityPath|alias&#x0a;00000000-0000-0000-0000-000000000000|orders/deadletter|Order DLQ"/>
+
+                                                            <TextBox Header="Azure DevOps pipeline bindings"
+                                                                     AcceptsReturn="True"
+                                                                     MinHeight="100"
+                                                                     TextWrapping="Wrap"
+                                                                     Text="{Binding DevOpsPipelinesText, Mode=TwoWay}"
+                                                                     PlaceholderText="One pipeline per line in the format projectName|pipelineId|alias&#x0a;platform-services|101|phonotif-api-ci-cd"/>
+
+                                                            <TextBox Header="Azure DevOps environment names"
+                                                                     AcceptsReturn="True"
+                                                                     MinHeight="80"
+                                                                     TextWrapping="Wrap"
+                                                                     Text="{Binding DevOpsEnvironmentNamesText, Mode=TwoWay}"
+                                                                     PlaceholderText="One environment per line&#x0a;Production"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Button Content="Save Incident Timeline settings"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                HorizontalAlignment="Left"
+                                                Command="{x:Bind ViewModel.SaveIncidentTimelineCommand}"/>
+                                    </StackPanel>
+                                </shared:SectionCard.BodyContent>
+                            </shared:SectionCard>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
