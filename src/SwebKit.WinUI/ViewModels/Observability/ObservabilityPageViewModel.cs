@@ -269,7 +269,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
     public partial string DependencyHeadline { get; set; } = "Dependency health will appear after the first overview refresh.";
 
     [ObservableProperty]
-    public partial string BreakdownHeadline { get; set; } = "Custom dimension pivots are intentionally deferred in this baseline.";
+    public partial string BreakdownHeadline { get; set; } = "Cloud-role and operation pivots will appear after the first overview refresh.";
 
     [ObservableProperty]
     public partial string DeploymentComparisonHeadline { get; set; } = "Compare telemetry before and after a recorded deployment.";
@@ -710,7 +710,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return Task.CompletedTask;
         }
 
-        ActiveTabStatusText = $"Loaded preset '{presetName}' into the advanced query editor baseline.";
+        ActiveTabStatusText = $"Loaded preset '{presetName}' into the advanced query editor.";
         return PublishSnapshotAsync(recordRecent: false);
     }
 
@@ -759,7 +759,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         config.SavedQueries.Add(savedQuery);
         LogsWorkspace.LoadSavedQueries(config);
         LogsWorkspace.SaveQueryName = string.Empty;
-        ActiveTabStatusText = $"Saved query '{savedQuery.Name}' in the Observability profile baseline.";
+        ActiveTabStatusText = $"Saved query '{savedQuery.Name}' in the Observability profile.";
 
         var persisted = await _appState.SaveConfigAsync();
         if (!persisted && !string.IsNullOrWhiteSpace(_appState.ProfilePersistenceBlockedMessage))
@@ -780,7 +780,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
             return Task.CompletedTask;
         }
 
-        ActiveTabStatusText = $"Running saved query '{savedQueryName}' from the Observability profile baseline.";
+        ActiveTabStatusText = $"Running saved query '{savedQueryName}' from the Observability profile.";
         SelectedTabIndex = 3;
         return RefreshCurrentTabAsync(force: true);
     }
@@ -803,7 +803,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
         }
 
         LogsWorkspace.LoadSavedQueries(config);
-        ActiveTabStatusText = $"Deleted saved query '{savedQuery.Name}' from the Observability profile baseline.";
+        ActiveTabStatusText = $"Deleted saved query '{savedQuery.Name}' from the Observability profile.";
 
         var persisted = await _appState.SaveConfigAsync();
         if (!persisted && !string.IsNullOrWhiteSpace(_appState.ProfilePersistenceBlockedMessage))
@@ -1998,7 +1998,7 @@ public sealed partial class ObservabilityPageViewModel : ObservableObject, IAsyn
 
         if (HasResources)
         {
-            ConnectionSummary = $"{Resources.Count:N0} resource(s) discovered. Activate one to query telemetry in the native WinUI baseline.";
+            ConnectionSummary = $"{Resources.Count:N0} resource(s) discovered. Activate one to query telemetry in the native workspace.";
             return;
         }
 

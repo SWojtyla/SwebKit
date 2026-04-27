@@ -12,7 +12,7 @@
 
     <shared:PageScaffold
         Title="Observability"
-        Subtitle="Discover Application Insights resources, activate a provider, and inspect overview, failures, performance, logs, and availability from one native WinUI baseline."
+        Subtitle="Discover Application Insights resources, activate a provider, and inspect overview, failures, performance, logs, and availability from one native WinUI workspace."
         IsHeaderCompact="True">
         <shared:PageScaffold.ContextContent>
             <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
@@ -1217,15 +1217,15 @@
                                                     BorderThickness="1"
                                                     Padding="12">
                                                 <StackPanel Spacing="10">
-                                                    <TextBlock Text="Baseline notes"
+                                                    <TextBlock Text="Workspace notes"
                                                                Style="{StaticResource SwebKitSectionHeaderTextBlockStyle}"/>
                                                     <TextBlock Text="{Binding MaxRowsSummary}"
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="The current logs experience stays native and text-first. Press Ctrl+Enter to run the current KQL, or use presets and saved queries for repeat workflows while Monaco remains deferred to a later shared editor host wave."
+                                                    <TextBlock Text="The logs experience stays native and text-first. Press Ctrl+Enter to run the current KQL, or use presets and saved queries for repeat workflows in the advanced editor."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
-                                                    <TextBlock Text="Overview and availability now render native request, failure, bar-chart, and hourly heatmap visuals without returning to the MAUI host."
+                                                    <TextBlock Text="Overview and availability render native request, failure, bar-chart, and hourly heatmap visuals in the current workspace."
                                                                Foreground="{ThemeResource SwebKitPageSubtitleBrush}"
                                                                TextWrapping="WrapWholeWords"/>
                                                 </StackPanel>

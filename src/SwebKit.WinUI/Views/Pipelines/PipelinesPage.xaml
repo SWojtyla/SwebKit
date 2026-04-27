@@ -11,7 +11,7 @@
 
     <shared:PageScaffold
         Title="Pipelines"
-        Subtitle="Track pipeline health, recent delivery activity, scoped releases, and pending approvals in the native workspace baseline."
+        Subtitle="Track pipeline health, recent delivery activity, scoped releases, and pending approvals in the native workspace."
         IsHeaderCompact="True">
         <shared:PageScaffold.ContextContent>
             <Border Style="{StaticResource SwebKitSurfaceCardStyle}">
@@ -82,7 +82,7 @@
                         IsOpen="{Binding ShowDemoModeState}"
                         Severity="Success"
                         Title="Demo mode"
-                        Message="This baseline is using the in-memory demo Azure DevOps client."/>
+                        Message="This workspace is using the in-memory demo Azure DevOps client."/>
 
                     <Grid ColumnSpacing="12"
                           RowSpacing="12">
@@ -816,7 +816,7 @@
                                 IsOpen="{Binding ShowApprovalsEmptyState}"
                                 Severity="Informational"
                                 Title="No pending approvals"
-                                Message="The current delivery scope has no pending approvals in this baseline."/>
+                                Message="The current delivery scope has no pending approvals."/>
 
                             <Border Grid.Row="3"
                                     Visibility="{Binding ApprovalActionVisibility}"

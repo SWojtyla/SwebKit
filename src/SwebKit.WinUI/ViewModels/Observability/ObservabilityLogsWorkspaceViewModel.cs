@@ -81,7 +81,7 @@ public sealed partial class ObservabilityLogsWorkspaceViewModel : ObservableObje
     public partial string GuidedCompiledQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string LogsResultSummary { get; set; } = "Run a query to preview logs in the native baseline.";
+    public partial string LogsResultSummary { get; set; } = "Run a query to preview logs in the native workspace.";
 
     public bool HasSavedQueries => SavedQueries.Count > 0;
 
@@ -89,15 +89,15 @@ public sealed partial class ObservabilityLogsWorkspaceViewModel : ObservableObje
 
     public bool UseGuidedLogsMode => string.Equals(SelectedLogsMode?.Key, "guided", StringComparison.OrdinalIgnoreCase);
 
-    public string SelectedPresetDescription => SelectedQueryPreset?.Description ?? "Select a preset to load a starting query into the native logs baseline.";
+    public string SelectedPresetDescription => SelectedQueryPreset?.Description ?? "Select a preset to load a starting query into the logs editor.";
 
     public string SavedQueriesSummary => !HasSavedQueries
-        ? "Saved queries are persisted in the Observability profile and can be loaded back into the advanced editor baseline."
+        ? "Saved queries are persisted in the Observability profile and can be loaded back into the advanced editor."
         : $"{SavedQueries.Count:N0} saved quer{(SavedQueries.Count == 1 ? "y" : "ies")} available in this profile.";
 
     public string LogsModeDescription => UseGuidedLogsMode
         ? "Guided mode compiles a bounded query draft with the shared KQL compiler seam."
-        : "Advanced mode runs raw KQL in the native text editor baseline; Monaco is deferred to a later shared editor wave.";
+        : "Advanced mode runs raw KQL in the native text editor for direct investigation workflows.";
 
     public bool ShowSavedQueriesEmptyState => !HasSavedQueries;
 
@@ -285,7 +285,7 @@ public sealed partial class ObservabilityLogsWorkspaceViewModel : ObservableObje
             : AdvancedQueryText;
 
         AdvancedQueryText = queryText;
-        GuidedCompileSummary = "Advanced mode runs the raw KQL query shown in the native editor baseline.";
+        GuidedCompileSummary = "Advanced mode runs the raw KQL query shown in the native editor.";
         OnPropertyChanged(nameof(GuidedCompileSummaryVisibility));
         return true;
     }
@@ -300,7 +300,7 @@ public sealed partial class ObservabilityLogsWorkspaceViewModel : ObservableObje
 
     public void ResetResultSummary()
     {
-        LogsResultSummary = "Run a query to preview logs in the native baseline.";
+        LogsResultSummary = "Run a query to preview logs in the native workspace.";
     }
 
     partial void OnSelectedQueryPresetChanged(ObservabilityQueryPresetItemViewModel? value)

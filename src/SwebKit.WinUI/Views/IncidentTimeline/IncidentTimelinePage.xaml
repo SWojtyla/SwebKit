@@ -383,7 +383,7 @@
 
                     <shared:StateView
                         Title="Refresh to load evidence"
-                        Message="Incident evidence appears after the first refresh for the selected scope. Changing filters does not auto-query in the native baseline."
+                        Message="Incident evidence appears after the first refresh for the selected scope. Changing filters keeps the current result visible until you refresh again."
                         Glyph="i"
                         Visibility="{Binding EmptyPageVisibility}"/>
 

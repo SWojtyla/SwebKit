@@ -15,9 +15,11 @@
                 Style="{StaticResource TitleTextBlockStyle}"
                 HorizontalAlignment="Center"/>
             <TextBlock
-                Text="This area will be implemented in a future phase."
+                Text="This area is not available in the current workspace. Use the left navigation to return to a supported feature."
                 Style="{StaticResource BodyTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextAlignment="Center"
+                MaxWidth="480"
                 HorizontalAlignment="Center"/>
         </StackPanel>
     </Grid>

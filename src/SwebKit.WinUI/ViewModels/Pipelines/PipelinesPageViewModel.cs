@@ -619,7 +619,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         }
         catch (Exception ex)
         {
-            HandleLoadFailure("Unable to load the native Pipelines baseline.", ex);
+            HandleLoadFailure("Unable to load the Pipelines workspace.", ex);
         }
         finally
         {
@@ -958,7 +958,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ClearAllData();
         ErrorMessage = null;
         ClearReadinessState();
-        ScopeSummary = "Azure DevOps is not configured for the native Pipelines route.";
+        ScopeSummary = "Azure DevOps is not configured for the Pipelines workspace.";
         MetricsSummary = "Configure an organization and PAT before loading project data.";
         LastRefreshLabel = detail is null ? LastRefreshLabel : detail;
         _connectionState.SetNotConfigured(AreaName);
@@ -1110,7 +1110,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
         ClearReadinessState();
         _logger.LogError(ex, "Pipelines WinUI baseline load failed.");
         ErrorMessage = ex.Message;
-        MetricsSummary = "The native Pipelines baseline hit a load failure.";
+        MetricsSummary = "The Pipelines workspace hit a load failure.";
         _connectionState.SetError(AreaName, ex.Message);
         RefreshConnectionStateSummary();
         _notifications.ShowError(message, ex.Message, ex);
@@ -1138,7 +1138,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
                 break;
             case ConnectionState.NotConfigured:
                 ConnectionStateLabel = "Not configured";
-                ConnectionSummary = "Configure an Azure DevOps organization and PAT before loading the native Pipelines route.";
+                ConnectionSummary = "Configure an Azure DevOps organization and PAT before loading the Pipelines workspace.";
                 break;
             default:
                 ConnectionStateLabel = "Unknown";
@@ -1221,7 +1221,7 @@ public sealed partial class PipelinesPageViewModel : ObservableObject, IAsyncDis
 
         if (_appState.UseDemoData)
         {
-            return $"Demo organization · {Projects.Count} project{(Projects.Count == 1 ? string.Empty : "s")} loaded for the delivery baseline.";
+            return $"Demo organization · {Projects.Count} project{(Projects.Count == 1 ? string.Empty : "s")} loaded for the delivery workspace.";
         }
 
         var pinnedProjects = _appState.Config.DevOpsConfig?.PinnedProjects ?? [];

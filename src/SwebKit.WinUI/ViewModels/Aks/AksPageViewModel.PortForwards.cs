@@ -257,7 +257,7 @@ public sealed partial class AksPageViewModel
 
         if (port < 1024)
         {
-            validationMessage = "Choose a local port above 1023 for the native baseline unless you explicitly need a privileged port.";
+            validationMessage = "Choose a local port above 1023 unless you explicitly need a privileged port.";
             return false;
         }
 

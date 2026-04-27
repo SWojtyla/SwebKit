@@ -182,8 +182,8 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
     public bool CanRefresh => !IsRefreshing;
 
     public string DashboardSubtitle => HasAttentionAreas
-        ? "Here is what needs attention before cutting over fully to the WinUI host."
-        : "Live readiness, health, pod alerts, recents, and favorites in one native WinUI route.";
+        ? "Here is what needs attention before the current workspace is fully ready."
+        : "Live readiness, health, pod alerts, recents, and favorites in one native workspace.";
 
     public string FavoritesBadgeText => $"{FavoriteItems.Count} favorite{(FavoriteItems.Count == 1 ? string.Empty : "s")}";
 
@@ -813,7 +813,8 @@ public sealed partial class DashboardPageViewModel : ObservableObject, IAsyncDis
         }
 
         var areaLabel = visibleAttentionAreaCount == 1 ? "area" : "areas";
-        return $"{visibleAttentionAreaCount} WinUI cutover {areaLabel} still need attention.";
+        var verb = visibleAttentionAreaCount == 1 ? "requires" : "require";
+        return $"{visibleAttentionAreaCount} workspace {areaLabel} {verb} attention.";
     }
 
     private static bool IsVisibleOnWinUiDashboard(string areaKey) => true;

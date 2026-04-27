@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Reflection;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
@@ -778,6 +779,8 @@ public sealed class ServiceBusPageViewModelTests
             profileRepository,
             uiStateRepository,
             new AppEventBus(NullLogger<AppEventBus>.Instance));
+        MarkInitialized(appState);
+
         var scheduledRepository = new ScheduledMessageRepository();
         var navigation = new TestShellNavigationService();
         var workspaceService = new OperatorWorkspaceService(appState, uiStateRepository, navigation, []);
@@ -792,6 +795,16 @@ public sealed class ServiceBusPageViewModelTests
             navigation);
 
         return new ServiceBusPageHarness(viewModel, workspaceService, navigation, appState);
+    }
+
+    private static void MarkInitialized(AppStateService appState)
+    {
+        var initializedField = typeof(AppStateService).GetField("<IsInitialized>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+        initializedField?.SetValue(appState, true);
+
+        var initializedTcsField = typeof(AppStateService).GetField("_initializedTcs", BindingFlags.Instance | BindingFlags.NonPublic);
+        var initializedTcs = (TaskCompletionSource?)initializedTcsField?.GetValue(appState);
+        initializedTcs?.TrySetResult();
     }
 
     private static ServiceBusTabViewModel CreateMessageTab(
