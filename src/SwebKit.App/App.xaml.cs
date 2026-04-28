@@ -50,6 +50,7 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
+        PerformanceBaselineRecorder.Record(nameof(App), "Perf app window created");
         var window = new Window(new MainPage()) { Title = "SwebKit.App" };
         _trayLifecycle.Initialize(window);
         return window;

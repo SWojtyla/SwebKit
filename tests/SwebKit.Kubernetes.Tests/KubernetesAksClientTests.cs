@@ -111,6 +111,25 @@ users:
         Assert.Empty(AksAzureAuthHelpers.BuildAksTokenScopes("   "));
     }
 
+    [Fact]
+    public void BuildCliKubeconfigArgs_UsesRequestedContextFlag()
+    {
+        var helmArgs = KubernetesAksClient.BuildCliKubeconfigArgs(
+            @"C:\temp\config",
+            "prod-aks",
+            "--kube-context");
+
+        var kubectlArgs = KubernetesAksClient.BuildCliKubeconfigArgs(
+            @"C:\temp\config",
+            "prod-aks",
+            "--context");
+
+        Assert.Contains("--kubeconfig \"C:\\temp\\config\"", helmArgs, StringComparison.Ordinal);
+        Assert.Contains("--kube-context prod-aks", helmArgs, StringComparison.Ordinal);
+        Assert.DoesNotContain("--context prod-aks", helmArgs, StringComparison.Ordinal);
+        Assert.Contains("--context prod-aks", kubectlArgs, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("https://cluster.region.azmk8s.io:443", null, true)]
     [InlineData("https://cluster.region.azmk8s.io:443", "already-token", false)]

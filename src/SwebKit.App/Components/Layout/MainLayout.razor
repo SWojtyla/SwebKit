@@ -9,6 +9,7 @@
 @inject CommandRegistry Commands
 @inject IShellErrorPresenter ShellErrors
 @inject IConnectionWarmupService ConnectionWarmup
+@inject Microsoft.Extensions.Logging.ILogger<MainLayout> Logger
 @implements IDisposable
 
 <FluentDesignTheme Mode="@CurrentDesignMode" />
@@ -89,6 +90,10 @@
     private const string LegacyThemeStorageKey = "swebkit-ui-theme";
     private const string LegacyFluentThemeStorageKey = "swebkit-theme";
 
+    private readonly System.Diagnostics.Stopwatch _shellStartupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+    private System.Diagnostics.Stopwatch? _pendingNavigationStopwatch;
+    private string? _pendingNavigationArea;
+
     private static readonly HashSet<string> SupportedThemes = new(StringComparer.OrdinalIgnoreCase)
     {
         "dark-studio-ledger",
@@ -115,13 +120,18 @@ AppState.Config.IsProduction, AppState.UseDemoData);
 
     protected override async Task OnInitializedAsync()
     {
+        var essentialsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await AppState.InitializeEssentialsAsync();
+        Logger.LogInformation("Perf shell essentials initialized in {ElapsedMs} ms",
+essentialsStopwatch.Elapsed.TotalMilliseconds);
+        PerformanceBaselineRecorder.Record(nameof(MainLayout), $"Perf shell essentials initialized in {essentialsStopwatch.Elapsed.TotalMilliseconds} ms");
         // Fire full init in background — shell renders immediately
         _ = InitializeInBackgroundAsync();
     }
 
     private async Task InitializeInBackgroundAsync()
     {
+        var backgroundInitStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             await AppState.InitializeAsync();
@@ -137,6 +147,13 @@ AppState.Config.IsProduction, AppState.UseDemoData);
                 .Cast<string>()
                 .ToList();
             _ = ConnectionWarmup.WarmAsync(openAreas);
+            Logger.LogInformation(
+                "Perf shell background initialization completed in {ElapsedMs} ms with {OpenAreaCount} warm area(s)",
+                backgroundInitStopwatch.Elapsed.TotalMilliseconds,
+                openAreas.Count);
+            PerformanceBaselineRecorder.Record(
+                nameof(MainLayout),
+                $"Perf shell background initialization completed in {backgroundInitStopwatch.Elapsed.TotalMilliseconds} ms with {openAreas.Count} warm area(s)");
         }
         catch (OperationCanceledException)
         {
@@ -156,26 +173,46 @@ AppState.Config.IsProduction, AppState.UseDemoData);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        RegisterDefaultCommands();
-        _jsRef = DotNetObjectReference.Create(this);
-        try
+        if (firstRender)
         {
-            await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            ShellErrors.PresentKeyboardShortcutRegistrationFailure(ex);
+            RegisterDefaultCommands();
+            _jsRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("SwebKit.registerKeyboardShortcuts", _jsRef);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ShellErrors.PresentKeyboardShortcutRegistrationFailure(ex);
+            }
+
+            await LoadThemeAsync();
+
+            RequestRender();
+            await InvokeAsync(StateHasChanged);
+            Logger.LogInformation("Perf shell first render ready in {ElapsedMs} ms",
+_shellStartupStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(nameof(MainLayout), $"Perf shell first render ready in {_shellStartupStopwatch.Elapsed.TotalMilliseconds} ms");
+            return;
         }
 
-        await LoadThemeAsync();
+        if (_pendingNavigationStopwatch is not null)
+        {
+            Logger.LogInformation(
+                "Perf route {Area} rendered in {ElapsedMs} ms",
+                _pendingNavigationArea ?? CurrentArea,
+                _pendingNavigationStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(
+                nameof(MainLayout),
+                $"Perf route {_pendingNavigationArea ?? CurrentArea} rendered in {_pendingNavigationStopwatch.Elapsed.TotalMilliseconds} ms");
 
-        RequestRender();
-        await InvokeAsync(StateHasChanged);
+            _pendingNavigationStopwatch = null;
+            _pendingNavigationArea = null;
+        }
     }
 
     public async Task SetThemeAsync(string theme)
@@ -249,6 +286,8 @@ AppState.Config.IsProduction, AppState.UseDemoData);
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         UpdateCurrentRoute(e.Location);
+        _pendingNavigationArea = _currentRoute.Area;
+        _pendingNavigationStopwatch = System.Diagnostics.Stopwatch.StartNew();
         RequestCoalescedRender();
     }
 

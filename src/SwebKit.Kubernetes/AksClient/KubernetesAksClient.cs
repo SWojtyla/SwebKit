@@ -1959,7 +1959,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
 
     private async Task<string> GetHelmManifestAsync(string ns, string releaseName, CancellationToken ct)
     {
-        var args = $"get manifest {releaseName} --namespace {ns}{BuildKubeconfigArgs()}";
+        var args = $"get manifest {releaseName} --namespace {ns}{BuildHelmKubeconfigArgs()}";
 
         var psi = new ProcessStartInfo("helm")
         {
@@ -1995,7 +1995,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 {
                     var retryPsi = new ProcessStartInfo("helm")
                     {
-                        Arguments = $"get manifest {releaseName} --namespace {ns}{BuildKubeconfigArgs()} --kube-token {token}",
+                        Arguments = $"get manifest {releaseName} --namespace {ns}{BuildHelmKubeconfigArgs()} --kube-token {token}",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
@@ -2295,7 +2295,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     {
         var psi = new ProcessStartInfo("helm")
         {
-            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildKubeconfigArgs()}",
+            Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildHelmKubeconfigArgs()}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -2327,7 +2327,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 {
                     var retryPsi = new ProcessStartInfo("helm")
                     {
-                        Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildKubeconfigArgs()} --kube-token {token}",
+                        Arguments = $"rollback {releaseName} {targetRevision} --namespace {ns} --wait{BuildHelmKubeconfigArgs()} --kube-token {token}",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
@@ -2413,15 +2413,21 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private static bool IsForbiddenError(string stderr)
         => stderr.Contains("Forbidden", StringComparison.OrdinalIgnoreCase);
 
-    private string BuildKubeconfigArgs()
+    internal static string BuildCliKubeconfigArgs(string? kubeconfigPath, string? kubeconfigContext, string contextFlagName)
     {
         var sb = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(_kubeconfigPath))
-            sb.Append($" --kubeconfig \"{_kubeconfigPath}\"");
-        if (!string.IsNullOrWhiteSpace(_kubeconfigContext))
-            sb.Append($" --context {_kubeconfigContext}");
+        if (!string.IsNullOrWhiteSpace(kubeconfigPath))
+            sb.Append($" --kubeconfig \"{kubeconfigPath}\"");
+        if (!string.IsNullOrWhiteSpace(kubeconfigContext))
+            sb.Append($" {contextFlagName} {kubeconfigContext}");
         return sb.ToString();
     }
+
+    private string BuildKubeconfigArgs()
+        => BuildCliKubeconfigArgs(_kubeconfigPath, _kubeconfigContext, "--context");
+
+    private string BuildHelmKubeconfigArgs()
+        => BuildCliKubeconfigArgs(_kubeconfigPath, _kubeconfigContext, "--kube-context");
 
     private async Task<(int ExitCode, string Stderr)> RunKubectlApplyWithTokenAsync(string tempFile, string ns, string token, CancellationToken ct)
     {

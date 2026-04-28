@@ -53,4 +53,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-5 — Do not reuse kubectl CLI flags for Helm commands
+
+**Symptom:** Helm operations fail with `unknown flag: --context` even though the same kubeconfig and context work with `kubectl`.
+
+**Cause:** A shared CLI argument builder emitted kubectl's `--context` flag for both tools. Helm uses `--kube-context` instead.
+
+**Fix:** Keep kubectl and Helm argument builders separate, or parameterize the context flag name explicitly when constructing process arguments.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_

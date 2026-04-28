@@ -24,6 +24,7 @@ public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
+        PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp entered");
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
@@ -37,6 +38,7 @@ public static class MauiProgram
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
+        builder.Logging.SetMinimumLevel(LogLevel.Information);
         builder.Logging.AddDebug();
 #endif
 
@@ -133,6 +135,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IConnectionWarmupService, ConnectionWarmupService>();
         builder.Services.AddSingleton<RedisOpsInsightsAggregator>();
 
-        return builder.Build();
+        var app = builder.Build();
+        PerformanceBaselineRecorder.Record(nameof(MauiProgram), "Perf startup CreateMauiApp completed");
+        return app;
     }
 }

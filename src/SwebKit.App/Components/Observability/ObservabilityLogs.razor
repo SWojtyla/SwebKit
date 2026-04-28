@@ -3,6 +3,8 @@
 @using BlazorMonaco
 @using BlazorMonaco.Editor
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using System.Diagnostics
 
 <div class="obs-logs">
     <div class="obs-logs-layout">
@@ -253,10 +255,19 @@
                     }
                 else
                     {
-                        <div class="obs-monaco-wrapper">
-                            <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorConstructionOptions"
-                                                  OnDidInit="OnEditorInitAsync" />
-                        </div>
+                        @if (!_monacoAssetsLoaded)
+                        {
+                            <div class="obs-monaco-wrapper">
+                                <LoadingSpinner Message="Loading query editor…" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="obs-monaco-wrapper">
+                                <StandaloneCodeEditor @ref="_editor" ConstructionOptions="EditorConstructionOptions"
+                                                      OnDidInit="OnEditorInitAsync" />
+                            </div>
+                        }
                     }
 
                     <div class="obs-query-actions" aria-live="polite">
@@ -399,6 +410,7 @@
 @inject IJSRuntime JS
 @inject INotificationService Notifications
 @inject IGuidedKqlCompiler GuidedCompiler
+@inject Microsoft.Extensions.Logging.ILogger<ObservabilityLogs> Logger
 
 @code {
     [Parameter] public IObservabilityProvider? Provider { get; set; }
@@ -460,6 +472,12 @@ Enum.GetValues<GuidedKqlFilterOperator>();
     private bool _guidedDraftInitialized;
     private GuidedKqlQueryDefinition? _lastGuidedDraftParameter;
     private int _handledPendingQueryVersion;
+    private readonly Stopwatch _componentStopwatch = Stopwatch.StartNew();
+    private bool _editorReadyLogged;
+    private bool _isEditorReady;
+    private string? _pendingEditorValue;
+    private bool _monacoAssetsLoaded;
+    private bool _monacoAssetsLoading;
 
     // Save dialog
     private bool _saveDialogOpen;
@@ -518,11 +536,40 @@ Enum.GetValues<GuidedKqlFilterOperator>();
 
         // Ctrl+Enter → Run query
 #pragma warning disable CS0618
-        await _editor.AddAction("run-query", "Run Query",
-            [(int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter],
-            null, null, "navigation", 1.0,
-            async (_, _) => await RunQueryAsync());
+        var actionRegistered = await TryInvokeEditorAsync(editor =>
+            editor.AddAction("run-query", "Run Query",
+                [(int)BlazorMonaco.KeyMod.CtrlCmd | (int)BlazorMonaco.KeyCode.Enter],
+                null, null, "navigation", 1.0,
+                async (_, _) => await RunQueryAsync()));
 #pragma warning restore CS0618
+
+        _isEditorReady = true;
+
+        if (!actionRegistered)
+        {
+            Logger.LogWarning("Perf logs editor shortcut registration raced editor availability on first init");
+        }
+
+        if (!_editorReadyLogged)
+        {
+            _editorReadyLogged = true;
+            Logger.LogInformation("Perf logs editor ready in {ElapsedMs} ms", _componentStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(nameof(ObservabilityLogs), $"Perf logs editor ready in {_componentStopwatch.Elapsed.TotalMilliseconds} ms");
+        }
+
+        await SyncPendingEditorValueAsync();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Logger.LogInformation("Perf logs component first render in {ElapsedMs} ms",
+_componentStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(nameof(ObservabilityLogs), $"Perf logs component first render in {_componentStopwatch.Elapsed.TotalMilliseconds} ms");
+        }
+
+        return EnsureMonacoAssetsForCurrentModeAsync();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -563,30 +610,27 @@ _handledPendingQueryVersion)
     public async Task LoadQueryAsync(string kql)
     {
         await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
-        _query = kql;
+        QueueEditorValue(kql);
         _activePresetId = null;
-        if (_editor is not null)
-            await _editor.SetValue(kql);
+        await SyncPendingEditorValueAsync();
         await RunQueryAsync();
     }
 
     private async Task ApplyPreset(QueryPreset preset)
     {
         await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
-        _query = preset.Query;
+        QueueEditorValue(preset.Query);
         _activePresetId = preset.Id;
-        if (_editor is not null)
-            await _editor.SetValue(preset.Query);
+        await SyncPendingEditorValueAsync();
         await RunQueryAsync();
     }
 
     private async Task LoadSaved(SwebKit.Core.Domain.SavedQuery sq)
     {
         await SetModeAsync(GuidedLogsQueryMode.Advanced, transferFromGuided: false);
-        _query = sq.Query;
+        QueueEditorValue(sq.Query);
         _activePresetId = null;
-        if (_editor is not null)
-            await _editor.SetValue(sq.Query);
+        await SyncPendingEditorValueAsync();
         await RunQueryAsync();
     }
 
@@ -594,6 +638,8 @@ _handledPendingQueryVersion)
     {
         if (Provider is null) return;
         if (_isRunning) return;
+
+        var queryStopwatch = Stopwatch.StartNew();
 
         if (_mode == GuidedLogsQueryMode.Guided)
         {
@@ -612,8 +658,17 @@ _handledPendingQueryVersion)
         else
         {
             // Sync query from editor
-            if (_editor is not null)
-                _query = await _editor.GetValue();
+            if (_editor is not null && _isEditorReady)
+            {
+                try
+                {
+                    _query = await _editor.GetValue();
+                }
+                catch (JSException)
+                {
+                    _isEditorReady = false;
+                }
+            }
         }
 
         if (string.IsNullOrWhiteSpace(_query)) return;
@@ -629,13 +684,33 @@ _handledPendingQueryVersion)
         try
         {
             _result = await Provider.RunQueryAsync(_query, Range, MaxRows, _cts.Token);
+            Logger.LogInformation(
+                "Perf logs query completed in {ElapsedMs} ms with {RowCount} row(s)",
+                queryStopwatch.Elapsed.TotalMilliseconds,
+                _result.Rows.Count);
+            PerformanceBaselineRecorder.Record(
+                nameof(ObservabilityLogs),
+                $"Perf logs query completed in {queryStopwatch.Elapsed.TotalMilliseconds} ms with {_result.Rows.Count} row(s)");
         }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Perf logs query canceled after {ElapsedMs} ms", queryStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(nameof(ObservabilityLogs), $"Perf logs query canceled after {queryStopwatch.Elapsed.TotalMilliseconds} ms");
+            throw;
+        }
         catch (global::Azure.RequestFailedException rfe) when (rfe.ErrorCode == "BadArgumentError")
         {
+            Logger.LogWarning("Perf logs query rejected after {ElapsedMs} ms: {Message}", queryStopwatch.Elapsed.TotalMilliseconds,
+rfe.Message);
+            PerformanceBaselineRecorder.Record(nameof(ObservabilityLogs), $"Perf logs query rejected after {queryStopwatch.Elapsed.TotalMilliseconds} ms: {rfe.ErrorCode}");
             _queryError = rfe.Message;
         }
-        catch (Exception ex) { _error = ex.Message; }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Perf logs query failed after {ElapsedMs} ms", queryStopwatch.Elapsed.TotalMilliseconds);
+            PerformanceBaselineRecorder.Record(nameof(ObservabilityLogs), $"Perf logs query failed after {queryStopwatch.Elapsed.TotalMilliseconds} ms: {ex.GetType().Name}");
+            _error = ex.Message;
+        }
         finally
         {
             _isRunning = false;
@@ -722,8 +797,17 @@ _handledPendingQueryVersion)
         else
         {
             // Sync query from editor before saving
-            if (_editor is not null)
-                _query = await _editor.GetValue();
+            if (_editor is not null && _isEditorReady)
+            {
+                try
+                {
+                    _query = await _editor.GetValue();
+                }
+                catch (JSException)
+                {
+                    _isEditorReady = false;
+                }
+            }
         }
 
         var sq = new SwebKit.Core.Domain.SavedQuery
@@ -751,6 +835,92 @@ _handledPendingQueryVersion)
     private static string Truncate(string s, int max) =>
         s.Length > max ? s[..max] + "…" : s;
 
+    private void QueueEditorValue(string value)
+    {
+        _query = value;
+        _pendingEditorValue = value;
+    }
+
+    private static bool IsEditorLookupRace(JSException ex) =>
+        ex.Message.Contains("Couldn't find the editor with id", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<bool> TryInvokeEditorAsync(Func<StandaloneCodeEditor, Task> operation, int retryCount = 1)
+    {
+        for (var attempt = 0; attempt <= retryCount; attempt++)
+        {
+            var editor = _editor;
+            if (editor is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                await operation(editor);
+                return true;
+            }
+            catch (JSException ex) when (IsEditorLookupRace(ex) && attempt < retryCount)
+            {
+                await Task.Delay(50);
+            }
+            catch (JSException)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task SyncPendingEditorValueAsync()
+    {
+        if (_editor is null || !_isEditorReady || _pendingEditorValue is null)
+        {
+            return;
+        }
+
+        var pendingValue = _pendingEditorValue;
+
+        var synced = await TryInvokeEditorAsync(editor => editor.SetValue(pendingValue));
+        if (synced)
+        {
+            if (_pendingEditorValue == pendingValue)
+            {
+                _pendingEditorValue = null;
+            }
+        }
+        else
+        {
+            _isEditorReady = false;
+        }
+    }
+
+    private async Task EnsureMonacoAssetsForCurrentModeAsync()
+    {
+        if (_mode != GuidedLogsQueryMode.Advanced || _monacoAssetsLoaded || _monacoAssetsLoading)
+        {
+            return;
+        }
+
+        _monacoAssetsLoading = true;
+
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded");
+            _monacoAssetsLoaded = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (JSException ex)
+        {
+            _error = ex.Message;
+            Logger.LogWarning(ex, "Failed to lazy-load Monaco assets for Observability Logs");
+        }
+        finally
+        {
+            _monacoAssetsLoading = false;
+        }
+    }
+
     private async Task SetModeAsync(GuidedLogsQueryMode mode, bool transferFromGuided = true)
     {
         if (_mode == mode)
@@ -758,16 +928,18 @@ _handledPendingQueryVersion)
             return;
         }
 
+        if (_mode == GuidedLogsQueryMode.Advanced || mode == GuidedLogsQueryMode.Advanced)
+        {
+            _editor = null;
+            _isEditorReady = false;
+        }
+
         if (_mode == GuidedLogsQueryMode.Guided && mode == GuidedLogsQueryMode.Advanced && transferFromGuided)
         {
             var compileResult = RecomputeGuidedPreview();
             if (compileResult.CanExecute)
             {
-                _query = compileResult.Query;
-                if (_editor is not null)
-                {
-                    await _editor.SetValue(_query);
-                }
+                QueueEditorValue(compileResult.Query);
             }
         }
 
