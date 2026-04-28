@@ -8,17 +8,17 @@ state: "In Progress"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-25"
-last_updated: "2026-04-26"
+last_updated: "2026-04-27"
 
 ---
 
 ## Quick summary
 
-The native AKS route now includes a shared-primitives resource explorer for Pods, Deployments, StatefulSets, Jobs, CronJobs, Helm releases, Services, ConfigMaps, Secrets, Ingresses, GatewayClasses, Gateways, and HTTPRoutes, plus a native detail pane that keeps pod diagnostics available while operators pivot to workload, batch, Helm, and edge context. The AKS page now also uses the compact shared scaffold/context pattern so the explorer reaches the viewport earlier and the selected-resource facts land before operational controls, which brings the native page closer to the MAUI content-first UX. The current parity pass also adds recent events, pod metrics and HPA context, selected-resource URL open/copy actions for Ingress and HTTPRoute resources, native pod delete from the selected-resource action rail, a native pod-health monitoring manager, native workload-level aggregated logs for Deployments and StatefulSets, and a WinUI keyboard shortcut layer with MAUI-style hint chips and context-sensitive actions. The remaining AKS work is now live-cluster validation rather than a known native parity gap.
+The WinUI AKS route has broad native capability coverage, but it is not ready to be treated as fully parity-complete. The current remaining work is a parity-and-regression pass focused on the concrete operator issues surfaced after the recent layout rewrite: saved context/namespace restore, namespace search, warning noise, log ergonomics, compact page structure, and row-level action discoverability.
 
 **Jira:** not linked
 
-**Current focus:** keep demo mode as the fastest AKS showcase/regression path and move the remaining AKS effort to live-cluster validation of the shipped native parity surface.
+**Current focus:** finish the remaining MAUI parity and regression fixes in the native AKS page, then validate that surface in focused tests and on a live cluster.
 
 ## Progress checklist
 
@@ -28,6 +28,7 @@ The native AKS route now includes a shared-primitives resource explorer for Pods
 - [x] Operational action parity defined
 - [x] Focused validation approach defined
 - [x] Docs aligned after implementation begins
+- [x] Remaining regression complaints captured as explicit scope
 
 ## Completed
 
@@ -57,29 +58,37 @@ The native AKS route now includes a shared-primitives resource explorer for Pods
 - Added a native workload-log surface for Deployments and StatefulSets so WinUI can stream the same aggregated all-pod logs that the MAUI detail panels expose.
 - Added WinUI AKS keyboard shortcuts and visible hint chips so operators can drive logs, YAML, analysis, restart, shell, port-forward, Helm, and deselect flows from the keyboard like the MAUI page.
 - Extended focused WinUI AKS view-model coverage for workload-log hydration and the new keyboard shortcut path.
+- Reframed the feature as an active parity-and-fix slice instead of treating the current page as already complete apart from live-cluster validation.
 
 ## Remaining
 
-- Live-cluster validation of YAML, Helm, mutation, shell, port-forward, recent-event, and selected-resource action behavior remains explicit follow-up.
-- Live-cluster validation of the native monitoring manager, workload logs, and shortcut-driven actions remains explicit follow-up, even though demo mode now covers the same AKS monitor workflow and shortcut surfaces as a fast showcase/test path.
+- Confirm that first-load context and namespace restore reliably honor persisted settings.
+- Keep namespace search restored and validate that it is usable on larger namespace lists.
+- Keep the compact AKS page layout free from wasted header chrome, oversized inactive panels, and unnecessary vertical scroll.
+- Ensure partial-load warnings stay suppressed when the explorer already has usable data, while still surfacing blocking failures.
+- Complete the remaining agreed MAUI action parity audit for row-level and selected-resource actions.
+- Validate the current workload-log and pod-log UX against the fullscreen-leaning investigation goal instead of the earlier split-panel compromise.
+- Perform live-cluster validation of YAML, Helm, mutation, shell, port-forward, events, monitoring, row actions, and logs after the parity fixes settle.
 
 ## Close-out checklist
 
 - [x] Close the remaining MAUI-only AKS detail-panel and shortcut parity gaps in WinUI.
+- [ ] Close the concrete operator regressions introduced or exposed during the compact layout rewrite.
 - [ ] Keep focused AKS tests and `build-winui` green as the remaining parity slices land.
 - [ ] Perform live-cluster validation for the native AKS operator flows, including the native monitor panel.
 
 ## Blockers
 
-- No implementation blocker is currently known for the native AKS slice; the remaining work is parity scope plus live-cluster validation.
+- No code blocker is currently known, but the current docs were ahead of reality and had to be pulled back from an implied "done except validation" position.
+- Full parity sign-off remains blocked on live-cluster review, because demo mode cannot prove every action and scope-restore path.
 
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: `build-winui` is green, focused `dotnet test .\tests\SwebKit.WinUI.Tests\SwebKit.WinUI.Tests.csproj --filter AksPageViewModelTests` passed `23/23`, and the AKS page now has focused coverage for monitor-state hydration, namespace start/stop flows, external monitor-state propagation, native workload-log streaming, and the keyboard shortcut path that opens workload logs and YAML from the selected resource.
+- Validation status: keep `build-winui` and focused `AksPageViewModelTests` green while the startup restore, warning behavior, row actions, and log UX slices finish. The latest known build failure was an output-file lock from a running `SwebKit.WinUI.exe`, not a confirmed AKS code regression.
 
 ## Notes
 
 - AKS can continue consuming the current shared layout baseline inside its own slice; only reusable primitive gaps should reopen the layout feature.
-- The native detail pane now owns the Helm, evidence, workload-log, and current resource-action parity slice as well; remaining work is live-cluster validation of the shipped native surface.
+- The native detail pane remains the main parity vehicle, but row-level discoverability now needs the same explicit attention as the side pane.
 - Demo mode is now an explicit AKS monitor showcase and a fast regression path for the native monitoring surface before live-cluster validation.

@@ -4,7 +4,7 @@
 
 title: "Status - winui3-incident-timeline-parity"
 owner: ""
-state: "In Progress"
+state: "Review"
 jira: "not linked"
 branch: "winui-rewrite"
 started: "2026-04-27"
@@ -14,11 +14,11 @@ last_updated: "2026-04-27"
 
 ## Quick summary
 
-The WinUI Incident Timeline slice now includes a native workbench, a native Settings mapping editor, dashboard and cutover-copy alignment, and source-page drill-through from native Service Bus, Pipelines, and Observability surfaces. The remaining validation gap is to keep final focused WinUI test execution on the cheap path (`build-winui` first, then filtered `dotnet test --no-build` only at the end) instead of re-triggering raw WinUI `dotnet test` inside the implementation loop.
+The WinUI Incident Timeline slice now includes a native workbench, a native Settings mapping editor, dashboard and cutover-copy alignment, and source-page drill-through from native Service Bus, Pipelines, and Observability surfaces. Focused WinUI launch coverage now exists for all three native source pages, and the remaining follow-up is broader integration review rather than feature-local implementation debt.
 
 **Jira:** not linked
 
-**Current focus:** finish docs and validation-cadence hardening so the shipped WinUI parity slice stays aligned with the faster inner-loop workflow.
+**Current focus:** hold the delivered WinUI parity slice in review while broader integration validation stays on the cheaper focused-test path.
 
 ## Progress checklist
 
@@ -38,13 +38,14 @@ The WinUI Incident Timeline slice now includes a native workbench, a native Sett
 - Replaced the deferred native Settings placeholder with an Incident Timeline mapping editor and current-scope seeding path.
 - Updated the native dashboard so Incident Timeline is part of the visible WinUI cutover surface.
 - Added native drill-through launch into Incident Timeline from WinUI Service Bus, Pipelines, and Observability pages using typed `IncidentInvestigationSeed` navigation parameters.
-- Added focused WinUI test coverage for the new Service Bus and Observability investigation-launch commands.
+- Added focused WinUI test coverage for the new Service Bus, Pipelines, and Observability investigation-launch commands.
 - Recorded the WinUI validation-cadence pitfall: use `build-winui` as the inner-loop executable gate, and reserve filtered `dotnet test --no-build` for the final pass.
+- Re-ran the focused WinUI Incident Timeline launch slice after the Pipelines coverage addition and kept the targeted files green.
 
 ## Remaining
 
-- Finish aligning the active feature docs with the shipped WinUI cross-page launch behavior.
-- Re-run the focused WinUI test slice with the corrected final-gate command once the implementation loop is closed.
+- No blocking feature-local implementation work remains.
+- Broader manual cutover review can still exercise the shipped native route, but it is no longer source-level debt inside this slice.
 
 ## Blockers
 
@@ -53,7 +54,7 @@ The WinUI Incident Timeline slice now includes a native workbench, a native Sett
 ## Validation
 
 - Test Plan: link to `test-plan.md`
-- Validation status: `build-winui` passes. Compile-only validation for `tests/SwebKit.WinUI.Tests` also passes once stale `testhost` locks are cleared. Focused WinUI test execution should use a final filtered `dotnet test --no-build` pass rather than raw inner-loop `dotnet test`.
+- Validation status: `build-winui` passes. Focused WinUI validation across `ServiceBusPageViewModelTests`, `ObservabilityPageViewModelTests`, and `ReadinessStateViewModelTests` now passes `30/30`, covering the native Service Bus, Pipelines, and Observability investigation-launch paths.
 
 ## Notes
 

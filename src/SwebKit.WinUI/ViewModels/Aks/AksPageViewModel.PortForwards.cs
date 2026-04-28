@@ -51,6 +51,10 @@ public sealed partial class AksPageViewModel
 
     public Visibility PortForwardFormVisibility => IsPortForwardFormOpen ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility PortForwardPanelVisibility => IsPortForwardFormOpen || HasPortForwardSessions
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
     public Visibility PortForwardValidationVisibility => string.IsNullOrWhiteSpace(PortForwardValidationMessage)
         ? Visibility.Collapsed
         : Visibility.Visible;
@@ -68,7 +72,9 @@ public sealed partial class AksPageViewModel
     partial void OnIsPortForwardFormOpenChanged(bool value)
     {
         OnPropertyChanged(nameof(PortForwardFormVisibility));
+        OnPropertyChanged(nameof(PortForwardPanelVisibility));
         OnPropertyChanged(nameof(ShowPortForwardSessionsEmptyState));
+        OnPropertyChanged(nameof(SelectedPodLogsPanelVisibility));
     }
 
     partial void OnPortForwardValidationMessageChanged(string? value)
@@ -82,9 +88,11 @@ public sealed partial class AksPageViewModel
         {
             OnPropertyChanged(nameof(HasPortForwardSessions));
             OnPropertyChanged(nameof(CanStopAllPortForwardSessions));
+            OnPropertyChanged(nameof(PortForwardPanelVisibility));
             OnPropertyChanged(nameof(PortForwardSummary));
             OnPropertyChanged(nameof(PortForwardSessionsVisibility));
             OnPropertyChanged(nameof(ShowPortForwardSessionsEmptyState));
+            OnPropertyChanged(nameof(SelectedPodLogsPanelVisibility));
         };
 
         _portForwardSessions.SessionsChanged += OnPortForwardSessionsChanged;

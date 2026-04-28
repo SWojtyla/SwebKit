@@ -82,11 +82,15 @@ public sealed partial class AksPageViewModel
             ? $"The native explorer could not load {ResolveResourceSingularName(SelectedResourceKind, plural: true)} for {ResolveResourceScopeLabel()}. Check connectivity or permissions and refresh."
             : $"The current {ResolveResourceScopeLabel()} does not expose any {ResolveResourceSingularName(SelectedResourceKind, plural: true)} for the native explorer yet.";
 
-    public bool ShowResourceLoadMessage => !string.IsNullOrWhiteSpace(ResourceLoadMessage);
+    public bool ShowResourceLoadMessage => !string.IsNullOrWhiteSpace(ResourceLoadMessage) && !HasLoadedExplorerData;
 
     public string ResourceLoadMessageTitle => HasLoadedExplorerData
         ? "Some AKS resources were not loaded"
         : "AKS explorer load failed";
+
+    public Visibility ErrorMessageVisibility => string.IsNullOrWhiteSpace(ErrorMessage)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
 
     public Visibility ResourceListVisibility => ResourceItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
@@ -147,6 +151,32 @@ public sealed partial class AksPageViewModel
 
     public string FocusMetricDetailText => ResolveResourceScopeLabel();
 
+    public bool IsDeploymentsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindDeployments, StringComparison.Ordinal);
+
+    public bool IsStatefulSetsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindStatefulSets, StringComparison.Ordinal);
+
+    public bool IsPodsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindPods, StringComparison.Ordinal);
+
+    public bool IsConfigMapsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindConfigMaps, StringComparison.Ordinal);
+
+    public bool IsSecretsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindSecrets, StringComparison.Ordinal);
+
+    public bool IsHelmResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindHelm, StringComparison.Ordinal);
+
+    public bool IsJobsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindJobs, StringComparison.Ordinal);
+
+    public bool IsCronJobsResourceKindSelected => string.Equals(SelectedResourceKind, ResourceKindCronJobs, StringComparison.Ordinal);
+
+    public bool IsNetworkResourceKindSelected => SelectedResourceKind is ResourceKindServices
+        or ResourceKindIngresses
+        or ResourceKindGatewayClasses
+        or ResourceKindGateways
+        or ResourceKindHttpRoutes;
+
+    public string NetworkResourceButtonText => IsNetworkResourceKindSelected
+        ? SelectedResourceKind
+        : "Network";
+
     private bool SelectedResourceKindFailed => _failedResourceKinds.Contains(SelectedResourceKind);
 
     private bool HasLoadedExplorerData => _resourceBrowseCache.Values.Any(items => items.Count > 0);
@@ -159,6 +189,16 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(ResourceEmptyTitle));
         OnPropertyChanged(nameof(ResourceEmptyMessage));
         OnPropertyChanged(nameof(FocusMetricValueLabel));
+        OnPropertyChanged(nameof(IsDeploymentsResourceKindSelected));
+        OnPropertyChanged(nameof(IsStatefulSetsResourceKindSelected));
+        OnPropertyChanged(nameof(IsPodsResourceKindSelected));
+        OnPropertyChanged(nameof(IsConfigMapsResourceKindSelected));
+        OnPropertyChanged(nameof(IsSecretsResourceKindSelected));
+        OnPropertyChanged(nameof(IsHelmResourceKindSelected));
+        OnPropertyChanged(nameof(IsJobsResourceKindSelected));
+        OnPropertyChanged(nameof(IsCronJobsResourceKindSelected));
+        OnPropertyChanged(nameof(IsNetworkResourceKindSelected));
+        OnPropertyChanged(nameof(NetworkResourceButtonText));
         NotifyKeyboardShortcutStateChanged();
     }
 
@@ -216,7 +256,20 @@ public sealed partial class AksPageViewModel
 
     partial void OnErrorMessageChanged(string? value)
     {
+        OnPropertyChanged(nameof(ErrorMessageVisibility));
         OnPropertyChanged(nameof(ResourceEmptyStateVisibility));
+    }
+
+    [RelayCommand]
+    private void SelectResourceKind(string? resourceKind)
+    {
+        if (string.IsNullOrWhiteSpace(resourceKind)
+            || string.Equals(SelectedResourceKind, resourceKind, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SelectedResourceKind = resourceKind;
     }
 
     [RelayCommand]
@@ -249,6 +302,78 @@ public sealed partial class AksPageViewModel
         }
 
         SelectedResourceItem = null;
+    }
+
+    [RelayCommand]
+    private async Task OpenYamlForItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        await OpenSelectedResourceYamlAsync();
+    }
+
+    [RelayCommand]
+    private async Task OpenWorkloadLogsForItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        await OpenSelectedResourceWorkloadLogsAsync();
+    }
+
+    [RelayCommand]
+    private async Task RestartResourceItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        await RestartSelectedResourceAsync();
+    }
+
+    [RelayCommand]
+    private async Task DeleteResourceItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        await DeleteSelectedResourceAsync();
+    }
+
+    [RelayCommand]
+    private async Task OpenShellForItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item?.PodItem is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        await OpenSelectedPodShellAsync();
+    }
+
+    [RelayCommand]
+    private async Task OpenPortForwardForItemAsync(AksResourceBrowseItemViewModel? item)
+    {
+        if (item?.PodItem is null)
+        {
+            return;
+        }
+
+        await SelectResourceItemAsync(item);
+        OpenSelectedPodPortForward();
     }
 
     private async Task LoadResourceScopeAsync(CancellationToken ct)
@@ -1604,6 +1729,30 @@ public sealed class AksResourceBrowseItemViewModel
     public string? PrimaryUrl { get; }
 
     public AksPodItemViewModel? PodItem { get; }
+
+    public bool SupportsYamlAction => true;
+
+    public bool SupportsWorkloadLogsAction => Kind is "Deployments" or "StatefulSets";
+
+    public bool SupportsPodShellAction => PodItem is not null;
+
+    public bool SupportsPortForwardAction => PodItem is not null;
+
+    public bool SupportsRestartAction => CanRestart;
+
+    public bool SupportsDeleteAction => CanDelete;
+
+    public Visibility YamlActionVisibility => SupportsYamlAction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility WorkloadLogsActionVisibility => SupportsWorkloadLogsAction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PodShellActionVisibility => SupportsPodShellAction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PortForwardActionVisibility => SupportsPortForwardAction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility RestartActionVisibility => SupportsRestartAction ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility DeleteActionVisibility => SupportsDeleteAction ? Visibility.Visible : Visibility.Collapsed;
 
     public bool Matches(AksResourceBrowseItemViewModel? other)
         => other is not null

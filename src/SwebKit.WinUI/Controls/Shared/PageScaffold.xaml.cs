@@ -9,7 +9,7 @@ public sealed partial class PageScaffold : UserControl
         nameof(Title),
         typeof(string),
         typeof(PageScaffold),
-        new PropertyMetadata(string.Empty));
+        new PropertyMetadata(string.Empty, OnTitleChanged));
 
     public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(
         nameof(Subtitle),
@@ -44,7 +44,9 @@ public sealed partial class PageScaffold : UserControl
     public PageScaffold()
     {
         InitializeComponent();
+        UpdateTitleVisibility();
         UpdateSubtitleVisibility();
+        UpdateHeaderTextVisibility();
         UpdateHeaderVisibility();
         UpdateContextVisibility();
         UpdateHeaderLayout();
@@ -86,9 +88,20 @@ public sealed partial class PageScaffold : UserControl
         set => SetValue(BodyContentProperty, value);
     }
 
+    private static void OnTitleChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        var scaffold = (PageScaffold)dependencyObject;
+        scaffold.UpdateTitleVisibility();
+        scaffold.UpdateHeaderTextVisibility();
+        scaffold.UpdateHeaderVisibility();
+    }
+
     private static void OnSubtitleChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
-        ((PageScaffold)dependencyObject).UpdateSubtitleVisibility();
+        var scaffold = (PageScaffold)dependencyObject;
+        scaffold.UpdateSubtitleVisibility();
+        scaffold.UpdateHeaderTextVisibility();
+        scaffold.UpdateHeaderVisibility();
     }
 
     private static void OnHeaderContentChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -106,6 +119,13 @@ public sealed partial class PageScaffold : UserControl
         ((PageScaffold)dependencyObject).UpdateHeaderLayout();
     }
 
+    private void UpdateTitleVisibility()
+    {
+        TitleTextBlock.Visibility = string.IsNullOrWhiteSpace(Title)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
     private void UpdateSubtitleVisibility()
     {
         SubtitleTextBlock.Visibility = string.IsNullOrWhiteSpace(Subtitle)
@@ -113,9 +133,18 @@ public sealed partial class PageScaffold : UserControl
             : Visibility.Visible;
     }
 
+    private void UpdateHeaderTextVisibility()
+    {
+        HeaderTextStack.Visibility = string.IsNullOrWhiteSpace(Title) && string.IsNullOrWhiteSpace(Subtitle)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
     private void UpdateHeaderVisibility()
     {
-        HeaderPresenter.Visibility = HeaderContent is null
+        var hasHeaderContent = HeaderContent is not null;
+        HeaderPresenter.Visibility = hasHeaderContent ? Visibility.Visible : Visibility.Collapsed;
+        HeaderGrid.Visibility = HeaderTextStack.Visibility == Visibility.Collapsed && !hasHeaderContent
             ? Visibility.Collapsed
             : Visibility.Visible;
     }

@@ -24,6 +24,7 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
     private CancellationTokenSource _selectedResourceActionCts = new();
     private bool _isDisposed;
     private bool _loaded;
+    private bool _hasSeededSelectionFromConfig;
     private bool _suppressSelectionSideEffects;
 
     public AksPageViewModel(
@@ -173,6 +174,8 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
 
         OnPropertyChanged(nameof(IsConfigured));
         OnPropertyChanged(nameof(ShowNotConfiguredState));
+
+        SeedSelectionFromConfig();
 
         if (!IsConfigured)
         {
@@ -383,6 +386,34 @@ public sealed partial class AksPageViewModel : ObservableObject, IAsyncDisposabl
             AksClientBootstrapStatus.NotConfigured => "No AKS configuration found. Configure kubeconfig settings in Settings before opening this workspace.",
             _ => result.ErrorMessage ?? "AKS bootstrap failed."
         };
+    }
+
+    private void SeedSelectionFromConfig()
+    {
+        if (_hasSeededSelectionFromConfig || _appState.Config.AksConfig is not AksConfig config)
+        {
+            return;
+        }
+
+        _suppressSelectionSideEffects = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(config.KubeconfigContext))
+            {
+                SelectedContext = config.KubeconfigContext;
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.DefaultNamespace))
+            {
+                SelectedNamespace = config.DefaultNamespace;
+            }
+        }
+        finally
+        {
+            _suppressSelectionSideEffects = false;
+        }
+
+        _hasSeededSelectionFromConfig = true;
     }
 
     private async Task HandleContextChangedAsync(string context)

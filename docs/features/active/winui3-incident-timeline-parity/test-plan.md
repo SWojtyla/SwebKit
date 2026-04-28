@@ -33,7 +33,7 @@ Validate that the native Incident Timeline route reaches the agreed WinUI parity
 
 - Build validation: `build-winui` must stay green and is the default inner-loop executable validation for WinUI route, XAML, and view-model changes.
 - Existing tests: keep `tests/SwebKit.WinUI.Tests/` green.
-- New tests: add focused WinUI coverage for Incident Timeline navigation, representative page-state transitions, Incident Timeline settings-section selection or repair navigation, and dashboard copy alignment.
+- New tests: add focused WinUI coverage for Incident Timeline navigation, representative page-state transitions, Incident Timeline settings-section selection or repair navigation, dashboard copy alignment, and native source-page launch from Service Bus, Pipelines, and Observability.
 - Validation cadence rule: do not use raw `dotnet test tests/SwebKit.WinUI.Tests/SwebKit.WinUI.Tests.csproj ...` as an inner-loop check. After `build-winui` is green, use a final focused `dotnet test ... --filter "<exact tests>" --no-build` pass only for the changed WinUI tests.
 - Regression target: rerun relevant shared incident or configuration tests if implementation touches shared contracts or configuration-health glue.
 
@@ -67,7 +67,7 @@ Validate that the native Incident Timeline route reaches the agreed WinUI parity
 
 ## Validation status
 
-- Automated: `build-winui` pass; compile-only WinUI test-project build pass; final focused `dotnet test --no-build` rerun still pending
+- Automated: `build-winui` pass; focused WinUI validation across `ServiceBusPageViewModelTests`, `ObservabilityPageViewModelTests`, and `ReadinessStateViewModelTests` passed `30/30`
 - Manual: Not started
 
 ## Sign-off

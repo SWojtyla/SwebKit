@@ -81,6 +81,10 @@ public sealed partial class AksPageViewModel
 
     public Visibility SelectedPodLogsActionsVisibility => SelectedPod is null ? Visibility.Collapsed : Visibility.Visible;
 
+    public Visibility SelectedPodLogsPanelVisibility => SelectedPod is not null || IsPortForwardFormOpen || HasPortForwardSessions
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
     public Visibility SelectedPodLogsErrorVisibility => string.IsNullOrWhiteSpace(SelectedPodLogsErrorMessage)
         ? Visibility.Collapsed
         : Visibility.Visible;
@@ -94,6 +98,7 @@ public sealed partial class AksPageViewModel
         OnPropertyChanged(nameof(ShowSelectPodLogsHint));
         OnPropertyChanged(nameof(SelectedPodLogsContentVisibility));
         OnPropertyChanged(nameof(SelectedPodLogsActionsVisibility));
+        OnPropertyChanged(nameof(SelectedPodLogsPanelVisibility));
         OnPropertyChanged(nameof(SelectedPodLogsTitle));
         OnPropertyChanged(nameof(CanInspectSelectedPodLogs));
         OnPropertyChanged(nameof(CanReloadSelectedPodLogs));

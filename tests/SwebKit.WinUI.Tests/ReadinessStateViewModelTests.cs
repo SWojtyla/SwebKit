@@ -86,6 +86,39 @@ public sealed class ReadinessStateViewModelTests
     }
 
     [Fact]
+    public async Task PipelinesInvestigateSelectedPipeline_NavigatesWithPipelineSeed()
+    {
+        var (appState, workspaceService, navigation) = CreateContext();
+        appState.Config.DevOpsConfig = new DevOpsConfig { Organization = "contoso", PatCredentialKey = "devops:pat" };
+
+        var viewModel = new PipelinesPageViewModel(
+            appState,
+            new TestDevOpsClientFactory(),
+            new DemoDevOpsClient(),
+            new ReleaseRepository(),
+            new ApprovalAgingPolicy(),
+            new ConnectionStateService(),
+            workspaceService,
+            navigation,
+            new TestNotificationService(),
+            NullLogger<PipelinesPageViewModel>.Instance)
+        {
+            SelectedProject = new PipelinesProjectItemViewModel("platform-services", "Platform Services"),
+            SelectedPipeline = new PipelinesPipelineItemViewModel(101, "orders-api-ci", "\\apps"),
+        };
+
+        await viewModel.InvestigateSelectedPipelineCommand.ExecuteAsync(null);
+
+        Assert.Equal("incident-timeline", navigation.CurrentArea);
+        var seed = Assert.IsType<IncidentInvestigationSeed>(navigation.CurrentParameter);
+        Assert.Equal(IncidentInvestigationSourceArea.Pipelines, seed.SourceArea);
+        Assert.Equal(101, seed.EvidenceRef?.PipelineId);
+        Assert.Equal("platform-services", seed.EvidenceRef?.ProjectName);
+        Assert.Equal("orders-api-ci", seed.EvidenceRef?.RunDisplayName);
+        Assert.Equal([IncidentTimelineSource.Releases], seed.SuggestedSources);
+    }
+
+    [Fact]
     public void AksOpenSettings_NavigatesToAksSettingsSection()
     {
         var (appState, _, navigation) = CreateContext();
