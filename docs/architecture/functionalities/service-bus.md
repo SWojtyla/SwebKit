@@ -22,6 +22,7 @@
 - Persist message-list row density and column preferences per namespace/entity/mode scope, including reset-to-default.
 - Expand loaded message windows with `Load More` in active and DLQ list modes for large result sets.
 - Compose, replay, edit, and schedule messages.
+- Send-like actions opened from a subscription workspace normalize the target to the parent topic, because subscriptions are receive-only paths.
 - Manage message templates from composer workflows (create/save, search, apply, rename, duplicate, edit, delete).
 - Cancel scheduled messages and view scheduled message history.
 - Resubmit dead-letter messages to original or target entity, processing the full requested sequence set across receive batches.

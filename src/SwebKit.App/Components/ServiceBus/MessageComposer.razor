@@ -4,195 +4,216 @@
 
 <div class="message-composer">
     <div class="message-composer__header">
-        <span class="message-composer__title">
-            @(Mode == ComposerMode.Replay ? "Replay →" : Mode == ComposerMode.Schedule ? "Schedule →" : "Compose →")
-            @(_effectiveEntityPath ?? EntityPath ?? "—")
-        </span>
+        <div class="message-composer__title-block">
+            <span class="message-composer__eyebrow">Message Workspace</span>
+            <span class="message-composer__title">
+                @(Mode == ComposerMode.Replay ? "Replay →" : Mode == ComposerMode.Schedule ? "Schedule →" : "Compose →")
+                @(ResolvedTargetEntityPath ?? "—")
+            </span>
+        </div>
         <div class="message-composer__header-actions">
-            @if (Mode == ComposerMode.Compose)
+            @if (Mode is ComposerMode.Compose or ComposerMode.Replay or ComposerMode.Edit or ComposerMode.Schedule)
             {
                 <FluentButton data-testid="load-template-button" Appearance="Appearance.Stealth" style="font-size:11px;"
                               @onclick="OpenTemplatePicker">Load
                     Template</FluentButton>
-                <FluentButton data-testid="open-save-template-button" Appearance="Appearance.Stealth"
-                              style="font-size:11px;" @onclick="OpenSaveTemplate">Save as
-                    Template</FluentButton>
-            }
-            <button @onclick="() => OnClose.InvokeAsync()" title="Close composer" class="message-composer__close">✕</button>
-        </div>
-    </div>
-
-    @if (Mode == ComposerMode.Replay && AvailableNamespaces is { Count: > 0 })
-    {
-        <div class="message-composer__panel">
-            <div class="message-composer__panel-title">Replay Target</div>
-            <div class="message-composer__two-col">
-                <div class="message-composer__field">
-                    <label class="message-composer__label">Namespace</label>
-                    <select @bind="_targetNamespaceId" class="message-composer__input app-native-control app-native-select">
-                        <option value="">— same namespace —</option>
-                        @foreach (var ns in AvailableNamespaces)
-                        {
-                            <option value="@ns.Id">@ns.Alias</option>
-                        }
-                    </select>
-                </div>
-                <div class="message-composer__field">
-                    <label class="message-composer__label">Entity</label>
-                    <input type="text" @bind="_effectiveEntityPath" placeholder="@(EntityPath ?? "entity path…")"
-                           class="message-composer__input message-composer__input--mono app-native-control" />
+                }
+                @if (Mode == ComposerMode.Compose)
+                {
+                    <FluentButton data-testid="open-save-template-button" Appearance="Appearance.Stealth"
+                                  style="font-size:11px;" @onclick="OpenSaveTemplate">Save as
+                        Template</FluentButton>
+                    }
+                    <button @onclick="() => OnClose.InvokeAsync()" title="Close composer"
+                            class="message-composer__close">✕</button>
                 </div>
             </div>
 
-            <details class="message-composer__details">
-                <summary class="message-composer__details-summary">Remap rules (optional)</summary>
-                <div class="message-composer__details-body">
+            @if (Mode != ComposerMode.Replay && !string.IsNullOrWhiteSpace(ResolvedTargetEntityPath))
+            {
+                <div class="message-composer__panel message-composer__panel--target">
+                    <div class="message-composer__panel-title">Target</div>
+                    <div class="message-composer__target-value">@ResolvedTargetEntityPath</div>
+                    <div class="message-composer__target-note">Uses the queue or topic from the current tab.</div>
+                </div>
+            }
+
+            @if (ShouldShowSendTargetHint)
+            {
+                <div class="message-composer__status message-composer__status--hint">
+                    Subscription paths are receive-only. This action sends to topic @ResolvedTargetEntityPath.
+                </div>
+            }
+
+            @if (Mode == ComposerMode.Replay && AvailableNamespaces is { Count: > 0 })
+            {
+                <div class="message-composer__panel">
+                    <div class="message-composer__panel-title">Replay Target</div>
                     <div class="message-composer__two-col">
                         <div class="message-composer__field">
-                            <label class="message-composer__label">Override Subject</label>
-                            <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
-                                   class="message-composer__input app-native-control" />
+                            <label class="message-composer__label">Namespace</label>
+                            <select @bind="_targetNamespaceId" class="message-composer__input app-native-control app-native-select">
+                                <option value="">— same namespace —</option>
+                                @foreach (var ns in AvailableNamespaces)
+                                {
+                                    <option value="@ns.Id">@ns.Alias</option>
+                                }
+                            </select>
                         </div>
                         <div class="message-composer__field">
-                            <label class="message-composer__label">Override CorrelationId</label>
-                            <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
-                                   class="message-composer__input app-native-control" />
+                            <label class="message-composer__label">Entity</label>
+                            <input type="text" @bind="_effectiveEntityPath" placeholder="@(EntityPath ?? "entity path…")"
+                                   data-testid="replay-target-entity-input"
+                                   class="message-composer__input message-composer__input--mono app-native-control" />
                         </div>
                     </div>
 
-                    <div>
-                        <div class="message-composer__section-title">
-                            Property Renames
-                            <button @onclick="AddPropertyRename" class="message-composer__secondary-btn">+ Add</button>
+                    <details class="message-composer__details">
+                        <summary class="message-composer__details-summary">Remap rules (optional)</summary>
+                        <div class="message-composer__details-body">
+                            <div class="message-composer__two-col">
+                                <div class="message-composer__field">
+                                    <label class="message-composer__label">Override Subject</label>
+                                    <input type="text" @bind="_remapOverrideSubject" placeholder="(keep original)"
+                                           class="message-composer__input app-native-control" />
+                                </div>
+                                <div class="message-composer__field">
+                                    <label class="message-composer__label">Override CorrelationId</label>
+                                    <input type="text" @bind="_remapOverrideCorrelationId" placeholder="(keep original)"
+                                           class="message-composer__input app-native-control" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="message-composer__section-title">
+                                    Property Renames
+                                    <button @onclick="AddPropertyRename" class="message-composer__secondary-btn">+ Add</button>
+                                </div>
+                                @for (var i = 0; i < _propertyRenames.Count; i++)
+                                {
+                                    var idx = i;
+                                    <div class="message-composer__prop-row">
+                                        <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
+                                               @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                               class="message-composer__prop-input message-composer__prop-input--key app-native-control" />
+                                        <span class="message-composer__arrow">→</span>
+                                        <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
+                                               @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
+                                               class="message-composer__prop-input message-composer__prop-input--value app-native-control" />
+                                        <button @onclick="() => RemovePropertyRename(idx)" title="Remove"
+                                                class="message-composer__secondary-btn">✕</button>
+                                    </div>
+                                }
+                            </div>
                         </div>
-                        @for (var i = 0; i < _propertyRenames.Count; i++)
+                    </details>
+                </div>
+            }
+
+            @if (Mode == ComposerMode.Schedule)
+            {
+                <div class="message-composer__panel">
+                    <div class="message-composer__panel-title">Schedule</div>
+                    <div class="message-composer__field">
+                        <label class="message-composer__label">Enqueue at (local time)</label>
+                        <input type="datetime-local" @bind="_scheduleAt" class="message-composer__input app-native-control" />
+                        @if (_scheduleAt != default)
                         {
-                            var idx = i;
-                            <div class="message-composer__prop-row">
-                                <input type="text" value="@_propertyRenames[idx].OldKey" placeholder="Old key"
-                                       @onchange="e => SetRenameOldKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                       class="message-composer__prop-input message-composer__prop-input--key app-native-control" />
-                                <span class="message-composer__arrow">→</span>
-                                <input type="text" value="@_propertyRenames[idx].NewKey" placeholder="New key"
-                                       @onchange="e => SetRenameNewKey(idx, e.Value?.ToString() ?? string.Empty)"
-                                       class="message-composer__prop-input message-composer__prop-input--value app-native-control" />
-                                <button @onclick="() => RemovePropertyRename(idx)" title="Remove"
-                                        class="message-composer__secondary-btn">✕</button>
+                            var minutesFromNow = (_scheduleAt - DateTime.Now).TotalMinutes;
+                            <div class="message-composer__status">
+                                Sends at @_scheduleAt.ToString("yyyy-MM-dd HH:mm") (local) — @minutesFromNow.ToString("F0") min from now
                             </div>
                         }
                     </div>
                 </div>
-            </details>
-        </div>
-    }
+            }
 
-    @if (Mode == ComposerMode.Schedule)
-    {
-        <div class="message-composer__panel">
-            <div class="message-composer__panel-title">Schedule</div>
-            <div class="message-composer__field">
-                <label class="message-composer__label">Enqueue at (local time)</label>
-                <input type="datetime-local" @bind="_scheduleAt"
-                       class="message-composer__input app-native-control" />
-                @if (_scheduleAt != default)
+            <div class="message-composer__two-col">
+                <div class="message-composer__field">
+                    <label class="message-composer__label">Message ID</label>
+                    <div class="message-composer__prop-row">
+                        <input type="text" @bind="_messageId"
+                               class="message-composer__input message-composer__input--mono app-native-control" />
+                        <button @onclick="@(() => _messageId = Guid.NewGuid().ToString())" title="Generate new ID"
+                                class="message-composer__icon-btn">⟳</button>
+                    </div>
+                </div>
+                <div class="message-composer__field">
+                    <label class="message-composer__label">Correlation ID</label>
+                    <input type="text" @bind="_correlationId" class="message-composer__input app-native-control" />
+                </div>
+                <div class="message-composer__field">
+                    <label class="message-composer__label">Subject</label>
+                    <input type="text" @bind="_subject" class="message-composer__input app-native-control" />
+                </div>
+                <div class="message-composer__field">
+                    <label class="message-composer__label">Content-Type</label>
+                    <input type="text" @bind="_contentType" class="message-composer__input app-native-control" />
+                </div>
+            </div>
+
+            <div>
+                <div class="message-composer__section-title">
+                    Application Properties
+                    <button @onclick="AddProperty" class="message-composer__secondary-btn">+ Add</button>
+                </div>
+                @for (var i = 0; i < _properties.Count; i++)
                 {
-                    var minutesFromNow = (_scheduleAt - DateTime.Now).TotalMinutes;
-                    <div class="message-composer__status">
-                        Sends at @_scheduleAt.ToString("yyyy-MM-dd HH:mm") (local) — @minutesFromNow.ToString("F0") min from now
+                    var idx = i;
+                    <div class="message-composer__prop-row">
+                        <input type="text" value="@_properties[idx].Key" placeholder="Key"
+                               @onchange="e => SetPropertyKey(idx, e.Value?.ToString() ?? string.Empty)"
+                               class="message-composer__prop-input message-composer__prop-input--key app-native-control" />
+                        <input type="text" value="@_properties[idx].Value" placeholder="Value"
+                               @onchange="e => SetPropertyValue(idx, e.Value?.ToString() ?? string.Empty)"
+                               class="message-composer__prop-input message-composer__prop-input--value app-native-control" />
+                        <button @onclick="() => RemoveProperty(idx)" title="Remove property"
+                                class="message-composer__secondary-btn">✕</button>
                     </div>
                 }
             </div>
-        </div>
-    }
 
-    <div class="message-composer__two-col">
-        <div class="message-composer__field">
-            <label class="message-composer__label">Message ID</label>
-            <div class="message-composer__prop-row">
-                <input type="text" @bind="_messageId"
-                       class="message-composer__input message-composer__input--mono app-native-control" />
-                <button @onclick="@(() => _messageId = Guid.NewGuid().ToString())" title="Generate new ID"
-                        class="message-composer__icon-btn">⟳</button>
+            <div class="message-composer__field">
+                <label class="message-composer__label">Body</label>
+                <textarea @bind="_body" rows="5" data-testid="composer-body-input"
+                          class="message-composer__textarea app-native-control"></textarea>
+            </div>
+
+            <div class="message-composer__actions">
+                @if (_sendResult is not null)
+                {
+                    <span
+                    class="message-composer__status @(_sendError ? "message-composer__status--error" : "message-composer__status--success")">@_sendResult</span>
+                }
+                <FluentButton data-testid="composer-send-button" Appearance="Appearance.Accent" style="margin-left:auto;"
+                              Disabled="@(!CanSend)" @onclick="SendMessage">
+                    @SendLabel
+                </FluentButton>
             </div>
         </div>
-        <div class="message-composer__field">
-            <label class="message-composer__label">Correlation ID</label>
-            <input type="text" @bind="_correlationId"
-                   class="message-composer__input app-native-control" />
-        </div>
-        <div class="message-composer__field">
-            <label class="message-composer__label">Subject</label>
-            <input type="text" @bind="_subject"
-                   class="message-composer__input app-native-control" />
-        </div>
-        <div class="message-composer__field">
-            <label class="message-composer__label">Content-Type</label>
-            <input type="text" @bind="_contentType"
-                   class="message-composer__input app-native-control" />
-        </div>
-    </div>
 
-    <div>
-        <div class="message-composer__section-title">
-            Application Properties
-            <button @onclick="AddProperty" class="message-composer__secondary-btn">+ Add</button>
-        </div>
-        @for (var i = 0; i < _properties.Count; i++)
+        @if (_showTemplatePicker)
         {
-            var idx = i;
-            <div class="message-composer__prop-row">
-                <input type="text" value="@_properties[idx].Key" placeholder="Key"
-                       @onchange="e => SetPropertyKey(idx, e.Value?.ToString() ?? string.Empty)"
-                       class="message-composer__prop-input message-composer__prop-input--key app-native-control" />
-                <input type="text" value="@_properties[idx].Value" placeholder="Value"
-                       @onchange="e => SetPropertyValue(idx, e.Value?.ToString() ?? string.Empty)"
-                       class="message-composer__prop-input message-composer__prop-input--value app-native-control" />
-                <button @onclick="() => RemoveProperty(idx)" title="Remove property"
-                        class="message-composer__secondary-btn">✕</button>
+            <TemplatePicker OnTemplateSelected="ApplyTemplate" OnClose="() => _showTemplatePicker = false" />
+        }
+
+        @if (_showSaveTemplate)
+        {
+            <div class="message-composer__save-overlay">
+                <div class="message-composer__save-dialog">
+                    <h3 class="message-composer__dialog-title">Save as Template</h3>
+                    <input data-testid="save-template-name-input" type="text" @bind="_saveTemplateName" placeholder="Template name…"
+                           class="message-composer__save-input app-native-control" />
+                    <div class="message-composer__dialog-actions">
+                        <button @onclick="() => _showSaveTemplate = false"
+                                class="message-composer__dialog-btn message-composer__dialog-btn--secondary">Cancel</button>
+                        <button data-testid="save-template-confirm-button" @onclick="SaveTemplate"
+                                disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
+                                class="message-composer__dialog-btn message-composer__dialog-btn--primary">Save</button>
+                    </div>
+                </div>
             </div>
         }
-    </div>
-
-    <div class="message-composer__field">
-        <label class="message-composer__label">Body</label>
-        <textarea @bind="_body" rows="5" data-testid="composer-body-input"
-                  class="message-composer__textarea app-native-control"></textarea>
-    </div>
-
-    <div class="message-composer__actions">
-        @if (_sendResult is not null)
-        {
-            <span class="message-composer__status @(_sendError ? "message-composer__status--error" : "message-composer__status--success")">@_sendResult</span>
-        }
-        <FluentButton data-testid="composer-send-button" Appearance="Appearance.Accent" style="margin-left:auto;"
-                      Disabled="@(!CanSend)" @onclick="SendMessage">
-            @SendLabel
-        </FluentButton>
-    </div>
-</div>
-
-@if (_showTemplatePicker)
-{
-    <TemplatePicker OnTemplateSelected="ApplyTemplate" OnClose="() => _showTemplatePicker = false" />
-}
-
-@if (_showSaveTemplate)
-{
-    <div class="message-composer__save-overlay">
-        <div class="message-composer__save-dialog">
-            <h3 class="message-composer__dialog-title">Save as Template</h3>
-            <input data-testid="save-template-name-input" type="text" @bind="_saveTemplateName" placeholder="Template name…"
-                   class="message-composer__save-input app-native-control" />
-            <div class="message-composer__dialog-actions">
-                <button @onclick="() => _showSaveTemplate = false"
-                        class="message-composer__dialog-btn message-composer__dialog-btn--secondary">Cancel</button>
-                <button data-testid="save-template-confirm-button" @onclick="SaveTemplate"
-                        disabled="@string.IsNullOrWhiteSpace(_saveTemplateName)"
-                        class="message-composer__dialog-btn message-composer__dialog-btn--primary">Save</button>
-            </div>
-        </div>
-    </div>
-}
 
 <ConfirmDialog Visible="_showSendConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage" IsProduction="true"
                ConfirmLabel="@SendLabel" OnConfirm="DoSend" OnCancel="() => _showSendConfirm = false" />
@@ -257,12 +278,18 @@
         }
 
         if (_effectiveEntityPath is null)
-            _effectiveEntityPath = EntityPath;
+            _effectiveEntityPath = NormalizeSendEntityPath(EntityPath);
     }
+
+    private string? ResolvedTargetEntityPath => NormalizeSendEntityPath(_effectiveEntityPath ?? EntityPath);
+
+    private bool ShouldShowSendTargetHint =>
+        !string.Equals(_effectiveEntityPath ?? EntityPath, ResolvedTargetEntityPath, StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(ResolvedTargetEntityPath);
 
     private bool CanSend => !_isSending &&
     (Client is not null || (Mode == ComposerMode.Replay && !string.IsNullOrWhiteSpace(_targetNamespaceId))) &&
-    !string.IsNullOrWhiteSpace(_effectiveEntityPath ?? EntityPath) &&
+    !string.IsNullOrWhiteSpace(ResolvedTargetEntityPath) &&
     (Mode != ComposerMode.Schedule || _scheduleAt > DateTime.Now);
 
     private string SendLabel => _isSending
@@ -277,10 +304,10 @@
 
     private string ConfirmTitle => Mode == ComposerMode.Schedule ? "Schedule Message" : "Send Message";
     private string ConfirmMessage => Mode == ComposerMode.Replay
-    ? $"Replay message to {_effectiveEntityPath} in production?"
+    ? $"Replay message to {ResolvedTargetEntityPath} in production?"
     : Mode == ComposerMode.Schedule
-    ? $"Schedule message on {_effectiveEntityPath ?? EntityPath} at {_scheduleAt:yyyy-MM-dd HH:mm} in production?"
-    : $"Send message to {_effectiveEntityPath ?? EntityPath} in production?";
+    ? $"Schedule message on {ResolvedTargetEntityPath} at {_scheduleAt:yyyy-MM-dd HH:mm} in production?"
+    : $"Send message to {ResolvedTargetEntityPath} in production?";
 
     private void AddProperty() => _properties.Add(("", ""));
     private void RemoveProperty(int idx) { _properties.RemoveAt(idx); StateHasChanged(); }
@@ -383,7 +410,7 @@
             };
 
             var targetClient = ResolveTargetClient();
-            var targetEntity = _effectiveEntityPath ?? EntityPath
+            var targetEntity = ResolvedTargetEntityPath
             ?? throw new InvalidOperationException("No target entity.");
 
             if (Mode == ComposerMode.Replay)
@@ -473,5 +500,29 @@
                 msg.ApplicationProperties[newKey] = val;
             }
         }
+    }
+
+    private static string? NormalizeSendEntityPath(string? entityPath)
+    {
+        if (string.IsNullOrWhiteSpace(entityPath))
+            return entityPath;
+
+        return TryParseSubscriptionPath(entityPath, out var topicName)
+            ? topicName
+            : entityPath.Trim();
+    }
+
+    private static bool TryParseSubscriptionPath(string entityPath, out string topicName)
+    {
+        const string marker = "/subscriptions/";
+        var markerIndex = entityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex <= 0)
+        {
+            topicName = string.Empty;
+            return false;
+        }
+
+        topicName = entityPath[..markerIndex].Trim();
+        return !string.IsNullOrWhiteSpace(topicName);
     }
 }

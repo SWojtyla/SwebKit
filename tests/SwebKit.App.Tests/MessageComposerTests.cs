@@ -242,6 +242,53 @@ public sealed class MessageComposerTests : TestContext
         });
     }
 
+    [Fact]
+    public void ComposeMode_SubscriptionEntity_SendsToParentTopic()
+    {
+        var client = new StubServiceBusClient();
+
+        var cut = RenderComponent<MessageComposer>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders/subscriptions/processor-a")
+            .Add(p => p.Mode, MessageComposer.ComposerMode.Compose));
+
+        cut.Find("[data-testid='composer-send-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(1, client.SendCalls);
+            Assert.Equal("orders", client.LastEntityPath);
+            Assert.Contains("Subscription paths are receive-only", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void ReplayMode_SubscriptionTarget_NormalizesToTopicBeforeSend()
+    {
+        var sourceClient = new StubServiceBusClient();
+        var targetClient = new StubServiceBusClient();
+        var targetNamespaceId = Guid.NewGuid();
+        var prefill = new SbMessage { MessageId = "orig", Body = "payload" };
+
+        var cut = RenderComponent<MessageComposer>(ps => ps
+            .Add(p => p.Client, sourceClient)
+            .Add(p => p.EntityPath, "orders/subscriptions/processor-a")
+            .Add(p => p.Mode, MessageComposer.ComposerMode.Replay)
+            .Add(p => p.PrefillMessage, prefill)
+            .Add(p => p.AvailableNamespaces, [new MessageComposer.NamespaceOption(targetNamespaceId, "Target", targetClient)]));
+
+        cut.Find("select").Change(targetNamespaceId.ToString());
+        cut.Find("[data-testid='replay-target-entity-input']").Change("billing/subscriptions/processor-b");
+        cut.Find("[data-testid='composer-send-button']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(1, targetClient.SendCalls);
+            Assert.Equal("billing", targetClient.LastEntityPath);
+            Assert.Contains("This action sends to topic billing.", cut.Markup);
+        });
+    }
+
     private sealed class StubServiceBusClient : IServiceBusClient
     {
         public int SendCalls { get; private set; }

@@ -35,6 +35,26 @@ public sealed class MessageListViewTests : TestContext
     }
 
     [Fact]
+    public void ComposePanel_UsesActiveEntityPath()
+    {
+        var client = new FakeServiceBusClient();
+
+        var cut = RenderComponent<MessageListView>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.EntityPath, "orders")
+            .Add(p => p.ShowCompose, true));
+
+        cut.Find("button[title='Open message composer or load a template']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Compose →", cut.Markup);
+            Assert.Contains("orders", cut.Markup);
+            Assert.DoesNotContain("Compose → EntityPath", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void DlqMode_ShowsModeBadge_AndShowingOfTotalSummary()
     {
         var client = new FakeServiceBusClient(

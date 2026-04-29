@@ -9,7 +9,7 @@
     @if (_showComposer && ShowCompose)
     {
         <div class="message-list-view__composer-shell">
-            <MessageComposer Client="Client" EntityPath="EntityPath" IsProduction="false"
+            <MessageComposer Client="Client" EntityPath="@EntityPath" IsProduction="false"
                              OnSent="@((_) => OnComposerSent())" OnClose="@(() => _showComposer = false)" />
         </div>
     }
@@ -214,8 +214,9 @@
         @if (ShowCompose && !IsDlqMode && Client is not null)
         {
             <FluentButton @onclick="@(() => _showComposer = !_showComposer)"
-                          Appearance="@(_showComposer? Appearance.Accent: Appearance.Stealth)" title="Open message composer">
-                ✉ Send
+                          Appearance="@(_showComposer? Appearance.Accent: Appearance.Stealth)"
+                          title="Open message composer or load a template">
+                ✉ Compose
             </FluentButton>
         }
         <FluentButton @onclick="ExportFilteredJsonAsync" Appearance="Appearance.Stealth"
@@ -344,7 +345,7 @@
                         <TemplateColumn Title="Correlation ID" Width="180px"
                                         SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
                             <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                                                                                                                           "-")</span>
+                                                                                                                                                                                                           "-")</span>
                             </TemplateColumn>
                         }
                         @if (IsBuiltInColumnVisible(ColumnSubject))
@@ -387,14 +388,14 @@
                                             SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
                                 <span class="cell-truncate"
                                       title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
-                                                                                                                                                                 "-")</span>
+                                                                                                                                                                                                                                         "-")</span>
                                 </TemplateColumn>
                             }
                             @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
                             {
                                 <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
                                     <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                                                                                                                                         "-")</span>
+                                                                                                                                                                                                                                                         "-")</span>
                                     </TemplateColumn>
                                 }
                                 @foreach (var customColumn in _customPropertyColumns)
