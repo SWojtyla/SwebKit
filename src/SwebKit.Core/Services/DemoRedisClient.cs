@@ -197,6 +197,43 @@ public sealed class DemoRedisClient : IRedisClient
         return Task.CompletedTask;
     }
 
+    public Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var db = GetDb();
+        var result = new RedisImportResult();
+
+        foreach (var entry in entries)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(entry.Key))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add("Skipped Redis import entry with an empty key.");
+                continue;
+            }
+
+            if (!overwriteExisting && db.ContainsKey(entry.Key))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped existing Redis key '{entry.Key}'.");
+                continue;
+            }
+
+            db.Remove(entry.Key);
+            if (!TryImportEntry(db, entry, result.Warnings))
+            {
+                result.SkippedCount++;
+                continue;
+            }
+
+            result.ImportedCount++;
+        }
+
+        return Task.FromResult(result);
+    }
+
     public Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -400,6 +437,59 @@ public sealed class DemoRedisClient : IRedisClient
         }
 
         return db;
+    }
+
+    private static bool TryImportEntry(Dictionary<string, DemoValue> db, RedisImportEntry entry, ICollection<string> warnings)
+    {
+        var expiry = ToExpiry(entry.Ttl);
+        switch (entry.Type.Trim().ToLowerInvariant())
+        {
+            case "string":
+                db[entry.Key] = new DemoValue("string", entry.StringValue ?? string.Empty, expiry);
+                return true;
+            case "hash":
+                if (entry.HashFields.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis hash '{entry.Key}' because Redis cannot persist an empty hash.");
+                    return false;
+                }
+
+                db[entry.Key] = new DemoValue("hash", new Dictionary<string, string>(entry.HashFields, StringComparer.Ordinal), expiry);
+                return true;
+            case "list":
+                if (entry.ListItems.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis list '{entry.Key}' because Redis cannot persist an empty list.");
+                    return false;
+                }
+
+                db[entry.Key] = new DemoValue("list", new List<string>(entry.ListItems), expiry);
+                return true;
+            case "set":
+                if (entry.SetMembers.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis set '{entry.Key}' because Redis cannot persist an empty set.");
+                    return false;
+                }
+
+                db[entry.Key] = new DemoValue("set", new HashSet<string>(entry.SetMembers, StringComparer.Ordinal), expiry);
+                return true;
+            case "zset":
+                if (entry.SortedSetMembers.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis sorted set '{entry.Key}' because Redis cannot persist an empty sorted set.");
+                    return false;
+                }
+
+                db[entry.Key] = new DemoValue("zset", entry.SortedSetMembers.Select(member => new RedisSortedSetEntry
+                {
+                    Member = member.Member,
+                    Score = member.Score
+                }).ToList(), expiry);
+                return true;
+            default:
+                throw new InvalidOperationException($"Unsupported Redis import type '{entry.Type}'.");
+        }
     }
 
     private static bool TryGetValue(Dictionary<string, DemoValue> db, string key, out DemoValue value)

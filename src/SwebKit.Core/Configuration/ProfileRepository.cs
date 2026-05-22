@@ -109,6 +109,19 @@ public class ProfileRepository
         _data = NormalizeProfileData(data);
     }
 
+    /// <summary>
+    /// Replaces and persists the full profile data, even when a previous load failure blocked normal saves.
+    /// Intended for explicit operator-driven configuration imports.
+    /// </summary>
+    public async Task ImportAsync(ProfileData data)
+    {
+        _data = NormalizeProfileData(data);
+        AppDataPaths.EnsureDirectoryExists();
+        var json = JsonSerializer.Serialize(_data, Options);
+        await AppDataFileStore.SaveAsync(AppDataPaths.ProfilesJson, json);
+        _lastLoadResult = ProfileLoadResult.Loaded(AppDataPaths.ProfilesJson);
+    }
+
     private static ProfileData DeserializeProfileData(string json)
     {
         var loaded = JsonSerializer.Deserialize<LegacyProfileData>(json, Options) ?? new LegacyProfileData();

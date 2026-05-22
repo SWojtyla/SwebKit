@@ -168,6 +168,42 @@ public sealed class RedisClient : IRedisClient
         await _db.KeyDeleteAsync(keys.Select(k => (RedisKey)k).ToArray());
     }
 
+    public async Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var result = new RedisImportResult();
+
+        foreach (var entry in entries)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(entry.Key))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add("Skipped Redis import entry with an empty key.");
+                continue;
+            }
+
+            if (!overwriteExisting && await _db.KeyExistsAsync(entry.Key))
+            {
+                result.SkippedCount++;
+                result.Warnings.Add($"Skipped existing Redis key '{entry.Key}'.");
+                continue;
+            }
+
+            await _db.KeyDeleteAsync(entry.Key);
+            if (!await TryImportEntryAsync(entry, result.Warnings))
+            {
+                result.SkippedCount++;
+                continue;
+            }
+
+            result.ImportedCount++;
+        }
+
+        return result;
+    }
+
     public async Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -250,6 +286,61 @@ public sealed class RedisClient : IRedisClient
     {
         _mux.Dispose();
     }
+
+    private async Task<bool> TryImportEntryAsync(RedisImportEntry entry, ICollection<string> warnings)
+    {
+        switch (entry.Type.Trim().ToLowerInvariant())
+        {
+            case "string":
+                await _db.StringSetAsync(entry.Key, entry.StringValue ?? string.Empty, entry.Ttl);
+                return true;
+            case "hash":
+                if (entry.HashFields.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis hash '{entry.Key}' because Redis cannot persist an empty hash.");
+                    return false;
+                }
+
+                await _db.HashSetAsync(entry.Key, entry.HashFields.Select(field => new HashEntry(field.Key, field.Value)).ToArray());
+                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                return true;
+            case "list":
+                if (entry.ListItems.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis list '{entry.Key}' because Redis cannot persist an empty list.");
+                    return false;
+                }
+
+                await _db.ListRightPushAsync(entry.Key, entry.ListItems.Select(static item => (RedisValue)item).ToArray());
+                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                return true;
+            case "set":
+                if (entry.SetMembers.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis set '{entry.Key}' because Redis cannot persist an empty set.");
+                    return false;
+                }
+
+                await _db.SetAddAsync(entry.Key, entry.SetMembers.Select(static member => (RedisValue)member).ToArray());
+                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                return true;
+            case "zset":
+                if (entry.SortedSetMembers.Count == 0)
+                {
+                    warnings.Add($"Skipped Redis sorted set '{entry.Key}' because Redis cannot persist an empty sorted set.");
+                    return false;
+                }
+
+                await _db.SortedSetAddAsync(entry.Key, entry.SortedSetMembers.Select(member => new SortedSetEntry(member.Member, member.Score)).ToArray());
+                await ApplyExpiryAsync(entry.Key, entry.Ttl);
+                return true;
+            default:
+                throw new InvalidOperationException($"Unsupported Redis import type '{entry.Type}'.");
+        }
+    }
+
+    private Task<bool> ApplyExpiryAsync(string key, TimeSpan? expiry)
+        => expiry.HasValue ? _db.KeyExpireAsync(key, expiry) : Task.FromResult(false);
 
     public async Task<RedisSlowLogSummary> GetSlowLogAsync(int top = 128, CancellationToken ct = default)
     {

@@ -20,6 +20,7 @@ public interface IRedisClient : IDisposable
     Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default);
     Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default);
     Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default);
+    Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default);
 
     Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default);
     Task SetTtlAsync(string key, TimeSpan ttl, CancellationToken ct = default);

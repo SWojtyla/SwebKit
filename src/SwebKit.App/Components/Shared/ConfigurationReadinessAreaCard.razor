@@ -35,8 +35,27 @@
     @if (Area is null)
     {
         <p class="settings-readiness-card__detail">
-            The current section does not own a separate external readiness contract.
+            Review workspace-wide setup here, then use the left navigation to open the section that still needs attention.
         </p>
+
+        @if (OutstandingAreas.Count > 0)
+        {
+            <div class="settings-readiness-actions">
+                @foreach (var area in OutstandingAreas)
+                {
+                    <div class="settings-readiness-action">
+                        <strong>@area.Title</strong>
+                        <span>@area.Summary</span>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="settings-readiness-card__detail">
+                All capability areas are currently marked ready.
+            </p>
+        }
     }
     else
     {
@@ -136,7 +155,11 @@
 
     [Parameter] public EventCallback OnRunLiveChecks { get; set; }
 
-    private bool ShowLiveCheckAction => Area?.CanRunLiveProbe == true || Area?.LiveProbe is not null;
+    private IReadOnlyList<ConfigurationAreaHealth> OutstandingAreas => Report.Areas
+        .Where(static area => area.Status != ConfigurationCheckStatus.Ready)
+        .ToList();
+
+    private bool ShowLiveCheckAction => Area is null || Area?.CanRunLiveProbe == true || Area?.LiveProbe is not null;
 
     private static string GetReadinessLabel(ConfigurationCheckStatus status) => status switch
     {

@@ -37,6 +37,17 @@ public sealed class UserSettingsRepository
         await AppDataFileStore.SaveAsync(AppDataPaths.UserSettingsJson, json);
     }
 
+    public void ReplaceSettings(UserSettings settings)
+    {
+        Settings = NormalizeSettings(settings);
+    }
+
+    public async Task ImportAsync(UserSettings settings)
+    {
+        ReplaceSettings(settings);
+        await SaveAsync();
+    }
+
     private static UserSettings DeserializeSettings(string json) =>
         NormalizeSettings(JsonSerializer.Deserialize<UserSettings>(json, Options) ?? new UserSettings());
 

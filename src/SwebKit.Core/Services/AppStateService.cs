@@ -94,5 +94,12 @@ public class AppStateService
         await TryPersistProfilesAsync();
     }
 
+    public void RefreshFromImportedState()
+    {
+        UseDemoData = _uiState.State.UseDemoData;
+        Initialized?.Invoke();
+        DemoModeChanged?.Invoke();
+    }
+
     private Task<bool> TryPersistProfilesAsync() => _profiles.TrySaveAsync();
 }

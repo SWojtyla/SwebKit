@@ -1,80 +1,155 @@
+@using Microsoft.AspNetCore.Components.Forms
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
 
-<div style="display:grid; gap:12px; padding:12px 0;">
-    @* ── Cache list ── *@
-    @if (Caches.Count > 0)
-    {
-        <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">Configured Caches</div>
-        @foreach (var cache in Caches)
+<div class="redis-settings-shell">
+    <section class="redis-settings-card redis-settings-card--hero">
+        <div class="redis-settings-card__copy">
+            <p class="redis-settings-card__eyebrow">Redis connections</p>
+            <h3 class="redis-settings-card__title">Manage cache profiles for this environment</h3>
+            <p class="redis-settings-card__body">
+                Add one cache at a time or import a connection list from a `.txt` or `.json` export.
+                Imported entries are merged by Redis endpoint.
+            </p>
+        </div>
+        <div class="redis-settings-card__meta">
+            <span class="shell-pill shell-pill--muted">@Caches.Count configured</span>
+            <span class="shell-pill shell-pill--muted">Global separator: @CurrentSeparator</span>
+        </div>
+    </section>
+
+    <section class="redis-settings-card redis-settings-card--import">
+        <div class="redis-settings-import__copy">
+            <h4 class="redis-settings-section-title">Import connection list</h4>
+            <p class="redis-settings-card__body">
+                Accepts Redis connection exports like the file you attached. If the file contains mixed separators,
+                SwebKit applies the most common one because separator grouping is global today.
+            </p>
+        </div>
+        <div class="redis-settings-import__actions">
+            <FluentInputFile class="redis-settings-import__picker" AnchorId="redis-settings-import-trigger"
+                             Accept=".txt,.json,application/json,text/plain" MaximumFileCount="1" DragDropZoneVisible="false"
+                             Disabled="@_isImportingConnections" OnInputFileChange="OnImportFileSelected" />
+            <FluentButton id="redis-settings-import-trigger" Appearance="Appearance.Outline"
+                          Disabled="@_isImportingConnections">
+                @(_selectedImportFile is null ? "Choose file" : "Change file")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent"
+                          Disabled="@(_selectedImportFile is null || _isImportingConnections)" @onclick="ImportConnectionsAsync">
+                @(_isImportingConnections ? "Importing…" : "Import connections")
+            </FluentButton>
+        </div>
+        @if (_selectedImportFile is not null)
         {
-            <div
-                style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface);">
-                <span style="flex:1; font-size:12px; font-family:Consolas, monospace;">@cache.DisplayName</span>
-                <span style="font-size:11px; color:var(--color-text-muted);">DB@cache.Database</span>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditCache(cache)">Edit</FluentButton>
-                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => RemoveCache(cache)">Remove</FluentButton>
-            </div>
+            <p class="redis-settings-card__body">Selected file: @_selectedImportFile.Name</p>
         }
+    </section>
+
+    @if (StatusMessage is not null)
+    {
+        <div class="redis-settings-status redis-settings-status--@StatusTone" role="status">@StatusMessage</div>
     }
 
-    @* ── Edit / Add form ── *@
-    <div style="font-size:12px; color:var(--color-text-muted); font-weight:600;">
-        @(EditingCacheId is not null ? "Edit Cache" : "Add Cache")
-    </div>
+    @if (Caches.Count > 0)
+    {
+        <section class="redis-settings-card">
+            <div class="redis-settings-card__header">
+                <h4 class="redis-settings-section-title">Configured caches</h4>
+            </div>
+            <div class="redis-settings-cache-grid">
+                @foreach (var cache in Caches)
+                {
+                    <article
+                        class="redis-settings-cache-card @(cache.Id == Environment.RedisConfig?.ActiveCacheId ? "redis-settings-cache-card--active" : string.Empty)">
+                        <div class="redis-settings-cache-card__header">
+                            <div class="redis-settings-cache-card__copy">
+                                <h5 class="redis-settings-cache-card__title">@GetCachePrimaryLabel(cache)</h5>
+                                @if (GetCacheSecondaryLabel(cache) is { } secondaryLabel)
+                                {
+                                    <p class="redis-settings-cache-card__detail">@secondaryLabel</p>
+                                }
+                            </div>
+                            <div class="redis-settings-cache-card__meta">
+                                @if (cache.Id == Environment.RedisConfig?.ActiveCacheId)
+                                {
+                                    <span class="shell-pill shell-pill--muted">Active</span>
+                                }
+                                <span class="shell-pill shell-pill--muted">DB@cache.Database</span>
+                            </div>
+                        </div>
+                        <p class="redis-settings-cache-card__endpoint">@GetConnectionIdentity(cache.ConnectionString)</p>
+                        <div class="redis-settings-cache-card__footer">
+                            <div class="redis-settings-cache-card__actions">
+                                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => EditCache(cache)">Edit
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => RemoveCache(cache)">Remove
+                                </FluentButton>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
+    }
 
-    <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Display Name</label>
-        <input type="text" @bind="DisplayName" @bind:event="oninput" class="@FieldClass(FieldDisplayName)"
-               aria-invalid="@HasError(FieldDisplayName)" aria-describedby="@ErrorId(FieldDisplayName)"
-               style="width:100%; padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px;"
-               placeholder="Dev Cache" @onfocusin="() => ClearError(FieldDisplayName)" />
-        @if (_errors.TryGetValue(FieldDisplayName, out var dnErr))
-        {
-            <span id="err-display-name" class="field-error-msg" role="alert">@dnErr</span>
-        }
-    </div>
+    <section class="redis-settings-card">
+        <div class="redis-settings-card__header">
+            <div>
+                <h4 class="redis-settings-section-title">@(EditingCacheId is not null ? "Edit cache" : "Add cache")</h4>
+                <p class="redis-settings-card__body">Use a display name that reads well in the Redis workspace and
+                    dashboard.</p>
+                </div>
+            </div>
 
-    <div style="display:grid; gap:4px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Redis Connection String</label>
-        <PasswordField Value="@ConnectionString"
-                       ValueChanged="@(v => { ConnectionString = v ?? ""; ClearError(FieldConnectionString); })"
-                       Label="Redis Connection String" Placeholder="localhost:6379,password=***,abortConnect=false"
-                       InputClass="@FieldClass(FieldConnectionString)" />
-        @if (_errors.TryGetValue(FieldConnectionString, out var csErr))
-        {
-            <span id="err-conn-str" class="field-error-msg" role="alert">@csErr</span>
-        }
-    </div>
+            <div class="redis-settings-form-grid">
+                <div class="redis-settings-field">
+                    <label class="redis-settings-field__label">Display name</label>
+                    <input type="text" @bind="DisplayName" @bind:event="oninput"
+                           class="@FieldClass(FieldDisplayName) redis-settings-field__input"
+                           aria-invalid="@HasError(FieldDisplayName)" aria-describedby="@ErrorId(FieldDisplayName)"
+                           placeholder="Dev Cache" @onfocusin="() => ClearError(FieldDisplayName)" />
+                    @if (_errors.TryGetValue(FieldDisplayName, out var dnErr))
+                    {
+                        <span id="err-display-name" class="field-error-msg" role="alert">@dnErr</span>
+                    }
+                </div>
 
-    <div style="display:grid; gap:6px;">
-        <label style="font-size:12px; color:var(--color-text-muted);">Default Database</label>
-        <select @bind="Database"
-                style="padding:6px 8px; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:4px; font-size:12px; width:120px;">
-            @for (var i = 0; i <= 15; i++)
-            {
-                <option value="@i">DB@i</option>
-            }
-        </select>
-    </div>
+                <div class="redis-settings-field">
+                    <label class="redis-settings-field__label">Redis connection string</label>
+                    <PasswordField Value="@ConnectionString"
+                                   ValueChanged="@(v => { ConnectionString = v ?? string.Empty; ClearError(FieldConnectionString); })"
+                                   Label="Redis Connection String" Placeholder="localhost:6379,password=***,abortConnect=false"
+                                   InputClass="@FieldClass(FieldConnectionString)" />
+                    @if (_errors.TryGetValue(FieldConnectionString, out var csErr))
+                    {
+                        <span id="err-conn-str" class="field-error-msg" role="alert">@csErr</span>
+                    }
+                </div>
 
-    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">
-            @(EditingCacheId is not null ? "Save Cache" : "Add Cache")
-        </FluentButton>
-        @if (EditingCacheId is not null)
-        {
-            <FluentButton @onclick="CancelEdit">Cancel</FluentButton>
-        }
-        <FluentButton @onclick="TestConnectionAsync">Test Connection</FluentButton>
+                <div class="redis-settings-field redis-settings-field--compact">
+                    <label class="redis-settings-field__label">Default database</label>
+                    <select @bind="Database" class="redis-settings-field__input redis-settings-field__input--select">
+                        @for (var i = 0; i <= 15; i++)
+                        {
+                            <option value="@i">DB@i</option>
+                        }
+                    </select>
+                </div>
+            </div>
 
-        @if (ConnectionStatus is not null)
-        {
-            <span
-            style="font-size:12px; color:@(ConnectionOk ? "var(--color-success)" : "var(--color-error)");">@ConnectionStatus</span>
-        }
+            <div class="redis-settings-actions">
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">
+                    @(EditingCacheId is not null ? "Save cache" : "Add cache")
+                </FluentButton>
+                @if (EditingCacheId is not null)
+                {
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CancelEdit">Cancel</FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="TestConnectionAsync">Test connection
+                </FluentButton>
+            </div>
+        </section>
     </div>
-</div>
 
 @code {
     [Parameter, EditorRequired] public AppConfig Environment { get; set; } = default!;
@@ -84,6 +159,8 @@
     private string ConnectionString = string.Empty;
     private int Database;
     private Dictionary<string, string> _errors = new();
+    private IBrowserFile? _selectedImportFile;
+    private bool _isImportingConnections;
 
     private const string FieldDisplayName = "DisplayName";
     private const string FieldConnectionString = "ConnectionString";
@@ -91,9 +168,12 @@
     private string FieldClass(string field) => _errors.ContainsKey(field) ? "field-invalid" : "";
     private string? HasError(string field) => _errors.ContainsKey(field) ? "true" : null;
     private string? ErrorId(string field) => _errors.ContainsKey(field) ? $"err-{field.ToLowerInvariant()}" : null;
-    private string? ConnectionStatus;
-    private bool ConnectionOk;
+    private string? StatusMessage;
+    private string StatusTone = "muted";
     private string? EditingCacheId;
+
+    private string CurrentSeparator => Environment.RedisConfig?.NamespaceSeparator ?? "-";
+
     private List<RedisCacheEntry> Caches
     {
         get
@@ -117,8 +197,6 @@
         DisplayName = string.Empty;
         ConnectionString = string.Empty;
         Database = 0;
-        ConnectionStatus = null;
-        ConnectionOk = false;
         _errors.Clear();
     }
 
@@ -144,7 +222,11 @@
         DisplayName = cache.DisplayName;
         ConnectionString = cache.ConnectionString;
         Database = cache.Database;
-        ConnectionStatus = null;
+    }
+
+    private void OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedImportFile = e.File;
     }
 
     private void CancelEdit() => ResetForm();
@@ -163,6 +245,71 @@
 
         await OnSaved.InvokeAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ImportConnectionsAsync()
+    {
+        if (_selectedImportFile is null || _isImportingConnections)
+            return;
+
+        _isImportingConnections = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            using var stream = _selectedImportFile.OpenReadStream(maxAllowedSize: 8L * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var payload = await reader.ReadToEndAsync();
+            var import = RedisConnectionImportParser.Parse(payload);
+            var config = Environment.RedisConfig ??= new RedisConfig();
+            config.EnsureMigrated();
+
+            var existingByIdentity = config.Caches.ToDictionary(GetConnectionIdentity, StringComparer.OrdinalIgnoreCase);
+            var added = 0;
+            var updated = 0;
+
+            foreach (var cache in import.Caches)
+            {
+                var identity = GetConnectionIdentity(cache.ConnectionString);
+                if (existingByIdentity.TryGetValue(identity, out var existing))
+                {
+                    existing.DisplayName = cache.DisplayName;
+                    existing.ConnectionString = cache.ConnectionString;
+                    updated++;
+                }
+                else
+                {
+                    config.Caches.Add(cache);
+                    existingByIdentity[identity] = cache;
+                    added++;
+                }
+            }
+
+            config.ActiveCacheId ??= config.Caches.FirstOrDefault()?.Id;
+            if (!string.IsNullOrWhiteSpace(import.SuggestedSeparator))
+                config.NamespaceSeparator = import.SuggestedSeparator;
+
+            _selectedImportFile = null;
+            await OnSaved.InvokeAsync();
+
+            var importedCount = added + updated;
+            var summary = $"Imported {importedCount} connection{(importedCount == 1 ? string.Empty : "s")} ({added} added, {updated} updated).";
+            if (import.HasMixedSeparators)
+                summary += $" Mixed separators found; using '{import.SuggestedSeparator}' globally.";
+            if (import.Warnings.Count > 0)
+                summary += $" {import.Warnings[0]}";
+
+            SetStatus(summary, import.HasMixedSeparators || import.Warnings.Count > 0 ? "warning" : "success");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Import failed: {ex.Message}", "error");
+        }
+        finally
+        {
+            _isImportingConnections = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task SaveAsync()
@@ -198,33 +345,64 @@
         }
 
         await OnSaved.InvokeAsync();
-        ConnectionOk = true;
-        ConnectionStatus = EditingCacheId is not null ? "Cache updated." : "Cache added.";
         ResetForm();
-        ConnectionStatus = "Saved.";
+        SetStatus("Saved.", "success");
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task TestConnectionAsync()
     {
-        ConnectionStatus = null;
-        ConnectionOk = false;
+        SetStatus("Testing connection…", "muted");
 
         try
         {
             using var client = await CreateClientAsync();
             var ok = await client.TestConnectionAsync();
-            ConnectionOk = ok;
-            ConnectionStatus = ok ? "Connection successful." : "Connection failed.";
+            SetStatus(ok ? "Connection successful." : "Connection failed.", ok ? "success" : "error");
         }
         catch (Exception ex)
         {
-            ConnectionOk = false;
-            ConnectionStatus = ex.Message;
+            SetStatus(ex.Message, "error");
         }
 
         await InvokeAsync(StateHasChanged);
     }
+
+    private void SetStatus(string message, string tone)
+    {
+        StatusMessage = message;
+        StatusTone = tone;
+    }
+
+    private static string GetCachePrimaryLabel(RedisCacheEntry cache)
+    {
+        var displayName = cache.DisplayName?.Trim();
+        var identity = GetConnectionIdentity(cache.ConnectionString);
+
+        if (string.IsNullOrWhiteSpace(displayName))
+            return identity;
+
+        return displayName.Length <= identity.Length ? displayName : identity;
+    }
+
+    private static string? GetCacheSecondaryLabel(RedisCacheEntry cache)
+    {
+        var displayName = cache.DisplayName?.Trim();
+        var identity = GetConnectionIdentity(cache.ConnectionString);
+        var primary = GetCachePrimaryLabel(cache);
+
+        if (string.IsNullOrWhiteSpace(displayName) || string.Equals(displayName, identity, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return string.Equals(primary, identity, StringComparison.OrdinalIgnoreCase)
+            ? displayName
+            : identity;
+    }
+
+    private static string GetConnectionIdentity(RedisCacheEntry entry) => GetConnectionIdentity(entry.ConnectionString);
+
+    private static string GetConnectionIdentity(string connectionString)
+        => connectionString.Split(',', 2, StringSplitOptions.TrimEntries)[0].Trim();
 
     private async Task<IRedisClient> CreateClientAsync()
     {

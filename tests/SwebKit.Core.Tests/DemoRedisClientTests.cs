@@ -199,6 +199,64 @@ public class DemoRedisClientTests
     }
 
     [Fact]
+    public async Task ImportAsync_ImportsSupportedRedisTypesAndTtls()
+    {
+        using var client = new DemoRedisClient();
+
+        var result = await client.ImportAsync(
+        [
+            new RedisImportEntry { Key = "import:string", Type = "string", StringValue = "hello", Ttl = TimeSpan.FromMinutes(2) },
+            new RedisImportEntry { Key = "import:hash", Type = "hash", HashFields = new Dictionary<string, string> { ["enabled"] = "true" } },
+            new RedisImportEntry { Key = "import:list", Type = "list", ListItems = ["a", "b"] },
+            new RedisImportEntry { Key = "import:set", Type = "set", SetMembers = ["red", "blue"] },
+            new RedisImportEntry
+            {
+                Key = "import:zset",
+                Type = "zset",
+                SortedSetMembers =
+                [
+                    new RedisSortedSetEntry { Member = "alice", Score = 10 },
+                    new RedisSortedSetEntry { Member = "bob", Score = 5 }
+                ]
+            }
+        ]);
+
+        var stringValue = await client.GetKeyValueAsync("import:string");
+        var stringTtl = await client.GetTtlAsync("import:string");
+        var hashFields = await client.GetHashFieldsAsync("import:hash");
+        var listItems = await client.GetListItemsAsync("import:list");
+        var setMembers = await client.GetSetMembersAsync("import:set");
+        var sortedMembers = await client.GetSortedSetMembersAsync("import:zset");
+
+        Assert.Equal(5, result.ImportedCount);
+        Assert.Equal(0, result.SkippedCount);
+        Assert.Equal("hello", stringValue);
+        Assert.NotNull(stringTtl);
+        Assert.Contains(hashFields, field => field.Field == "enabled" && field.Value == "true");
+        Assert.Equal(["a", "b"], listItems);
+        Assert.Contains("red", setMembers);
+        Assert.Equal("alice", sortedMembers[0].Member);
+    }
+
+    [Fact]
+    public async Task ImportAsync_SkipsEmptyRedisCollections()
+    {
+        using var client = new DemoRedisClient();
+
+        var result = await client.ImportAsync(
+        [
+            new RedisImportEntry { Key = "import:empty:list", Type = "list", ListItems = [] },
+            new RedisImportEntry { Key = "import:empty:set", Type = "set", SetMembers = [] }
+        ]);
+
+        Assert.Equal(0, result.ImportedCount);
+        Assert.Equal(2, result.SkippedCount);
+        Assert.Equal(2, result.Warnings.Count);
+        Assert.Equal("none", await client.GetKeyTypeAsync("import:empty:list"));
+        Assert.Equal("none", await client.GetKeyTypeAsync("import:empty:set"));
+    }
+
+    [Fact]
     public async Task GetServerInfoAsync_ReturnsDatabaseStats()
     {
         using var client = new DemoRedisClient();

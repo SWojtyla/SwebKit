@@ -223,6 +223,7 @@ public sealed class ConfigurationProbeServiceTests
         public Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteKeysAsync(IReadOnlyList<string> keys, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<RedisImportResult> ImportAsync(IReadOnlyList<RedisImportEntry> entries, bool overwriteExisting = true, CancellationToken ct = default) => Task.FromResult(new RedisImportResult());
         public Task<TimeSpan?> GetTtlAsync(string key, CancellationToken ct = default) => Task.FromResult<TimeSpan?>(null);
         public Task SetTtlAsync(string key, TimeSpan ttl, CancellationToken ct = default) => Task.CompletedTask;
         public Task RemoveTtlAsync(string key, CancellationToken ct = default) => Task.CompletedTask;

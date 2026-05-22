@@ -52,6 +52,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PinnedPortForwardService>();
         builder.Services.AddSingleton<ScheduledMessageRepository>();
         builder.Services.AddSingleton<AppStateService>();
+        builder.Services.AddSingleton<ConfigurationBundleService>();
         builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
         builder.Services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
 

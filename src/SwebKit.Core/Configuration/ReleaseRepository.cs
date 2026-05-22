@@ -16,6 +16,13 @@ public class ReleaseRepository
     public IReadOnlyList<DeploymentSnapshot> AllSnapshots => _snapshots;
     public IReadOnlyList<DeploymentValidationSnapshot> AllValidationSnapshots => _validationSnapshots;
 
+    public ReleaseStoreData GetStoreData() => new()
+    {
+        Releases = [.. _releases],
+        Snapshots = [.. _snapshots],
+        ValidationSnapshots = [.. _validationSnapshots]
+    };
+
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
@@ -42,6 +49,19 @@ public class ReleaseRepository
         var data = new ReleaseStoreData { Releases = _releases, Snapshots = _snapshots, ValidationSnapshots = _validationSnapshots };
         var json = JsonSerializer.Serialize(data, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.ReleasesJson, json);
+    }
+
+    public void ReplaceStoreData(ReleaseStoreData? data)
+    {
+        _releases = data?.Releases ?? [];
+        _snapshots = data?.Snapshots ?? [];
+        _validationSnapshots = data?.ValidationSnapshots ?? [];
+    }
+
+    public async Task ImportAsync(ReleaseStoreData? data)
+    {
+        ReplaceStoreData(data);
+        await SaveAsync();
     }
 
     public async Task AddReleaseAsync(ReleaseRecord release)
@@ -95,13 +115,13 @@ public class ReleaseRepository
             .OrderByDescending(v => v.ValidatedAt)
             .ToList();
 
-    private class ReleaseStoreData
-    {
-        public List<ReleaseRecord> Releases { get; set; } = [];
-        public List<DeploymentSnapshot> Snapshots { get; set; } = [];
-        public List<DeploymentValidationSnapshot> ValidationSnapshots { get; set; } = [];
-    }
-
     private static ReleaseStoreData? DeserializeStoreData(string json) =>
         JsonSerializer.Deserialize<ReleaseStoreData>(json, Options);
+}
+
+public sealed class ReleaseStoreData
+{
+    public List<ReleaseRecord> Releases { get; set; } = [];
+    public List<DeploymentSnapshot> Snapshots { get; set; } = [];
+    public List<DeploymentValidationSnapshot> ValidationSnapshots { get; set; } = [];
 }

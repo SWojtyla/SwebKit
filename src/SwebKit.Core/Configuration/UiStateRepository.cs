@@ -12,6 +12,8 @@ public class UiStateRepository
 
     public UiState State => _state;
 
+    public UiState GetState() => _state;
+
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
@@ -37,6 +39,17 @@ public class UiStateRepository
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_state, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.UiStateJson, json);
+    }
+
+    public void ReplaceState(UiState state)
+    {
+        _state = NormalizeState(state);
+    }
+
+    public async Task ImportAsync(UiState state)
+    {
+        ReplaceState(state);
+        await SaveAsync();
     }
 
     public IReadOnlyList<SavedFilter> GetFilters(string scopeKey) =>

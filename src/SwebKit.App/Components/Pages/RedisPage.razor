@@ -14,90 +14,90 @@
 <div class="redis-page">
     <RoutePageHeader Area="redis" Subtitle="Explore keyspaces, health, and value operations for the active cache.">
         <Meta>
-        </Meta>
-    </RoutePageHeader>
+    </Meta>
+</RoutePageHeader>
 
-    <RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
-                        SelectedCacheId="@SelectedCacheId" IsConnected="@(Client is not null)" ConnectionLabel="@ConnectionLabel"
-                        OnCacheChanged="HandleCacheChanged" OnCacheNameChanged="HandleCacheNameChanged" />
+<RedisConnectionBar CacheEntries="@CacheEntries" ActiveCacheEntry="@ActiveCacheEntry"
+                    SelectedCacheId="@SelectedCacheId" OnCacheChanged="HandleCacheChanged"
+                    OnCacheNameChanged="HandleCacheNameChanged" />
 
-    @if (!AppState.UseDemoData && !IsConfigured)
+@if (!AppState.UseDemoData && !IsConfigured)
+{
+    <EmptyState Icon="🗄" Title="Redis is not configured"
+                Subtitle="Configure the active cache in Settings before opening keyspace, health, and value operations.">
+        <Actions>
+            <a href="/settings?section=redis">Open Redis settings</a>
+        </Actions>
+    </EmptyState>
+}
+else
+{
+    <RedisToolbar @ref="_toolbar" IsLoading="@IsLoading" SelectedKey="@SelectedKey" KeyCount="@Keys.Count"
+                  HasMoreKeys="@_hasMoreKeys" IsProduction="@IsProduction" HasAnyPanel="@(SelectedInfo is not null)"
+                  BatchProgressMessage="@_batchProgressMessage" OnScan="HandleScan" OnRefreshKey="RefreshSelectedAsync"
+                  OnDeleteKey="DeleteSelectedKeyAsync" OnSelectAllLoaded="SelectAllLoadedAsync"
+                  OnExportJson="ExportKeysToJsonAsync" OnBatchDelete="DeleteSelectedKeysAsync" />
+
+    @if (ErrorMessage is not null)
     {
-        <EmptyState Icon="🗄" Title="Redis is not configured"
-                    Subtitle="Configure the active cache in Settings before opening keyspace, health, and value operations.">
-            <Actions>
-                <a href="/settings?section=redis">Open Redis settings</a>
-            </Actions>
-        </EmptyState>
+        <ErrorCallout Message="@ErrorMessage" />
+    }
+
+    @if (IsLoading && Client is null)
+    {
+        <LoadingSpinner Message="Connecting to Redis…" />
     }
     else
     {
-        <RedisToolbar @ref="_toolbar" IsLoading="@IsLoading" SelectedKey="@SelectedKey" KeyCount="@Keys.Count"
-                      HasMoreKeys="@_hasMoreKeys" IsProduction="@IsProduction" HasAnyPanel="@(SelectedInfo is not null)"
-                      BatchProgressMessage="@_batchProgressMessage" OnScan="HandleScan" OnRefreshKey="RefreshSelectedAsync"
-                      OnDeleteKey="DeleteSelectedKeyAsync" OnSelectAllLoaded="SelectAllLoadedAsync"
-                      OnExportJson="ExportKeysToJsonAsync" OnBatchDelete="DeleteSelectedKeysAsync" />
-
-        @if (ErrorMessage is not null)
-        {
-            <ErrorCallout Message="@ErrorMessage" />
-        }
-
-        @if (IsLoading && Client is null)
-        {
-            <LoadingSpinner Message="Connecting to Redis…" />
-        }
-        else
-        {
-            <div class="content-grid">
-                <div class="left-column">
-                    <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown"
-                         @onkeydown:preventDefault="@_preventKeyListKey">
-                        <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
-                                            KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
-                                            OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
-                                            MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
-                                            SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled"
-                                            OnSubtreeSelected="HandleSubtreeSelected" OnSubtreeCleared="HandleSubtreeCleared" />
-                        @if (_hasMoreKeys)
-                        {
-                            <div class="load-more-bar">
-                                <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count
-                                    loaded)
-                                </FluentButton>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="right-column">
-                    <div class="panel detail-panel">
-                        <RedisKeyDetail SelectedKey="@SelectedKey" KeyInfo="@SelectedInfo" StringValue="@SelectedStringValue"
-                                        HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
-                                        OnRefresh="RefreshSelectedAsync" OnDelete="DeleteSelectedKeyAsync" OnSetTtl="SetTtlAsync"
-                                        OnRemoveTtl="RemoveTtlAsync" OnSetStringValue="SetStringValueAsync"
-                                        OnSetHashField="SetHashFieldAsync" OnUpdateSortedSetScore="UpdateSortedSetScoreAsync"
-                                        OnRenameKey="RenameSelectedKeyAsync" OnDeleteHashField="DeleteHashFieldAsync"
-                                        HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
-                    </div>
-
-                    <div class="panel health-panel">
-                        <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
-                                                     OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
-                    </div>
-
-                    <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
-                                       TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
-
-                    <div class="panel insights-panel">
-                        <RedisOpsInsightsPanel SlowLog="@_slowLog" HotKeys="@_hotKeys" PubSub="@_pubSub"
-                                               OnRefreshSlowLog="LoadSlowLogAsync" OnRefreshPubSub="LoadPubSubAsync"
-                                               OnNavigateToKey="SelectKeyAsync" />
-                    </div>
+        <div class="content-grid">
+            <div class="left-column">
+                <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown"
+                     @onkeydown:preventDefault="@_preventKeyListKey">
+                    <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
+                                        KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
+                                        OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
+                                        MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
+                                        SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled"
+                                        OnSubtreeSelected="HandleSubtreeSelected" OnSubtreeCleared="HandleSubtreeCleared" />
+                    @if (_hasMoreKeys)
+                    {
+                        <div class="load-more-bar">
+                            <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count
+                                loaded)
+                            </FluentButton>
+                        </div>
+                    }
                 </div>
             </div>
-        }
+
+            <div class="right-column">
+                <div class="panel detail-panel">
+                    <RedisKeyDetail SelectedKey="@SelectedKey" KeyInfo="@SelectedInfo" StringValue="@SelectedStringValue"
+                                    HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
+                                    OnRefresh="RefreshSelectedAsync" OnDelete="DeleteSelectedKeyAsync" OnSetTtl="SetTtlAsync"
+                                    OnRemoveTtl="RemoveTtlAsync" OnSetStringValue="SetStringValueAsync"
+                                    OnSetHashField="SetHashFieldAsync" OnUpdateSortedSetScore="UpdateSortedSetScoreAsync"
+                                    OnRenameKey="RenameSelectedKeyAsync" OnDeleteHashField="DeleteHashFieldAsync"
+                                    HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
+                </div>
+
+                <div class="panel health-panel">
+                    <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
+                                                 OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
+                </div>
+
+                <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
+                                   TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
+
+                <div class="panel insights-panel">
+                    <RedisOpsInsightsPanel SlowLog="@_slowLog" HotKeys="@_hotKeys" PubSub="@_pubSub"
+                                           OnRefreshSlowLog="LoadSlowLogAsync" OnRefreshPubSub="LoadPubSubAsync"
+                                           OnNavigateToKey="SelectKeyAsync" />
+                </div>
+            </div>
+        </div>
     }
+}
 </div>
 
 <ConfirmDialog Visible="@ConfirmVisible" Title="@ConfirmTitle" Message="@ConfirmMessage" ConfirmLabel="@ConfirmLabel"
@@ -192,19 +192,8 @@
                                                   ?? CacheEntries.FirstOrDefault();
 
     private bool IsConfigured => AppState.UseDemoData || CacheEntries.Any(c =>
-!string.IsNullOrWhiteSpace(c.ConnectionString));
+        !string.IsNullOrWhiteSpace(c.ConnectionString));
     private bool IsProduction => AppState.Config.IsProduction;
-
-    private string ConnectionLabel
-    {
-        get
-        {
-            if (AppState.UseDemoData)
-                return "Connected: demo";
-            var name = ActiveCacheEntry?.DisplayName;
-            return $"Connected: {(string.IsNullOrWhiteSpace(name) ? "Redis" : name)}";
-        }
-    }
 
     protected override void OnInitialized()
     {

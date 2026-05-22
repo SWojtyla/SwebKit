@@ -1,6 +1,8 @@
 @page "/settings"
+@using Microsoft.AspNetCore.Components.Forms
 @inject AppStateService AppState
 @inject UserSettingsRepository UserSettings
+@inject ConfigurationBundleService ConfigurationBundles
 @inject IConfigurationHealthService ConfigurationHealth
 @inject IConfigurationProbeService ConfigurationProbes
 @inject ICredentialStore CredentialStore
@@ -17,6 +19,10 @@
 
     @* ── Left navigation sidebar ── *@
     <nav class="settings-nav">
+        <button class="@GetNavItemClass(WorkspaceSection)" @onclick="@(() => SelectSection(WorkspaceSection))">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Width="18px" />
+            Workspace
+        </button>
         <button class="@GetNavItemClass(AppearanceSection)" @onclick="@(() => SelectSection(AppearanceSection))">
             <FluentIcon Value="@(new Icons.Regular.Size20.PaintBrush())" Width="18px" />
             Appearance
@@ -53,171 +59,207 @@
     </nav>
 
     @* ── Right content well ── *@
-    <div class="settings-content">
+    <div class="@SettingsContentClass">
         <RoutePageHeader Area="settings" Subtitle="@CurrentSectionSubtitle">
             <Meta>
-                <span class="shell-pill shell-pill--muted">Section: @CurrentSectionTitle</span>
-                @if (IsDirty)
-                {
-                    <span class="shell-pill shell-pill--warning">Unsaved changes</span>
-                }
-                @if (AppState.Config.IsProduction)
-                {
-                    <span class="shell-pill shell-pill--danger">Production safeguards on</span>
-                }
-                @if (string.Equals(_active, ObservabilitySection, StringComparison.Ordinal))
-                {
-                    <span class="shell-pill shell-pill--muted">Azure CLI identity</span>
-                }
-            </Meta>
-        </RoutePageHeader>
+            <span class="shell-pill shell-pill--muted">Section: @CurrentSectionTitle</span>
+            @if (IsDirty)
+            {
+                <span class="shell-pill shell-pill--warning">Unsaved changes</span>
+            }
+            @if (AppState.Config.IsProduction)
+            {
+                <span class="shell-pill shell-pill--danger">Production safeguards on</span>
+            }
+            @if (string.Equals(_active, ObservabilitySection, StringComparison.Ordinal))
+            {
+                <span class="shell-pill shell-pill--muted">Azure CLI identity</span>
+            }
+        </Meta>
+    </RoutePageHeader>
 
-        @if (IsDirty)
-        {
-            <div class="settings-unsaved-banner" role="status">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Width="16px" />
-                Unsaved changes
+    @if (IsDirty)
+    {
+        <div class="settings-unsaved-banner" role="status">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Width="16px" />
+            Unsaved changes
+        </div>
+    }
+
+    @switch (_active)
+    {
+        case WorkspaceSection:
+            <section class="settings-transfer-strip" aria-label="Settings transfer tools">
+                <div class="settings-transfer-strip__copy">
+                    <p class="settings-transfer-strip__eyebrow">Global workspace transfer</p>
+                    <h2 class="settings-transfer-strip__title">Move the full SwebKit configuration in one step</h2>
+                    <p class="settings-transfer-strip__body">
+                        Export or import the complete local workspace state across all settings sections: profiles, UI
+                        state, user settings, releases, and scheduled messages.
+                    </p>
+                </div>
+                <div class="settings-transfer-strip__actions">
+                    <FluentInputFile class="settings-transfer-strip__picker" AnchorId="settings-transfer-bundle-trigger"
+                                     Accept=".json,application/json" MaximumFileCount="1" DragDropZoneVisible="false"
+                                     Disabled="@_isImportingBundle" OnInputFileChange="OnConfigurationBundleSelected" />
+                    <FluentButton id="settings-transfer-bundle-trigger" Appearance="Appearance.Outline"
+                                  Disabled="@_isImportingBundle">
+                        @(_selectedConfigurationBundle is null ? "Choose bundle" : "Change bundle")
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  Disabled="@(_selectedConfigurationBundle is null || _isImportingBundle)"
+                                  @onclick="ImportConfigurationBundleAsync">
+                        @(_isImportingBundle ? "Importing…" : "Import bundle")
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" Disabled="@_isExportingBundle"
+                                  @onclick="ExportConfigurationBundleAsync">
+                        @(_isExportingBundle ? "Exporting…" : "Export bundle")
+                    </FluentButton>
+                </div>
+                @if (_selectedConfigurationBundle is not null)
+                {
+                    <p class="settings-transfer-strip__selection">Selected bundle: @_selectedConfigurationBundle.Name</p>
+                }
+            </section>
+
+            <ConfigurationReadinessAreaCard Report="readinessReport" Area="null"
+                                            IsProductionConfiguration="@AppState.Config.IsProduction" IsRunningLiveChecks="@_isRunningLiveChecks"
+                                            OnRunLiveChecks="RunLiveChecksAsync" />
+            break;
+
+        case AppearanceSection:
+            <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
+
+            <div class="settings-field-group">
+                <p class="settings-hint">
+                    Mark this configuration as production. Destructive operations (e.g. DLQ resubmit/delete) will show
+                    an extra confirmation step requiring you to type CONFIRM.
+                </p>
+                <FluentCheckbox Value="@AppState.Config.IsProduction"
+                                ValueChanged="@(async (bool v) => { AppState.Config.IsProduction = v; await SaveAsync(); })">
+                    This is a production environment
+                </FluentCheckbox>
             </div>
-        }
 
-        <ConfigurationReadinessAreaCard Report="readinessReport" Area="currentAreaHealth"
-                                        IsProductionConfiguration="@AppState.Config.IsProduction" IsRunningLiveChecks="@_isRunningLiveChecks"
-                                        OnRunLiveChecks="RunLiveChecksAsync" />
+            <div class="settings-field-group">
+                <p class="settings-hint">
+                    Pre-warm connections to Service Bus, AKS, and Redis in the background when the app starts.
+                    Disable this if startup warmup causes issues or you prefer on-demand connects.
+                </p>
+                <FluentCheckbox Value="@UserSettings.Settings.WarmupConnectionsOnStartup"
+                                ValueChanged="@(async (bool v) => { UserSettings.Settings.WarmupConnectionsOnStartup = v; await UserSettings.SaveAsync(); })">
+                    Warm up connections on startup
+                </FluentCheckbox>
+            </div>
+            break;
 
-        @switch (_active)
-        {
-            case AppearanceSection:
-                <AppearanceSettings CurrentTheme="@_layout?.CurrentTheme" OnThemeChanged="ApplyThemeAsync" />
+        case ServiceBusSection:
+            <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+            break;
 
+        case AksSection:
+            <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+            break;
+
+        case RedisSection:
+            <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
+            break;
+
+        case DevOpsSection:
+            <DevOpsConfigForm OnSaved="SaveAsync" />
+            break;
+
+        case IncidentTimelineSection:
+            <IncidentTimelineConfigForm Environment="AppState.Config" OnSaved="SaveAsync"
+                                        OnChanged="HandleDraftChangedAsync" SuggestedNamespace="IncidentNamespace"
+                                        SuggestedWorkloadKind="IncidentWorkloadKind" SuggestedWorkloadName="IncidentWorkloadName" />
+            break;
+
+        case StorageSection:
+            <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
+            break;
+
+        case ObservabilitySection:
+            <div class="settings-info-card">
+                <div class="settings-info-icon">🔑</div>
+                <div>
+                    <div class="settings-info-title">No credentials to configure</div>
+                    <p class="settings-info-body">
+                        The Observability tab connects to Azure Application Insights using
+                        <strong>DefaultAzureCredential</strong> — the same identity your Azure CLI session uses.
+                        No secrets or connection strings are stored here.
+                    </p>
+                    <p class="settings-info-body">
+                        If you can run <code class="settings-info-code">az account show</code> in a terminal and
+                        see your account, you're ready. SwebKit will automatically discover every Application
+                        Insights resource you have read access to across all your subscriptions.
+                    </p>
+                    <p class="settings-info-body">
+                        <strong>Not seeing your resources?</strong> Run <code class="settings-info-code">az login</code>
+                        (or <code class="settings-info-code">az login --tenant &lt;tenant-id&gt;</code> if you work
+                        across multiple tenants) and reopen the Observability tab.
+                    </p>
+                </div>
+            </div>
+
+            @if (AppState.Config.ObservabilityConfig is { } obsCfg)
+            {
                 <div class="settings-field-group">
                     <p class="settings-hint">
-                        Mark this configuration as production. Destructive operations (e.g. DLQ resubmit/delete) will show
-                        an extra confirmation step requiring you to type CONFIRM.
+                        Caps the number of rows returned by any KQL query. Lower values reduce Azure Monitor query costs.
+                        Range: 100 – 5000.
                     </p>
-                    <FluentCheckbox Value="@AppState.Config.IsProduction"
-                                    ValueChanged="@(async (bool v) => { AppState.Config.IsProduction = v; await SaveAsync(); })">
-                        This is a production environment
-                    </FluentCheckbox>
+                    <input class="settings-input" type="number" min="100" max="5000" value="@obsCfg.MaxRowsPerQuery"
+                           @onchange="async e => { obsCfg.MaxRowsPerQuery = Math.Clamp(int.TryParse(e.Value?.ToString(), out var v) ? v : 500, 100, 5000); await SaveAsync(); }" />
                 </div>
 
-                <div class="settings-field-group">
+                <div class="settings-field-group" style="margin-top:var(--spacing-lg);">
+                    <label class="settings-label">Metric thresholds</label>
                     <p class="settings-hint">
-                        Pre-warm connections to Service Bus, AKS, and Redis in the background when the app starts.
-                        Disable this if startup warmup causes issues or you prefer on-demand connects.
+                        Customize the colour thresholds for failure rate and latency indicators across overview and performance
+                        tabs.
                     </p>
-                    <FluentCheckbox Value="@UserSettings.Settings.WarmupConnectionsOnStartup"
-                                    ValueChanged="@(async (bool v) => { UserSettings.Settings.WarmupConnectionsOnStartup = v; await UserSettings.SaveAsync(); })">
-                        Warm up connections on startup
-                    </FluentCheckbox>
-                </div>
-                break;
-
-            case ServiceBusSection:
-                <ServiceBusConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-                break;
-
-            case AksSection:
-                <AksConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-                break;
-
-            case RedisSection:
-                <RedisConfigForm Environment="AppState.Config" OnSaved="SaveAsync" />
-                break;
-
-            case DevOpsSection:
-                <DevOpsConfigForm OnSaved="SaveAsync" />
-                break;
-
-            case IncidentTimelineSection:
-                <IncidentTimelineConfigForm Environment="AppState.Config" OnSaved="SaveAsync"
-                                            OnChanged="HandleDraftChangedAsync" SuggestedNamespace="IncidentNamespace"
-                                            SuggestedWorkloadKind="IncidentWorkloadKind" SuggestedWorkloadName="IncidentWorkloadName" />
-                break;
-
-            case StorageSection:
-                <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
-                break;
-
-            case ObservabilitySection:
-                <div class="settings-info-card">
-                    <div class="settings-info-icon">🔑</div>
-                    <div>
-                        <div class="settings-info-title">No credentials to configure</div>
-                        <p class="settings-info-body">
-                            The Observability tab connects to Azure Application Insights using
-                            <strong>DefaultAzureCredential</strong> — the same identity your Azure CLI session uses.
-                            No secrets or connection strings are stored here.
-                        </p>
-                        <p class="settings-info-body">
-                            If you can run <code class="settings-info-code">az account show</code> in a terminal and
-                            see your account, you're ready. SwebKit will automatically discover every Application
-                            Insights resource you have read access to across all your subscriptions.
-                        </p>
-                        <p class="settings-info-body">
-                            <strong>Not seeing your resources?</strong> Run <code class="settings-info-code">az login</code>
-                            (or <code class="settings-info-code">az login --tenant &lt;tenant-id&gt;</code> if you work
-                            across multiple tenants) and reopen the Observability tab.
-                        </p>
-                    </div>
-                </div>
-
-                @if (AppState.Config.ObservabilityConfig is { } obsCfg)
-                {
-                    <div class="settings-field-group">
-                        <p class="settings-hint">
-                            Caps the number of rows returned by any KQL query. Lower values reduce Azure Monitor query costs.
-                            Range: 100 – 5000.
-                        </p>
-                        <input class="settings-input" type="number" min="100" max="5000" value="@obsCfg.MaxRowsPerQuery"
-                               @onchange="async e => { obsCfg.MaxRowsPerQuery = Math.Clamp(int.TryParse(e.Value?.ToString(), out var v) ? v : 500, 100, 5000); await SaveAsync(); }" />
-                    </div>
-
-                    <div class="settings-field-group" style="margin-top:var(--spacing-lg);">
-                        <label class="settings-label">Metric thresholds</label>
-                        <p class="settings-hint">
-                            Customize the colour thresholds for failure rate and latency indicators across overview and performance
-                            tabs.
-                        </p>
-                        <div class="settings-threshold-grid">
-                            <div>
-                                <label class="settings-label-sm">Failure rate — amber above</label>
-                                <input class="settings-input" type="number" step="0.01" min="0" max="1"
-                                       value="@obsCfg.FailureRateAmberThreshold"
-                                       @onchange="async e => { obsCfg.FailureRateAmberThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.01; await SaveAsync(); }" />
-                            </div>
-                            <div>
-                                <label class="settings-label-sm">Failure rate — red above</label>
-                                <input class="settings-input" type="number" step="0.01" min="0" max="1"
-                                       value="@obsCfg.FailureRateRedThreshold"
-                                       @onchange="async e => { obsCfg.FailureRateRedThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.05; await SaveAsync(); }" />
-                            </div>
-                            <div>
-                                <label class="settings-label-sm">Latency P95 — amber above (ms)</label>
-                                <input class="settings-input" type="number" min="0" max="60000"
-                                       value="@obsCfg.LatencyAmberThresholdMs"
-                                       @onchange="async e => { obsCfg.LatencyAmberThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 500; await SaveAsync(); }" />
-                            </div>
-                            <div>
-                                <label class="settings-label-sm">Latency P95 — red above (ms)</label>
-                                <input class="settings-input" type="number" min="0" max="60000"
-                                       value="@obsCfg.LatencyRedThresholdMs"
-                                       @onchange="async e => { obsCfg.LatencyRedThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 2000; await SaveAsync(); }" />
-                            </div>
+                    <div class="settings-threshold-grid">
+                        <div>
+                            <label class="settings-label-sm">Failure rate — amber above</label>
+                            <input class="settings-input" type="number" step="0.01" min="0" max="1"
+                                   value="@obsCfg.FailureRateAmberThreshold"
+                                   @onchange="async e => { obsCfg.FailureRateAmberThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.01; await SaveAsync(); }" />
+                        </div>
+                        <div>
+                            <label class="settings-label-sm">Failure rate — red above</label>
+                            <input class="settings-input" type="number" step="0.01" min="0" max="1"
+                                   value="@obsCfg.FailureRateRedThreshold"
+                                   @onchange="async e => { obsCfg.FailureRateRedThreshold = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 1) : 0.05; await SaveAsync(); }" />
+                        </div>
+                        <div>
+                            <label class="settings-label-sm">Latency P95 — amber above (ms)</label>
+                            <input class="settings-input" type="number" min="0" max="60000"
+                                   value="@obsCfg.LatencyAmberThresholdMs"
+                                   @onchange="async e => { obsCfg.LatencyAmberThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 500; await SaveAsync(); }" />
+                        </div>
+                        <div>
+                            <label class="settings-label-sm">Latency P95 — red above (ms)</label>
+                            <input class="settings-input" type="number" min="0" max="60000"
+                                   value="@obsCfg.LatencyRedThresholdMs"
+                                   @onchange="async e => { obsCfg.LatencyRedThresholdMs = double.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 60000) : 2000; await SaveAsync(); }" />
                         </div>
                     </div>
-                }
-                break;
-        }
+                </div>
+            }
+            break;
+    }
 
-        @if (_savedMessage is not null)
-        {
-            <div class="settings-saved-banner">@_savedMessage</div>
-        }
-    </div>
+    @if (_savedMessage is not null)
+    {
+        <div class="settings-saved-banner">@_savedMessage</div>
+    }
+</div>
 
 </div>
 
 @code {
+    private const string WorkspaceSection = "workspace";
     private const string AppearanceSection = "appearance";
     private const string ServiceBusSection = "servicebus";
     private const string AksSection = "aks";
@@ -233,19 +275,29 @@
     [SupplyParameterFromQuery(Name = "workloadKind")] private string? IncidentWorkloadKind { get; set; }
     [SupplyParameterFromQuery(Name = "workloadName")] private string? IncidentWorkloadName { get; set; }
 
-    private string _active = AppearanceSection;
+    private string _active = WorkspaceSection;
     private string? _savedMessage;
     private string _configSnapshot = string.Empty;
     private IDisposable? _navGuard;
     private string? _lastRequestedSection;
     private readonly CancellationTokenSource _liveChecksCts = new();
     private bool _isRunningLiveChecks;
+    private IBrowserFile? _selectedConfigurationBundle;
+    private bool _isExportingBundle;
+    private bool _isImportingBundle;
 
     private bool IsDirty => _configSnapshot.Length > 0
         && _configSnapshot != CurrentConfigJson();
 
+    private string SettingsContentClass => _active switch
+    {
+        WorkspaceSection or RedisSection => "settings-content settings-content--wide",
+        _ => "settings-content"
+    };
+
     private string CurrentSectionTitle => _active switch
     {
+        WorkspaceSection => "Workspace",
         AppearanceSection => "Appearance",
         ServiceBusSection => "Service Bus",
         AksSection => "AKS / Kubernetes",
@@ -259,6 +311,7 @@
 
     private string CurrentSectionSubtitle => _active switch
     {
+        WorkspaceSection => "Manage full-workspace import/export and review capability readiness from one global section.",
         AppearanceSection => "Tune shell themes, demo behavior, and safety defaults for this configuration.",
         ServiceBusSection => "Manage namespace connections and how messaging workspaces open by default.",
         AksSection => "Choose the cluster context and namespace defaults that drive the AKS workspace.",
@@ -310,13 +363,86 @@
         var persisted = await AppState.SaveConfigAsync();
         ConfigurationProbes.Invalidate();
         _configSnapshot = CurrentConfigJson();
-        _savedMessage = persisted
+        await ShowTransientMessageAsync(persisted
             ? "Settings saved."
-            : AppState.ProfilePersistenceBlockedMessage;
+            : AppState.ProfilePersistenceBlockedMessage ?? "Profile persistence is blocked; settings remain in memory only.");
+    }
+
+    private void OnConfigurationBundleSelected(InputFileChangeEventArgs e)
+    {
+        _selectedConfigurationBundle = e.File;
+    }
+
+    private async Task ExportConfigurationBundleAsync()
+    {
+        if (_isExportingBundle)
+        {
+            return;
+        }
+
+        _isExportingBundle = true;
         await InvokeAsync(StateHasChanged);
-        await Task.Delay(3000);
-        _savedMessage = null;
+
+        try
+        {
+            var bundle = ConfigurationBundles.Export();
+            var json = ConfigurationBundles.Serialize(bundle);
+            var downloadsPath = GetDownloadsFolder();
+            Directory.CreateDirectory(downloadsPath);
+
+            var filePath = Path.Combine(downloadsPath, $"swebkit-config-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+            await File.WriteAllTextAsync(filePath, json);
+            await ShowTransientMessageAsync($"Configuration bundle exported to {filePath}");
+        }
+        catch (Exception ex)
+        {
+            await ShowTransientMessageAsync($"Configuration export failed: {ex.Message}");
+        }
+        finally
+        {
+            _isExportingBundle = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ImportConfigurationBundleAsync()
+    {
+        if (_selectedConfigurationBundle is null || _isImportingBundle)
+        {
+            return;
+        }
+
+        _isImportingBundle = true;
         await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            using var stream = _selectedConfigurationBundle.OpenReadStream(maxAllowedSize: 32L * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            var bundle = ConfigurationBundles.Deserialize(json);
+            await ConfigurationBundles.ImportAsync(bundle);
+            ConfigurationProbes.Invalidate();
+            _configSnapshot = CurrentConfigJson();
+            _selectedConfigurationBundle = null;
+
+            if (_layout is not null && !string.IsNullOrWhiteSpace(UserSettings.Settings.Theme))
+            {
+                await _layout.SetThemeAsync(UserSettings.Settings.Theme);
+            }
+
+            await ShowTransientMessageAsync("Configuration bundle imported.");
+        }
+        catch (Exception ex)
+        {
+            await ShowTransientMessageAsync($"Configuration import failed: {ex.Message}");
+        }
+        finally
+        {
+            _isImportingBundle = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task ApplyThemeAsync(string theme)
@@ -326,6 +452,18 @@
     }
 
     private async Task HandleDraftChangedAsync() => await InvokeAsync(StateHasChanged);
+
+    private async Task ShowTransientMessageAsync(string message)
+    {
+        _savedMessage = message;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(3000);
+        if (string.Equals(_savedMessage, message, StringComparison.Ordinal))
+        {
+            _savedMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task RunLiveChecksAsync()
     {
@@ -380,6 +518,7 @@
 
     private static string? NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
     {
+        WorkspaceSection => WorkspaceSection,
         AppearanceSection => AppearanceSection,
         ServiceBusSection => ServiceBusSection,
         AksSection => AksSection,
@@ -390,6 +529,10 @@
         ObservabilitySection => ObservabilitySection,
         _ => null,
     };
+
+    private static string GetDownloadsFolder() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads");
 
     public void Dispose()
     {

@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -125,6 +125,13 @@
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
                             <span class="aks-section-title">HPA: @_hpaDetailTarget.Name</span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenHpaYamlAsync(false)"
+                                          Title="View YAML">
+                                YAML
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenHpaYamlAsync(true)" Title="Edit YAML">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="16px" />
+                            </FluentButton>
                             <FluentButton Appearance="Appearance.Stealth" @onclick="CloseHpaDetail" Title="Close">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
@@ -289,7 +296,7 @@
                                 {
                                     <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
                                         <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                                                                                                                                    == "Warning")
+                                                                                                                                                                                                                                                                                                                            == "Warning")
                                     </span>
                                 }
                                 <span class="aks-toolbar-spacer"></span>
@@ -719,6 +726,16 @@
     {
         _hpaDetailTarget = null;
         NotifyPanelStateChanged();
+    }
+
+    private Task OpenHpaYamlAsync(bool editMode)
+    {
+        if (_hpaDetailTarget is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return OpenYamlAsync("HPA", _hpaDetailTarget.Name, editMode, _hpaDetailTarget.Namespace);
     }
 
     private void CloseIngressAnalysis()

@@ -41,7 +41,7 @@
                     @if (!string.IsNullOrEmpty(_search))
                     {
                         <span class="aks-yaml-search-count">@_searchCount match@(_searchCount != 1 ? "es" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "")</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        "")</span>
                             <button class="aks-yaml-search-clear" @onclick="ClearSearch" title="Clear">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
                             </button>
@@ -141,9 +141,19 @@
     /// <summary>Whether the YAML panel is in edit mode.</summary>
     public bool IsEditing => _editMode;
 
+    private static readonly HashSet<string> EditableKinds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Deployment",
+        "Ingress",
+        "StatefulSet",
+        "ConfigMap",
+        "Secret",
+        "HPA",
+        "HorizontalPodAutoscaler"
+    };
+
     // Only these resource types are editable
-    private bool IsEditable => _target?.Kind is "Deployment" or "Ingress" or "StatefulSet" or "ConfigMap" or
-    "Secret";
+    private bool IsEditable => _target is not null && EditableKinds.Contains(_target.Value.Kind);
 
     /// <summary>Opens the YAML viewer for the given resource, optionally starting in edit mode.</summary>
     public async Task OpenAsync(string kind, string name, string? targetNamespace = null, bool startInEditMode = false)

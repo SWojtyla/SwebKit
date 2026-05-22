@@ -40,6 +40,7 @@
 - Secret viewer — key-names-only list by default; individual values revealed on demand (never bulk-loaded).
 - Container image and environment details — image tag with copy, resource requests/limits, env vars with ConfigMapRef resolution and SecretRef reveal.
 - HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel with all metrics and conditions.
+- HPA detail panel actions for `View YAML` and `Edit YAML`, reusing the shared AKS YAML viewer/apply workflow instead of a separate HPA-specific editor.
 - Helm history, values, and rollback.
 - Pod metrics retrieval where available — CPU and Memory columns always visible in the Pods grid; show "—" when metrics are unavailable.
 - YAML viewer includes inline search (highlight + scroll to match).
@@ -60,8 +61,9 @@
 8. Successful batch create actions surface the created Job name and queue a background Jobs refresh so the new execution becomes discoverable without changing tabs.
 9. Long-running and side-panel operations keep the main grid responsive.
 10. HTTPRoute rows render in a non-virtualized grid path so variable-height route chips do not hide later rows when several routes are present.
-11. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, ingress analysis, network analysis, etc.) is open or the Events section is expanded, and resumes on panel close.
-12. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
+11. HPA detail-panel YAML actions route through `AksDetailPanels.OpenYamlAsync("HPA", ...)`, and `AksYamlViewer` now treats `HPA` / `HorizontalPodAutoscaler` as editable resource kinds so operators can apply YAML changes through the same guarded flow used by Deployment, StatefulSet, ConfigMap, Secret, and Ingress edits.
+12. Auto-refresh starts enabled at 10 seconds, pauses whenever any side panel (logs, YAML, container details, HPA, ingress analysis, network analysis, etc.) is open or the Events section is expanded, and resumes on panel close.
+13. On Windows, tray lifecycle service subscribes to `PodHealthMonitorService.PodHealthDetected` and updates unread tray indicator only while app is hidden.
 
 ## Key Design Notes
 

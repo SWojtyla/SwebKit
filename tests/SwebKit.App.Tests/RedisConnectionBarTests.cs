@@ -19,22 +19,16 @@ public class RedisConnectionBarTests : TestContext
     }
 
     [Fact]
-    public void RedisConnectionBar_NotConnected_HidesConnectionLabel()
+    public void RedisConnectionBar_ShowsEditableActiveCacheNameWithoutRedundantStatus()
     {
-        var cut = RenderComponent<RedisConnectionBar>(ps => ps
-            .Add(p => p.IsConnected, false));
+        var entry = new RedisCacheEntry { Id = "a", DisplayName = "redis-tst-shared-redis-01.redis.cache.windows.net@6380" };
 
+        var cut = RenderComponent<RedisConnectionBar>(ps => ps
+            .Add(p => p.CacheEntries, [entry])
+            .Add(p => p.ActiveCacheEntry, entry));
+
+        Assert.Equal(entry.DisplayName, cut.Find("input.cache-name-input").GetAttribute("value"));
         Assert.Empty(cut.FindAll(".connection"));
-    }
-
-    [Fact]
-    public void RedisConnectionBar_Connected_ShowsConnectionLabel()
-    {
-        var cut = RenderComponent<RedisConnectionBar>(ps => ps
-            .Add(p => p.IsConnected, true)
-            .Add(p => p.ConnectionLabel, "db:0 — 42 keys"));
-
-        Assert.Contains("db:0 — 42 keys", cut.Find(".connection").TextContent);
     }
 
     [Fact]

@@ -15,6 +15,8 @@ public class ScheduledMessageRepository
 
     public IReadOnlyList<ScheduledMessageEntry> All => _entries;
 
+    public IReadOnlyList<ScheduledMessageEntry> GetEntries() => _entries;
+
     public async Task LoadAsync()
     {
         AppDataPaths.EnsureDirectoryExists();
@@ -36,6 +38,17 @@ public class ScheduledMessageRepository
         AppDataPaths.EnsureDirectoryExists();
         var json = JsonSerializer.Serialize(_entries, Options);
         await AppDataFileStore.SaveAsync(AppDataPaths.ScheduledMessagesJson, json);
+    }
+
+    public void ReplaceEntries(IEnumerable<ScheduledMessageEntry>? entries)
+    {
+        _entries = entries?.ToList() ?? [];
+    }
+
+    public async Task ImportAsync(IEnumerable<ScheduledMessageEntry>? entries)
+    {
+        ReplaceEntries(entries);
+        await SaveAsync();
     }
 
     public async Task AddAsync(ScheduledMessageEntry entry)
