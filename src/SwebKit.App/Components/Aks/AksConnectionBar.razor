@@ -66,14 +66,13 @@
 
         <button class="aks-events-toggle @(ShowEvents ? "active" : "")" @onclick="HandleToggleEvents"
                 title="Toggle events panel">
-            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
+            <FluentIcon Value="@_iconWarning" Width="14px" style="vertical-align:middle;" />
             @(EventWarningCount > 0 ? $" {EventWarningCount}" : " Events")
         </button>
 
         <button class="aks-events-toggle @(ShowPortForwardSessions ? "active" : "")"
                 @onclick="HandleTogglePortForwardSessions" title="Toggle port-forward sessions panel">
-            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="14px"
-                        style="vertical-align:middle;" />
+            <FluentIcon Value="@_iconArrowForward" Width="14px" style="vertical-align:middle;" />
             @(ActivePortForwardCount > 0 ? $" {ActivePortForwardCount} pf" : " Sessions")
         </button>
 
@@ -125,6 +124,8 @@
         "Helm", "Jobs", "CronJobs"];
     private static readonly string[] NetworkResourceTypes = ["Services", "Ingresses", "GatewayClasses", "Gateways",
 "HTTPRoutes"];
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+    private static readonly Icon _iconArrowForward = new Icons.Regular.Size16.ArrowForward();
 
     [Parameter] public List<KubeContextInfo> Contexts { get; set; } = [];
     [Parameter] public string ActiveContext { get; set; } = "";

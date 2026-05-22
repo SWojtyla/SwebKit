@@ -1200,6 +1200,16 @@ public class DemoAksClient : IAksClient
         await Task.Delay(300, ct); // simulate delete
     }
 
+    public async Task DeleteIngressAsync(string ns, string name, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct); // simulate delete
+    }
+
+    public async Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default)
+    {
+        await Task.Delay(300, ct); // simulate delete
+    }
+
     public async Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
     {
         await Task.Delay(400, ct); // simulate scale

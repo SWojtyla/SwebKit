@@ -30,6 +30,8 @@ public interface IAksClient
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
     Task RestartDeploymentAsync(string ns, string deploymentName, CancellationToken ct = default);
     Task DeletePodAsync(string ns, string podName, CancellationToken ct = default);
+    Task DeleteIngressAsync(string ns, string name, CancellationToken ct = default);
+    Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default);
     Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default);
     Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default);
     Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);

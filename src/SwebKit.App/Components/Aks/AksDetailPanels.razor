@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                                            ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                                            : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -292,47 +292,46 @@
                             <div class="aks-section-header">
                                 <span class="aks-section-title">Events</span>
                                 <span class="aks-section-count">@Events.Count</span>
-                                @if (Events.Any(e => e.Type == "Warning"))
+                                @if (_warningEventCount > 0)
                                 {
                                     <span class="aks-event-warn-badge" style="display:inline-flex; align-items:center; gap:4px;">
-                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" /> @Events.Count(e => e.Type
-                                                                                                                                                                                                                                                                                                                            == "Warning")
+                                        <FluentIcon Value="@_iconWarning" Width="14px" /> @_warningEventCount
                                     </span>
                                 }
                                 <span class="aks-toolbar-spacer"></span>
                                 <FluentButton Appearance="Appearance.Stealth" @onclick="CloseEvents" Title="Close">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
+                                    <FluentIcon Value="@_iconDismissEvt" Width="16px" />
                                 </FluentButton>
                             </div>
                             <div class="aks-events-filter-bar">
                                 <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.All ? "active" : "")"
-                                        @onclick="() => _eventTypeFilter = EventTypeFilter.All">All</button>
+                                        @onclick="() => SetEventFilter(EventTypeFilter.All)">All</button>
                                 <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Warning ? "active" : "")"
-                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Warning">Warning</button>
+                                        @onclick="() => SetEventFilter(EventTypeFilter.Warning)">Warning</button>
                                 <button class="aks-evt-filter-chip @(_eventTypeFilter == EventTypeFilter.Normal ? "active" : "")"
-                                        @onclick="() => _eventTypeFilter = EventTypeFilter.Normal">Normal</button>
+                                        @onclick="() => SetEventFilter(EventTypeFilter.Normal)">Normal</button>
                             </div>
                             <div class="aks-events-list">
-                                @if (!FilteredEvents.Any())
+                                @if (_filteredEvents.Count == 0)
                                 {
                                     <div class="aks-events-empty">No recent events</div>
                                 }
                                 else
                                 {
-                                    @foreach (var evt in FilteredEvents)
+                                    @foreach (var evt in _filteredEvents)
                                     {
                                         <div class="aks-event-item @(evt.Type == "Warning" ? "warning" : "")">
                                             <div class="aks-event-header">
                                                 @if (evt.Type == "Warning")
                                                 {
                                                     <span class="aks-event-icon warning" style="display:inline-flex; align-items:center;">
-                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
+                                                        <FluentIcon Value="@_iconWarning" Width="14px" />
                                                     </span>
                                                 }
                                                 else
                                                 {
                                                     <span class="aks-event-icon normal" style="display:inline-flex; align-items:center;">
-                                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" />
+                                                        <FluentIcon Value="@_iconCircle" Width="10px" />
                                                     </span>
                                                 }
                                                 <span class="aks-event-reason">@evt.Reason</span>
@@ -393,16 +392,43 @@
     private AksYamlViewer _yamlViewer = default!;
     private AksHelmPanel _helmPanel = default!;
 
+    // ── Icon cache — stable references eliminate FluentIcon re-renders on every parent render ──
+    private static readonly Icon _iconDismissEvt = new Icons.Regular.Size16.Dismiss();
+    private static readonly Icon _iconWarning = new Icons.Regular.Size16.Warning();
+    private static readonly Icon _iconCircle = new Icons.Filled.Size12.Circle();
+
     // ── Event filter ──
     private enum EventTypeFilter { All, Warning, Normal }
     private EventTypeFilter _eventTypeFilter = EventTypeFilter.All;
+    private List<KubernetesEvent> _filteredEvents = [];
+    private int _warningEventCount;
+    private List<KubernetesEvent>? _eventsRef; // reference guard for OnParametersSet
 
-    private IEnumerable<KubernetesEvent> FilteredEvents => _eventTypeFilter switch
+    protected override void OnParametersSet()
     {
-        EventTypeFilter.Warning => Events.Where(e => e.Type == "Warning"),
-        EventTypeFilter.Normal => Events.Where(e => e.Type == "Normal"),
-        _ => Events
-    };
+        if (!ReferenceEquals(_eventsRef, Events))
+        {
+            _eventsRef = Events;
+            _warningEventCount = Events.Count(e => e.Type == "Warning");
+            RebuildFilteredEvents();
+        }
+    }
+
+    private void SetEventFilter(EventTypeFilter filter)
+    {
+        _eventTypeFilter = filter;
+        RebuildFilteredEvents();
+    }
+
+    private void RebuildFilteredEvents()
+    {
+        _filteredEvents = _eventTypeFilter switch
+        {
+            EventTypeFilter.Warning => Events.Where(e => e.Type == "Warning").ToList(),
+            EventTypeFilter.Normal => Events.Where(e => e.Type == "Normal").ToList(),
+            _ => Events
+        };
+    }
 
     private bool ResourceExistsForEvent(KubernetesEvent evt) => evt.InvolvedObjectKind switch
     {

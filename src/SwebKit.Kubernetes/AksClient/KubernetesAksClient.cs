@@ -1316,6 +1316,27 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         return null;
     }
 
+    private async Task DeleteGatewayApiCustomObjectAsync(string ns, string plural, string name, CancellationToken ct)
+    {
+        foreach (var version in GatewayApiVersions)
+        {
+            try
+            {
+                await _client.CustomObjects.DeleteNamespacedCustomObjectAsync(
+                    GatewayApiGroup,
+                    version,
+                    ns,
+                    plural,
+                    name,
+                    cancellationToken: ct);
+                return;
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+    }
+
     private async Task<object?> ListClusterGatewayApiCustomObjectsAsync(string plural, CancellationToken ct)
     {
         foreach (var version in GatewayApiVersions)
@@ -2186,6 +2207,22 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         await WithAuthRetryAsync(async () =>
         {
             await _client.CoreV1.DeleteNamespacedPodAsync(podName, ns, cancellationToken: ct);
+        });
+    }
+
+    public async Task DeleteIngressAsync(string ns, string name, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            await _client.NetworkingV1.DeleteNamespacedIngressAsync(name, ns, cancellationToken: ct);
+        });
+    }
+
+    public async Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            await DeleteGatewayApiCustomObjectAsync(ns, "httproutes", name, ct);
         });
     }
 
