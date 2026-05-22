@@ -20,7 +20,7 @@
         </div>
 
         <div class="rows">
-            <Virtualize TItem="string" Items="@Keys.ToList()" Context="key" ItemSize="36" OverscanCount="5">
+            <Virtualize TItem="string" Items="@Keys" Context="key" ItemSize="36" OverscanCount="5">
                 @{
                     var isSelected = SelectedKeys.Contains(key, StringComparer.Ordinal);
                 }
@@ -52,7 +52,7 @@
             </div>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<string> Keys { get; set; } = [];
+    [Parameter, EditorRequired] public IList<string> Keys { get; set; } = [];
     [Parameter, EditorRequired]
     public IReadOnlySet<string> SelectedKeys { get; set; } = new
 HashSet<string>(StringComparer.Ordinal);

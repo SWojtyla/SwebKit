@@ -26,8 +26,9 @@
     @* ── Toolbar ── *@
     <AksConnectionBar Contexts="Contexts" ActiveContext="@ActiveContext" Namespaces="Namespaces"
                       CurrentNamespace="@CurrentNamespace" IsLoading="@IsLoading" IsConnected="@(Client is not null)"
-                      ActiveResourceType="@ActiveResourceType" ShowEvents="@ShowEvents"
-                      ShowPortForwardSessions="@ShowPortForwardSessions" EventWarningCount="@(Events.Count(e => e.Type == "Warning"))"
+                      DefaultContext="@(AppState.Config.AksConfig?.KubeconfigContext)" ActiveResourceType="@ActiveResourceType"
+                      ShowEvents="@ShowEvents" ShowPortForwardSessions="@ShowPortForwardSessions"
+                      EventWarningCount="@(Events.Count(e => e.Type == "Warning"))"
                       ActivePortForwardCount="@(SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active))"
                       AutoRefreshPaused="@HasAnyPanel" OnContextChanged="HandleContextChangedAsync"
                       OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
@@ -2464,6 +2465,20 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
     public void Dispose()
     {
+        // Replenish the warmup cache with the live client so the next navigation
+        // can skip the bootstrap round-trip instead of re-showing the spinner.
+        if (!AppState.UseDemoData && Client is not null)
+        {
+            AksWarmupCache.Store(new AksClientBootstrapResult(
+                AksClientBootstrapStatus.Connected,
+                Client,
+                Contexts,
+                Namespaces,
+                ActiveContext,
+                CurrentNamespace,
+                null));
+        }
+
         var bootstrapCts = Interlocked.Exchange(ref _bootstrapCts, null!);
         bootstrapCts?.Cancel();
         bootstrapCts?.Dispose();

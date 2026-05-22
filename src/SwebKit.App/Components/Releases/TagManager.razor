@@ -132,7 +132,7 @@
     [Parameter] public ReleaseRecord? Release { get; set; }
     [CascadingParameter(Name = "DevOpsClient")] public IDevOpsClient DevOpsClient { get; set; } = default!;
 
-    private List<ComponentScope> ScopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
+    private List<ComponentScope> ScopedComponents = [];
     private Dictionary<string, List<AdoTag>> ExistingTags = new();
     private Dictionary<string, List<AdoCommit>> RecentCommits = new();
     private Dictionary<string, string> TagNames = new();
@@ -148,6 +148,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        ScopedComponents = Release?.Components.Where(c => c.InScope).ToList() ?? [];
         if (Release is not null && ScopedComponents.Count > 0)
             await LoadTagDataAsync();
     }

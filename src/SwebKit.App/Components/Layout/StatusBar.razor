@@ -59,43 +59,36 @@
         }
 
         @* ── Port-forward count ── *@
-        @{
-            var pfActive = SessionService.Sessions.Count(s => s.Status is PortForwardStatus.Starting or
-        PortForwardStatus.Active);
-        }
-        @if (pfActive > 0)
+        @if (_activePortForwardCount > 0)
         {
             <button class="status-bar-btn" title="Open port-forward sessions panel"
                     aria-label="Open port-forward sessions panel" @onclick="OpenPortForwardPanel">
                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" Width="12px" />
-                @pfActive pf
+                @_activePortForwardCount pf
             </button>
         }
 
         @* ── Background tasks ── *@
-        @{
-            var running = TaskQueue.Tasks.Where(t => t.Status == BackgroundTaskStatus.Running).ToList();
-        }
-        @if (running.Count == 1)
+        @if (_runningTasks.Count == 1)
         {
-            <span class="status-section status-task" title="@running[0].Title">
+            <span class="status-section status-task" title="@_runningTasks[0].Title">
                 <FluentProgressRing Width="12px" />
-                @running[0].Title
-                @if (running[0].Total is > 0)
+                @_runningTasks[0].Title
+                @if (_runningTasks[0].Total is > 0)
                 {
-                    <span class="status-progress">@running[0].Progress / @running[0].Total</span>
-                    <progress value="@running[0].Progress" max="@running[0].Total"
+                    <span class="status-progress">@_runningTasks[0].Progress / @_runningTasks[0].Total</span>
+                    <progress value="@_runningTasks[0].Progress" max="@_runningTasks[0].Total"
                               style="width:60px; height:6px; margin-left:4px;" />
                 }
             </span>
         }
-        else if (running.Count > 1)
+        else if (_runningTasks.Count > 1)
         {
-            var totalDone = running.Sum(t => t.Progress ?? 0);
-            var totalWork = running.Sum(t => t.Total ?? 0);
+            var totalDone = _runningTasksTotalDone;
+            var totalWork = _runningTasksTotalWork;
             <span class="status-section status-task">
                 <FluentProgressRing Width="12px" />
-                @running.Count tasks running
+                @_runningTasks.Count tasks running
                 @if (totalWork > 0)
                 {
                     <span class="status-progress">@totalDone / @totalWork</span>
@@ -125,8 +118,23 @@
     private CancellationTokenSource _cts = new();
     private string CurrentArea => CurrentRoute.Area;
 
+    // Cached render state — updated in OnChanged to avoid LINQ in the render loop
+    private int _activePortForwardCount;
+    private IReadOnlyList<BackgroundTask> _runningTasks = [];
+    private int _runningTasksTotalDone;
+    private int _runningTasksTotalWork;
+
     // Cached — updated in OnChanged and OnParametersSet to avoid ConnState dictionary snapshot per render
     private string? _currentAreaStatusText;
+
+    private void UpdateCachedState()
+    {
+        _activePortForwardCount = SessionService.Sessions.Count(
+            s => s.Status is PortForwardStatus.Starting or PortForwardStatus.Active);
+        _runningTasks = TaskQueue.Tasks.Where(t => t.Status == BackgroundTaskStatus.Running).ToList();
+        _runningTasksTotalDone = _runningTasks.Sum(t => t.Progress ?? 0);
+        _runningTasksTotalWork = _runningTasks.Sum(t => t.Total ?? 0);
+    }
 
     private void UpdateAreaStatusText()
     {
@@ -142,10 +150,15 @@
 
     private string? CurrentAreaStatusText => _currentAreaStatusText;
 
-    protected override void OnParametersSet() => UpdateAreaStatusText();
+    protected override void OnParametersSet()
+    {
+        UpdateAreaStatusText();
+        UpdateCachedState();
+    }
 
     protected override void OnInitialized()
     {
+        UpdateCachedState();
         TaskQueue.TasksChanged += OnChanged;
         SessionService.SessionsChanged += OnChanged;
         ConnState.StatesChanged += OnChanged;
@@ -172,6 +185,7 @@
     private void OnChanged()
     {
         UpdateAreaStatusText();
+        UpdateCachedState();
         RequestCoalescedRender();
     }
 

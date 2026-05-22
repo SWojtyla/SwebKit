@@ -620,12 +620,14 @@
             try
             {
                 var elem = JsonSerializer.Deserialize<JsonElement>(content.Content);
-                return JsonSerializer.Serialize(elem, new JsonSerializerOptions { WriteIndented = true });
+                return JsonSerializer.Serialize(elem, _prettyPrintOptions);
             }
             catch { }
         }
         return content.Content;
     }
+
+    private static readonly System.Text.Json.JsonSerializerOptions _prettyPrintOptions = new() { WriteIndented = true };
 
     private static IEnumerable<KeyValuePair<string, string>> GetPropertyRows(BlobProperties p)
     {

@@ -4,6 +4,16 @@
    Color tokens live in per-theme [data-theme="*"] blocks.
    ═══════════════════════════════════════════════════════════ */
 
+/* ── Registered CSS custom properties (Houdini) ──
+   Declaring <length> types lets the browser interpolate them
+   in transitions — including inside grid-template-columns.
+   Without @property, CSS variables cannot be animated.        ── */
+@property --nav-current-width {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 240px;
+}
+
 /* ── Layout & non-theme constants ── */
 :root {
     /* layout */
@@ -1094,15 +1104,17 @@ html, body {
    ═══════════════════════════════════════════════════════════ */
 
 .app-shell {
+    --nav-current-width: var(--nav-width);
     display: grid;
     grid-template-rows: var(--top-bar-height) auto 1fr var(--status-bar-height);
-    grid-template-columns: var(--nav-width) 1fr;
+    grid-template-columns: var(--nav-current-width) 1fr;
     height: 100vh;
     overflow: hidden;
+    transition: --nav-current-width 0.2s ease;
 }
 
 .app-shell.nav-collapsed {
-    grid-template-columns: var(--nav-collapsed-width) 1fr;
+    --nav-current-width: var(--nav-collapsed-width);
 }
 
 .top-bar {
@@ -1502,6 +1514,7 @@ kbd {
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
+    contain: layout;
 }
 
 .main-content {
@@ -1523,6 +1536,7 @@ kbd {
     gap: 12px;
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+    contain: layout paint;
 }
 
 .status-section {
@@ -2121,7 +2135,8 @@ kbd {
     align-items: flex-start;
     justify-content: center;
     padding-top: 80px;
-    animation: fadeIn 0.12s ease;
+    will-change: opacity, transform;
+    animation: fadeIn 0.12s ease forwards;
 }
 
 @keyframes fadeIn {
@@ -2302,7 +2317,8 @@ kbd {
     align-items: flex-start;
     justify-content: center;
     padding-top: 60px;
-    animation: fadeIn 0.12s ease;
+    will-change: opacity, transform;
+    animation: fadeIn 0.12s ease forwards;
 }
 
 .shortcuts-panel {
@@ -2424,7 +2440,8 @@ kbd {
 
 .skip-link {
     position: absolute;
-    top: -100px;
+    top: 0;
+    transform: translateY(-200%);
     left: var(--spacing-md);
     background: var(--color-accent);
     color: var(--color-solid-foreground);
@@ -2432,11 +2449,11 @@ kbd {
     border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     font-size: var(--font-size-sm);
     text-decoration: none;
-    transition: top 0.1s;
+    transition: transform 0.1s ease;
     z-index: var(--z-overlay);
     white-space: nowrap;
 }
-.skip-link:focus { top: 0; outline: 2px solid white; outline-offset: 2px; }
+.skip-link:focus { transform: translateY(0); outline: 2px solid white; outline-offset: 2px; }
 
 /* ═══════════════════════════════════════════════════════════
    Data tables
@@ -2576,20 +2593,18 @@ kbd {
 /* ── Service Bus UI revamp ─────────────────────────────── */
 
 .sb-entity-panel {
-    flex: 0 0 var(--sb-entity-panel-width);
-    min-width: var(--sb-entity-panel-width);
-    max-width: var(--sb-entity-panel-width);
+    flex: 0 0 auto;
+    width: var(--sb-entity-panel-width);
     border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: flex-basis 0.2s ease, min-width 0.2s ease, max-width 0.2s ease;
+    will-change: width;
+    transition: width 0.18s ease;
 }
 
 .sb-entity-panel.collapsed {
-    flex-basis: var(--sb-entity-panel-collapsed-width);
-    min-width: var(--sb-entity-panel-collapsed-width);
-    max-width: var(--sb-entity-panel-collapsed-width);
+    width: var(--sb-entity-panel-collapsed-width);
 }
 
 .sb-entity-panel-icon-strip {

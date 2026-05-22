@@ -196,7 +196,7 @@
                                                 @if (cell is not null)
                                                 {
                                                     <a class="release-matrix__status-link" href="@cell.WebUrl" target="_blank"
-                                                           title="@cell.State / @cell.Result">
+                                                       title="@cell.State / @cell.Result">
                                                         <span class="pipeline-status @cell.CssClass">@cell.DisplayText</span>
                                                     </a>
                                                 }
@@ -286,7 +286,7 @@
     private bool _driftLoading;
 
     private List<string> _discoveredEnvironments = [];
-    private List<ComponentScope> _scopedComponents => Release?.Components.Where(c => c.InScope).ToList() ?? [];
+    private List<ComponentScope> _scopedComponents = [];
     private Dictionary<string, Dictionary<string, CellData>> _boardData = new();
     private Dictionary<string, string> _runNames = new();
     private Dictionary<string, RuntimeDriftResult> _driftResults = new();
@@ -306,6 +306,7 @@
         // BL-3: guard before await to prevent double-load on parent re-renders
         if (ReferenceEquals(_loadedRelease, Release)) return;
         _loadedRelease = Release;
+        _scopedComponents = Release?.Components.Where(c => c.InScope).ToList() ?? [];
         if (Release is not null && _scopedComponents.Count > 0)
             await LoadAsync();
     }
