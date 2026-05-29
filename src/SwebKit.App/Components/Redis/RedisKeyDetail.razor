@@ -83,7 +83,14 @@
                 }
                 else
                 {
-                    <pre class="blob">@DisplayStringValue</pre>
+                    <div class="value-toolbar">
+                        <span>Value</span>
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyStringValueAsync"
+                                      Disabled="@(StringValue is null)">
+                            Copy Value
+                        </FluentButton>
+                    </div>
+                    <pre class="blob" tabindex="0">@DisplayStringValue</pre>
                 }
             }
         }
@@ -100,7 +107,13 @@
                     }
                     else
                     {
-                        @context.Value
+                        <div class="value-cell">
+                            <span class="hash-value" title="@context.Value">@context.Value</span>
+                            <button type="button" class="copy-btn" title="Copy value"
+                                    @onclick='() => CopyTextAsync(context.Value, "Copied field value")'>
+                                Copy
+                            </button>
+                        </div>
                     }
                 </TemplateColumn>
                 <TemplateColumn Title="" Width="140px">
@@ -133,7 +146,13 @@
             <ul class="list">
                 @foreach (var item in Items)
                 {
-                    <li>@item</li>
+                    <li>
+                        <pre class="item-value">@item</pre>
+                        <button type="button" class="copy-btn" title="Copy item"
+                                @onclick='() => CopyTextAsync(item, "Copied item")'>
+                            Copy
+                        </button>
+                    </li>
                 }
             </ul>
             @if (HasMoreItems)
@@ -145,7 +164,13 @@
         {
             <FluentDataGrid Items="@(SortedSetItems.AsQueryable())" TGridItem="RedisSortedSetEntry">
                 <TemplateColumn Title="Member" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Member))">
-                    @context.Member
+                    <div class="value-cell">
+                        <span class="hash-value" title="@context.Member">@context.Member</span>
+                        <button type="button" class="copy-btn" title="Copy member"
+                                @onclick='() => CopyTextAsync(context.Member, "Copied member")'>
+                            Copy
+                        </button>
+                    </div>
                 </TemplateColumn>
                 <TemplateColumn Title="Score" SortBy="@(GridSort<RedisSortedSetEntry>.ByAscending(e => e.Score))">
                     <span @onclick="() => BeginZsetScoreEdit(context.Member, context.Score)" class="zset-score-cell">
@@ -198,7 +223,7 @@
     private string StringEditorValue = string.Empty;
     private string HashEditorValue = string.Empty;
     private int LastStartEditRequestId;
-    private string DisplayStringValue => RedisValueHelpers.TruncateValue(RedisValueHelpers.FormatJsonIfValid(StringValue));
+    private string DisplayStringValue => RedisValueHelpers.FormatJsonIfValid(StringValue);
 
     // RDS-3: Sorted set score editing
     private string? _editingZsetMember;
@@ -377,8 +402,16 @@
     private async Task CopyKeyNameAsync()
     {
         if (string.IsNullOrEmpty(KeyInfo?.Key)) return;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", KeyInfo.Key);
-        Notifications.ShowSuccess("Copied!");
+        await CopyTextAsync(KeyInfo.Key, "Copied key name");
+    }
+
+    private Task CopyStringValueAsync() => CopyTextAsync(StringValue, "Copied value");
+
+    private async Task CopyTextAsync(string? value, string message)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+        Notifications.ShowSuccess(message);
     }
 
     // RDS-3: ZSet score editing

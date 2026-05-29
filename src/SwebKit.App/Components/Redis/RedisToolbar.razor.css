@@ -1,13 +1,36 @@
-.toolbar {
-    display: flex;
+.redis-toolbar {
+    display: grid;
     gap: var(--spacing-sm);
+}
+
+.toolbar-primary {
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) 1fr;
+    gap: var(--spacing-md);
     align-items: end;
+}
+
+.toolbar-actions,
+.selection-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
     flex-wrap: wrap;
+}
+
+.toolbar-actions {
+    justify-content: flex-end;
 }
 
 .field {
     display: grid;
     gap: var(--spacing-xs);
+}
+
+.pattern-input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .field label {
@@ -16,7 +39,7 @@
 }
 
 .field input {
-    width: 220px;
+    width: min(100%, 280px);
     padding: 6px var(--spacing-sm);
     background: var(--color-surface);
     color: var(--color-text);
@@ -33,7 +56,6 @@
 .pattern-scope {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
-    max-width: 320px;
 }
 
 .pattern-help code {
@@ -43,7 +65,55 @@
     font-size: 10px;
 }
 
-.selection-summary {
+.selection-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.selection-bar[data-has-selection="true"] {
+    border-color: rgba(64, 170, 255, 0.42);
+    background: rgba(64, 170, 255, 0.08);
+}
+
+.selection-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     font-size: 12px;
     color: var(--color-text-muted);
+}
+
+.selection-copy strong {
+    color: var(--color-text);
+}
+
+.batch-progress {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+@media (max-width: 1000px) {
+    .toolbar-primary {
+        grid-template-columns: 1fr;
+    }
+
+    .toolbar-actions,
+    .selection-bar,
+    .selection-copy {
+        align-items: flex-start;
+    }
+
+    .toolbar-actions {
+        justify-content: flex-start;
+    }
+
+    .selection-bar {
+        flex-direction: column;
+    }
 }

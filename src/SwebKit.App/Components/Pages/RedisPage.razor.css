@@ -16,14 +16,13 @@
 
 .content-grid {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: minmax(320px, 38%) minmax(0, 1fr);
     gap: var(--spacing-md);
     min-height: 0;
     flex: 1;
 }
 
-.left-column,
-.right-column {
+.detail-column {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
@@ -38,22 +37,109 @@
 }
 
 .key-tree-panel {
-    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .detail-panel {
     padding: var(--spacing-md);
     flex: 1;
+    min-height: 0;
 }
 
 .health-panel {
     max-height: 360px;
 }
 
+.redis-workspace-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.redis-workspace-status span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 24px;
+}
+
+.redis-workspace-status strong {
+    color: var(--color-text);
+}
+
+.active-key-summary {
+    max-width: min(520px, 100%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: Consolas, monospace;
+}
+
+.panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.panel-heading h2 {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.panel-heading span {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.insights-drawer {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.insights-drawer > summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    padding: 10px 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.insights-drawer > summary::-webkit-details-marker {
+    display: none;
+}
+
+.insights-drawer > summary span {
+    font-weight: 600;
+}
+
+.insights-drawer > summary small {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.insights-stack {
+    display: grid;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--color-border);
+}
+
 @media (max-width: 1000px) {
     .content-grid {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(220px, 40%) 1fr;
+        grid-template-rows: minmax(280px, 42vh) minmax(0, 1fr);
     }
 }
 

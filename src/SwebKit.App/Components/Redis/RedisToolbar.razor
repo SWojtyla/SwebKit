@@ -1,47 +1,44 @@
-<div class="toolbar">
-    <div class="field">
-        <label>Pattern</label>
-        <input @bind="_pattern" placeholder="*" />
-        <div class="pattern-help">
-            Examples: <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
+<div class="redis-toolbar">
+    <div class="toolbar-primary">
+        <div class="field pattern-field">
+            <label>Pattern</label>
+            <div class="pattern-input-row">
+                <input @bind="_pattern" placeholder="*" />
+                <FluentButton Appearance="Appearance.Accent" @onclick="HandleScan" Disabled="@IsLoading">Scan</FluentButton>
+            </div>
+            <div class="pattern-help">
+                <code>user:*</code> <code>session:*</code> <code>cache:*</code> <code>*:pending</code>
+            </div>
+            <div class="pattern-scope">
+                Pattern applies to the full Redis keyspace. The tree shows the currently loaded matches.
+            </div>
         </div>
-        <div class="pattern-scope">
-            Pattern applies to the full Redis keyspace. The tree shows the currently loaded matches.
+
+        <div class="toolbar-actions">
+            <FluentButton @onclick="OnRefreshKey" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key</FluentButton>
+            <FluentButton @onclick="OnDeleteKey" Disabled="@(IsLoading || SelectedKey is null)">Delete Key</FluentButton>
+            <FluentButton @onclick="OnExportJson" Disabled="@(IsLoading || KeyCount == 0)">Export JSON</FluentButton>
+            <AutoRefreshToggle OnRefresh="HandleScan" Paused="@IsLoading" />
         </div>
     </div>
 
-    <FluentButton Appearance="Appearance.Accent" @onclick="HandleScan" Disabled="@IsLoading">Scan
-    </FluentButton>
-    <FluentButton @onclick="OnRefreshKey" Disabled="@(IsLoading || SelectedKey is null)">Refresh Key
-    </FluentButton>
-    <FluentButton @onclick="OnDeleteKey" Disabled="@(IsLoading || SelectedKey is null)">Delete Key
-    </FluentButton>
-    <FluentButton @onclick="HandleSelectAllLoaded" Disabled="@(IsLoading || KeyCount == 0)">Select All Loaded
-    </FluentButton>
-    <FluentButton @onclick="ToggleMultiSelectMode"
-                  Appearance="@(_multiSelectMode ? Appearance.Accent : Appearance.Neutral)">
-        @(_multiSelectMode ? "Cancel Select" : "Select")
-    </FluentButton>
-    @if (_multiSelectMode)
-    {
-        <span class="selection-summary">
-            Selected @_selectedKeys.Count of @KeyCount loaded matching key(s)@((HasMoreKeys && KeyCount > 0) ? " (more matching keys not loaded yet)" : string.Empty)
-        </span>
-        <FluentButton @onclick="ClearSelection" Disabled="@(_selectedKeys.Count == 0)">Clear Selection</FluentButton>
-        @if (_selectedKeys.Count > 0)
-        {
-            <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent">
-                Delete @_selectedKeys.Count key(s)
+    <div class="selection-bar" data-has-selection="@(_selectedKeys.Count > 0 ? "true" : "false")">
+        <div class="selection-copy">
+            <strong>@_selectedKeys.Count selected</strong>
+            <span>of @KeyCount loaded matching key(s)@((HasMoreKeys && KeyCount > 0) ? ", with more matches available" : string.Empty)</span>
+        </div>
+        <div class="selection-actions">
+            <FluentButton @onclick="HandleSelectAllLoaded" Disabled="@(IsLoading || KeyCount == 0)">Select All Loaded</FluentButton>
+            <FluentButton @onclick="ClearSelection" Disabled="@(_selectedKeys.Count == 0)">Clear</FluentButton>
+            <FluentButton @onclick="OnBatchDelete" Appearance="Appearance.Accent" Disabled="@(_selectedKeys.Count == 0)">
+                Delete Selected
             </FluentButton>
-        }
+        </div>
         @if (BatchProgressMessage is not null)
         {
-            <span class="selection-summary">@BatchProgressMessage</span>
+            <span class="batch-progress">@BatchProgressMessage</span>
         }
-    }
-    <FluentButton @onclick="OnExportJson" Disabled="@(IsLoading || KeyCount == 0)">Export JSON
-    </FluentButton>
-    <AutoRefreshToggle OnRefresh="HandleScan" Paused="@IsLoading" />
+    </div>
 </div>
 
 @code {
@@ -60,11 +57,10 @@
     [Parameter] public EventCallback OnBatchDelete { get; set; }
 
     private string _pattern = "*";
-    private bool _multiSelectMode;
     private readonly HashSet<string> _selectedKeys = new(StringComparer.Ordinal);
 
     public string Pattern { get => _pattern; set => _pattern = value; }
-    public bool MultiSelectMode => _multiSelectMode;
+    public bool MultiSelectMode => true;
     public HashSet<string> SelectedKeys => _selectedKeys;
 
     public void ReplaceSelection(IEnumerable<string> keys)
@@ -72,13 +68,11 @@
         _selectedKeys.Clear();
         foreach (var key in keys)
             _selectedKeys.Add(key);
-        _multiSelectMode = true;
         RequestRender();
     }
 
     public void AddSelection(IEnumerable<string> keys)
     {
-        _multiSelectMode = true;
         foreach (var key in keys)
             _selectedKeys.Add(key);
         RequestRender();
@@ -100,7 +94,6 @@
     public void ExitMultiSelect()
     {
         _selectedKeys.Clear();
-        _multiSelectMode = false;
         RequestRender();
     }
 
@@ -113,7 +106,6 @@
 
     public void ToggleKeySelection(string key)
     {
-        _multiSelectMode = true;
         if (!_selectedKeys.Remove(key))
             _selectedKeys.Add(key);
         RequestRender();
@@ -125,10 +117,4 @@
 
     private void RequestRender() => _ = InvokeAsync(StateHasChanged);
 
-    private void ToggleMultiSelectMode()
-    {
-        _multiSelectMode = !_multiSelectMode;
-        if (!_multiSelectMode)
-            _selectedKeys.Clear();
-    }
 }

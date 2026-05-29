@@ -49,28 +49,37 @@ else
     }
     else
     {
+        <div class="redis-workspace-status">
+            <span><strong>@Keys.Count</strong> loaded</span>
+            <span><strong>@((_toolbar?.SelectedKeys.Count ?? 0))</strong> selected</span>
+            @if (SelectedKey is not null)
+            {
+                <span class="active-key-summary">@SelectedKey</span>
+            }
+        </div>
+
         <div class="content-grid">
-            <div class="left-column">
-                <div class="panel key-tree-panel" tabindex="0" @onkeydown="HandleKeyListKeyDown"
-                     @onkeydown:preventDefault="@_preventKeyListKey">
-                    <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
-                                        KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
-                                        OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
-                                        MultiSelectMode="@(_toolbar?.MultiSelectMode ?? false)"
-                                        SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled"
-                                        OnSubtreeSelected="HandleSubtreeSelected" OnSubtreeCleared="HandleSubtreeCleared" />
+            <section class="panel key-tree-panel" aria-label="Redis key browser" tabindex="0"
+                     @onkeydown="HandleKeyListKeyDown" @onkeydown:preventDefault="@_preventKeyListKey">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Keys</h2>
+                        <span>@Keys.Count loaded match(es)</span>
+                    </div>
                     @if (_hasMoreKeys)
                     {
-                        <div class="load-more-bar">
-                            <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load more matches (@Keys.Count
-                                loaded)
-                            </FluentButton>
-                        </div>
+                        <FluentButton @onclick="LoadMoreKeysAsync" Disabled="@IsLoading">Load More</FluentButton>
                     }
                 </div>
-            </div>
+                <RedisNamespaceTree Nodes="@NamespaceNodes" Separator="@CurrentSeparator" SelectedKey="@SelectedKey"
+                                    KeyTypes="@KeyTypes" IsLoading="@IsLoading" OnSeparatorChanged="OnSeparatorChangedAsync"
+                                    OnPrefixSelected="OnPrefixSelectedAsync" OnKeySelected="SelectKeyAsync"
+                                    MultiSelectMode="@(_toolbar?.MultiSelectMode ?? true)"
+                                    SelectedKeys="@(_toolbar?.SelectedKeys ?? _emptySelectedKeys)" OnKeyToggled="HandleKeyToggled"
+                                    OnSubtreeSelected="HandleSubtreeSelected" OnSubtreeCleared="HandleSubtreeCleared" />
+            </section>
 
-            <div class="right-column">
+            <section class="detail-column" aria-label="Redis key details">
                 <div class="panel detail-panel">
                     <RedisKeyDetail SelectedKey="@SelectedKey" KeyInfo="@SelectedInfo" StringValue="@SelectedStringValue"
                                     HashFields="@SelectedHashFields" Items="@SelectedItems" SortedSetItems="@SelectedSortedSetItems"
@@ -81,20 +90,29 @@ else
                                     HasMoreItems="@_hasMoreItems" OnLoadMoreItems="LoadMoreItemsAsync" />
                 </div>
 
-                <div class="panel health-panel">
-                    <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
-                                                 OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
-                </div>
+                <details class="insights-drawer">
+                    <summary>
+                        <span>Insights</span>
+                        <small>Health, memory, slowlog, and Pub/Sub</small>
+                    </summary>
+                    <div class="insights-stack">
+                        <div class="panel health-panel">
+                            <RedisKeyspaceHealthExplorer Report="@HealthReport" IsLoading="@IsAnalyzingHealth"
+                                                         OnAnalyze="AnalyzeKeyspaceHealthAsync" OnFindingSelected="OpenFindingKeyAsync" />
+                        </div>
 
-                <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
-                                   TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory" OnAnalyze="AnalyzePrefixMemoryAsync" />
+                        <RedisPrefixMemory Buckets="@PrefixMemoryBuckets" ScannedKeyCount="@ScannedKeyInfos.Count"
+                                           TotalKeyCount="@Keys.Count" IsLoading="@IsAnalyzingMemory"
+                                           OnAnalyze="AnalyzePrefixMemoryAsync" />
 
-                <div class="panel insights-panel">
-                    <RedisOpsInsightsPanel SlowLog="@_slowLog" HotKeys="@_hotKeys" PubSub="@_pubSub"
-                                           OnRefreshSlowLog="LoadSlowLogAsync" OnRefreshPubSub="LoadPubSubAsync"
-                                           OnNavigateToKey="SelectKeyAsync" />
-                </div>
-            </div>
+                        <div class="panel insights-panel">
+                            <RedisOpsInsightsPanel SlowLog="@_slowLog" HotKeys="@_hotKeys" PubSub="@_pubSub"
+                                                   OnRefreshSlowLog="LoadSlowLogAsync" OnRefreshPubSub="LoadPubSubAsync"
+                                                   OnNavigateToKey="SelectKeyAsync" />
+                        </div>
+                    </div>
+                </details>
+            </section>
         </div>
     }
 }

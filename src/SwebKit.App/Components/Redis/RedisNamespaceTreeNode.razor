@@ -6,11 +6,11 @@
         <div class="@RowClass" data-active="@ActiveAttributeValue" data-selected="@SelectedAttributeValue">
             @if (MultiSelectMode)
             {
-                <input type="checkbox" checked="@(SelectedKeys.Contains(Node.FullKey ?? ""))" @onclick="ToggleSelection"
-                       @onclick:stopPropagation="true" class="ns-checkbox" />
+                  <input type="checkbox" checked="@(SelectedKeys.Contains(Node.FullKey ?? ""))" @onclick="ToggleSelection"
+                      @onclick:stopPropagation="true" class="ns-checkbox" aria-label="@LeafSelectionLabel" />
             }
             <button type="button" class="ns-row-main" @onclick="HandleLeafClick" title="@Node.FullKey"
-                    aria-current="@ActiveAttributeValue" aria-pressed="@LeafPressedState">
+                    aria-current="@ActiveAttributeValue">
                 <span class="ns-toggle-placeholder"></span>
                 <span class="ns-name">@Node.Name</span>
                 @if (KeyType is not null)
@@ -23,6 +23,14 @@
     else
     {
         <div class="@NamespaceRowClass" data-selected="@NamespaceSelectedAttributeValue">
+            @if (MultiSelectMode && _loadedDescendantKeys.Count > 0)
+            {
+                <button type="button" class="ns-select-toggle" data-state="@NamespaceSelectionState"
+                        @onclick="ToggleNamespaceSelection" @onclick:stopPropagation="true"
+                        aria-pressed="@NamespacePressedState" title="@NamespaceSelectionTitle">
+                    <span>@NamespaceSelectionGlyph</span>
+                </button>
+            }
             <button type="button" class="ns-row-toggle" @onclick="Toggle" @onclick:stopPropagation="true"
                     aria-label="@ExpandToggleLabel" title="@ExpandToggleLabel">
                 @if (Node.Children.Count > 0)
@@ -35,7 +43,7 @@
                 }
             </button>
             <button type="button" class="ns-row-main" @onclick="HandleNamespaceClick" title="@NamespaceClickTitle"
-                    aria-pressed="@NamespacePressedState">
+                    aria-expanded="@IsExpanded">
                 <span class="ns-name">@Node.Name</span>
             </button>
             <span class="ns-count">@Node.KeyCount</span>
@@ -80,7 +88,6 @@
     private bool IsSelected => Node.IsKey && Node.FullKey is not null && SelectedKeys.Contains(Node.FullKey);
     private string? ActiveAttributeValue => IsActive ? "true" : null;
     private string? SelectedAttributeValue => IsSelected ? "true" : null;
-    private string? LeafPressedState => MultiSelectMode ? (IsSelected ? "true" : "false") : null;
     private string? KeyType => Node.FullKey is not null && KeyTypes.TryGetValue(Node.FullKey, out var t) ? t : null;
     private string RowClass => $"ns-row{(IsActive ? " active" : string.Empty)}{(IsSelected ? " selected" : string.Empty)}";
     private string NamespaceRowClass => $"ns-row{(_areAllLoadedDescendantsSelected ? " selected" : string.Empty)}{(_hasAnyLoadedDescendantsSelected && !_areAllLoadedDescendantsSelected ? " partial" : string.Empty)}";
@@ -89,11 +96,15 @@
         ? null
         : _areAllLoadedDescendantsSelected ? "true" : _hasAnyLoadedDescendantsSelected ? "mixed" : "false";
     private string ExpandToggleLabel => IsExpanded ? "Collapse namespace" : "Expand namespace";
-    private string NamespaceClickTitle => MultiSelectMode && _loadedDescendantKeys.Count > 0
-        ? _areAllLoadedDescendantsSelected
-            ? $"Clear {_loadedDescendantKeys.Count} loaded descendant key(s)"
-            : $"Select {_loadedDescendantKeys.Count} loaded descendant key(s)"
-        : ExpandToggleLabel;
+    private string NamespaceClickTitle => ExpandToggleLabel;
+    private string NamespaceSelectionTitle => _areAllLoadedDescendantsSelected
+        ? $"Clear {_loadedDescendantKeys.Count} loaded descendant key(s)"
+        : $"Select {_loadedDescendantKeys.Count} loaded descendant key(s)";
+    private string LeafSelectionLabel => Node.FullKey is null ? "Select key" : $"Select key {Node.FullKey}";
+    private string NamespaceSelectionState => _areAllLoadedDescendantsSelected
+        ? "checked"
+        : _hasAnyLoadedDescendantsSelected ? "mixed" : "unchecked";
+    private string NamespaceSelectionGlyph => _areAllLoadedDescendantsSelected ? "✓" : _hasAnyLoadedDescendantsSelected ? "−" : string.Empty;
 
     protected override void OnParametersSet()
     {
@@ -122,9 +133,7 @@
         if (Node.FullKey is null)
             return Task.CompletedTask;
 
-        return MultiSelectMode
-            ? OnKeyToggled.InvokeAsync(Node.FullKey)
-            : OnKeySelected.InvokeAsync(Node.FullKey);
+        return OnKeySelected.InvokeAsync(Node.FullKey);
     }
 
     private Task FilterPrefix()
@@ -139,12 +148,12 @@
 
     private Task HandleNamespaceClick()
     {
-        if (!MultiSelectMode || _loadedDescendantKeys.Count == 0)
-        {
-            Toggle();
-            return Task.CompletedTask;
-        }
+        Toggle();
+        return Task.CompletedTask;
+    }
 
+    private Task ToggleNamespaceSelection()
+    {
         return _areAllLoadedDescendantsSelected
             ? OnSubtreeCleared.InvokeAsync(_loadedDescendantKeys)
             : OnSubtreeSelected.InvokeAsync(_loadedDescendantKeys);

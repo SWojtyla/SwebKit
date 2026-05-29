@@ -48,11 +48,11 @@ public class RedisToolbarTests : TestContext
     }
 
     [Fact]
-    public void RedisToolbar_MultiSelectMode_FalseByDefault()
+    public void RedisToolbar_MultiSelectMode_AlwaysAvailable()
     {
         var cut = RenderComponent<RedisToolbar>();
 
-        Assert.False(cut.Instance.MultiSelectMode);
+        Assert.True(cut.Instance.MultiSelectMode);
     }
 
     [Fact]
@@ -101,9 +101,23 @@ public class RedisToolbarTests : TestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Selected 2 of 5 loaded matching key(s) (more matching keys not loaded yet)", cut.Markup);
-            Assert.Contains("Clear Selection", cut.Markup);
-            Assert.Contains("Delete 2 key(s)", cut.Markup);
+            Assert.Contains("2 selected", cut.Markup);
+            Assert.Contains("of 5 loaded matching key(s), with more matches available", cut.Markup);
+            Assert.Contains("Clear", cut.Markup);
+            Assert.Contains("Delete Selected", cut.Markup);
         });
+    }
+
+    [Fact]
+    public void RedisToolbar_ClearSelection_RemovesSelectionWithoutModeSwitch()
+    {
+        var cut = RenderComponent<RedisToolbar>(ps => ps
+            .Add(p => p.KeyCount, 2));
+
+        cut.Instance.AddSelection(["alpha", "beta"]);
+        cut.Instance.ClearSelection();
+
+        Assert.Empty(cut.Instance.SelectedKeys);
+        Assert.True(cut.Instance.MultiSelectMode);
     }
 }

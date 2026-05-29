@@ -10,7 +10,8 @@
     color: var(--color-text);
     padding: var(--spacing-xs) 10px;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 6px;
+    min-height: 32px;
 }
 
 .ns-row:hover {
@@ -85,6 +86,34 @@
     flex-shrink: 0;
 }
 
+.ns-select-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.ns-select-toggle[data-state="checked"],
+.ns-select-toggle[data-state="mixed"] {
+    border-color: var(--color-accent, #40aaff);
+    background: rgba(64, 170, 255, 0.24);
+}
+
+.ns-select-toggle:hover {
+    border-color: var(--color-accent, #40aaff);
+    background: rgba(64, 170, 255, 0.16);
+}
+
 .ns-row-toggle:hover {
     background: rgba(64, 170, 255, 0.16);
 }
@@ -153,7 +182,9 @@
 .t-unknown { background: rgba(127, 127, 127, 0.24); }
 
 .ns-checkbox {
-    margin-right: 4px;
+    width: 16px;
+    height: 16px;
+    margin: 0;
     cursor: pointer;
     accent-color: var(--color-accent, #40aaff);
     flex-shrink: 0;
