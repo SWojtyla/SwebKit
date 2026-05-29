@@ -11,6 +11,7 @@ Update this file when control flow, runtime responsibilities, or integration bou
 This document expands [architecture.md](architecture.md) for the most important implementation flows:
 
 - App bootstrap and shell hydration
+- Dashboard summary and customization foundation
 - Operator workspace search, favorites, recents, and route-first restore
 - Service Bus namespace connection and message browsing
 - AKS diagnostics and side-panel operations
@@ -99,6 +100,45 @@ sequenceDiagram
 - `OperatorWorkspaceService` owns current snapshots, provider-backed search, favorites, recents, and pending route-first restores.
 - Participating pages register one area restore handler and publish semantic snapshots only; they never serialize live component objects or service graphs.
 - Search providers are additive. New capability areas can contribute resource candidates without reopening one central palette branch.
+
+## Dashboard Summary Flow
+
+### Intent
+
+Give operators a fast initial view of setup attention, favorite resources, recent shell context, and bounded cross-area health summaries without blocking the shell on slow integrations.
+
+### High-Level Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dashboard as DashboardPage
+    participant AppState as AppStateService
+    participant Health as IConfigurationHealthService
+    participant Events as IAppEventBus
+    participant Workspace as OperatorWorkspaceService
+    participant Integrations as Area Clients
+    participant UiState as UiStateRepository
+
+    User->>Dashboard: Open / or /dashboard
+    Dashboard->>AppState: Read config, demo mode, and setup state
+    Dashboard->>Health: Build readiness report
+    Dashboard->>Workspace: Read favorite resources
+    Dashboard->>UiState: Read local shell state for future tile preferences
+    Dashboard->>Integrations: Refresh enabled health summaries in parallel
+    Integrations-->>Dashboard: Per-tile data, timeout, or error
+    Events-->>Dashboard: Activity or refresh requested events
+    User->>Dashboard: Open tile or favorite
+    Dashboard->>Workspace: OpenSnapshotAsync or publish navigation event
+```
+
+### Design Notes
+
+- Dashboard content is shell-local and user-specific when it affects visibility, order, or size. Persist those preferences through `UiStateRepository`, not `AppConfig`.
+- Tile definitions should have stable IDs and live in an app-layer registry. Persisted state should reference IDs rather than serializing component type names or service instances.
+- Network-backed tiles must use bounded refresh budgets and independent loading/error states, following the current health-tile refresh pattern.
+- Setup readiness is an attention surface, not an optional metric. It must remain visible whenever configuration health requires action.
+- Drill-through should use existing shell mechanisms: area navigation events, direct routes, or `OperatorWorkspaceService` snapshots.
 
 ## Service Bus Namespace and Message Browse Flow
 

@@ -127,6 +127,7 @@ Key files:
 Feature-level behavior notes live in `docs/architecture/functionalities/`:
 
 - `docs/architecture/functionalities/service-bus.md`
+- `docs/architecture/functionalities/dashboard.md`
 - `docs/architecture/functionalities/aks.md`
 - `docs/architecture/functionalities/redis.md`
 - `docs/architecture/functionalities/storage.md`
@@ -154,6 +155,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Add or change app-level service registration                                | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                               |
 | Add a new routed page and navigation entry                                  | `src/SwebKit.App/Components/Pages/` and `src/SwebKit.App/Components/Layout/LeftNav.razor`                                                                                      |
+| Extend dashboard tiles, dashboard readiness, or dashboard customization     | `src/SwebKit.App/Components/Pages/DashboardPage.razor`, `src/SwebKit.App/Components/Shared/HealthTile.razor`, and `src/SwebKit.Core/Configuration/UiStateRepository.cs`        |
 | Extend persisted app configuration                                          | `src/SwebKit.Core/Domain/AppConfig.cs` and `src/SwebKit.Core/Configuration/ProfileRepository.cs`                                                                               |
 | Extend shell resource search, named favorites, recents, or snapshot restore | `src/SwebKit.App/Services/OperatorWorkspaceService.cs`, `src/SwebKit.App/Services/OperatorResourceSearchProviders.cs`, and `src/SwebKit.Core/Domain/WorkspaceModels.cs`        |
 | Implement a new Service Bus operation                                       | `src/SwebKit.Core/Abstractions/IServiceBusClient.cs` and `src/SwebKit.Azure/ServiceBus/AzureServiceBusClient.cs`                                                               |
