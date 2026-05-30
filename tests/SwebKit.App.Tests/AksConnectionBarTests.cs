@@ -108,4 +108,20 @@ public class AksConnectionBarTests : TestContext
         Assert.Contains(">Gateways<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">HTTPRoutes<", cut.Markup, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_CanApplyMultipleNamespaces()
+    {
+        string? changedNamespace = null;
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "orders")
+            .Add(p => p.OnNamespaceChanged, value => changedNamespace = value));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+        cut.Find("input[aria-label='payments']").Change(true);
+        cut.Find("button.aks-ns-apply").Click();
+
+        Assert.Equal("orders,payments", changedNamespace);
+    }
 }

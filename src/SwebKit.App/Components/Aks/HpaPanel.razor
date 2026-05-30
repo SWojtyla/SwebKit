@@ -132,7 +132,8 @@
 
     private string? FirstConditionDetail(string type)
     {
-        var condition = Hpa.Conditions.FirstOrDefault(condition => string.Equals(condition.Type, type, StringComparison.OrdinalIgnoreCase));
+        var condition = Hpa.Conditions.FirstOrDefault(condition => string.Equals(condition.Type, type,
+StringComparison.OrdinalIgnoreCase));
         if (condition is null)
             return null;
 

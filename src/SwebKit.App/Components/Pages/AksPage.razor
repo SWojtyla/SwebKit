@@ -274,11 +274,11 @@
             </div>
 
             @* ── Side column: all detail panels ── *@
-            <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentNamespace" IsProduction="@IsProduction"
-                             Confirm="Confirm" Notifications="Notifications" Events="@Events" Deployments="@Deployments" Pods="@Pods"
-                             StatefulSets="@StatefulSets" ShowEvents="@ShowEvents" OnShowEventsChanged="HandleToggleEventsOff"
-                             OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync" OnPanelStateChanged="StateHasChanged"
-                             OnJumpToResource="HandleJumpToResource" />
+            <AksDetailPanels @ref="_detailPanels" Client="Client" Namespace="@CurrentPrimaryNamespace"
+                             IsProduction="@IsProduction" Confirm="Confirm" Notifications="Notifications" Events="@Events"
+                             Deployments="@Deployments" Pods="@Pods" StatefulSets="@StatefulSets" ShowEvents="@ShowEvents"
+                             OnShowEventsChanged="HandleToggleEventsOff" OnError="@(msg => ErrorMessage = msg)" OnDataChanged="LoadAsync"
+                             OnPanelStateChanged="StateHasChanged" OnJumpToResource="HandleJumpToResource" />
 
         </div>
     }
@@ -1014,13 +1014,49 @@ OnCtxRestartDeployment();
         }
     }
 
-    private bool IsMultiNamespace => CurrentNamespace == "*";
+    private bool IsMultiNamespace => CurrentNamespace == "*" || GetSelectedNamespaces().Count > 1;
+
+    private string CurrentPrimaryNamespace => GetSelectedNamespaces().FirstOrDefault() ?? "default";
 
     private List<string> GetScopedNamespaces()
+        => CurrentNamespace == "*"
+            ? GetAvailableNamespaces()
+            : GetSelectedNamespaces();
+
+    private List<string> GetAvailableNamespaces()
         => Namespaces
-            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Where(ns => !string.IsNullOrWhiteSpace(ns))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+    private List<string> GetSelectedNamespaces()
+    {
+        if (CurrentNamespace == "*")
+        {
+            return GetAvailableNamespaces();
+        }
+
+        var selected = CurrentNamespace
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(ns => !string.IsNullOrWhiteSpace(ns))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (selected.Count == 0)
+        {
+            return [];
+        }
+
+        var available = GetAvailableNamespaces();
+        if (available.Count == 0)
+        {
+            return selected;
+        }
+
+        return selected
+            .Where(ns => available.Contains(ns, StringComparer.Ordinal))
+            .ToList();
+    }
 
     private void StoreSnapshot(string? cacheKey = null)
     {
@@ -1043,7 +1079,7 @@ OnCtxRestartDeployment();
 
         try
         {
-            IReadOnlyList<JobInfo> refreshedJobs = requestedNamespace == "*"
+            IReadOnlyList<JobInfo> refreshedJobs = IsMultiNamespace
                 ? await Client.GetJobsAsync(GetScopedNamespaces())
                 : await Client.GetJobsAsync(requestedNamespace);
 
@@ -1148,6 +1184,7 @@ OnCtxRestartDeployment();
                     LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r),
                     LoadDataset(() => Client.GetGatewaysAsync(allNs), r => Gateways = r),
                     LoadDataset(() => Client.GetHttpRoutesAsync(allNs), r => HttpRoutes = r),
+                    LoadDataset(() => Client.GetHpasAsync(allNs), r => Hpas = r),
                     LoadDataset(() => Client.GetJobsAsync(allNs), r => Jobs = r),
                     LoadDataset(() => Client.GetCronJobsAsync(allNs), r => CronJobs = r),
                 };
@@ -1503,19 +1540,24 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
 
     private string? GetSelectedResourceName() => ActiveResourceType switch
     {
-        "Deployments" => SelectedDeployment?.Name,
-        "Pods" => SelectedPod?.Name,
-        "StatefulSets" => SelectedStatefulSet?.Name,
-        "ConfigMaps" => SelectedConfigMap?.Name,
-        "Secrets" => SelectedSecret?.Name,
+        "Deployments" => SelectedDeployment is null ? null : GetNamespaceScopedIdentity(SelectedDeployment.Namespace,
+SelectedDeployment.Name),
+        "Pods" => SelectedPod is null ? null : GetNamespaceScopedIdentity(SelectedPod.Namespace, SelectedPod.Name),
+        "StatefulSets" => SelectedStatefulSet is null ? null : GetNamespaceScopedIdentity(SelectedStatefulSet.Namespace,
+SelectedStatefulSet.Name),
+        "ConfigMaps" => SelectedConfigMap is null ? null : GetNamespaceScopedIdentity(SelectedConfigMap.Namespace,
+SelectedConfigMap.Name),
+        "Secrets" => SelectedSecret is null ? null : GetNamespaceScopedIdentity(SelectedSecret.Namespace, SelectedSecret.Name),
         "Services" => SelectedService is null ? null : GetServiceIdentity(SelectedService),
         "Ingresses" => SelectedIngress is null ? null : GetIngressIdentity(SelectedIngress),
         "GatewayClasses" => SelectedGatewayClass is null ? null : GetGatewayClassIdentity(SelectedGatewayClass),
         "Gateways" => SelectedGateway is null ? null : GetGatewayIdentity(SelectedGateway),
         "HTTPRoutes" => SelectedHttpRoute is null ? null : GetHttpRouteIdentity(SelectedHttpRoute),
-        "Helm" => SelectedHelmRelease?.Name,
-        "Jobs" => SelectedJob?.Name,
-        "CronJobs" => SelectedCronJob?.Name,
+        "Helm" => SelectedHelmRelease is null ? null : GetNamespaceScopedIdentity(SelectedHelmRelease.Namespace,
+SelectedHelmRelease.Name),
+        "Jobs" => SelectedJob is null ? null : GetNamespaceScopedIdentity(SelectedJob.Namespace, SelectedJob.Name),
+        "CronJobs" => SelectedCronJob is null ? null : GetNamespaceScopedIdentity(SelectedCronJob.Namespace,
+SelectedCronJob.Name),
         _ => null,
     };
 
@@ -1542,19 +1584,34 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
         switch (resourceKind)
         {
             case "deployment":
-                SelectedDeployment = Deployments.FirstOrDefault(item => item.Name == resourceName);
+                SelectedDeployment = Deployments.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace,
+item.Name), resourceName,
+StringComparison.Ordinal))
+                    ?? Deployments.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "pod":
-                SelectedPod = Pods.FirstOrDefault(item => item.Name == resourceName);
+                SelectedPod = Pods.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace, item.Name),
+resourceName,
+StringComparison.Ordinal))
+                    ?? Pods.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "statefulset":
-                SelectedStatefulSet = StatefulSets.FirstOrDefault(item => item.Name == resourceName);
+                SelectedStatefulSet = StatefulSets.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace,
+item.Name), resourceName,
+StringComparison.Ordinal))
+                    ?? StatefulSets.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "configmap":
-                SelectedConfigMap = ConfigMaps.FirstOrDefault(item => item.Name == resourceName);
+                SelectedConfigMap = ConfigMaps.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace,
+item.Name), resourceName,
+StringComparison.Ordinal))
+                    ?? ConfigMaps.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "secret":
-                SelectedSecret = Secrets.FirstOrDefault(item => item.Name == resourceName);
+                SelectedSecret = Secrets.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace, item.Name),
+resourceName,
+StringComparison.Ordinal))
+                    ?? Secrets.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "service":
                 SelectedService = Services.FirstOrDefault(item => string.Equals(GetServiceIdentity(item), resourceName,
@@ -1582,13 +1639,22 @@ StringComparison.Ordinal))
                     ?? HttpRoutes.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "helm":
-                SelectedHelmRelease = HelmReleases.FirstOrDefault(item => item.Name == resourceName);
+                SelectedHelmRelease = HelmReleases.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace,
+item.Name), resourceName,
+StringComparison.Ordinal))
+                    ?? HelmReleases.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "job":
-                SelectedJob = Jobs.FirstOrDefault(item => item.Name == resourceName);
+                SelectedJob = Jobs.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace, item.Name),
+resourceName,
+StringComparison.Ordinal))
+                    ?? Jobs.FirstOrDefault(item => item.Name == resourceName);
                 break;
             case "cronjob":
-                SelectedCronJob = CronJobs.FirstOrDefault(item => item.Name == resourceName);
+                SelectedCronJob = CronJobs.FirstOrDefault(item => string.Equals(GetNamespaceScopedIdentity(item.Namespace, item.Name),
+resourceName,
+StringComparison.Ordinal))
+                    ?? CronJobs.FirstOrDefault(item => item.Name == resourceName);
                 break;
             default:
                 ClearSelection();
@@ -1685,16 +1751,22 @@ class
         switch (ActiveResourceType)
         {
             case "Deployments":
-                SelectedDeployment = NavigateInList(FilteredDeployments, SelectedDeployment, delta, d => d.Name);
+                SelectedDeployment = NavigateInList(FilteredDeployments, SelectedDeployment, delta, d =>
+GetNamespaceScopedIdentity(d.Namespace, d.Name));
                 break;
-            case "Pods": SelectedPod = NavigateInList(FilteredPods, SelectedPod, delta, p => p.Name); break;
+            case "Pods":
+                SelectedPod = NavigateInList(FilteredPods, SelectedPod, delta, p => GetNamespaceScopedIdentity(p.Namespace,
+p.Name)); break;
             case "StatefulSets":
                 SelectedStatefulSet = NavigateInList(FilteredStatefulSets, SelectedStatefulSet, delta, s =>
-s.Name); break;
+GetNamespaceScopedIdentity(s.Namespace, s.Name)); break;
             case "ConfigMaps":
-                SelectedConfigMap = NavigateInList(FilteredConfigMaps, SelectedConfigMap, delta, cm => cm.Name);
+                SelectedConfigMap = NavigateInList(FilteredConfigMaps, SelectedConfigMap, delta, cm =>
+GetNamespaceScopedIdentity(cm.Namespace, cm.Name));
                 break;
-            case "Secrets": SelectedSecret = NavigateInList(FilteredSecrets, SelectedSecret, delta, s => s.Name); break;
+            case "Secrets":
+                SelectedSecret = NavigateInList(FilteredSecrets, SelectedSecret, delta, s =>
+GetNamespaceScopedIdentity(s.Namespace, s.Name)); break;
             case "Services":
                 SelectedService = NavigateInList(FilteredServices, SelectedService, delta, GetServiceIdentity);
                 break;
@@ -1710,13 +1782,16 @@ s.Name); break;
             case "HTTPRoutes":
                 SelectedHttpRoute = NavigateInList(FilteredHttpRoutes, SelectedHttpRoute, delta, GetHttpRouteIdentity);
                 break;
-            case "Helm": SelectedHelmRelease = NavigateInList(FilteredHelmReleases, SelectedHelmRelease, delta, h => h.Name); break;
+            case "Helm":
+                SelectedHelmRelease = NavigateInList(FilteredHelmReleases, SelectedHelmRelease, delta, h =>
+GetNamespaceScopedIdentity(h.Namespace, h.Name)); break;
             case "Jobs":
-                SelectedJob = NavigateInList(FilteredJobs, SelectedJob, delta, job => $"{job.Namespace}/{job.Name}");
+                SelectedJob = NavigateInList(FilteredJobs, SelectedJob, delta, job => GetNamespaceScopedIdentity(job.Namespace,
+job.Name));
                 break;
             case "CronJobs":
                 SelectedCronJob = NavigateInList(FilteredCronJobs, SelectedCronJob, delta, cj =>
-$"{cj.Namespace}/{cj.Name}"); break;
+GetNamespaceScopedIdentity(cj.Namespace, cj.Name)); break;
         }
         PushAksSelection();
         StateHasChanged();
@@ -1779,7 +1854,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
                 {
                     case "l": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
                     case "n": CtxDeployment = SelectedDeployment; OnCtxAnalyzeDeploymentNetwork(); break;
-                    case "y": await _detailPanels.OpenYamlAsync("Deployment", SelectedDeployment.Name); break;
+                    case "y":
+                        await _detailPanels.OpenYamlAsync("Deployment", SelectedDeployment.Name, targetNamespace:
+SelectedDeployment.Namespace); break;
                     case "r": CtxDeployment = SelectedDeployment; await OnCtxRestartDeployment(); break;
                     case "Enter": CtxDeployment = SelectedDeployment; OnCtxViewDeploymentLogs(); break;
                 }
@@ -1790,7 +1867,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
                 {
                     case "l": CtxPod = SelectedPod; OnCtxViewPodLogs(); break;
                     case "n": CtxPod = SelectedPod; OnCtxAnalyzePodNetwork(); break;
-                    case "y": await _detailPanels.OpenYamlAsync("Pod", SelectedPod.Name); break;
+                    case "y": await _detailPanels.OpenYamlAsync("Pod", SelectedPod.Name, targetNamespace: SelectedPod.Namespace); break;
                     case "s": CtxPod = SelectedPod; await OnCtxOpenPodShell(); break;
                     case "p": CtxPod = SelectedPod; OnCtxPortForward(); break;
                     case "d": CtxPod = SelectedPod; await OnCtxKillPod(); break;
@@ -1803,7 +1880,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
                 {
                     case "l": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
                     case "n": CtxStatefulSet = SelectedStatefulSet; OnCtxAnalyzeStatefulSetNetwork(); break;
-                    case "y": await _detailPanels.OpenYamlAsync("StatefulSet", SelectedStatefulSet.Name); break;
+                    case "y":
+                        await _detailPanels.OpenYamlAsync("StatefulSet", SelectedStatefulSet.Name, targetNamespace:
+SelectedStatefulSet.Namespace); break;
                     case "r": CtxStatefulSet = SelectedStatefulSet; await OnCtxRestartStatefulSet(); break;
                     case "Enter": CtxStatefulSet = SelectedStatefulSet; OnCtxAllPodsLogsStatefulSet(); break;
                 }
@@ -1812,7 +1891,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
             case "ConfigMaps" when SelectedConfigMap is not null:
                 switch (key)
                 {
-                    case "y": await _detailPanels.OpenYamlAsync("ConfigMap", SelectedConfigMap.Name); break;
+                    case "y":
+                        await _detailPanels.OpenYamlAsync("ConfigMap", SelectedConfigMap.Name, targetNamespace:
+SelectedConfigMap.Namespace); break;
                     case "Enter": CtxConfigMap = SelectedConfigMap; OnCtxViewConfigMapKeys(); break;
                 }
                 break;
@@ -1820,7 +1901,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
             case "Secrets" when SelectedSecret is not null:
                 switch (key)
                 {
-                    case "y": await _detailPanels.OpenYamlAsync("Secret", SelectedSecret.Name); break;
+                    case "y":
+                        await _detailPanels.OpenYamlAsync("Secret", SelectedSecret.Name, targetNamespace: SelectedSecret.Namespace);
+                        break;
                     case "Enter": CtxSecret = SelectedSecret; OnCtxViewSecretKeys(); break;
                 }
                 break;
@@ -1837,7 +1920,9 @@ $"{cj.Namespace}/{cj.Name}"); break;
                 switch (key)
                 {
                     case "i": CtxIngress = SelectedIngress; OnCtxAnalyzeIngress(); break;
-                    case "y": await _detailPanels.OpenYamlAsync("Ingress", SelectedIngress.Name); break;
+                    case "y":
+                        await _detailPanels.OpenYamlAsync("Ingress", SelectedIngress.Name, targetNamespace:
+SelectedIngress.Namespace); break;
                     case "Enter": CtxIngress = SelectedIngress; await OnCtxOpenIngressUrl(); break;
                 }
                 break;
@@ -1997,8 +2082,21 @@ $"{cj.Namespace}/{cj.Name}"); break;
         };
         CloseAllMenus();
         if (kind is not null && name is not null)
-            await _detailPanels.OpenYamlAsync(kind, name);
+            await _detailPanels.OpenYamlAsync(kind, name, targetNamespace: GetContextTargetNamespace(source));
     }
+
+    private string? GetContextTargetNamespace(char source) => source switch
+    {
+        'D' => CtxDeployment?.Namespace,
+        'P' => CtxPod?.Namespace,
+        'I' => CtxIngress?.Namespace,
+        'H' => CtxHelm?.Namespace,
+        'S' => CtxStatefulSet?.Namespace,
+        'C' => CtxConfigMap?.Namespace,
+        'E' => CtxSecret?.Namespace,
+        'J' => CtxCronJob?.Namespace,
+        _ => null
+    };
 
     private void OnCtxViewDeploymentLogs()
     {
@@ -2006,8 +2104,8 @@ $"{cj.Namespace}/{cj.Name}"); break;
         CloseAllMenus();
         if (deployment is null) return;
         _detailPanels?.CloseYaml();
-        var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(deployment.Name));
-        if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name, pod.Containers);
+        var pod = Pods.FirstOrDefault(p => p.Namespace == deployment.Namespace && p.Name.StartsWith(deployment.Name));
+        if (pod is not null) _detailPanels?.ShowPodLogs(pod.Name, pod.Containers, pod.Namespace);
     }
 
     private void OnCtxViewPodLogs()
@@ -2016,7 +2114,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         CloseAllMenus();
         if (pod is null) return;
         _detailPanels?.CloseYaml();
-        _detailPanels?.ShowPodLogs(pod.Name, pod.Containers);
+        _detailPanels?.ShowPodLogs(pod.Name, pod.Containers, pod.Namespace);
     }
 
     private async Task OnCtxRestartDeployment()
@@ -2033,7 +2131,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
         try
         {
-            await Client.RestartDeploymentAsync(CurrentNamespace, deployment.Name);
+            await Client.RestartDeploymentAsync(deployment.Namespace, deployment.Name);
             await LoadAsync();
             Notifications.ShowSuccess("Deployment restarted", deployment.Name);
         }
@@ -2054,7 +2152,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
         try
         {
-            await Client.DeletePodAsync(CurrentNamespace, pod.Name);
+            await Client.DeletePodAsync(pod.Namespace, pod.Name);
             _detailPanels?.CloseLogs();
             await LoadAsync();
             Notifications.ShowSuccess("Pod deleted", pod.Name);
@@ -2206,6 +2304,8 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
     private static string GetServiceIdentity(ServiceInfo service) => $"{service.Namespace}/{service.Name}";
 
+    private static string GetNamespaceScopedIdentity(string ns, string name) => $"{ns}/{name}";
+
     private static string GetIngressIdentity(IngressInfo ingress) => $"{ingress.Namespace}/{ingress.Name}";
 
     private static string GetGatewayClassIdentity(GatewayClassInfo gatewayClass) => gatewayClass.Name;
@@ -2323,7 +2423,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var deployment = CtxDeployment;
         CloseAllMenus();
         if (deployment is null) return;
-        _detailPanels.ShowScale(deployment.Name, deployment.Replicas, false);
+        _detailPanels.ShowScale(deployment.Name, deployment.Replicas, false, deployment.Namespace);
     }
 
     // (OnScaleConfirm and OnScaleCancel moved to AksDetailPanels)
@@ -2371,7 +2471,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var d = CtxDeployment;
         CloseAllMenus();
         if (d is null) return;
-        _detailPanels.ShowDeploymentLogs(d.Name);
+        _detailPanels.ShowDeploymentLogs(d.Name, d.Namespace);
     }
 
     private void OnCtxAllPodsLogsStatefulSet()
@@ -2379,7 +2479,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var s = CtxStatefulSet;
         CloseAllMenus();
         if (s is null) return;
-        _detailPanels.ShowDeploymentLogs(s.Name);
+        _detailPanels.ShowDeploymentLogs(s.Name, s.Namespace);
     }
 
     // Feature 2: StatefulSet actions
@@ -2397,7 +2497,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
 
         try
         {
-            await Client.RestartStatefulSetAsync(CurrentNamespace, ss.Name);
+            await Client.RestartStatefulSetAsync(ss.Namespace, ss.Name);
             await LoadAsync();
             Notifications.ShowSuccess("Stateful set restarted", ss.Name);
         }
@@ -2409,7 +2509,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var ss = CtxStatefulSet;
         CloseAllMenus();
         if (ss is null) return;
-        _detailPanels.ShowScale(ss.Name, ss.Replicas, true);
+        _detailPanels.ShowScale(ss.Name, ss.Replicas, true, ss.Namespace);
     }
 
     // Feature 3: ConfigMap / Secret viewer
@@ -2435,7 +2535,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var pod = CtxPod;
         CloseAllMenus();
         if (pod is null) return;
-        _detailPanels.ShowContainerDetails(pod.Name);
+        _detailPanels.ShowContainerDetails(pod.Name, pod.Namespace);
     }
 
     private void OnCtxContainerDetailsDeployment()
@@ -2443,10 +2543,10 @@ $"{cj.Namespace}/{cj.Name}"); break;
         var d = CtxDeployment;
         CloseAllMenus();
         if (d is null) return;
-        var pod = Pods.FirstOrDefault(p => p.Name.StartsWith(d.Name) && p.Ready)
-        ?? Pods.FirstOrDefault(p => p.Name.StartsWith(d.Name));
+        var pod = Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name) && p.Ready)
+        ?? Pods.FirstOrDefault(p => p.Namespace == d.Namespace && p.Name.StartsWith(d.Name));
         if (pod is null) return;
-        _detailPanels.ShowContainerDetails(pod.Name);
+        _detailPanels.ShowContainerDetails(pod.Name, pod.Namespace);
     }
 
     // Feature 5: HPA detail
@@ -2547,7 +2647,7 @@ $"{cj.Namespace}/{cj.Name}"); break;
         };
         CloseAllMenus();
         if (kind is not null && name is not null)
-            await _detailPanels.OpenYamlAsync(kind, name, editMode: true);
+            await _detailPanels.OpenYamlAsync(kind, name, editMode: true, targetNamespace: GetContextTargetNamespace(source));
     }
 
     private async Task CopyToClipboardAsync(string? text)

@@ -112,6 +112,25 @@ public sealed class AksPageBatchTests : TestContext
     }
 
     [Fact]
+    public void AksPage_JobsTab_MultiNamespaceSelection_LoadsOnlySelectedNamespaces()
+    {
+        _appState.Config.AksConfig!.DefaultNamespace = "orders,payments";
+        var client = new TrackingAksClient(
+            namespaces: ["default", "orders", "payments"],
+            includeDefaultNamespaceBatchData: true);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Jobs");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("inventory-sync-001", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("settlement-rollup-manual", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("platform-reconcile-001", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void AksPage_CronJobsTab_AllNamespacesModeWithMoreThanThreeNamespaces_IncludesDefaultNamespace()
     {
         var client = new TrackingAksClient(

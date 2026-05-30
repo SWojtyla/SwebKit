@@ -44,20 +44,37 @@
                 @onclick="SelectAllNamespaces">*</button>
         <div class="aks-ns-picker">
             <input class="aks-ns-select aks-ns-search app-native-control"
-                   value="@(_nsDropOpen ? _nsSearchText : CurrentNamespace)"
-                   placeholder="@(_nsDropOpen ? "Filter…" : CurrentNamespace)" @onfocus="OpenNsDrop"
-                   @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" />
+                   value="@(_nsDropOpen ? _nsSearchText : NamespaceSelectionText)"
+                   placeholder="@(_nsDropOpen ? "Filter…" : NamespaceSelectionText)" title="@NamespaceSelectionTitle"
+                   @onfocus="OpenNsDrop" @oninput="OnNsSearchInput" readonly="@(!_nsDropOpen)" @onkeydown="OnNsKeyDown" />
             @if (_nsDropOpen)
             {
-                <div class="aks-ns-dropdown">
-                    @foreach (var ns in NsFiltered)
+                var filteredNamespaces = NsFiltered.ToList();
+                <div class="aks-ns-dropdown aks-ns-dropdown--multi">
+                    @if (filteredNamespaces.Count == 0)
                     {
-                        var nsLocal = ns;
-                        <div class="aks-ns-option @(nsLocal == CurrentNamespace ? "current" : "")"
-                             @onclick="() => SelectNs(nsLocal)">
-                            @nsLocal
-                        </div>
+                        <div class="aks-ns-empty">No namespaces match</div>
                     }
+                    else
+                    {
+                        @foreach (var ns in filteredNamespaces)
+                        {
+                            var nsLocal = ns;
+                            var checkedNamespace = IsPendingNamespace(nsLocal);
+                            <label class="aks-ns-option aks-ns-option-check @(checkedNamespace ? "current" : "")">
+                                <input type="checkbox" checked="@checkedNamespace"
+                                       @onchange="e => TogglePendingNamespace(nsLocal, e.Value is true)" aria-label="@nsLocal" />
+                                <span>@nsLocal</span>
+                            </label>
+                        }
+                    }
+                    <div class="aks-ns-dropdown-actions">
+                        <button type="button" class="aks-ns-action" @onclick="SelectAllNamespaces">All</button>
+                        <button type="button" class="aks-ns-action aks-ns-apply" disabled="@(!_pendingNamespaces.Any())"
+                                @onclick="ApplyNamespaceSelectionAsync">
+                            Apply
+                        </button>
+                    </div>
                 </div>
             }
         </div>
@@ -155,6 +172,7 @@
     // ── Namespace picker internal state ──
     private bool _nsDropOpen;
     private string _nsSearchText = string.Empty;
+    private HashSet<string> _pendingNamespaces = new(StringComparer.Ordinal);
     private bool _networkMenuOpen;
     private string _lastActiveResourceType = string.Empty;
 
@@ -213,16 +231,53 @@
     {
         get
         {
-            var all = Enumerable.Repeat("*", 1).Concat(Namespaces);
+            var all = Namespaces
+                .Where(ns => !string.IsNullOrWhiteSpace(ns))
+                .Distinct(StringComparer.Ordinal);
+
             return string.IsNullOrWhiteSpace(_nsSearchText)
                 ? all
                 : all.Where(n => n.Contains(_nsSearchText, StringComparison.OrdinalIgnoreCase));
         }
     }
 
+    private string NamespaceSelectionText
+    {
+        get
+        {
+            if (CurrentNamespace == "*")
+            {
+                return "*";
+            }
+
+            var selected = ParseNamespaceSelection(CurrentNamespace).ToList();
+            return selected.Count switch
+            {
+                0 => CurrentNamespace,
+                1 => selected[0],
+                _ => $"{selected.Count} namespaces"
+            };
+        }
+    }
+
+    private string NamespaceSelectionTitle
+    {
+        get
+        {
+            if (CurrentNamespace == "*")
+            {
+                return "All namespaces";
+            }
+
+            var selected = ParseNamespaceSelection(CurrentNamespace).ToList();
+            return selected.Count > 1 ? string.Join(", ", selected) : NamespaceSelectionText;
+        }
+    }
+
     private void OpenNsDrop()
     {
         _nsSearchText = string.Empty;
+        _pendingNamespaces = ParseNamespaceSelection(CurrentNamespace).ToHashSet(StringComparer.Ordinal);
         _nsDropOpen = true;
         StateHasChanged();
     }
@@ -240,6 +295,19 @@
         StateHasChanged();
     }
 
+    private void OnNsKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":
+                CloseNsDrop();
+                break;
+            case "Enter":
+                _ = ApplyNamespaceSelectionAsync();
+                break;
+        }
+    }
+
     private async Task SelectNs(string ns)
     {
         _nsDropOpen = false;
@@ -248,6 +316,67 @@
     }
 
     private Task SelectAllNamespaces() => SelectNs("*");
+
+    private bool IsPendingNamespace(string ns)
+        => _pendingNamespaces.Contains(ns);
+
+    private void TogglePendingNamespace(string ns, bool selected)
+    {
+        if (selected)
+        {
+            _pendingNamespaces.Add(ns);
+        }
+        else
+        {
+            _pendingNamespaces.Remove(ns);
+        }
+    }
+
+    private async Task ApplyNamespaceSelectionAsync()
+    {
+        if (_pendingNamespaces.Count == 0)
+        {
+            return;
+        }
+
+        await SelectNs(BuildNamespaceSelection(_pendingNamespaces));
+    }
+
+    private string BuildNamespaceSelection(IEnumerable<string> selectedNamespaces)
+    {
+        var selected = selectedNamespaces
+            .Where(ns => !string.IsNullOrWhiteSpace(ns))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(GetNamespaceSortIndex)
+            .ThenBy(ns => ns, StringComparer.Ordinal)
+            .ToList();
+
+        if (selected.Count == Namespaces.Count && Namespaces.Count > 0)
+        {
+            return "*";
+        }
+
+        return selected.Count == 1 ? selected[0] : string.Join(",", selected);
+    }
+
+    private IEnumerable<string> ParseNamespaceSelection(string selection)
+    {
+        if (selection == "*")
+        {
+            return Namespaces.Where(ns => !string.IsNullOrWhiteSpace(ns));
+        }
+
+        return selection
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(ns => Namespaces.Count == 0 || Namespaces.Contains(ns, StringComparer.Ordinal))
+            .Distinct(StringComparer.Ordinal);
+    }
+
+    private int GetNamespaceSortIndex(string ns)
+    {
+        var index = Namespaces.IndexOf(ns);
+        return index >= 0 ? index : int.MaxValue;
+    }
 
     private static bool IsNetworkResourceType(string resourceType)
         => NetworkResourceTypes.Contains(resourceType, StringComparer.Ordinal);

@@ -155,6 +155,11 @@
     backdrop-filter: blur(14px);
 }
 
+.aks-ns-dropdown--multi {
+    min-width: 240px;
+    padding-bottom: 0;
+}
+
 .aks-ns-option {
     padding: 6px var(--spacing-md);
     font-size: var(--font-size-sm);
@@ -163,6 +168,57 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.aks-ns-option-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.aks-ns-option-check input {
+    flex-shrink: 0;
+}
+
+.aks-ns-empty {
+    padding: 8px var(--spacing-md);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-dropdown-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs);
+    border-top: 1px solid var(--aks-toolbar-border);
+    background: color-mix(in srgb, var(--aks-monitor-surface) 86%, transparent);
+    position: sticky;
+    bottom: 0;
+}
+
+.aks-ns-action {
+    padding: 3px 9px;
+    border: 1px solid var(--aks-tab-border);
+    border-radius: var(--aks-chip-radius);
+    background: var(--aks-tab-inactive-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+}
+
+.aks-ns-action:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--aks-toolbar-border));
+    background: var(--aks-tab-active-surface);
+}
+
+.aks-ns-action:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.aks-ns-apply {
+    color: var(--color-accent);
 }
 
 .aks-ns-option:hover {

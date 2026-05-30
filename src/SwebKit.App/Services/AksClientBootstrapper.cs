@@ -158,6 +158,21 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
             return resolvedNamespace;
         }
 
+        var selectedNamespaces = ParseNamespaceSelection(resolvedNamespace)
+            .Where(ns => namespaces.Contains(ns, StringComparer.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (selectedNamespaces.Count > 1)
+        {
+            return string.Join(",", selectedNamespaces);
+        }
+
+        if (selectedNamespaces.Count == 1)
+        {
+            return selectedNamespaces[0];
+        }
+
         if (namespaces.Contains(resolvedNamespace, StringComparer.Ordinal))
         {
             return resolvedNamespace;
@@ -175,4 +190,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         return string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config.DefaultNamespace;
     }
+
+    private static IEnumerable<string> ParseNamespaceSelection(string selection)
+        => selection.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

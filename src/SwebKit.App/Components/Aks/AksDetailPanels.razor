@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                                                                                                        ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                                                                                                                                                                        : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -56,7 +56,8 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
                         </div>
-                        <PodLogView Client="Client" Namespace="@Namespace" PodName="@_logPodName" Containers="@_logPodContainers" />
+                        <PodLogView Client="Client" Namespace="@(_logPodNamespace ?? Namespace)" PodName="@_logPodName"
+                                    Containers="@_logPodContainers" />
                     </div>
                 }
 
@@ -70,7 +71,8 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="16px" />
                             </FluentButton>
                         </div>
-                        <MultiPodLogView Client="Client" Namespace="@Namespace" DeploymentName="@_logDeploymentName" />
+                        <MultiPodLogView Client="Client" Namespace="@(_logDeploymentNamespace ?? Namespace)"
+                                         DeploymentName="@_logDeploymentName" />
                     </div>
                 }
 
@@ -86,7 +88,8 @@
                             </FluentButton>
                         </div>
                         <div class="aks-yaml-content">
-                            <ContainerDetailPanel Client="Client" Namespace="@Namespace" PodName="@_containerDetailPodName" />
+                            <ContainerDetailPanel Client="Client" Namespace="@(_containerDetailNamespace ?? Namespace)"
+                                                  PodName="@_containerDetailPodName" />
                         </div>
                     </div>
                 }
@@ -460,9 +463,12 @@
 
     // ── Internal state ──
     private string? _logPodName;
+    private string? _logPodNamespace;
     private string? _logDeploymentName;
+    private string? _logDeploymentNamespace;
     private IReadOnlyList<string> _logPodContainers = [];
     private string? _containerDetailPodName;
+    private string? _containerDetailNamespace;
     private ConfigMapInfo? _configMapDetailTarget;
     private SecretInfo? _secretDetailTarget;
     private HpaInfo? _hpaDetailTarget;
@@ -475,6 +481,7 @@
     private HelmDiffPreviewTarget? _helmDiffPreviewTarget;
     private HelmRollbackPreviewTarget? _helmRollbackPreviewTarget;
     private string? _scaleTarget;
+    private string? _scaleNamespace;
     private int _scaleReplicas;
     private bool _scaleIsStatefulSet;
 
@@ -540,12 +547,13 @@
     }
 
     // Scale
-    public void ShowScale(string targetName, int currentReplicas, bool isStatefulSet)
+    public void ShowScale(string targetName, int currentReplicas, bool isStatefulSet, string? targetNamespace = null)
     {
         _yamlViewer?.Close();
         CloseLogs();
         _scaleIsStatefulSet = isStatefulSet;
         _scaleTarget = targetName;
+        _scaleNamespace = targetNamespace ?? Namespace;
         _scaleReplicas = currentReplicas;
         NotifyPanelStateChanged();
     }
@@ -553,25 +561,31 @@
     public void CancelScale()
     {
         _scaleTarget = null;
+        _scaleNamespace = null;
         _scaleReplicas = 0;
         NotifyPanelStateChanged();
     }
 
     // Pod logs
-    public void ShowPodLogs(string podName, IReadOnlyList<string>? containers = null)
+    public void ShowPodLogs(string podName, IReadOnlyList<string>? containers = null, string? targetNamespace = null)
     {
         _yamlViewer?.Close();
         _logPodName = podName;
+        _logPodNamespace = targetNamespace
+            ?? Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Namespace
+            ?? Namespace;
         _logPodContainers = containers?.Count > 0
             ? [.. containers]
             : [.. Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Containers ?? []];
         NotifyPanelStateChanged();
     }
 
-    public void ShowDeploymentLogs(string deploymentName)
+    public void ShowDeploymentLogs(string deploymentName, string? targetNamespace = null)
     {
         _logPodName = null;
+        _logPodNamespace = null;
         _logDeploymentName = deploymentName;
+        _logDeploymentNamespace = targetNamespace ?? Namespace;
         _logPodContainers = [];
         NotifyPanelStateChanged();
     }
@@ -579,15 +593,20 @@
     public void CloseLogs()
     {
         _logPodName = null;
+        _logPodNamespace = null;
         _logDeploymentName = null;
+        _logDeploymentNamespace = null;
         _logPodContainers = [];
         NotifyPanelStateChanged();
     }
 
     // Container / detail panels
-    public void ShowContainerDetails(string podName)
+    public void ShowContainerDetails(string podName, string? targetNamespace = null)
     {
         _containerDetailPodName = podName;
+        _containerDetailNamespace = targetNamespace
+            ?? Pods.FirstOrDefault(p => string.Equals(p.Name, podName, StringComparison.Ordinal))?.Namespace
+            ?? Namespace;
         NotifyPanelStateChanged();
     }
 
@@ -697,9 +716,11 @@
     {
         if (_scaleTarget is null || Client is null) return;
         var name = _scaleTarget;
+        var ns = _scaleNamespace ?? Namespace;
         var replicas = _scaleReplicas;
         var isStatefulSet = _scaleIsStatefulSet;
         _scaleTarget = null;
+        _scaleNamespace = null;
         StateHasChanged();
 
         if (IsProduction)
@@ -714,9 +735,9 @@
         try
         {
             if (isStatefulSet)
-                await Client.ScaleStatefulSetAsync(Namespace, name, replicas);
+                await Client.ScaleStatefulSetAsync(ns, name, replicas);
             else
-                await Client.ScaleDeploymentAsync(Namespace, name, replicas);
+                await Client.ScaleDeploymentAsync(ns, name, replicas);
             await OnDataChanged.InvokeAsync();
             Notifications.ShowSuccess("Scaled", $"{name} → {replicas} replica{(replicas == 1 ? "" : "s")}");
         }
@@ -733,6 +754,7 @@
     private void CloseDeploymentLogs()
     {
         _logDeploymentName = null;
+        _logDeploymentNamespace = null;
         _logPodContainers = [];
         NotifyPanelStateChanged();
     }
@@ -740,6 +762,7 @@
     private void CloseContainerDetail()
     {
         _containerDetailPodName = null;
+        _containerDetailNamespace = null;
         NotifyPanelStateChanged();
     }
 
@@ -837,13 +860,17 @@
     {
         _yamlViewer?.Close();
         _logPodName = null;
+        _logPodNamespace = null;
         _logDeploymentName = null;
+        _logDeploymentNamespace = null;
         _logPodContainers = [];
         _containerDetailPodName = null;
+        _containerDetailNamespace = null;
         _configMapDetailTarget = null;
         _secretDetailTarget = null;
         _hpaDetailTarget = null;
         _scaleTarget = null;
+        _scaleNamespace = null;
     }
 
     private static string TruncatePodName(string name)

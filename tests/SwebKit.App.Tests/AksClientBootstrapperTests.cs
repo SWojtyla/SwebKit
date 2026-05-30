@@ -50,6 +50,25 @@ public sealed class AksClientBootstrapperTests
     }
 
     [Fact]
+    public async Task BootstrapAsync_WithMultiNamespaceRequest_PreservesValidSelection()
+    {
+        var client = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
+            namespaces: ["default", "orders", "payments"]);
+        var bootstrapper = MakeBootstrapper();
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            client,
+            UseDemoData: false,
+            Config: new AksConfig { DefaultNamespace = "default" },
+            RequestedContext: null,
+            RequestedNamespace: "orders,payments"));
+
+        Assert.Equal(AksClientBootstrapStatus.Connected, result.Status);
+        Assert.Equal("orders,payments", result.CurrentNamespace);
+    }
+
+    [Fact]
     public async Task BootstrapAsync_UseDemoData_ReturnsDemoClientWithoutCallingFactory()
     {
         var factory = new RecordingFactory();

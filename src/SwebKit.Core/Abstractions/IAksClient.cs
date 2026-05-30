@@ -130,6 +130,13 @@ public interface IAksClient
         return results.SelectMany(r => r).ToList();
     }
 
+    async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
+    {
+        var tasks = namespaces.Select(ns => GetHpasAsync(ns, ct));
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(r => r).ToList();
+    }
+
     // ── Wave 1: namespace and workload constraint visibility ──────────────────
     Task<IReadOnlyList<ResourceQuotaInfo>> GetResourceQuotasAsync(string ns, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ResourceQuotaInfo>>([]);

@@ -5,7 +5,8 @@
 - Incident Timeline backend uses `IAksClientBootstrapper` plus selector-label workload resolution to gather workload-scoped pod lifecycle and event evidence for `Deployment`, `StatefulSet`, and `Pod` scopes.
 - Connect to Kubernetes using default or configured kubeconfig/context.
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
-- Context switching and namespace filtering (single and all namespaces).
+- Context switching and namespace filtering (single, selected multiple, and all namespaces).
+- Namespace picker supports explicit multi-selection so operators can compare a scoped set of namespaces without switching to full-cluster all-namespaces mode.
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, Services, ingresses, Helm releases, Jobs, and CronJobs.
 - Pods hide terminal `Completed` / `Succeeded` rows by default so completed Job pods do not crowd active troubleshooting; a pod-list checkbox reveals them on demand.
@@ -54,7 +55,7 @@
 ## Core Runtime Flow
 
 1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
-2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in both single-namespace and all-namespaces mode.
+2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in single-namespace, explicit multi-namespace, and all-namespaces mode.
 3. Services are loaded alongside the other namespace-scoped resources and support all-namespaces browse, selection, and YAML viewing against the selected row namespace.
 4. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`GatewayClass`, `Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
 5. Resource YAML for Services, Jobs, CronJobs, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
