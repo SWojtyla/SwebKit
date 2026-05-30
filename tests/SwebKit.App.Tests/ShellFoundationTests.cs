@@ -86,13 +86,17 @@ public sealed class ShellFoundationTests : TestContext
             .Add(p => p.Meta, meta)
             .Add(p => p.Actions, actions));
 
-        // New design: ShowSupportingContent=false with meta+actions renders a support strip (not a full header)
+        // New design: ShowSupportingContent=false keeps route copy available to assistive tech while showing meta separately.
+        var copy = cut.Find(".page-header-shell__copy");
+        Assert.Contains("visually-hidden", copy.ClassName, StringComparison.Ordinal);
+        Assert.Single(cut.FindAll("h1.page-title"));
+        Assert.Contains("AKS", cut.Find("h1.page-title").TextContent, StringComparison.Ordinal);
+
         var strip = cut.Find(".page-support-strip");
         Assert.NotNull(strip);
         Assert.Contains("Namespace: ops", cut.Markup);
         Assert.Contains("Refresh", cut.Markup);
-        Assert.Empty(cut.FindAll("h1.page-title"));
-        Assert.Empty(cut.FindAll(".page-subtitle"));
+        Assert.Single(cut.FindAll(".page-subtitle"));
     }
 
     [Fact]

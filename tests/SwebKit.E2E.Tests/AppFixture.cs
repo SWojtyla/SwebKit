@@ -96,11 +96,13 @@ public sealed class AppFixture : IAsyncLifetime
         await Page.EvaluateAsync(
             """
             path => {
-                // Drive Blazor's client-side route pipeline directly. In the WebView2/CDP
-                // test harness, forcing document navigation can load the right page markup
-                // without refreshing shell route state the same way a routed transition does.
                 const target = new URL(path, window.location.href);
                 const next = `${target.pathname}${target.search}${target.hash}`;
+                if (window.Blazor?.navigateTo) {
+                    window.Blazor.navigateTo(next, { forceLoad: false, replaceHistoryEntry: true });
+                    return;
+                }
+
                 history.replaceState(history.state, '', next);
                 dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
             }

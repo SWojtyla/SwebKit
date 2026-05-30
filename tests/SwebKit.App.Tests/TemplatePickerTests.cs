@@ -137,8 +137,31 @@ public sealed class TemplatePickerTests : TestContext
         {
             Environment.SetEnvironmentVariable("APPDATA", _originalAppData);
             Environment.SetEnvironmentVariable("SWEBKIT_APPDATA_ROOT", _originalRootOverride);
-            if (Directory.Exists(_tempRoot))
-                Directory.Delete(_tempRoot, recursive: true);
+            DeleteTempRoot();
+        }
+
+        private void DeleteTempRoot()
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    if (Directory.Exists(_tempRoot))
+                    {
+                        Directory.Delete(_tempRoot, recursive: true);
+                    }
+
+                    return;
+                }
+                catch (IOException) when (attempt < 4)
+                {
+                    Thread.Sleep(50);
+                }
+                catch (UnauthorizedAccessException) when (attempt < 4)
+                {
+                    Thread.Sleep(50);
+                }
+            }
         }
     }
 }

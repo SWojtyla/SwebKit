@@ -498,7 +498,7 @@ public sealed class MessageListViewTests : TestContext
     }
 
     [Fact]
-    public void AdvancedFiltering_AppliesApplicationPropertyNumericAndDateRules()
+    public async Task AdvancedFiltering_AppliesApplicationPropertyNumericAndDateRules()
     {
         var messages = new List<SbMessage>
         {
@@ -546,36 +546,20 @@ public sealed class MessageListViewTests : TestContext
 
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='advanced-filter-panel']")));
 
-        cut.FindAll("[data-testid='advanced-rule']")[0]
-            .QuerySelector("[data-testid='rule-property']")!
-            .Input("region");
-        cut.FindAll("[data-testid='advanced-rule']")[0]
-            .QuerySelector("[data-testid='rule-value']")!
-            .Input("eu");
+        await InputRuleValueAsync(cut, 0, "[data-testid='rule-property']", "region");
+        await InputRuleValueAsync(cut, 0, "[data-testid='rule-value']", "eu");
 
         cut.Find("[data-testid='add-rule']").Click();
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='advanced-rule']").Count));
-        cut.FindAll("[data-testid='advanced-rule']")[1]
-            .QuerySelector("[data-testid='rule-field']")!
-            .Change("delivery-count");
-        cut.FindAll("[data-testid='advanced-rule']")[1]
-            .QuerySelector("[data-testid='rule-operator']")!
-            .Change("gte");
-        cut.FindAll("[data-testid='advanced-rule']")[1]
-            .QuerySelector("[data-testid='rule-value']")!
-            .Input("5");
+        await ChangeRuleValueAsync(cut, 1, "[data-testid='rule-field']", "delivery-count");
+        await ChangeRuleValueAsync(cut, 1, "[data-testid='rule-operator']", "gte");
+        await InputRuleValueAsync(cut, 1, "[data-testid='rule-value']", "5");
 
         cut.Find("[data-testid='add-rule']").Click();
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid='advanced-rule']").Count));
-        cut.FindAll("[data-testid='advanced-rule']")[2]
-            .QuerySelector("[data-testid='rule-field']")!
-            .Change("enqueued-time");
-        cut.FindAll("[data-testid='advanced-rule']")[2]
-            .QuerySelector("[data-testid='rule-operator']")!
-            .Change("on-or-after");
-        cut.FindAll("[data-testid='advanced-rule']")[2]
-            .QuerySelector("[data-testid='rule-value']")!
-            .Input("2026-03-28T12:00:00Z");
+        await ChangeRuleValueAsync(cut, 2, "[data-testid='rule-field']", "enqueued-time");
+        await ChangeRuleValueAsync(cut, 2, "[data-testid='rule-operator']", "on-or-after");
+        await InputRuleValueAsync(cut, 2, "[data-testid='rule-value']", "2026-03-28T12:00:00Z");
 
         cut.WaitForAssertion(() =>
         {
@@ -584,6 +568,16 @@ public sealed class MessageListViewTests : TestContext
             Assert.DoesNotContain("msg-us-high-late", cut.Markup);
             Assert.Contains("Showing 1 filtered of 3 loaded", cut.Markup);
         });
+
+        static Task InputRuleValueAsync(IRenderedComponent<MessageListView> cut, int ruleIndex, string selector, string value)
+            => cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[ruleIndex]
+                .QuerySelector(selector)!
+                .Input(value));
+
+        static Task ChangeRuleValueAsync(IRenderedComponent<MessageListView> cut, int ruleIndex, string selector, string value)
+            => cut.InvokeAsync(() => cut.FindAll("[data-testid='advanced-rule']")[ruleIndex]
+                .QuerySelector(selector)!
+                .Change(value));
     }
 
     [Fact]
@@ -856,7 +850,7 @@ public sealed class MessageListViewTests : TestContext
     }
 
     [Fact]
-    public void ColumnChooser_ToggleBuiltInColumn_HidesAndRestoresSubjectValues()
+    public async Task ColumnChooser_ToggleBuiltInColumn_HidesAndRestoresSubjectValues()
     {
         var messages = new List<SbMessage>
         {
@@ -875,10 +869,10 @@ public sealed class MessageListViewTests : TestContext
         cut.Find("[data-testid='column-chooser-toggle']").Click();
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='column-chooser-menu']")));
 
-        cut.FindAll("[data-testid='built-in-column-option']")
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='built-in-column-option']")
             .First(option => option.GetAttribute("data-column-key") == "subject")
             .QuerySelector("input")!
-            .Change(false);
+            .Change(false));
 
         cut.WaitForAssertion(() =>
         {
@@ -886,10 +880,10 @@ public sealed class MessageListViewTests : TestContext
             Assert.DoesNotContain("subject-visible-2", cut.Markup);
         });
 
-        cut.FindAll("[data-testid='built-in-column-option']")
+        await cut.InvokeAsync(() => cut.FindAll("[data-testid='built-in-column-option']")
             .First(option => option.GetAttribute("data-column-key") == "subject")
             .QuerySelector("input")!
-            .Change(true);
+            .Change(true));
 
         cut.WaitForAssertion(() => Assert.Contains("subject-visible-1", cut.Markup));
     }
