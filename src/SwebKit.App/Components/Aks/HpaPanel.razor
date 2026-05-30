@@ -2,25 +2,13 @@
 
 <div class="aks-yaml-content">
     <div class="aks-hpa-detail">
-
-        @* ── Refresh button ── *@
-        <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
-            <FluentButton Appearance="Appearance.Stealth" @onclick="OnRefreshRequested" Title="Refresh HPA data">
-                ↻ Refresh
-            </FluentButton>
+        <div class="aks-hpa-status-strip">
+            <span class="aks-hpa-state aks-hpa-state--@StatusClass">@StatusText</span>
+            <span class="aks-hpa-status-copy">@StatusDetail</span>
+            <span class="aks-hpa-status-meta">@Hpa.Namespace / @Hpa.Name</span>
         </div>
 
-        @* ── Target ── *@
-        <div class="aks-hpa-row">
-            <span class="aks-hpa-label">Target</span>
-            <span class="aks-hpa-value">
-                <span class="aks-hpa-kind-badge">@Hpa.TargetKind</span>
-                @Hpa.TargetName
-            </span>
-        </div>
-
-        @* ── Replica overview card ── *@
-        <div class="aks-hpa-replica-card">
+        <div class="aks-hpa-replica-panel">
             <div class="aks-hpa-replica-stats">
                 <div class="aks-hpa-stat">
                     <span class="aks-hpa-stat-num current">@Hpa.CurrentReplicas</span>
@@ -28,75 +16,86 @@
                 </div>
                 <div class="aks-hpa-stat-arrow">→</div>
                 <div class="aks-hpa-stat">
-                    <span class="aks-hpa-stat-num @(Hpa.DesiredReplicas == Hpa.CurrentReplicas ? "desired-stable" : "desired-scaling")">
+                    <span
+                        class="aks-hpa-stat-num @(Hpa.DesiredReplicas == Hpa.CurrentReplicas ? "desired-stable" : "desired-scaling")">
                         @Hpa.DesiredReplicas
                     </span>
                     <span class="aks-hpa-stat-lbl">Desired</span>
                 </div>
             </div>
-            <div class="aks-hpa-replica-bounds">
-                <span>min <strong>@Hpa.MinReplicas</strong></span>
+            <div class="aks-hpa-replica-scale" title="min @Hpa.MinReplicas, max @Hpa.MaxReplicas">
                 <div class="aks-hpa-replica-track">
-                    <div class="aks-hpa-replica-fill"
-                         style="width: @(Math.Round(100.0 * Hpa.CurrentReplicas / Math.Max(Hpa.MaxReplicas, 1)))%">
+                    <div class="aks-hpa-replica-fill" style="width: @ReplicaCurrentPercent%"></div>
+                    <div class="aks-hpa-replica-marker" style="left: @ReplicaDesiredPercent%">
+                        <span>@Hpa.DesiredReplicas</span>
                     </div>
                 </div>
-                <span>max <strong>@Hpa.MaxReplicas</strong></span>
+                <div class="aks-hpa-replica-bounds">
+                    <span>min @Hpa.MinReplicas</span>
+                    <span>max @Hpa.MaxReplicas</span>
+                </div>
             </div>
         </div>
 
-        @* ── Metrics ── *@
         @if (Hpa.Metrics.Count > 0)
         {
-            <div class="aks-hpa-section-label">Metrics</div>
-            <table class="aks-hpa-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Current</th>
-                        <th>Target</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var m in Hpa.Metrics)
+            <section class="aks-hpa-section">
+                <div class="aks-hpa-section-label">Metrics</div>
+                <div class="aks-hpa-metrics">
+                    @foreach (var metric in Hpa.Metrics)
                     {
-                        var pct = m.CurrentValue.HasValue && m.TargetValue.HasValue
-                            ? (double)m.CurrentValue.Value / m.TargetValue.Value
-                            : (double?)null;
-                        <tr>
-                            <td class="aks-hpa-metric-name">@m.Name</td>
-                            <td><span class="aks-hpa-type-badge">@m.Type</span></td>
-                            <td class="@(pct > 0.9 ? "metric-high" : pct > 0.7 ? "metric-med" : "metric-ok")">
-                                @(m.CurrentValue.HasValue ? $"{m.CurrentValue:F0}%" : "—")
-                            </td>
-                            <td class="aks-hpa-target-val">@(m.TargetValue.HasValue ? $"{m.TargetValue:F0}%" : "—")</td>
-                        </tr>
+                        var percent = MetricPercent(metric);
+                        <div class="aks-hpa-metric-row">
+                            <div class="aks-hpa-metric-head">
+                                <div>
+                                    <div class="aks-hpa-metric-name">@metric.Name</div>
+                                    <div class="aks-hpa-metric-type">@(metric.Type ?? "Metric")</div>
+                                </div>
+                                <div class="aks-hpa-metric-values">
+                                    <span class="@MetricClass(percent)">@FormatPercent(metric.CurrentValue)</span>
+                                    <span>/ @FormatPercent(metric.TargetValue)</span>
+                                </div>
+                            </div>
+                            <div class="aks-hpa-metric-track">
+                                <div class="aks-hpa-metric-fill @MetricClass(percent)" style="width: @(MetricWidth(percent))%">
+                                </div>
+                            </div>
+                        </div>
                     }
-                </tbody>
-            </table>
+                </div>
+            </section>
         }
 
-        @* ── Conditions ── *@
         @if (Hpa.Conditions.Count > 0)
         {
-            <div class="aks-hpa-section-label">Conditions</div>
-            <div class="aks-hpa-conditions">
-                @foreach (var cond in Hpa.Conditions)
-                {
-                    <div class="aks-hpa-condition @(cond.Status == "True" ? "cond-ok" : "cond-warn")">
-                        <div class="aks-hpa-condition-header">
-                            <span class="aks-hpa-cond-dot"></span>
-                            <span class="aks-hpa-cond-type">@cond.Type</span>
-                            <span class="aks-ready-badge @(cond.Status == "True" ? "healthy" : "degraded")">@cond.Status</span>
+            <section class="aks-hpa-section">
+                <div class="aks-hpa-section-label">Conditions</div>
+                <div class="aks-hpa-conditions">
+                    @foreach (var condition in Hpa.Conditions)
+                    {
+                        <div class="aks-hpa-condition @(IsConditionHealthy(condition) ? "cond-ok" : "cond-warn")">
+                            <div class="aks-hpa-condition-header">
+                                <span class="aks-hpa-cond-dot"></span>
+                                <span class="aks-hpa-cond-type">@condition.Type</span>
+                                <span class="aks-hpa-cond-status">@condition.Status</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(condition.Reason) || !string.IsNullOrWhiteSpace(condition.Message))
+                            {
+                                <div class="aks-hpa-cond-reason">
+                                    @if (!string.IsNullOrWhiteSpace(condition.Reason))
+                                    {
+                                        <strong>@condition.Reason</strong>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(condition.Message))
+                                    {
+                                        <span>@condition.Message</span>
+                                    }
+                                </div>
+                            }
                         </div>
-                        @if (!string.IsNullOrEmpty(cond.Reason))
-                        {
-                            <div class="aks-hpa-cond-reason">@cond.Reason</div>
-                        }
-                    </div>
-                }
-            </div>
+                    }
+                </div>
+            </section>
         }
 
     </div>
@@ -104,5 +103,71 @@
 
 @code {
     [Parameter, EditorRequired] public HpaInfo Hpa { get; set; } = default!;
-    [Parameter] public EventCallback OnRefreshRequested { get; set; }
+
+    private string StatusText => HasCondition("ScalingActive", "False")
+        ? "Inactive"
+        : Hpa.CurrentReplicas != Hpa.DesiredReplicas
+            ? "Scaling"
+            : HasCondition("ScalingLimited", "True")
+                ? "Limited"
+                : "Stable";
+
+    private string StatusClass => StatusText.ToLowerInvariant();
+
+    private string StatusDetail => StatusText switch
+    {
+        "Inactive" => FirstConditionDetail("ScalingActive") ?? "Autoscaling is not active",
+        "Scaling" => $"Moving from {Hpa.CurrentReplicas} to {Hpa.DesiredReplicas} replicas",
+        "Limited" => FirstConditionDetail("ScalingLimited") ?? "Replica bounds are limiting scale",
+        _ => "Current and desired replicas match"
+    };
+
+    private int ReplicaCurrentPercent => ReplicaPercent(Hpa.CurrentReplicas);
+
+    private int ReplicaDesiredPercent => ReplicaPercent(Hpa.DesiredReplicas);
+
+    private bool HasCondition(string type, string status)
+        => Hpa.Conditions.Any(condition => string.Equals(condition.Type, type, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(condition.Status, status, StringComparison.OrdinalIgnoreCase));
+
+    private string? FirstConditionDetail(string type)
+    {
+        var condition = Hpa.Conditions.FirstOrDefault(condition => string.Equals(condition.Type, type, StringComparison.OrdinalIgnoreCase));
+        if (condition is null)
+            return null;
+
+        return !string.IsNullOrWhiteSpace(condition.Reason)
+            ? condition.Reason
+            : condition.Message;
+    }
+
+    private bool IsConditionHealthy(HpaCondition condition)
+        => string.Equals(condition.Status, "True", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(condition.Type, "ScalingLimited", StringComparison.OrdinalIgnoreCase);
+
+    private int ReplicaPercent(int replicas)
+    {
+        var range = Math.Max(Hpa.MaxReplicas - Hpa.MinReplicas, 1);
+        var relative = Math.Clamp(replicas - Hpa.MinReplicas, 0, range);
+        return (int)Math.Round(relative * 100.0 / range);
+    }
+
+    private static double? MetricPercent(HpaMetricStatus metric)
+        => metric.CurrentValue.HasValue && metric.TargetValue is > 0
+            ? metric.CurrentValue.Value / metric.TargetValue.Value
+            : null;
+
+    private static int MetricWidth(double? percent)
+        => percent.HasValue ? (int)Math.Clamp(Math.Round(percent.Value * 100), 0, 100) : 0;
+
+    private static string MetricClass(double? percent) => percent switch
+    {
+        null => "metric-muted",
+        > 0.95 => "metric-high",
+        > 0.75 => "metric-med",
+        _ => "metric-ok"
+    };
+
+    private static string FormatPercent(double? value)
+        => value.HasValue ? $"{value.Value:F0}%" : "—";
 }

@@ -90,7 +90,19 @@
                     <span class="aks-section-count">@ActiveResourceCount</span>
                 </div>
                 <ResourceFilter Placeholder="@($"Filter {ActiveResourceType.ToLowerInvariant()}…")" Value="@ActiveFilter"
-                                ValueChanged="OnFilterChanged" />
+                                ValueChanged="OnFilterChanged">
+                    @if (ActiveResourceType == "Pods")
+                    {
+                        <label class="resource-filter-check" title="Show terminal pods such as Completed and Succeeded">
+                            <input type="checkbox" checked="@ShowCompletedPods" @onchange="OnShowCompletedPodsChanged" />
+                            <span>Show completed</span>
+                        </label>
+                        @if (!ShowCompletedPods && HiddenCompletedPodCount > 0)
+                        {
+                            <span class="resource-filter-muted">@HiddenCompletedPodCount hidden</span>
+                        }
+                    }
+                </ResourceFilter>
                 <div class="aks-table-wrap" @oncontextmenu="OnTableContextMenu" @oncontextmenu:preventDefault tabindex="0"
                      @onkeydown="HandleGridKeyDown" @onkeydown:preventDefault="@_preventGridKey">
                     @switch (ActiveResourceType)
@@ -523,6 +535,7 @@
     private string SecretFilter = string.Empty;
     private string JobFilter = string.Empty;
     private string CronJobFilter = string.Empty;
+    private bool ShowCompletedPods;
 
     private string ActiveFilter
     {
@@ -573,12 +586,19 @@
     ? StatefulSets.AsQueryable()
     : StatefulSets.Where(s => s.Name.Contains(StatefulSetFilter, StringComparison.OrdinalIgnoreCase)).AsQueryable();
 
-    private IQueryable<PodInfo> FilteredPods => string.IsNullOrWhiteSpace(PodFilter)
-    ? Pods.AsQueryable()
-    : Pods.Where(p => p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
+    private IQueryable<PodInfo> FilteredPods => Pods
+    .Where(p => ShowCompletedPods || !IsCompletedPod(p))
+    .Where(p => string.IsNullOrWhiteSpace(PodFilter)
+    || p.Name.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
     || p.Status.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
     || p.Phase.Contains(PodFilter, StringComparison.OrdinalIgnoreCase)
-    || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false)).AsQueryable();
+    || (p.NodeName?.Contains(PodFilter, StringComparison.OrdinalIgnoreCase) ?? false))
+    .AsQueryable();
+
+    private int HiddenCompletedPodCount => Pods.Count(IsCompletedPod);
+
+    private static bool IsCompletedPod(PodInfo pod)
+        => pod.Status is "Completed" or "Succeeded" || pod.Phase is "Succeeded";
 
     private IQueryable<ServiceInfo> FilteredServices => string.IsNullOrWhiteSpace(ServiceFilter)
     ? Services.AsQueryable()
@@ -1423,6 +1443,7 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
                 ["namespace"] = CurrentNamespace,
                 ["resourceType"] = ActiveResourceType,
                 ["filter"] = ActiveFilter,
+                ["showCompletedPods"] = ShowCompletedPods.ToString(),
                 ["showEvents"] = ShowEvents.ToString(),
                 ["showPortForwardSessions"] = ShowPortForwardSessions.ToString(),
             },
@@ -1452,6 +1473,10 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
         ActiveFilter = snapshot.RestoreState.TryGetValue("filter", out var restoredFilter)
             ? restoredFilter
             : string.Empty;
+
+        ShowCompletedPods = snapshot.RestoreState.TryGetValue("showCompletedPods", out var showCompletedPodsText)
+            && bool.TryParse(showCompletedPodsText, out var restoredShowCompletedPods)
+            && restoredShowCompletedPods;
 
         if (snapshot.RestoreState.TryGetValue("showEvents", out var showEventsText)
             && bool.TryParse(showEventsText, out var restoredShowEvents))
@@ -1611,6 +1636,19 @@ StringComparison.Ordinal))
     private void OnFilterChanged(string value)
     {
         ActiveFilter = value;
+        _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
+        StateHasChanged();
+    }
+
+    private void OnShowCompletedPodsChanged(ChangeEventArgs e)
+    {
+        ShowCompletedPods = e.Value is bool value && value;
+        if (!ShowCompletedPods && SelectedPod is not null && IsCompletedPod(SelectedPod))
+        {
+            SelectedPod = null;
+            Selection.SetSelection("aks", null);
+        }
+
         _ = PublishWorkspaceSnapshotAsync(recordRecent: false);
         StateHasChanged();
     }

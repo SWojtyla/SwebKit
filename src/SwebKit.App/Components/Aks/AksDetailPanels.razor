@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                                                ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                                                                                                                : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -124,7 +124,14 @@
                 {
                     <div class="aks-panel-pane">
                         <div class="aks-section-header">
-                            <span class="aks-section-title">HPA: @_hpaDetailTarget.Name</span>
+                            <span class="aks-detail-title-stack" title="@_hpaDetailTarget.Name">
+                                <span class="aks-section-title">HPA</span>
+                                <span class="aks-detail-subtitle">@_hpaDetailTarget.TargetKind @_hpaDetailTarget.TargetName</span>
+                            </span>
+                            <span class="aks-detail-header-spacer"></span>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="RefreshHpaDetailAsync" Title="Refresh HPA data">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowClockwise())" Width="16px" />
+                            </FluentButton>
                             <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenHpaYamlAsync(false)"
                                           Title="View YAML">
                                 YAML
@@ -762,6 +769,28 @@
         }
 
         return OpenYamlAsync("HPA", _hpaDetailTarget.Name, editMode, _hpaDetailTarget.Namespace);
+    }
+
+    private async Task RefreshHpaDetailAsync()
+    {
+        if (Client is null || _hpaDetailTarget is null)
+            return;
+
+        try
+        {
+            var target = _hpaDetailTarget;
+            var hpas = await Client.GetHpasAsync(target.Namespace);
+            _hpaDetailTarget = hpas.FirstOrDefault(h => h.Name == target.Name && h.Namespace == target.Namespace) ?? target;
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            Notifications.ShowError("Failed to refresh HPA", ex: ex);
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private void CloseIngressAnalysis()

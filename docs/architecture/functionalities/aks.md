@@ -8,6 +8,7 @@
 - Context switching and namespace filtering (single and all namespaces).
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, Services, ingresses, Helm releases, Jobs, and CronJobs.
+- Pods hide terminal `Completed` / `Succeeded` rows by default so completed Job pods do not crowd active troubleshooting; a pod-list checkbox reveals them on demand.
 - Network-oriented AKS resources are grouped behind an expandable `Network` menu so Services, Ingresses, and Gateway API resources stay available without flattening the main toolbar.
 - Inspect ingress backend evidence and workload-scoped network-policy evidence from the existing AKS side-panel rail.
 - Deployment, StatefulSet, Pod, and Ingress rows expose diagnostics entry points through row buttons, context menus, and keyboard shortcuts (`n` for workload network analysis, `i` for ingress inspection).
@@ -32,6 +33,7 @@
 - Multi-pod log aggregation is always presented as one timestamp-merged stream; each pod keeps a stable color and legend entry so cross-pod correlation stays readable, and the legend doubles as a focus control for isolating one pod inside the merged view.
 - Pod log export downloads the full underlying pod log stream instead of exporting only the currently visible window.
 - View resource YAML.
+- YAML edit mode preserves blank lines and inserts an indented newline on `Enter` so the highlighted overlay stays aligned with the editable textarea.
 - **Port-forward sessions panel** — tracked, observable sessions with `Starting / Active / Stopping / Stopped / Error` lifecycle; dialog to configure local port; sticky sessions panel; status bar count badge; all sessions cancelled on app exit.
 - Pod shell launch (externally via `wt.exe` or `cmd.exe` with `kubectl exec`).
 - Deployment restart, scale operations, and pod delete.
@@ -39,7 +41,7 @@
 - ConfigMap viewer — filterable key/value table; YAML view and edit.
 - Secret viewer — key-names-only list by default; individual values revealed on demand (never bulk-loaded).
 - Container image and environment details — image tag with copy, resource requests/limits, env vars with ConfigMapRef resolution and SecretRef reveal.
-- HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel with all metrics and conditions.
+- HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel summarizes autoscaler state, replica movement, metrics, and conditions.
 - HPA detail panel actions for `View YAML` and `Edit YAML`, reusing the shared AKS YAML viewer/apply workflow instead of a separate HPA-specific editor.
 - Helm history, values, and rollback.
 - Pod metrics retrieval where available — CPU and Memory columns always visible in the Pods grid; show "—" when metrics are unavailable.
@@ -83,6 +85,7 @@
 - **Unified side-panel column.** All side panels (YAML, Helm history/values, scale, logs, container details, ConfigMap/Secret detail, HPA) are rendered inside a single `aks-panels-col` flex container. Events sit at the bottom of this column as a collapsible inset (`aks-events-inset`), so multiple open panels never overflow the grid. When nothing is open the column is hidden and a thin vertical `aks-events-collapsed-tab` appears instead.
 - **On-demand diagnostics panels.** `IngressAnalysisPanel` and `NetworkPolicyAnalysisPanel` are self-loading panel components. They fetch point-in-time evidence on open or refresh and deliberately stay outside the main browse-data refresh loop.
 - **YAML search** is implemented entirely in `yamlHighlight.js` (`searchInPre`, `clearSearch`). Blazor calls JSInterop on each input change; match count is displayed in the search bar.
+- YAML edit highlighting also uses `yamlHighlight.js`; editor mode deliberately preserves blank lines while the read-only viewer keeps its compact blank-line suppression.
 - **Multi-pod log fan-out** uses `System.Threading.Channels.Channel<AggregatedLogLine>` (unbounded). Each per-pod task writes into the channel; a linked `CancellationTokenSource` ensures the outer consumer cancellation propagates to all per-pod readers. Aggregated lines carry parsed timestamps so the UI can keep a single merged chronological view without reparsing every line on each refresh.
 - **Log viewer buffering** is intentionally decoupled from the rendered window. The UI keeps a larger bounded buffer, pages through it in fixed-size windows, and only auto-scrolls while the operator is on the latest window. This keeps live tails readable while preserving older context.
 - **Progressive `All` history** avoids requesting the full container backlog up front. The viewer starts from a bounded tail and lets the operator pull older chunks explicitly, which keeps the hybrid UI responsive when pods emit large log volumes.

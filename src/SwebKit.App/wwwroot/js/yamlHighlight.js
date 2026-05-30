@@ -26,10 +26,14 @@ window.yamlHighlight = {
 
     // Seed both textarea and pre with the initial value from C#.
     textareaEl.value = initialValue || '';
-    preEl.innerHTML = yamlToHtml(textareaEl.value);
+    preEl.innerHTML = yamlToHtml(textareaEl.value, {
+      preserveBlankLines: true,
+    });
 
     function updateHighlight() {
-      preEl.innerHTML = yamlToHtml(textareaEl.value || '');
+      preEl.innerHTML = yamlToHtml(textareaEl.value || '', {
+        preserveBlankLines: true,
+      });
       preEl.scrollTop = textareaEl.scrollTop;
       preEl.scrollLeft = textareaEl.scrollLeft;
     }
@@ -56,6 +60,17 @@ window.yamlHighlight = {
         textareaEl.value = v.substring(0, start) + '  ' + v.substring(end);
         textareaEl.selectionStart = textareaEl.selectionEnd = start + 2;
         updateHighlight();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        var lineStart =
+          textareaEl.value.lastIndexOf('\n', textareaEl.selectionStart - 1) + 1;
+        var currentLine = textareaEl.value.slice(
+          lineStart,
+          textareaEl.selectionStart,
+        );
+        var indent = (currentLine.match(/^\s*/) || [''])[0];
+        insertText(textareaEl, '\n' + indent);
+        updateHighlight();
       }
     });
   },
@@ -80,7 +95,10 @@ window.yamlHighlight = {
   setEditorValue: function (textareaEl, preEl, value) {
     if (!textareaEl) return;
     textareaEl.value = value || '';
-    if (preEl) preEl.innerHTML = yamlToHtml(textareaEl.value);
+    if (preEl)
+      preEl.innerHTML = yamlToHtml(textareaEl.value, {
+        preserveBlankLines: true,
+      });
   },
 
   /**
@@ -227,12 +245,22 @@ function findInlineCommentIdx(s) {
   return -1;
 }
 
-function yamlToHtml(text) {
+function insertText(textareaEl, text) {
+  var start = textareaEl.selectionStart;
+  var end = textareaEl.selectionEnd;
+  var value = textareaEl.value;
+  textareaEl.value = value.substring(0, start) + text + value.substring(end);
+  textareaEl.selectionStart = textareaEl.selectionEnd = start + text.length;
+}
+
+function yamlToHtml(text, options) {
+  var preserveBlankLines = Boolean(options && options.preserveBlankLines);
   var lines = text.split('\n');
   return lines
     .map(function (line) {
-      // Blank line — skip entirely (suppressed in viewer)
-      if (!line.trim()) return null;
+      // The read-only viewer suppresses blank lines, but the editor overlay must
+      // preserve them so textarea lines stay aligned with highlighted lines.
+      if (!line.trim()) return preserveBlankLines ? '' : null;
 
       // Full-line comment
       if (/^\s*#/.test(line)) return span('comment', line);

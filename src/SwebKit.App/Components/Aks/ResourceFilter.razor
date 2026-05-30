@@ -1,6 +1,12 @@
 <div class="resource-filter">
-    <input class="resource-filter-input app-native-control" type="text" placeholder="@Placeholder"
-           value="@Value" @oninput="OnInput" />
+    <input class="resource-filter-input app-native-control" type="text" placeholder="@Placeholder" value="@Value"
+           @oninput="OnInput" />
+    @if (ChildContent is not null)
+    {
+        <div class="resource-filter-extra">
+            @ChildContent
+        </div>
+    }
     @if (!string.IsNullOrEmpty(Value))
     {
         <button class="resource-filter-clear" @onclick="OnClear" title="Clear filter">✕</button>
@@ -11,6 +17,7 @@
     [Parameter] public string Placeholder { get; set; } = "Filter…";
     [Parameter] public string Value { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private async Task OnInput(ChangeEventArgs e)
     {

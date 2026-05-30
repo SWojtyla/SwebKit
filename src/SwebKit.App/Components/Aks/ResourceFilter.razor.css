@@ -28,6 +28,44 @@
     color: var(--color-text-muted);
 }
 
+.resource-filter-extra {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+}
+
+.resource-filter-extra ::deep .resource-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--aks-filter-border);
+    border-radius: var(--aks-chip-radius);
+    background: var(--color-table-input-bg, var(--color-bg));
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.resource-filter-extra ::deep .resource-filter-check:hover {
+    color: var(--color-text);
+    border-color: var(--color-accent);
+}
+
+.resource-filter-extra ::deep .resource-filter-check input {
+    margin: 0;
+    accent-color: var(--color-accent);
+}
+
+.resource-filter-extra ::deep .resource-filter-muted {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
 .resource-filter-clear {
     background: transparent;
     border: none;
