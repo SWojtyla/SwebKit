@@ -302,6 +302,7 @@ public class ComponentTests : TestContext
     {
         Services.AddSingleton<ICredentialStore>(new InMemoryCredentialStore());
         Services.AddSingleton(new DemoStorageClient());
+        Services.AddSingleton<IStorageClientFactory>(new FakeStorageClientFactory());
         Services.AddSingleton(new CommandRegistry(new UiStateRepository()));
         Services.AddSingleton<ISelectionContext>(new TestSelectionContext());
         Services.AddSingleton<INotificationService>(new NotificationService(new UiStateRepository()));
@@ -323,6 +324,11 @@ public class ComponentTests : TestContext
         public void Delete(string key) => _secrets.Remove(key);
         public IReadOnlyList<string> ListKeys(string prefix = "") =>
             _secrets.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private sealed class FakeStorageClientFactory : IStorageClientFactory
+    {
+        public IStorageClient Create(StorageConfig config) => throw new InvalidOperationException("Storage client creation is not expected in this test.");
     }
 
     private sealed class TestSelectionContext : ISelectionContext

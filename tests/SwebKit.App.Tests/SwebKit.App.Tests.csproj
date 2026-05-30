@@ -38,6 +38,7 @@
 
     <ItemGroup>
         <Compile Include="..\..\src\SwebKit.App\Services\CommandRegistry.cs" Link="Services\CommandRegistry.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\AksNamespaceScope.cs" Link="Services\AksNamespaceScope.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\AksClientBootstrapper.cs" Link="Services\AksClientBootstrapper.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\NotificationService.cs" Link="Services\NotificationService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ObservabilityProviderFactory.cs" Link="Services\ObservabilityProviderFactory.cs" />
@@ -68,6 +69,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\SkeletonRows.razor" Link="Components\Shared\SkeletonRows.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessDashboard.razor" Link="Components\Shared\ConfigurationReadinessDashboard.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Shared\ConfigurationReadinessAreaCard.razor" Link="Components\Shared\ConfigurationReadinessAreaCard.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Shared\SwebKitComponentBase.cs" Link="Components\Shared\SwebKitComponentBase.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\SelectionService.cs" Link="Components\Shared\SelectionService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Shared\AutoRefreshController.cs" Link="Components\Shared\AutoRefreshController.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\PageDataCache.cs" Link="Services\PageDataCache.cs" />
@@ -76,6 +78,7 @@
         <Compile Include="..\..\src\SwebKit.App\Services\ServiceBusWarmupCache.cs" Link="Services\ServiceBusWarmupCache.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\ConnectionWarmupService.cs" Link="Services\ConnectionWarmupService.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\PinnedPortForwardService.cs" Link="Services\PinnedPortForwardService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\PerformanceBaselineRecorder.cs" Link="Services\PerformanceBaselineRecorder.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Aks\CronNextRun.cs" Link="Components\Aks\CronNextRun.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
@@ -115,6 +118,7 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisConnectionBar.razor" Link="Components\Redis\RedisConnectionBar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisToolbar.razor" Link="Components\Redis\RedisToolbar.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisNamespaceTreeNode.razor" Link="Components\Redis\RedisNamespaceTreeNode.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisKeyDetail.razor" Link="Components\Redis\RedisKeyDetail.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisKeyspaceHealthExplorer.razor" Link="Components\Redis\RedisKeyspaceHealthExplorer.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisSlowLogPanel.razor" Link="Components\Redis\RedisSlowLogPanel.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Redis\RedisPubSubPanel.razor" Link="Components\Redis\RedisPubSubPanel.razor" />

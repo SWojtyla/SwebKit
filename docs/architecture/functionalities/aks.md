@@ -7,6 +7,7 @@
 - Keep the page shell and toolbar interactive while AKS client, context, and namespace bootstrap runs in the background.
 - Context switching and namespace filtering (single, selected multiple, and all namespaces).
 - Namespace picker supports explicit multi-selection so operators can compare a scoped set of namespaces without switching to full-cluster all-namespaces mode.
+- AKS namespace selection is normalized through the app-layer `AksNamespaceScope` model, preserving the external `*` and comma-separated selection tokens while keeping page and toolbar logic typed.
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, Services, ingresses, Helm releases, Jobs, and CronJobs.
 - Pods hide terminal `Completed` / `Succeeded` rows by default so completed Job pods do not crowd active troubleshooting; a pod-list checkbox reveals them on demand.
@@ -55,7 +56,7 @@
 ## Core Runtime Flow
 
 1. `AksPage` calls `IAksClientBootstrapper` to resolve the correct client source (override, demo, or live), normalize the active context and namespace, and load the context and namespace lists without blocking the initial render.
-2. After bootstrap completes, the page loads the selected resource collection, including Jobs and CronJobs in single-namespace, explicit multi-namespace, and all-namespaces mode.
+2. After bootstrap completes, the page loads the selected resource collection, including Jobs, CronJobs, and Ingresses in single-namespace, explicit multi-namespace, and all-namespaces mode.
 3. Services are loaded alongside the other namespace-scoped resources and support all-namespaces browse, selection, and YAML viewing against the selected row namespace.
 4. Gateway API resources are loaded through `gateway.networking.k8s.io` custom-resource queries (`GatewayClass`, `Gateway`, `HTTPRoute`) and are intentionally separate from `Ingress`.
 5. Resource YAML for Services, Jobs, CronJobs, GatewayClasses, Gateways, and HTTPRoutes flows through the same `GetResourceYamlAsync` detail-panel path as other AKS resources.
@@ -73,6 +74,7 @@
 - **Incident timeline anchor.** `AksTimelineSignalSource` is the anchor evidence adapter for the incident cockpit. It bootstraps the current `IAksClient`, resolves workload-owned pods from deployment/statefulset selector labels, and returns only workload-scoped pod lifecycle changes and events inside the requested UTC window. `DaemonSet` scopes are not yet supported by this adapter.
 - **Batch workload contract.** `IAksClient` now exposes additive Jobs and trigger methods: `GetJobsAsync`, `TriggerCronJobAsync`, and `RerunJobAsync`. Default multi-namespace overloads for `GetJobsAsync` and `GetCronJobsAsync` let the AKS page keep both resource types visible in all-namespaces mode without special client wrappers.
 - **Service inventory contract.** `IAksClient` now exposes `GetServicesAsync`. The AKS page treats Services as a first-class network resource with all-namespaces browse and row-namespace-aware YAML requests.
+- **Namespace fan-out contract.** Default `IAksClient` multi-namespace overloads use bounded concurrency so explicit multi-select and all-namespaces views remain responsive without issuing an unbounded request burst against large clusters.
 - **Wave 2 diagnostics contract.** `IAksClient` now exposes `AnalyzeIngressAsync` and `AnalyzeNetworkPoliciesAsync`. These return typed evidence summaries plus explicit limitation text instead of pushing raw object interpretation into Razor components.
 - **Gateway API contract.** `IAksClient` exposes `GetGatewayClassesAsync`, `GetGatewaysAsync`, and `GetHttpRoutesAsync`. `KubernetesAksClient` queries Gateway API CRDs through the custom-objects client with `v1`/`v1beta1`/`v1alpha2` fallback so Envoy Gateway migrations remain visible even when classic `Ingress` is empty.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.

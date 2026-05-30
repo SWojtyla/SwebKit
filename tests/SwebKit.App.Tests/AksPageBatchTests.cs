@@ -44,18 +44,21 @@ public sealed class AksPageBatchTests : TestContext
         };
 
         _notifications = new CaptureNotificationService();
+        var userSettings = new UserSettingsRepository();
 
         Services.AddSingleton<IAppEventBus>(eventBus);
         Services.AddSingleton(_appState);
         Services.AddSingleton(uiState);
+        Services.AddSingleton(userSettings);
         Services.AddSingleton<INotificationService>(_notifications);
         Services.AddSingleton<IPortForwardSessionService>(new FakePortForwardSessionService());
+        Services.AddSingleton(new PinnedPortForwardService(userSettings));
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton(new PageDataCache());
         Services.AddSingleton(new CommandRegistry(uiState));
         Services.AddSingleton<IPodHealthMonitorService>(new FakePodHealthMonitorService());
-        Services.AddSingleton<IAksClientBootstrapper, AksClientBootstrapper>();
+        Services.AddSingleton<IAksClientBootstrapper>(new FakeAksClientBootstrapper());
         Services.AddSingleton<IAksWarmupCache>(new AksWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
     }
@@ -127,6 +130,25 @@ public sealed class AksPageBatchTests : TestContext
             Assert.Contains("inventory-sync-001", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("settlement-rollup-manual", cut.Markup, StringComparison.Ordinal);
             Assert.DoesNotContain("platform-reconcile-001", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AksPage_IngressesTab_MultiNamespaceSelection_LoadsOnlySelectedNamespaces()
+    {
+        _appState.Config.AksConfig!.DefaultNamespace = "orders,payments";
+        var client = new TrackingAksClient(
+            namespaces: ["default", "orders", "payments"],
+            includeDefaultNamespaceBatchData: true);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Ingresses");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("orders-public", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("payments-public", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("platform-public", cut.Markup, StringComparison.Ordinal);
         });
     }
 
@@ -1565,6 +1587,31 @@ public sealed class AksPageBatchTests : TestContext
 
         public Task StopAllAsync(CancellationToken ct = default)
             => Task.CompletedTask;
+    }
+
+    private sealed class FakeAksClientBootstrapper : IAksClientBootstrapper
+    {
+        public async Task<AksClientBootstrapResult> BootstrapAsync(AksClientBootstrapRequest request, CancellationToken ct = default)
+        {
+            var client = request.ClientOverride ?? new TrackingAksClient();
+            var namespaces = await client.GetNamespacesAsync(ct);
+            var activeContext = request.RequestedContext
+                ?? request.Config?.KubeconfigContext
+                ?? "test-context";
+            var currentNamespace = request.RequestedNamespace
+                ?? request.Config?.DefaultNamespace
+                ?? namespaces.FirstOrDefault()
+                ?? "default";
+
+            return new AksClientBootstrapResult(
+                AksClientBootstrapStatus.Connected,
+                client,
+                [new KubeContextInfo { Name = activeContext, IsCurrent = true }],
+                namespaces,
+                activeContext,
+                currentNamespace,
+                null);
+        }
     }
 
     private sealed class FakePodHealthMonitorService : IPodHealthMonitorService

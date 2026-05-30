@@ -1,7 +1,8 @@
 <div class="health-explorer">
     <div class="health-header">
         <button class="panel-collapse-btn" type="button" @onclick="() => _collapsed = !_collapsed"
-                aria-expanded="@(!_collapsed)" aria-label="@(_collapsed ? "Expand Keyspace Health" : "Collapse Keyspace Health")">
+                aria-expanded="@(!_collapsed)"
+                aria-label="@(_collapsed ? "Expand Keyspace Health" : "Collapse Keyspace Health")">
             <span class="collapse-chevron @(_collapsed ? "chevron-collapsed" : "")">›</span>
             <strong>Keyspace Health</strong>
         </button>
@@ -23,37 +24,37 @@
     }
     else if (!_collapsed)
     {
-        <div class="health-coverage @(Report.IsPartialCoverage ? "coverage-partial" : "coverage-full")">
-            @BuildCoverageText(Report)
-            <span class="coverage-confidence">Confidence: @Report.ConfidenceLabel</span>
+        <div class="health-coverage @CoverageClass">
+            @CoverageText
+            <span class="coverage-confidence">Confidence: @ConfidenceLabel</span>
         </div>
 
         <div class="health-signal">
-            @BuildHotSignalText(Report)
+            @HotSignalText
         </div>
 
         <div class="summary-grid">
-            <button class="summary-card critical @(IsFilterActive(RedisHealthSeverity.Critical) ? "active" : "")" type="button"
-                    @onclick="() => ToggleFilter(RedisHealthSeverity.Critical)">
+            <button class="summary-card critical @(IsFilterActive(RedisHealthSeverity.Critical) ? "active" : "")"
+                    type="button" @onclick="() => ToggleFilter(RedisHealthSeverity.Critical)">
                 <span>Critical</span>
-                <strong>@Report.CriticalCount</strong>
+                <strong>@CriticalCount</strong>
             </button>
-            <button class="summary-card warning @(IsFilterActive(RedisHealthSeverity.Warning) ? "active" : "")" type="button"
-                    @onclick="() => ToggleFilter(RedisHealthSeverity.Warning)">
+            <button class="summary-card warning @(IsFilterActive(RedisHealthSeverity.Warning) ? "active" : "")"
+                    type="button" @onclick="() => ToggleFilter(RedisHealthSeverity.Warning)">
                 <span>Warning</span>
-                <strong>@Report.WarningCount</strong>
+                <strong>@WarningCount</strong>
             </button>
             <button class="summary-card info @(IsFilterActive(RedisHealthSeverity.Info) ? "active" : "")" type="button"
                     @onclick="() => ToggleFilter(RedisHealthSeverity.Info)">
                 <span>Info</span>
-                <strong>@Report.InfoCount</strong>
+                <strong>@InfoCount</strong>
             </button>
         </div>
 
         <div class="filter-row">
             <FluentButton Appearance="@(_severityFilter is null ? Appearance.Accent : Appearance.Neutral)"
                           @onclick="ClearFilter">
-                All (@Report.Findings.Count)
+                All (@FindingCount)
             </FluentButton>
             @if (_severityFilter is not null)
             {
@@ -116,6 +117,22 @@
 
     private bool _collapsed;
     private RedisHealthSeverity? _severityFilter;
+
+    private string CoverageClass => Report?.IsPartialCoverage == true ? "coverage-partial" : "coverage-full";
+
+    private string CoverageText => Report is { } report ? BuildCoverageText(report) : string.Empty;
+
+    private string ConfidenceLabel => Report?.ConfidenceLabel ?? "Unknown";
+
+    private string HotSignalText => Report is { } report ? BuildHotSignalText(report) : string.Empty;
+
+    private int CriticalCount => Report?.CriticalCount ?? 0;
+
+    private int WarningCount => Report?.WarningCount ?? 0;
+
+    private int InfoCount => Report?.InfoCount ?? 0;
+
+    private int FindingCount => Report?.Findings.Count ?? 0;
 
     private IReadOnlyList<RedisHealthFinding> FilteredFindings =>
         Report?.Findings

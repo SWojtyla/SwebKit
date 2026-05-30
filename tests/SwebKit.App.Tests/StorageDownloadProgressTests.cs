@@ -10,6 +10,7 @@ using SwebKit.Core.Models;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public class StorageDownloadProgressTests : TestContext
 {
     public StorageDownloadProgressTests()

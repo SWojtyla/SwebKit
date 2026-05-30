@@ -278,7 +278,7 @@
         }
 
         if (_effectiveEntityPath is null)
-            _effectiveEntityPath = NormalizeSendEntityPath(EntityPath);
+            _effectiveEntityPath = EntityPath;
     }
 
     private string? ResolvedTargetEntityPath => NormalizeSendEntityPath(_effectiveEntityPath ?? EntityPath);

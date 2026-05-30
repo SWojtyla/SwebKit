@@ -142,9 +142,20 @@
                             break;
 
                         case "Secrets":
-                            <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
-                                        SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
-                                        OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
+                            @if (IsMultiNamespace && Secrets.Count == 0 && !IsLoading)
+                            {
+                                <div class="aks-mns-notice">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Width="14px"
+                                                style="vertical-align:middle;" />
+                                    Secrets are not loaded in multi-namespace mode. Select a specific namespace to view them.
+                                </div>
+                            }
+                            else
+                            {
+                                <SecretGrid FilteredItems="@FilteredSecrets" IsMultiNamespace="@IsMultiNamespace"
+                                            SelectedSecret="@SelectedSecret" OnSelectRow="@SelectSecret"
+                                            OnContextMenu="@((args) => ShowSecretMenu(args.Item1, args.Item2))" />
+                            }
                             break;
 
                         case "Pods":
@@ -767,7 +778,7 @@ false)
     };
 
     private string? CurrentCacheKey => !string.IsNullOrEmpty(ActiveContext) && !string.IsNullOrEmpty(CurrentNamespace)
-        ? $"aks:{ActiveContext}:{CurrentNamespace}"
+        ? $"aks:{ActiveContext}:{CurrentNamespaceScope.CacheKeyPart}"
         : null;
 
     private bool HasOpenPanel => _detailPanels?.IsOpen == true;
@@ -1014,49 +1025,13 @@ OnCtxRestartDeployment();
         }
     }
 
-    private bool IsMultiNamespace => CurrentNamespace == "*" || GetSelectedNamespaces().Count > 1;
+    private AksNamespaceScope CurrentNamespaceScope => AksNamespaceScope.FromSelection(CurrentNamespace, Namespaces);
 
-    private string CurrentPrimaryNamespace => GetSelectedNamespaces().FirstOrDefault() ?? "default";
+    private bool IsMultiNamespace => CurrentNamespaceScope.IsMulti;
 
-    private List<string> GetScopedNamespaces()
-        => CurrentNamespace == "*"
-            ? GetAvailableNamespaces()
-            : GetSelectedNamespaces();
+    private string CurrentPrimaryNamespace => CurrentNamespaceScope.Primary;
 
-    private List<string> GetAvailableNamespaces()
-        => Namespaces
-            .Where(ns => !string.IsNullOrWhiteSpace(ns))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-    private List<string> GetSelectedNamespaces()
-    {
-        if (CurrentNamespace == "*")
-        {
-            return GetAvailableNamespaces();
-        }
-
-        var selected = CurrentNamespace
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(ns => !string.IsNullOrWhiteSpace(ns))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        if (selected.Count == 0)
-        {
-            return [];
-        }
-
-        var available = GetAvailableNamespaces();
-        if (available.Count == 0)
-        {
-            return selected;
-        }
-
-        return selected
-            .Where(ns => available.Contains(ns, StringComparer.Ordinal))
-            .ToList();
-    }
+    private IReadOnlyList<string> GetScopedNamespaces() => CurrentNamespaceScope.Namespaces;
 
     private void StoreSnapshot(string? cacheKey = null)
     {
@@ -1079,9 +1054,10 @@ OnCtxRestartDeployment();
 
         try
         {
-            IReadOnlyList<JobInfo> refreshedJobs = IsMultiNamespace
-                ? await Client.GetJobsAsync(GetScopedNamespaces())
-                : await Client.GetJobsAsync(requestedNamespace);
+            var scope = CurrentNamespaceScope;
+            IReadOnlyList<JobInfo> refreshedJobs = scope.IsMulti
+                ? await Client.GetJobsAsync(scope.Namespaces)
+                : await Client.GetJobsAsync(scope.Primary);
 
             if (requestedContext != ActiveContext || requestedNamespace != CurrentNamespace)
                 return;
@@ -1161,12 +1137,12 @@ OnCtxRestartDeployment();
                 }
             }
 
-            if (IsMultiNamespace)
+            var scope = CurrentNamespaceScope;
+            if (scope.IsMulti)
             {
-                var allNs = GetScopedNamespaces();
+                var scopedNamespaces = scope.Namespaces;
 
                 // Clear non-loaded lists synchronously
-                Ingresses = [];
                 HelmReleases = [];
                 ConfigMaps = [];
                 Secrets = [];
@@ -1177,16 +1153,17 @@ OnCtxRestartDeployment();
 
                 var tasks = new List<Task>
                 {
-                    LoadDataset(() => Client.GetDeploymentsAsync(allNs), r => Deployments = r),
-                    LoadDataset(() => Client.GetPodsAsync(allNs), r => Pods = r),
-                    LoadDataset(() => Client.GetStatefulSetsAsync(allNs), r => StatefulSets = r),
-                    LoadDataset(() => Client.GetServicesAsync(allNs), r => Services = r),
+                    LoadDataset(() => Client.GetDeploymentsAsync(scopedNamespaces), r => Deployments = r),
+                    LoadDataset(() => Client.GetPodsAsync(scopedNamespaces), r => Pods = r),
+                    LoadDataset(() => Client.GetStatefulSetsAsync(scopedNamespaces), r => StatefulSets = r),
+                    LoadDataset(() => Client.GetServicesAsync(scopedNamespaces), r => Services = r),
+                    LoadDataset(() => Client.GetIngressesAsync(scopedNamespaces), r => Ingresses = r),
                     LoadDataset(() => Client.GetGatewayClassesAsync(ct), r => GatewayClasses = r),
-                    LoadDataset(() => Client.GetGatewaysAsync(allNs), r => Gateways = r),
-                    LoadDataset(() => Client.GetHttpRoutesAsync(allNs), r => HttpRoutes = r),
-                    LoadDataset(() => Client.GetHpasAsync(allNs), r => Hpas = r),
-                    LoadDataset(() => Client.GetJobsAsync(allNs), r => Jobs = r),
-                    LoadDataset(() => Client.GetCronJobsAsync(allNs), r => CronJobs = r),
+                    LoadDataset(() => Client.GetGatewaysAsync(scopedNamespaces), r => Gateways = r),
+                    LoadDataset(() => Client.GetHttpRoutesAsync(scopedNamespaces), r => HttpRoutes = r),
+                    LoadDataset(() => Client.GetHpasAsync(scopedNamespaces), r => Hpas = r),
+                    LoadDataset(() => Client.GetJobsAsync(scopedNamespaces), r => Jobs = r),
+                    LoadDataset(() => Client.GetCronJobsAsync(scopedNamespaces), r => CronJobs = r),
                 };
 
                 // PERF2-8: Render flush loop — batch renders at ~150ms intervals
@@ -1218,7 +1195,7 @@ OnCtxRestartDeployment();
             }
             else
             {
-                var ns = CurrentNamespace;
+                var ns = scope.Primary;
 
                 var tasks = new List<Task>
                 {

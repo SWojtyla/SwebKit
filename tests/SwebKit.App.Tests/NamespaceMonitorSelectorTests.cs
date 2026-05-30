@@ -147,6 +147,12 @@ public class NamespaceMonitorSelectorTests : TestContext
         public Task DeletePodAsync(string ns, string podName, CancellationToken ct = default)
             => Task.CompletedTask;
 
+        public Task DeleteIngressAsync(string ns, string name, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default)
+            => Task.CompletedTask;
+
         public Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default)
             => Task.CompletedTask;
 

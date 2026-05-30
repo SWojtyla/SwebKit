@@ -245,39 +245,17 @@
     {
         get
         {
-            if (CurrentNamespace == "*")
-            {
-                return "*";
-            }
-
-            var selected = ParseNamespaceSelection(CurrentNamespace).ToList();
-            return selected.Count switch
-            {
-                0 => CurrentNamespace,
-                1 => selected[0],
-                _ => $"{selected.Count} namespaces"
-            };
+            var scope = GetNamespaceScope();
+            return string.IsNullOrWhiteSpace(scope.DisplayText) ? CurrentNamespace : scope.DisplayText;
         }
     }
 
-    private string NamespaceSelectionTitle
-    {
-        get
-        {
-            if (CurrentNamespace == "*")
-            {
-                return "All namespaces";
-            }
-
-            var selected = ParseNamespaceSelection(CurrentNamespace).ToList();
-            return selected.Count > 1 ? string.Join(", ", selected) : NamespaceSelectionText;
-        }
-    }
+    private string NamespaceSelectionTitle => GetNamespaceScope().DisplayTitle;
 
     private void OpenNsDrop()
     {
         _nsSearchText = string.Empty;
-        _pendingNamespaces = ParseNamespaceSelection(CurrentNamespace).ToHashSet(StringComparer.Ordinal);
+        _pendingNamespaces = GetNamespaceScope().Namespaces.ToHashSet(StringComparer.Ordinal);
         _nsDropOpen = true;
         StateHasChanged();
     }
@@ -339,38 +317,18 @@
             return;
         }
 
-        await SelectNs(BuildNamespaceSelection(_pendingNamespaces));
+        await SelectNs(AksNamespaceScope.FromNamespaces(OrderNamespaces(_pendingNamespaces)).SelectionToken);
     }
 
-    private string BuildNamespaceSelection(IEnumerable<string> selectedNamespaces)
-    {
-        var selected = selectedNamespaces
+    private AksNamespaceScope GetNamespaceScope()
+        => AksNamespaceScope.FromSelection(CurrentNamespace, Namespaces);
+
+    private IEnumerable<string> OrderNamespaces(IEnumerable<string> namespaces)
+        => namespaces
             .Where(ns => !string.IsNullOrWhiteSpace(ns))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(GetNamespaceSortIndex)
-            .ThenBy(ns => ns, StringComparer.Ordinal)
-            .ToList();
-
-        if (selected.Count == Namespaces.Count && Namespaces.Count > 0)
-        {
-            return "*";
-        }
-
-        return selected.Count == 1 ? selected[0] : string.Join(",", selected);
-    }
-
-    private IEnumerable<string> ParseNamespaceSelection(string selection)
-    {
-        if (selection == "*")
-        {
-            return Namespaces.Where(ns => !string.IsNullOrWhiteSpace(ns));
-        }
-
-        return selection
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(ns => Namespaces.Count == 0 || Namespaces.Contains(ns, StringComparer.Ordinal))
-            .Distinct(StringComparer.Ordinal);
-    }
+            .ThenBy(ns => ns, StringComparer.Ordinal);
 
     private int GetNamespaceSortIndex(string ns)
     {

@@ -18,6 +18,7 @@ namespace SwebKit.App.Tests;
 /// Validates that AksPage uses the warm-client cache on first open and only
 /// falls through to AksBootstrapper when the cache is empty.
 /// </summary>
+[Collection("AppDataSerial")]
 public sealed class AksPageBootstrapCacheTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -52,6 +53,9 @@ public sealed class AksPageBootstrapCacheTests : TestContext
         Services.AddSingleton(_appState);
         Services.AddSingleton(uiState);
         Services.AddSingleton<INotificationService>(new NotificationService(uiState));
+        var userSettings = new UserSettingsRepository();
+        Services.AddSingleton(userSettings);
+        Services.AddSingleton(new PinnedPortForwardService(userSettings));
         Services.AddSingleton<IPortForwardSessionService>(new FakePortForwardSessionService());
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());

@@ -153,32 +153,7 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
         AksConfig? config)
     {
         var resolvedNamespace = NormalizeRequestedNamespace(requestedNamespace, config);
-        if (namespaces.Count == 0 || resolvedNamespace == "*")
-        {
-            return resolvedNamespace;
-        }
-
-        var selectedNamespaces = ParseNamespaceSelection(resolvedNamespace)
-            .Where(ns => namespaces.Contains(ns, StringComparer.Ordinal))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        if (selectedNamespaces.Count > 1)
-        {
-            return string.Join(",", selectedNamespaces);
-        }
-
-        if (selectedNamespaces.Count == 1)
-        {
-            return selectedNamespaces[0];
-        }
-
-        if (namespaces.Contains(resolvedNamespace, StringComparer.Ordinal))
-        {
-            return resolvedNamespace;
-        }
-
-        return namespaces.Contains("default", StringComparer.Ordinal) ? "default" : namespaces[0];
+        return AksNamespaceScope.NormalizeSelection(resolvedNamespace, namespaces);
     }
 
     private static string NormalizeRequestedNamespace(string? requestedNamespace, AksConfig? config)
@@ -190,7 +165,4 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
 
         return string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config.DefaultNamespace;
     }
-
-    private static IEnumerable<string> ParseNamespaceSelection(string selection)
-        => selection.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

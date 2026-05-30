@@ -219,6 +219,20 @@ Components/
 
 Styles that are used across multiple isolated components (status dots, status badges, form inputs, shared text utilities) must be placed in `wwwroot/app.css` so they are not isolated and apply globally.
 
+---
+
+## BL-13 â€” E2E `.app-shell` timeout can mean Blazor never mounted, not a slow selector
+
+**Symptom:** Playwright waits for `.app-shell` and times out, while the MAUI window is visibly open and shows only the static `Loading...` text from `wwwroot/index.html`.
+
+**Cause:** The WebView loaded the host page, but the Blazor root component did not mount into `#app`. Treat this as a BlazorWebView/startup failure, not a normal UI timing issue. In this state, changing selector timeouts or waiting longer will not fix the test.
+
+**Observed during validation:** The E2E fixture could connect to WebView2 CDP on `http://localhost:9222`, and CDP sometimes later showed a fully mounted app shell. However, during the failing test run the visible app window stayed on `Loading...`, so the fixture still reported `.app-shell` timeouts. Attempts to switch the fixture to a random CDP port were not reliable in this environment because WebView2 continued to expose the fixed debug endpoint.
+
+**Fix direction:** Before changing assertions, inspect the WebView page through CDP and confirm whether `document.body.innerText` is still just `Loading...` or whether `.app-shell` exists. If the static loading host remains, capture console/runtime errors and diagnose BlazorWebView startup/root-component mounting. Keep the E2E fixture cleanup strict: stop stale `testhost`, `SwebKit.App`, and `msedgewebview2` processes before reruns so the fixture does not attach to an old WebView target.
+
+**Rule:** For E2E failures at startup, first prove whether Blazor mounted. A visible `Loading...` window means the failure is below the app shell and should be documented as unresolved until the WebView startup cause is known.
+
 **Rule:** never write styles for a child component's internal elements in the parent's `.razor.css` file. If a class is used by more than one component, put it in `app.css`.
 
 ---
