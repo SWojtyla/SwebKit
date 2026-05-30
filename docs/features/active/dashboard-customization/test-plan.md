@@ -2,7 +2,7 @@
 
 ## Scope
 
-Validate that dashboard tile selection, ordering, default behavior, and tile refresh states work without regressing the existing dashboard metrics.
+Validate that dashboard widget selection, ordering, sizing, configuration, default behavior, responsive layout, and refresh states work without regressing the existing dashboard metrics.
 
 ## Component Tests
 
@@ -13,6 +13,8 @@ Validate that dashboard tile selection, ordering, default behavior, and tile ref
 - Shows configured, unconfigured, loading, empty, error, and stale states for registry-driven tiles.
 - Opens the correct destination when a tile drill-through action is invoked.
 - Adds, removes, resizes, hides, and reorders custom tile instances from the dashboard builder.
+- Maps existing persisted `small`, `medium`, and `wide` sizes to the new widget footprint model.
+- Renders each MVP tile in its supported footprints without overflowing labels, metrics, or action buttons.
 - Renders Service Bus entity watch tiles with active, dead-letter, and scheduled message counts.
 - Renders AKS namespace watch tiles with pod, unhealthy pod, and restart counts without requiring deployment-list permissions.
 
@@ -25,8 +27,13 @@ Validate that dashboard tile selection, ordering, default behavior, and tile ref
 
 ## Manual Checks
 
-- The dashboard builder is usable with keyboard and pointer input.
-- Tile labels and metric values fit at supported desktop window sizes.
+- The widget board is usable with keyboard and pointer input.
+- Tile labels, metric values, targets, timestamps, and action buttons fit in every supported footprint.
+- The board behaves like a home screen: widgets align predictably, sparse dashboards stay compact, and list widgets use larger footprints without stretching unrelated tiles.
+- The board remains usable at desktop widths, half-width snapped windows, and narrow mobile-like widths.
+- The board feels pleasant during normal use: spacing is calm, text hierarchy is clear, action buttons are discoverable without shouting, and tile colors support area identity without turning the page into a patchwork.
+- Hover, focus, loading, error, stale, and editing states feel polished and intentional rather than abrupt or noisy.
+- Configuration affordances are consistent across built-in health widgets, Service Bus entity widgets, and AKS namespace widgets.
 - Environment readiness prompts do not render on the dashboard; users review setup state from Settings.
 - Health signal tiles stay compact when adjacent workspace panels contain long lists.
 - Adding a Service Bus entity tile refreshes that entity without changing the global Service Bus summary tile.
@@ -38,6 +45,22 @@ Validate that dashboard tile selection, ordering, default behavior, and tile ref
 - Navigation away from the dashboard cancels or ignores in-flight tile refreshes.
 - Demo mode renders meaningful sample tile data.
 - A dashboard with only one visible custom tile stays compact at the top of the page, with no stretched overview cards or large blank rows.
+
+## Responsive Widget Checks
+
+- `1x1` widgets show one primary value, short label, status, and a compact action affordance without wrapping awkwardly.
+- `2x1` widgets add target/context and secondary values while keeping a stable height.
+- `2x2` widgets can show short lists or recent events without internal content pushing the board row taller.
+- `3x2` widgets can host richer lists such as Recent Resources or Favorites while remaining scannable without dominating the board.
+- Narrow widths collapse widgets to one column with stable vertical rhythm and no horizontal overflow.
+
+## Visual Quality Checks
+
+- The default dashboard has a clear first glance: the most important health signals are obvious without oversized hero treatment.
+- Repeated widgets share a consistent frame, but tile contents do not feel monotonous.
+- Empty dashboards, sparse dashboards, and busy dashboards all feel intentionally composed.
+- The configuration surface is compact enough for repeated use but still gives enough room for target selection and preview.
+- No tile relies on visible instructional copy to explain basic actions that should be represented by familiar controls and tooltips.
 
 ## Initial Validation Command
 
@@ -56,6 +79,11 @@ dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0 -
 - AKS namespace tile RBAC hardening and Recent Resources spacing build passed with existing warnings using alternate output path `artifacts/copilot-build/dashboard-custom/`; generated output was removed after validation.
 - Validation-gate recheck passed for UI-state hydration safety and persisted tile-size rendering.
 - Added persistence tests for defaults, unknown tile IDs, preference round-tripping, and custom template-instance preservation.
+- Updated persistence tests to assert legacy dashboard sizes migrate from `small`, `medium`, and `wide` to `1x1`, `2x1`, and `3x2` footprints.
 - Focused Core test execution is currently blocked before the new tests run by existing `DeploymentValidationServiceTests.FakeAksClient` compile errors for missing `IAksClient.DeleteIngressAsync` and `IAksClient.DeleteHttpRouteAsync` implementations.
+- Widget-board implementation build passed through `build-maui-windows` with existing warnings.
+- Widget row stretching and top-bar favorites popover fixes passed through `build-maui-windows` with existing warnings.
+- `3x2` footprint and list-row spacing changes passed through `build-maui-windows` with existing warnings.
+- Focused Core test execution remains blocked before the dashboard preference tests run by the existing `DeploymentValidationServiceTests.FakeAksClient` compile errors.
 - Manual dashboard builder smoke validation is still pending.
 - Manual visual review of the redesigned dashboard is still pending.

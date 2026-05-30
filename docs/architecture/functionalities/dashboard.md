@@ -10,8 +10,9 @@
 - Favorites panel populated from the shared `OperatorWorkspaceService` favorite-resource model.
 - Recent resources panel populated from local `UiState.RecentResources`.
 - Registry-driven tile visibility and ordering persisted in `ui-state.json`.
+- Responsive widget-board canvas with explicit `1x1`, `2x1`, `2x2`, and `3x2` footprints.
 - Visual grouping keeps health signals first, workspace context next, and incident/activity surfaces lower while preserving user ordering inside those groups.
-- Dashboard builder with tile templates, show/hide toggles, size controls, ordering controls, remove actions, and reset-to-default behavior.
+- Dashboard builder with tile templates, show/hide toggles, widget footprint controls, ordering controls, remove actions, and reset-to-default behavior.
 - Custom Service Bus entity watch tile instances for a selected namespace and queue/topic/subscription path.
 - Custom AKS namespace watch tile instances for pod health and restart counts in a selected kube context and namespace.
 - Manual refresh integration through `RefreshRequestedEvent("dashboard")`.
@@ -31,11 +32,14 @@
 9. `OperatorWorkspaceService.GetFavoriteResources()` and `GetRecentResources()` supply favorite and recent resource snapshots, and clicking one reopens the snapshot through route-first workspace restore.
 10. Component disposal unsubscribes event handlers and cancels outstanding refresh work.
 
-## Planned Customization Direction
+## Customization Direction
 
 - Dashboard tile definitions come from a stable app-layer registry instead of hard-coded page sections.
 - User-specific tile visibility, order, and size persist in `ui-state.json`, not in profile configuration.
 - Custom resource tile settings also persist in `ui-state.json`; they identify the watched target but do not become environment profile configuration.
+- The current UI direction is a responsive widget board inspired by phone home screens: explicit widget footprints, consistent configuration, and size-aware tile content.
+- The widget board should feel pleasant and elegant, with restrained visual styling, clear hierarchy, refined interaction states, and area color used as a cue rather than decoration.
+- Existing `small`, `medium`, `wide`, and early `4x2` size values should be migrated or mapped into explicit footprints such as `1x1`, `2x1`, `2x2`, and `3x2` without breaking older `ui-state.json` payloads.
 - The default dashboard remains useful without customization: favorites, recent resources, and the existing health summaries.
 - Tile data providers should preserve bounded refresh behavior and avoid starting duplicate network calls during parent rerenders.
 - Drill-through should reuse shell navigation and `OperatorWorkspaceService` restore paths instead of introducing page-specific navigation shortcuts.
@@ -55,6 +59,7 @@
 
 - Dashboard customization is shell-local preference state. It should not affect environment-scoped profile configuration.
 - Unknown persisted tile IDs need a migration or safe-drop strategy so removed tiles do not break startup.
+- Widget footprint changes must remain backward compatible with older dashboard preference payloads.
 - Network-backed tiles should keep per-tile loading and error states independent so one slow integration does not block the rest of the dashboard.
 - Configuration readiness belongs on Settings surfaces; the dashboard should not render environment-readiness prompts.
 - `StateHasChanged` calls after async work must flow through `InvokeAsync` in Blazor Hybrid components.

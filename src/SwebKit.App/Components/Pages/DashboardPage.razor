@@ -33,7 +33,7 @@
             <span class="shell-pill shell-pill--warning">Demo mode</span>
         }
         <span class="shell-pill shell-pill--muted">@pinnedItems.Count favorite@(pinnedItems.Count == 1 ? "" :
-                                                                                 "s")</span>
+                                                                                                         "s")</span>
             <span class="shell-pill shell-pill--muted">@visibleTiles.Count tile@(visibleTiles.Count == 1 ? "" : "s")</span>
             @if (Monitor.IsMonitoring)
             {
@@ -53,25 +53,6 @@
                 </button>
             </Actions>
         </RoutePageHeader>
-
-        <section class="dashboard-overview-strip" aria-label="Dashboard overview">
-            <div class="dashboard-overview-cell">
-                <span class="dashboard-overview-label">Visible</span>
-                <strong>@visibleTiles.Count</strong>
-            </div>
-            <div class="dashboard-overview-cell">
-                <span class="dashboard-overview-label">Favorites</span>
-                <strong>@pinnedItems.Count</strong>
-            </div>
-            <div class="dashboard-overview-cell">
-                <span class="dashboard-overview-label">Recent</span>
-                <strong>@recentItems.Count</strong>
-            </div>
-            <div class="dashboard-overview-cell">
-                <span class="dashboard-overview-label">Health</span>
-                <strong>@GetAttentionCount()</strong>
-            </div>
-        </section>
 
         @if (_isCustomizing)
         {
@@ -112,6 +93,15 @@
                             <span>Title</span>
                             <input class="dashboard-field" @bind="_newServiceBusTileTitle" placeholder="Orders backlog" />
                         </label>
+                        <div class="dashboard-size-picker" role="group" aria-label="Service Bus entity tile size">
+                            @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.ServiceBusEntityWatch))
+                            {
+                                <button type="button" class="@GetSizeButtonClass(size, _newServiceBusTileSize)"
+                                        @onclick="() => _newServiceBusTileSize = size">
+                                    @GetTileSizeLabel(size)
+                                </button>
+                            }
+                        </div>
                         <button class="dashboard-add-button" type="button" disabled="@(serviceBusNamespaces.Count == 0)"
                                 @onclick="AddServiceBusEntityTileAsync">
                             <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
@@ -135,6 +125,15 @@
                             <span>Title</span>
                             <input class="dashboard-field" @bind="_newAksTileTitle" placeholder="Production namespace" />
                         </label>
+                        <div class="dashboard-size-picker" role="group" aria-label="AKS namespace tile size">
+                            @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.AksNamespaceWatch))
+                            {
+                                <button type="button" class="@GetSizeButtonClass(size, _newAksTileSize)"
+                                        @onclick="() => _newAksTileSize = size">
+                                    @GetTileSizeLabel(size)
+                                </button>
+                            }
+                        </div>
                         <button class="dashboard-add-button" type="button" disabled="@(!_aksConfigured)"
                                 @onclick="AddAksNamespaceTileAsync">
                             <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
@@ -156,6 +155,17 @@
                                     <span>@row.DisplayTitle</span>
                                 </label>
                                 <span class="dashboard-layout-row__meta">@row.Description</span>
+                                <div class="dashboard-size-picker dashboard-size-picker--row" role="group"
+                                     aria-label="Size for @row.DisplayTitle">
+                                    @foreach (var size in GetSupportedTileSizes(row.Preference.TileId))
+                                    {
+                                        <button type="button" class="@GetSizeButtonClass(size, row.Preference.Size)"
+                                                title="Use @GetTileSizeLabel(size) size"
+                                                @onclick="() => SetTileSizeAsync(row.Preference.TileId, size)">
+                                            @GetTileSizeLabel(size)
+                                        </button>
+                                    }
+                                </div>
                                 <div class="dashboard-layout-row__actions">
                                     @if (IsEditableCustomTile(row.Preference))
                                     {
@@ -598,9 +608,11 @@
     private string _newServiceBusNamespaceId = string.Empty;
     private string _newServiceBusEntityPath = string.Empty;
     private string _newServiceBusTileTitle = string.Empty;
+    private string _newServiceBusTileSize = "2x1";
     private string _newAksContext = string.Empty;
     private string _newAksNamespace = "default";
     private string _newAksTileTitle = string.Empty;
+    private string _newAksTileSize = "2x1";
     private string? _editingTileId;
     private string _editAksContext = string.Empty;
     private string _editAksNamespace = string.Empty;
@@ -924,6 +936,26 @@ IsHiddenTemplateTile(preference.TileId);
         await SaveDashboardPreferencesAsync();
     }
 
+    private async Task SetTileSizeAsync(string tileId, string size)
+    {
+        if (!_dashboardPreferencesReady)
+        {
+            return;
+        }
+
+        var normalizedSize = NormalizeWidgetSize(size);
+        var index = FindTilePreferenceIndex(tileId);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var tiles = _dashboardPreferences.Tiles.ToList();
+        tiles[index] = tiles[index] with { Size = normalizedSize };
+        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
+        await SaveDashboardPreferencesAsync();
+    }
+
     private static bool IsEditableCustomTile(DashboardTilePreference preference) =>
         DashboardTileRegistry.IsCustomTile(preference.TileId)
         && (DashboardTileRegistry.IsAksNamespaceWatch(preference.TileId)
@@ -1117,7 +1149,7 @@ entityPath
         {
             TileId = DashboardTileRegistry.CreateInstanceId(DashboardTileRegistry.ServiceBusEntityWatch),
             IsVisible = true,
-            Size = "medium",
+            Size = NormalizeWidgetSize(_newServiceBusTileSize),
             Settings = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["title"] = title,
@@ -1164,7 +1196,7 @@ entityPath
         {
             TileId = DashboardTileRegistry.CreateInstanceId(DashboardTileRegistry.AksNamespaceWatch),
             IsVisible = true,
-            Size = "medium",
+            Size = NormalizeWidgetSize(_newAksTileSize),
             Settings = settings
         };
 
@@ -1427,7 +1459,8 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
             var context = GetSetting(preference, "context", AppState.Config.AksConfig?.KubeconfigContext ?? string.Empty);
             IAksClient client = AppState.UseDemoData
                 ? DemoAksClient
-                : AksClientFactory.Create(string.IsNullOrWhiteSpace(context) ? null : context, AppState.Config.AksConfig!.KubeconfigPath);
+                : AksClientFactory.Create(string.IsNullOrWhiteSpace(context) ? null : context,
+AppState.Config.AksConfig!.KubeconfigPath);
 
             var pods = await client.GetPodsAsync(@namespace, null, ct);
             var unhealthyPods = pods.Count(static pod => !pod.Ready || pod.Status is not ("Running" or "Succeeded" or "Completed"));
@@ -1683,20 +1716,46 @@ _dashboardPreferences.Tiles.FirstOrDefault(preference =>
             ? value
             : fallback;
 
-    private static string GetTileGridClass(IReadOnlyList<DashboardTileDefinition> visibleTiles)
+    private static string GetTileGridClass(IReadOnlyList<DashboardTileDefinition> visibleTiles) => visibleTiles.Count switch
     {
-        var hasListTile = visibleTiles.Any(static tile => DashboardTileRegistry.GetTemplateId(tile.Id) is
-            DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites or DashboardTileRegistry.OpenTabs);
+        1 => "dashboard-tile-grid dashboard-tile-grid--single",
+        2 => "dashboard-tile-grid dashboard-tile-grid--pair",
+        _ => "dashboard-tile-grid"
+    };
 
-        return visibleTiles.Count switch
+    private static IReadOnlyList<string> GetSupportedTileSizes(string tileId)
+    {
+        var templateId = DashboardTileRegistry.GetTemplateId(tileId);
+        return templateId switch
         {
-            1 when hasListTile => "dashboard-tile-grid dashboard-tile-grid--single dashboard-tile-grid--single-wide",
-            1 => "dashboard-tile-grid dashboard-tile-grid--single",
-            2 when hasListTile => "dashboard-tile-grid dashboard-tile-grid--pair dashboard-tile-grid--pair-with-list",
-            2 => "dashboard-tile-grid dashboard-tile-grid--pair",
-            _ => "dashboard-tile-grid"
+            DashboardTileRegistry.ServiceBusDeadLetters or
+            DashboardTileRegistry.AksUnhealthyPods or
+            DashboardTileRegistry.RedisExpiringKeys or
+            DashboardTileRegistry.PendingApprovals => ["1x1", "2x1"],
+            DashboardTileRegistry.ServiceBusEntityWatch or
+            DashboardTileRegistry.AksNamespaceWatch => ["2x1", "2x2"],
+            DashboardTileRegistry.Favorites or
+            DashboardTileRegistry.RecentResources => ["2x2", "3x2"],
+            _ => ["2x1", "2x2", "3x2"]
         };
     }
+
+    private static string GetSizeButtonClass(string size, string activeSize) =>
+        string.Equals(NormalizeWidgetSize(size), NormalizeWidgetSize(activeSize), StringComparison.OrdinalIgnoreCase)
+            ? "dashboard-size-button is-active"
+            : "dashboard-size-button";
+
+    private static string GetTileSizeLabel(string size) => NormalizeWidgetSize(size).ToUpperInvariant();
+
+    private static string NormalizeWidgetSize(string? size) => size switch
+    {
+        "1x1" or "2x1" or "2x2" or "3x2" => size,
+        "4x2" => "3x2",
+        "small" => "1x1",
+        "medium" => "2x1",
+        "wide" => "3x2",
+        _ => "2x1"
+    };
 
     private int GetAttentionCount()
     {
@@ -1802,12 +1861,7 @@ builder =>
     {
         var templateId = DashboardTileRegistry.GetTemplateId(tile.Id);
         var idClass = $"dashboard-tile--{NormalizeCssToken(templateId.Replace('.', '-'))}";
-        var sizeClass = tile.Size switch
-        {
-            "wide" => "dashboard-tile--wide",
-            "small" => "dashboard-tile--small",
-            _ => "dashboard-tile--medium"
-        };
+        var sizeClass = $"dashboard-tile--{NormalizeCssToken(NormalizeWidgetSize(tile.Size))}";
 
         var areaClass = templateId switch
         {

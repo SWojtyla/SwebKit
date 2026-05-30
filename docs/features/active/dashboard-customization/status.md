@@ -6,7 +6,7 @@ In Progress
 
 ## Current Focus
 
-Validating the full custom-dashboard overhaul, with special attention to sparse dashboards that only show one or two custom watch tiles.
+Manual smoke validation of the responsive widget-board dashboard after the implementation pass.
 
 ## Completed Work
 
@@ -34,12 +34,21 @@ Validating the full custom-dashboard overhaul, with special attention to sparse 
 - Removed the per-tile S/M/W size selector from the active dashboard manager because CSS overrides for sparse layouts made it a no-op and the tile sizing is now derived from layout context.
 - Added an inline edit affordance on AKS namespace watch and Service Bus entity watch tiles so users can correct the persisted namespace, entity path, or title without deleting and re-adding the tile.
 - Made AKS workspace restoration robust when navigating from a dashboard "Open" action while the AKS environment signature is unchanged: `OnParametersSet` now drains the pending restore so the snapshot's namespace and filters are applied instead of silently falling back to the configured default namespace.
+- Accepted a design pivot to rebuild the dashboard presentation as a responsive widget board while preserving the existing registry, persistence, refresh, and drill-through contracts.
+- Added pleasant/elegant UI as an explicit acceptance constraint for the widget-board redesign.
+- Replaced the grouped dashboard canvas with a responsive widget grid using explicit `1x1`, `2x1`, `2x2`, and `3x2` footprints.
+- Reworked dashboard tile sizing so existing `small`, `medium`, and `wide` persisted sizes migrate to widget footprints without breaking older `ui-state.json` files.
+- Restored useful size controls in the active dashboard manager and custom tile templates so every configurable tile can be resized directly.
+- Replaced the dashboard isolated CSS with a calmer widget-board visual system: restrained borders, area color rails, polished hover/focus states, dense responsive placement, and footprint-aware compact rendering.
+- Fixed widget row stretching by making dashboard grid rows use fixed widget units, so sparse Redis and AKS namespace tiles do not inherit excessive height from content-heavy neighbors.
+- Stabilized the top-bar favorites/resources popover by marking menu state changes for render under the gated `SwebKitComponentBase` render model.
+- Replaced the oversized `4x2` list footprint with `3x2` and relaxed Favorites/Recent Resources row spacing so list widgets read less cramped.
 
 ## Remaining Work
 
 - Add focused component tests for dashboard rendering once the broader test project compile blockers are cleared.
 - Manually smoke the dashboard builder in the running MAUI app.
-- Manually review the redesigned dashboard at common desktop window widths.
+- Manually review the widget board at common desktop window widths and narrow/mobile-like widths.
 - Consider richer resource pickers for Service Bus entities and AKS namespaces once reusable lightweight discovery endpoints exist.
 
 ## Blockers
@@ -53,3 +62,8 @@ Validating the full custom-dashboard overhaul, with special attention to sparse 
 - AKS pod-only namespace tile and Recent Resources spacing build: passed with existing warnings using the alternate dashboard output directory.
 - Validation-gate recheck: passed for UI-state hydration safety and persisted tile-size rendering.
 - Focused persistence tests include custom template-instance preservation, but `dotnet test tests/SwebKit.Core.Tests/SwebKit.Core.Tests.csproj --filter "DashboardPreferences"` is blocked before execution by existing `DeploymentValidationServiceTests.FakeAksClient` compile errors for missing `DeleteIngressAsync` and `DeleteHttpRouteAsync` interface members.
+- Widget-board redesign build: `build-maui-windows` passed with existing warnings (`RedisKeyspaceHealthExplorer.razor` nullable warning and WinAppSDK PRI qualifier warnings).
+- Focused widget-size persistence test command remains blocked before execution by the existing `DeploymentValidationServiceTests.FakeAksClient` missing `DeleteIngressAsync` and `DeleteHttpRouteAsync` members.
+- Widget row and top-bar popover fix build: `build-maui-windows` passed with existing warnings (`RedisKeyspaceHealthExplorer.razor` nullable warning and WinAppSDK PRI qualifier warnings).
+- `3x2` footprint and list-row spacing build: `build-maui-windows` passed with existing warnings (`RedisKeyspaceHealthExplorer.razor` nullable warning and WinAppSDK PRI qualifier warnings).
+- Focused `DashboardPreferences` test command remains blocked before execution by the existing `DeploymentValidationServiceTests.FakeAksClient` missing `DeleteIngressAsync` and `DeleteHttpRouteAsync` members.

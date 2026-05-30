@@ -261,7 +261,7 @@ public class UiStateFilterTests
             preferences.Tiles.Select(static tile => tile.TileId));
         Assert.True(preferences.Tiles[0].IsVisible);
         Assert.False(preferences.Tiles[1].IsVisible);
-        Assert.Equal("wide", preferences.Tiles[0].Size);
+        Assert.Equal("3x2", preferences.Tiles[0].Size);
     }
 
     [Fact]
@@ -293,8 +293,8 @@ public class UiStateFilterTests
         Assert.Equal(["service-bus.dead-letters", "shell.favorites", "shell.recent-resources", "service-bus.entity-watch"],
             preferences.Tiles.Select(static tile => tile.TileId));
         Assert.False(preferences.Tiles[0].IsVisible);
-        Assert.Equal("small", preferences.Tiles[0].Size);
-        Assert.Equal("medium", preferences.Tiles[1].Size);
+        Assert.Equal("1x1", preferences.Tiles[0].Size);
+        Assert.Equal("2x1", preferences.Tiles[1].Size);
     }
 
     [Fact]
@@ -320,9 +320,9 @@ public class UiStateFilterTests
         Assert.Equal(["service-bus.dead-letters", "shell.favorites", "shell.recent-resources", "service-bus.entity-watch"],
             preferences.Tiles.Select(static tile => tile.TileId));
         Assert.False(preferences.Tiles[0].IsVisible);
-        Assert.Equal("small", preferences.Tiles[0].Size);
+        Assert.Equal("1x1", preferences.Tiles[0].Size);
         Assert.True(preferences.Tiles[1].IsVisible);
-        Assert.Equal("wide", preferences.Tiles[1].Size);
+        Assert.Equal("3x2", preferences.Tiles[1].Size);
         Assert.False(preferences.Tiles[2].IsVisible);
     }
 
@@ -358,14 +358,15 @@ public class UiStateFilterTests
 
         Assert.Equal("service-bus.entity-watch:abc123", preferences.Tiles[0].TileId);
         Assert.Equal("order-created", preferences.Tiles[0].Settings["entityPath"]);
+        Assert.Equal("2x1", preferences.Tiles[0].Size);
         Assert.DoesNotContain(preferences.Tiles, static tile => tile.TileId.StartsWith("unknown.template", StringComparison.Ordinal));
     }
 
     private static IReadOnlyList<DashboardTilePreference> DefaultDashboardTiles() =>
     [
-        new DashboardTilePreference { TileId = "shell.favorites", IsVisible = true, Size = "wide" },
-        new DashboardTilePreference { TileId = "shell.recent-resources", IsVisible = false, Size = "wide" },
-        new DashboardTilePreference { TileId = "service-bus.dead-letters", IsVisible = true, Size = "medium" },
-        new DashboardTilePreference { TileId = "service-bus.entity-watch", IsVisible = false, Size = "medium" }
+        new DashboardTilePreference { TileId = "shell.favorites", IsVisible = true, Size = "3x2" },
+        new DashboardTilePreference { TileId = "shell.recent-resources", IsVisible = false, Size = "3x2" },
+        new DashboardTilePreference { TileId = "service-bus.dead-letters", IsVisible = true, Size = "1x1" },
+        new DashboardTilePreference { TileId = "service-bus.entity-watch", IsVisible = false, Size = "2x1" }
     ];
 }

@@ -309,9 +309,15 @@ public class UiStateRepository
                 .ToDictionary(static entry => entry.Key.Trim(), static entry => entry.Value, StringComparer.Ordinal)
     };
 
-    private static string NormalizeDashboardTileSize(string? size) => size is "small" or "medium" or "wide"
-        ? size
-        : "medium";
+    private static string NormalizeDashboardTileSize(string? size) => size switch
+    {
+        "1x1" or "2x1" or "2x2" or "3x2" => size,
+        "4x2" => "3x2",
+        "small" => "1x1",
+        "medium" => "2x1",
+        "wide" => "3x2",
+        _ => "2x1"
+    };
 }
 
 public class UiState

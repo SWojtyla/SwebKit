@@ -32,17 +32,17 @@ public static class DashboardTileRegistry
 
     public static IReadOnlyList<DashboardTileDefinition> All { get; } =
     [
-        new(Favorites, "Favorites", "dashboard", "Pinned resources and saved workspace context.", "wide", true, "event-driven", "OperatorWorkspaceService", "workspace snapshot"),
-        new(RecentResources, "Recent Resources", "dashboard", "Recently opened shell resources.", "wide", true, "event-driven", "UiState.RecentResources", "workspace snapshot"),
-        new(ServiceBusDeadLetters, "Service Bus", "service-bus", "Dead-lettered messages across configured namespaces.", "medium", true, "interval", "IServiceBusClient", "service-bus"),
-        new(AksUnhealthyPods, "AKS", "aks", "Pods outside healthy running or terminal states.", "medium", true, "interval", "IAksClient", "aks"),
-        new(RedisExpiringKeys, "Redis", "redis", "Sampled keys expiring in under five minutes.", "medium", true, "interval", "IRedisClient", "redis"),
-        new(PendingApprovals, "Pipelines", "pipelines", "Pending Azure DevOps approvals.", "medium", true, "interval", "IDevOpsClient", "pipelines"),
-        new(PodHealthAlerts, "Pod Health", "aks", "Recent pod health monitor events.", "wide", true, "event-driven", "IPodHealthMonitorService", "aks"),
-        new(OpenTabs, "Open Tabs", "dashboard", "Restorable tabs grouped by area.", "wide", false, "manual", "UiState.OpenTabs", "route"),
-        new(RecentActivity, "Recent Activity", "dashboard", "Session activity from app events.", "wide", false, "event-driven", "IAppEventBus", "area route"),
-        new(ServiceBusEntityWatch, "Service Bus Entity", "service-bus", "Watch one queue, topic, or subscription.", "medium", false, "interval", "IServiceBusClient.GetEntityStatsAsync", "workspace snapshot"),
-        new(AksNamespaceWatch, "AKS Namespace", "aks", "Watch pods and deployments in one namespace.", "medium", false, "interval", "IAksClient namespace summary", "aks namespace"),
+        new(Favorites, "Favorites", "dashboard", "Pinned resources and saved workspace context.", "3x2", true, "event-driven", "OperatorWorkspaceService", "workspace snapshot"),
+        new(RecentResources, "Recent Resources", "dashboard", "Recently opened shell resources.", "3x2", true, "event-driven", "UiState.RecentResources", "workspace snapshot"),
+        new(ServiceBusDeadLetters, "Service Bus", "service-bus", "Dead-lettered messages across configured namespaces.", "1x1", true, "interval", "IServiceBusClient", "service-bus"),
+        new(AksUnhealthyPods, "AKS", "aks", "Pods outside healthy running or terminal states.", "1x1", true, "interval", "IAksClient", "aks"),
+        new(RedisExpiringKeys, "Redis", "redis", "Sampled keys expiring in under five minutes.", "1x1", true, "interval", "IRedisClient", "redis"),
+        new(PendingApprovals, "Pipelines", "pipelines", "Pending Azure DevOps approvals.", "1x1", true, "interval", "IDevOpsClient", "pipelines"),
+        new(PodHealthAlerts, "Pod Health", "aks", "Recent pod health monitor events.", "2x2", true, "event-driven", "IPodHealthMonitorService", "aks"),
+        new(OpenTabs, "Open Tabs", "dashboard", "Restorable tabs grouped by area.", "2x2", false, "manual", "UiState.OpenTabs", "route"),
+        new(RecentActivity, "Recent Activity", "dashboard", "Session activity from app events.", "2x2", false, "event-driven", "IAppEventBus", "area route"),
+        new(ServiceBusEntityWatch, "Service Bus Entity", "service-bus", "Watch one queue, topic, or subscription.", "2x1", false, "interval", "IServiceBusClient.GetEntityStatsAsync", "workspace snapshot"),
+        new(AksNamespaceWatch, "AKS Namespace", "aks", "Watch pods and deployments in one namespace.", "2x1", false, "interval", "IAksClient namespace summary", "aks namespace"),
     ];
 
     public static IReadOnlyList<DashboardTilePreference> DefaultPreferences { get; } = All

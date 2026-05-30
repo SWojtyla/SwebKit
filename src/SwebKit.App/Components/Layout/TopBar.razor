@@ -55,7 +55,7 @@
                         {
                             <div class="workspace-hub__resource-card">
                                 <div class="workspace-hub__resource-title">@(CurrentSnapshot.Resource.DisplayPath ??
-                                                                                                    CurrentSnapshot.Resource.DisplayName)</div>
+                                                                                                                                        CurrentSnapshot.Resource.DisplayName)</div>
                                     <div class="workspace-hub__resource-summary">@BuildResourceSummary(CurrentSnapshot)</div>
                                     <div class="workspace-hub__save-row">
                                         <input class="workspace-hub__input" placeholder="Name favorite as" value="@_favoriteName"
@@ -114,7 +114,7 @@
                                 {
                                     <button class="workspace-hub__list-item" @onclick="() => OpenRecentAsync(recent)">
                                         <span class="workspace-hub__list-title">@(recent.Snapshot.Resource.DisplayPath ??
-                                                                                                                        recent.Snapshot.Resource.DisplayName)</span>
+                                                                                                                                                                    recent.Snapshot.Resource.DisplayName)</span>
                                             <span class="workspace-hub__list-summary">@recent.AccessedAt.ToLocalTime().ToString("g")</span>
                                         </button>
                                     }
@@ -272,6 +272,8 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         {
             _lastSeenCount = Notifications.All.Count;
         }
+
+        RequestRender();
     }
 
     private void ToggleWorkspaceHub()
@@ -283,31 +285,43 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
         {
             SyncFavoriteName();
         }
+
+        RequestRender();
     }
 
-    private void CloseHistory() => _isHistoryOpen = false;
+    private void CloseHistory()
+    {
+        _isHistoryOpen = false;
+        RequestRender();
+    }
 
     private void ShowDemoConfirm()
     {
         _isWorkspaceHubOpen = false;
         _isHistoryOpen = false;
         _showDemoConfirm = true;
+        RequestRender();
     }
 
     private void HideDemoConfirm()
     {
         _showDemoConfirm = false;
+        RequestRender();
     }
 
     private async Task EnableDemoAsync()
     {
         _showDemoConfirm = false;
+        RequestRender();
         await AppState.SetDemoModeAsync(true);
     }
 
     private void OpenCommandPalette()
     {
         _isWorkspaceHubOpen = false;
+        _isHistoryOpen = false;
+        _showDemoConfirm = false;
+        RequestRender();
         Events.Publish(new CommandPaletteRequestedEvent());
     }
 
@@ -352,6 +366,7 @@ ShellNavigation.CreateContext(ShellNavigation.Dashboard, false, false);
     private async Task OpenSnapshotAsync(WorkspaceSnapshot snapshot)
     {
         _isWorkspaceHubOpen = false;
+        RequestRender();
         await Workspaces.OpenSnapshotAsync(snapshot, recordRecent: true);
     }
 

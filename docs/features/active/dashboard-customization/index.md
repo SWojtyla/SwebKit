@@ -2,21 +2,40 @@
 
 ## Goal
 
-Redesign the initial dashboard into a configurable operations surface where each user can choose the tiles that matter to their workflow.
+Redesign the initial dashboard into a responsive widget board where each user can arrange, size, and configure the operational tiles that matter to their workflow. The target interaction model should feel closer to a phone home screen with widgets than to a static operations report.
 
 ## Scope
 
 - Inventory the dashboard tiles worth supporting.
 - Separate tiles that can ship from existing data from tiles that need new data contracts.
 - Define the minimum tile metadata needed for layout, refresh, visibility, and drill-through behavior.
+- Define a widget-board layout model with responsive size tokens, configuration affordances, and predictable mobile/desktop collapse behavior.
 - Keep the first implementation compatible with the current MAUI Blazor Hybrid shell and local JSON persistence model.
 
 ## Out of Scope For The First Slice
 
-- Drag-and-drop layout editing.
+- Freeform pixel positioning.
 - Marketplace-style third-party tiles.
 - Custom user-authored KQL or scripts inside dashboard tiles.
 - Cross-device dashboard sync.
+
+Drag-and-drop can be considered after the widget-board model is stable, but the first redesign should work well with explicit move, resize, configure, duplicate, and remove actions.
+
+## Design Pivot - Widget Board
+
+The current dashboard customization work proved the registry, persistence, custom tile instances, and drill-through model. The next slice should rebuild the visual shell around those primitives instead of continuing to patch the current operations-console layout.
+
+The desired direction is:
+
+- A full-screen widget board with a compact top command row and no separate overview strip that competes with the tiles.
+- Tiles that behave like widgets: each tile has a stable identity, a size, a configure action, an optional quick action, and a clear refresh/error state.
+- A size system based on grid footprints rather than vague labels: `1x1`, `2x1`, `2x2`, and `3x2` on desktop, collapsing to one or two columns on narrow windows.
+- A configuration experience that is consistent for every tile type: choose target, choose size, choose title, choose refresh behavior where supported, preview, then add or update.
+- Responsive behavior that preserves information hierarchy: small widgets show one primary value, medium widgets add secondary context, large widgets can show lists or mini timelines.
+- A pleasant, elegant visual language: quiet surfaces, generous but efficient spacing, readable hierarchy, soft motion or state changes only where they clarify interaction, and no noisy decorative treatment.
+- Existing integration plumbing remains in place: tile registry, `UiStateRepository` preferences, custom instance IDs, bounded refresh, and `OperatorWorkspaceService` drill-through.
+
+This is a UI-layer redesign, not a reset of the dashboard architecture. The current implementation can be treated as the first prototype of the underlying model.
 
 ## Quick Links
 
@@ -95,26 +114,27 @@ These are valuable, but should follow the initial customizable dashboard because
 
 Each dashboard tile should be described by stable metadata before it has UI state:
 
-| Field                   | Purpose                                                            |
-| ----------------------- | ------------------------------------------------------------------ |
-| `Id`                    | Stable persisted identity, for example `service-bus.dead-letters`. |
-| `Title`                 | Display name shown in the dashboard and picker.                    |
-| `Area`                  | Shell area used for grouping, color, and drill-through.            |
-| `Description`           | Short picker/help text, not long in-dashboard prose.               |
-| `Size`                  | Supported footprint such as `small`, `medium`, or `wide`.          |
-| `DefaultVisible`        | Whether the tile appears in the default layout.                    |
-| `RequiresConfiguration` | Configuration predicate or area dependency.                        |
-| `RefreshPolicy`         | Manual, shell refresh, interval, or event-driven.                  |
-| `DataSource`            | Service or provider responsible for the summary.                   |
-| `DrillThrough`          | Route, area event, or workspace snapshot action.                   |
-| `EmptyState`            | What to show when configured but no data exists.                   |
-| `ErrorState`            | What to show when refresh fails.                                   |
+| Field                   | Purpose                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `Id`                    | Stable persisted identity, for example `service-bus.dead-letters`.                 |
+| `Title`                 | Display name shown in the dashboard and picker.                                    |
+| `Area`                  | Shell area used for grouping, color, and drill-through.                            |
+| `Description`           | Short picker/help text, not long in-dashboard prose.                               |
+| `Size`                  | Supported footprint such as `small`, `medium`, or `wide`.                          |
+| `SupportedSizes`        | Widget footprints the tile can render well, such as `1x1`, `2x1`, `2x2`, or `3x2`. |
+| `DefaultVisible`        | Whether the tile appears in the default layout.                                    |
+| `RequiresConfiguration` | Configuration predicate or area dependency.                                        |
+| `RefreshPolicy`         | Manual, shell refresh, interval, or event-driven.                                  |
+| `DataSource`            | Service or provider responsible for the summary.                                   |
+| `DrillThrough`          | Route, area event, or workspace snapshot action.                                   |
+| `EmptyState`            | What to show when configured but no data exists.                                   |
+| `ErrorState`            | What to show when refresh fails.                                                   |
 
 ## Customization Model
 
 - Persist user dashboard choices in local UI state, not profile configuration, because tile selection is a per-user shell preference.
 - Add a typed dashboard section to `UiState` rather than storing opaque dashboard JSON in `ViewStates` if the layout will be migrated over time.
-- Store tile order, visibility, size, and optional per-tile settings separately from the tile registry.
+- Store tile order, visibility, widget footprint, and optional per-tile settings separately from the tile registry.
 - Keep unknown tile IDs during load only if a migration path exists; otherwise drop them with a safe default layout.
 - Default layout should remain useful without customization: favorites, recent resources, and the four existing health metrics. Configuration readiness remains a Settings responsibility.
 
@@ -126,10 +146,21 @@ Each dashboard tile should be described by stable metadata before it has UI stat
 4. Add a tile picker/edit mode with visible toggles and simple ordering controls.
 5. Keep the existing refresh behavior and only refactor data loading once the registry is stable.
 
+## Next Implementation Slice - Widget Board Redesign
+
+1. Replace the current grouped dashboard canvas with a responsive widget grid that maps persisted tile sizes to explicit grid footprints.
+2. Introduce a shared widget frame for title, target label, status, refresh timestamp, configure action, and open/drill-through action.
+3. Rework each MVP tile into size-aware content states so `1x1`, `2x1`, and larger footprints deliberately show different levels of detail.
+4. Replace the current builder layout with a configuration drawer or panel that uses one consistent edit form pattern for built-in and custom tile instances.
+5. Keep the existing persistence payload backward compatible by mapping existing `small`, `medium`, and `wide` values into the new footprint model during load.
+
 ## Design Notes
 
-- The dashboard should feel like an operations console, not a landing page.
-- Cards should remain compact and scannable; avoid nested cards.
+- The dashboard should feel like a responsive operations home screen, not a landing page or a report.
+- Widgets should remain compact and scannable; avoid nested cards.
+- Tile content must be designed per footprint instead of simply stretching the same markup into larger rectangles.
+- The board should feel elegant under everyday use: calm contrast, restrained borders, clear hover/focus states, and enough whitespace to make scanning relaxing without wasting operator space.
+- Configuration should feel lightweight and direct. Prefer inline/drawer controls, previewable changes, and recognizable icons over long explanatory text or dense form pages.
 - Use Fluent icons for tile actions and area identity where possible.
 - Every tile must have configured, loading, empty, error, and stale-data states.
 - Tiles with network calls need bounded refresh budgets like the current health metrics.
