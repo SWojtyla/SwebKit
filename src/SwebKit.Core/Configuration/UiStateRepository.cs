@@ -99,6 +99,17 @@ public class UiStateRepository
         await SaveAsync();
     }
 
+    public DashboardPreferences GetDashboardPreferences(IEnumerable<DashboardTilePreference> defaultTiles) =>
+        CloneDashboardPreferences(NormalizeDashboardPreferences(_state.Dashboard, defaultTiles));
+
+    public async Task SaveDashboardPreferencesAsync(
+        DashboardPreferences preferences,
+        IEnumerable<DashboardTilePreference> defaultTiles)
+    {
+        _state.Dashboard = NormalizeDashboardPreferences(preferences, defaultTiles);
+        await SaveAsync();
+    }
+
     public T GetViewState<T>(string scopeKey, T defaultValue)
     {
         if (string.IsNullOrWhiteSpace(scopeKey))
@@ -212,12 +223,95 @@ public class UiStateRepository
         state.RecentResources ??= [];
         state.NotificationHistory ??= [];
         state.DemoMonitoredNamespaces ??= [];
+        state.Dashboard ??= new DashboardPreferences();
         return state;
     }
 
     private static string NormalizeDensity(string? density) => density is "compact" or "default" or "comfort"
         ? density
         : "default";
+
+    private static DashboardPreferences NormalizeDashboardPreferences(
+        DashboardPreferences? preferences,
+        IEnumerable<DashboardTilePreference> defaultTiles)
+    {
+        var defaults = defaultTiles
+            .Where(static tile => !string.IsNullOrWhiteSpace(tile.TileId))
+            .Select(CloneDashboardTilePreference)
+            .GroupBy(static tile => tile.TileId.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToList();
+
+        if (defaults.Count == 0)
+        {
+            return CloneDashboardPreferences(preferences ?? new DashboardPreferences());
+        }
+
+        var knownIds = defaults.Select(static tile => tile.TileId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var normalized = new DashboardPreferences { SchemaVersion = 1 };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (preferences?.Tiles is not null)
+        {
+            foreach (var tile in preferences.Tiles)
+            {
+                var tileId = tile.TileId?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(tileId) || !IsKnownDashboardTileId(tileId, knownIds) || !seen.Add(tileId))
+                {
+                    continue;
+                }
+
+                normalized.Tiles.Add(CloneDashboardTilePreference(tile) with
+                {
+                    TileId = tileId,
+                    Size = NormalizeDashboardTileSize(tile.Size)
+                });
+            }
+        }
+
+        foreach (var defaultTile in defaults)
+        {
+            if (seen.Add(defaultTile.TileId))
+            {
+                normalized.Tiles.Add(CloneDashboardTilePreference(defaultTile));
+            }
+        }
+
+        return normalized;
+    }
+
+    private static bool IsKnownDashboardTileId(string tileId, HashSet<string> knownIds)
+    {
+        if (knownIds.Contains(tileId))
+        {
+            return true;
+        }
+
+        var separatorIndex = tileId.IndexOf(':', StringComparison.Ordinal);
+        return separatorIndex > 0 && knownIds.Contains(tileId[..separatorIndex]);
+    }
+
+    private static DashboardPreferences CloneDashboardPreferences(DashboardPreferences preferences) => new()
+    {
+        SchemaVersion = preferences.SchemaVersion <= 0 ? 1 : preferences.SchemaVersion,
+        Tiles = preferences.Tiles?.Select(CloneDashboardTilePreference).ToList() ?? []
+    };
+
+    private static DashboardTilePreference CloneDashboardTilePreference(DashboardTilePreference preference) => new()
+    {
+        TileId = preference.TileId?.Trim() ?? string.Empty,
+        IsVisible = preference.IsVisible,
+        Size = NormalizeDashboardTileSize(preference.Size),
+        Settings = preference.Settings is null
+            ? []
+            : preference.Settings
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+                .ToDictionary(static entry => entry.Key.Trim(), static entry => entry.Value, StringComparer.Ordinal)
+    };
+
+    private static string NormalizeDashboardTileSize(string? size) => size is "small" or "medium" or "wide"
+        ? size
+        : "medium";
 }
 
 public class UiState
@@ -240,6 +334,22 @@ public class UiState
     /// <summary>Demo-mode pod health monitoring preferences (no AksConfig to fall back on).</summary>
     public List<string> DemoMonitoredNamespaces { get; set; } = [];
     public bool DemoMonitoringEnabled { get; set; }
+    /// <summary>Shell-local dashboard tile visibility, order, size, and per-tile settings.</summary>
+    public DashboardPreferences Dashboard { get; set; } = new();
+}
+
+public record DashboardPreferences
+{
+    public int SchemaVersion { get; init; } = 1;
+    public List<DashboardTilePreference> Tiles { get; init; } = [];
+}
+
+public record DashboardTilePreference
+{
+    public string TileId { get; init; } = string.Empty;
+    public bool IsVisible { get; init; } = true;
+    public string Size { get; init; } = "medium";
+    public Dictionary<string, string> Settings { get; init; } = [];
 }
 
 public class SavedFilter

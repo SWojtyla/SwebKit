@@ -30,16 +30,15 @@ Redesign the initial dashboard into a configurable operations surface where each
 
 The current dashboard already exposes these surfaces:
 
-| Current surface         | Source                                                         | Notes                                                                         |
-| ----------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Configuration readiness | `IConfigurationHealthService` and `IConfigurationProbeService` | Conditional panel shown when setup needs attention.                           |
-| Service Bus health      | `IServiceBusClient.ListQueuesAsync`                            | Counts dead-lettered queue messages across configured namespaces.             |
-| AKS health              | `IAksClient.GetPodsAsync`                                      | Counts pods outside Running/Succeeded/Completed for the configured namespace. |
-| Redis health            | `IRedisClient.ScanKeysAsync` and `GetKeyInfoAsync`             | Counts sampled keys expiring in under five minutes.                           |
-| Pipelines health        | `IDevOpsClient.GetPendingApprovalsAsync`                       | Counts pending approvals across Azure DevOps projects.                        |
-| Pod health alerts       | `IPodHealthMonitorService`                                     | Shows recent monitor events and monitored namespaces.                         |
-| Recent activity         | `ActivityEvent` via `IAppEventBus`                             | In-memory session feed only.                                                  |
-| Favorites               | `OperatorWorkspaceService.GetFavoriteResources()`              | Persisted semantic favorites from configured profile data.                    |
+| Current surface    | Source                                             | Notes                                                                         |
+| ------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Service Bus health | `IServiceBusClient.ListQueuesAsync`                | Counts dead-lettered queue messages across configured namespaces.             |
+| AKS health         | `IAksClient.GetPodsAsync`                          | Counts pods outside Running/Succeeded/Completed for the configured namespace. |
+| Redis health       | `IRedisClient.ScanKeysAsync` and `GetKeyInfoAsync` | Counts sampled keys expiring in under five minutes.                           |
+| Pipelines health   | `IDevOpsClient.GetPendingApprovalsAsync`           | Counts pending approvals across Azure DevOps projects.                        |
+| Pod health alerts  | `IPodHealthMonitorService`                         | Shows recent monitor events and monitored namespaces.                         |
+| Recent activity    | `ActivityEvent` via `IAppEventBus`                 | In-memory session feed only.                                                  |
+| Favorites          | `OperatorWorkspaceService.GetFavoriteResources()`  | Persisted semantic favorites from configured profile data.                    |
 
 ## Tile Inventory
 
@@ -47,18 +46,17 @@ The current dashboard already exposes these surfaces:
 
 These tiles can be implemented first because the data already exists or the current dashboard already computes it.
 
-| Tile                     | Area        | Value                                                 | Drill-through                                                  | Default                      | Data readiness                                                  |
-| ------------------------ | ----------- | ----------------------------------------------------- | -------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
-| Setup Attention          | Settings    | Count and summary of configuration action items       | Settings section that needs attention                          | On when attention exists     | Existing readiness service.                                     |
-| Favorites                | Shell       | Favorite resources with quick-open actions            | Saved resource snapshot                                        | On                           | Existing workspace service and profile persistence.             |
-| Recent Resources         | Shell       | Recently opened resources                             | Saved resource snapshot                                        | On                           | Existing `UiState.RecentResources`; not yet shown on dashboard. |
-| Open Tabs                | Shell       | Restorable open tabs grouped by area                  | Existing tab route or area                                     | Off by default               | Existing `UiState.OpenTabs`.                                    |
-| Service Bus Dead Letters | Service Bus | Total DLQ count across configured namespaces          | Service Bus page filtered to queue/topic context when possible | On                           | Existing dashboard metric.                                      |
-| AKS Unhealthy Pods       | AKS         | Count of pods not in a healthy terminal/running state | AKS page scoped to namespace and pods                          | On                           | Existing dashboard metric.                                      |
-| Pod Health Alerts        | AKS         | Latest monitor events and monitored namespaces        | AKS page or monitor context                                    | On when monitoring is active | Existing monitor service.                                       |
-| Redis Expiring Keys      | Redis       | Sample count of keys expiring within five minutes     | Redis page with active cache                                   | On                           | Existing dashboard metric.                                      |
-| Pending Approvals        | Pipelines   | Total pending Azure DevOps approvals                  | Pipelines approvals tab                                        | On                           | Existing dashboard metric.                                      |
-| Recent Activity          | Shell       | Recent app actions in this session                    | Related area when available                                    | Off by default               | Existing event bus feed, currently volatile.                    |
+| Tile                     | Area        | Value                                                 | Drill-through                                                  | Default                      | Data readiness                                      |
+| ------------------------ | ----------- | ----------------------------------------------------- | -------------------------------------------------------------- | ---------------------------- | --------------------------------------------------- |
+| Favorites                | Shell       | Favorite resources with quick-open actions            | Saved resource snapshot                                        | On                           | Existing workspace service and profile persistence. |
+| Recent Resources         | Shell       | Recently opened resources                             | Saved resource snapshot                                        | On                           | Existing `UiState.RecentResources`.                 |
+| Open Tabs                | Shell       | Restorable open tabs grouped by area                  | Existing tab route or area                                     | Off by default               | Existing `UiState.OpenTabs`.                        |
+| Service Bus Dead Letters | Service Bus | Total DLQ count across configured namespaces          | Service Bus page filtered to queue/topic context when possible | On                           | Existing dashboard metric.                          |
+| AKS Unhealthy Pods       | AKS         | Count of pods not in a healthy terminal/running state | AKS page scoped to namespace and pods                          | On                           | Existing dashboard metric.                          |
+| Pod Health Alerts        | AKS         | Latest monitor events and monitored namespaces        | AKS page or monitor context                                    | On when monitoring is active | Existing monitor service.                           |
+| Redis Expiring Keys      | Redis       | Sample count of keys expiring within five minutes     | Redis page with active cache                                   | On                           | Existing dashboard metric.                          |
+| Pending Approvals        | Pipelines   | Total pending Azure DevOps approvals                  | Pipelines approvals tab                                        | On                           | Existing dashboard metric.                          |
+| Recent Activity          | Shell       | Recent app actions in this session                    | Related area when available                                    | Off by default               | Existing event bus feed, currently volatile.        |
 
 ### Near-Term Tiles
 
@@ -118,7 +116,7 @@ Each dashboard tile should be described by stable metadata before it has UI stat
 - Add a typed dashboard section to `UiState` rather than storing opaque dashboard JSON in `ViewStates` if the layout will be migrated over time.
 - Store tile order, visibility, size, and optional per-tile settings separately from the tile registry.
 - Keep unknown tile IDs during load only if a migration path exists; otherwise drop them with a safe default layout.
-- Default layout should remain useful without customization: setup attention, favorites, recent resources, and the four existing health metrics.
+- Default layout should remain useful without customization: favorites, recent resources, and the four existing health metrics. Configuration readiness remains a Settings responsibility.
 
 ## First Implementation Slice
 

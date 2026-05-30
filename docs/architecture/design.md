@@ -124,7 +124,7 @@ sequenceDiagram
     Dashboard->>AppState: Read config, demo mode, and setup state
     Dashboard->>Health: Build readiness report
     Dashboard->>Workspace: Read favorite resources
-    Dashboard->>UiState: Read local shell state for future tile preferences
+    Dashboard->>UiState: Read dashboard tile preferences and recent resources
     Dashboard->>Integrations: Refresh enabled health summaries in parallel
     Integrations-->>Dashboard: Per-tile data, timeout, or error
     Events-->>Dashboard: Activity or refresh requested events
@@ -135,7 +135,8 @@ sequenceDiagram
 ### Design Notes
 
 - Dashboard content is shell-local and user-specific when it affects visibility, order, or size. Persist those preferences through `UiStateRepository`, not `AppConfig`.
-- Tile definitions should have stable IDs and live in an app-layer registry. Persisted state should reference IDs rather than serializing component type names or service instances.
+- Tile definitions have stable IDs and live in an app-layer registry. Persisted state references IDs rather than serializing component type names or service instances.
+- The dashboard merges persisted preferences with registry defaults on load, drops unknown tile IDs, and appends new default tiles so older `ui-state.json` payloads remain safe.
 - Network-backed tiles must use bounded refresh budgets and independent loading/error states, following the current health-tile refresh pattern.
 - Setup readiness is an attention surface, not an optional metric. It must remain visible whenever configuration health requires action.
 - Drill-through should use existing shell mechanisms: area navigation events, direct routes, or `OperatorWorkspaceService` snapshots.

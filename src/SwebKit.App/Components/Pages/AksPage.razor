@@ -893,6 +893,9 @@ OnCtxRestartDeployment();
 
         if (_lastBootstrapSignature == signature)
         {
+            // Same environment as last render, but we may have arrived here via a workspace
+            // snapshot (e.g. Dashboard tile "Open") that registered a pending restore.
+            _ = Workspaces.ApplyPendingRestoreAsync("aks");
             return;
         }
 

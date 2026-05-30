@@ -246,4 +246,126 @@ public class UiStateFilterTests
         Assert.Single(restored.CustomPropertyColumns);
         Assert.Equal("region", restored.CustomPropertyColumns[0]);
     }
+
+    [Fact]
+    public async Task DashboardPreferences_MissingPayload_UsesDefaultTiles()
+    {
+        using var _ = new AppDataSandbox();
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var preferences = repo.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal(["shell.favorites", "shell.recent-resources", "service-bus.dead-letters", "service-bus.entity-watch"],
+            preferences.Tiles.Select(static tile => tile.TileId));
+        Assert.True(preferences.Tiles[0].IsVisible);
+        Assert.False(preferences.Tiles[1].IsVisible);
+        Assert.Equal("wide", preferences.Tiles[0].Size);
+    }
+
+    [Fact]
+    public async Task DashboardPreferences_DropsUnknownTilesAndAppendsMissingDefaults()
+    {
+        using var _ = new AppDataSandbox();
+
+        var json =
+                """
+                        {
+                            "dashboard": {
+                                "tiles": [
+                                    { "tileId": "unknown.tile", "isVisible": true, "size": "wide" },
+                                    { "tileId": "service-bus.dead-letters", "isVisible": false, "size": "small" },
+                                    { "tileId": "shell.favorites", "isVisible": true, "size": "not-real" }
+                                ]
+                            }
+                        }
+                        """;
+
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, json);
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var preferences = repo.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal(["service-bus.dead-letters", "shell.favorites", "shell.recent-resources", "service-bus.entity-watch"],
+            preferences.Tiles.Select(static tile => tile.TileId));
+        Assert.False(preferences.Tiles[0].IsVisible);
+        Assert.Equal("small", preferences.Tiles[0].Size);
+        Assert.Equal("medium", preferences.Tiles[1].Size);
+    }
+
+    [Fact]
+    public async Task SaveDashboardPreferencesAsync_RoundTripsVisibilityOrderAndSize()
+    {
+        using var _ = new AppDataSandbox();
+
+        var writer = new UiStateRepository();
+        await writer.SaveDashboardPreferencesAsync(new DashboardPreferences
+        {
+            Tiles =
+            [
+                new DashboardTilePreference { TileId = "service-bus.dead-letters", IsVisible = false, Size = "small" },
+                new DashboardTilePreference { TileId = "shell.favorites", IsVisible = true, Size = "wide" }
+            ]
+        }, DefaultDashboardTiles());
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        var preferences = reader.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal(["service-bus.dead-letters", "shell.favorites", "shell.recent-resources", "service-bus.entity-watch"],
+            preferences.Tiles.Select(static tile => tile.TileId));
+        Assert.False(preferences.Tiles[0].IsVisible);
+        Assert.Equal("small", preferences.Tiles[0].Size);
+        Assert.True(preferences.Tiles[1].IsVisible);
+        Assert.Equal("wide", preferences.Tiles[1].Size);
+        Assert.False(preferences.Tiles[2].IsVisible);
+    }
+
+    [Fact]
+    public async Task DashboardPreferences_PreservesKnownTemplateInstances()
+    {
+        using var _ = new AppDataSandbox();
+
+        var writer = new UiStateRepository();
+        await writer.SaveDashboardPreferencesAsync(new DashboardPreferences
+        {
+            Tiles =
+            [
+                new DashboardTilePreference
+                {
+                    TileId = "service-bus.entity-watch:abc123",
+                    IsVisible = true,
+                    Size = "medium",
+                    Settings = new Dictionary<string, string>
+                    {
+                        ["namespaceId"] = "00000000-0000-0000-0000-000000000001",
+                        ["entityPath"] = "order-created"
+                    }
+                },
+                new DashboardTilePreference { TileId = "unknown.template:abc123", IsVisible = true, Size = "wide" }
+            ]
+        }, DefaultDashboardTiles());
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        var preferences = reader.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal("service-bus.entity-watch:abc123", preferences.Tiles[0].TileId);
+        Assert.Equal("order-created", preferences.Tiles[0].Settings["entityPath"]);
+        Assert.DoesNotContain(preferences.Tiles, static tile => tile.TileId.StartsWith("unknown.template", StringComparison.Ordinal));
+    }
+
+    private static IReadOnlyList<DashboardTilePreference> DefaultDashboardTiles() =>
+    [
+        new DashboardTilePreference { TileId = "shell.favorites", IsVisible = true, Size = "wide" },
+        new DashboardTilePreference { TileId = "shell.recent-resources", IsVisible = false, Size = "wide" },
+        new DashboardTilePreference { TileId = "service-bus.dead-letters", IsVisible = true, Size = "medium" },
+        new DashboardTilePreference { TileId = "service-bus.entity-watch", IsVisible = false, Size = "medium" }
+    ];
 }

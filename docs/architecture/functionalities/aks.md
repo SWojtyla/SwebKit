@@ -46,7 +46,7 @@
 - YAML viewer includes inline search (highlight + scroll to match).
 - Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
 - CronJob rows show schedule, active count, last schedule time, last success time, and suspended state badge.
-- Publish current AKS context, namespace, resource type, filter state, and selected resource into the shared shell workspace model so favorites, recents, and named favorites can reopen AKS context.
+- Publish current AKS context, namespace, resource type, filter state, and selected resource into the shared shell workspace model so favorites, recents, named favorites, and dashboard AKS namespace tiles can reopen AKS context.
 - Windows tray continuity for monitoring — Minimize and Close hide the app to tray, monitoring continues in the existing `PodHealthMonitorService`, and hidden pod alerts increment tray unread state.
 
 ## Core Runtime Flow
@@ -79,7 +79,7 @@
 - **Row-scoped batch actions.** In all-namespaces mode, `AksPage.razor` resolves Job and CronJob actions from the selected row object, not `CurrentNamespace`, which prevents accidental cross-namespace execution.
 - **GatewayClass scope.** GatewayClasses are cluster-scoped resources. `AksPage` loads them independently of the namespace filter, restores them by name, and routes YAML requests through the shared viewer without a namespace dependency.
 - **Gateway API identity.** Gateway and HTTPRoute selection, keyboard navigation, and workspace restore use `namespace/name` identity, matching the existing ingress namespace fix and avoiding collisions in all-namespaces mode.
-- **Workspace integration.** `AksPage` registers a restore handler with `OperatorWorkspaceService`, publishes semantic snapshots for context, namespace, active resource tab, filters, panel flags, and current selection, and suppresses duplicate recent-resource writes while replaying a restore.
+- **Workspace integration.** `AksPage` registers a restore handler with `OperatorWorkspaceService`, publishes semantic snapshots for context, namespace, active resource tab, filters, panel flags, and current selection, and suppresses duplicate recent-resource writes while replaying a restore. Dashboard AKS namespace watch tiles persist an optional `context` alongside `namespace`; refresh and drill-through use that context when present and otherwise fall back to the configured/current context.
 - **Unified side-panel column.** All side panels (YAML, Helm history/values, scale, logs, container details, ConfigMap/Secret detail, HPA) are rendered inside a single `aks-panels-col` flex container. Events sit at the bottom of this column as a collapsible inset (`aks-events-inset`), so multiple open panels never overflow the grid. When nothing is open the column is hidden and a thin vertical `aks-events-collapsed-tab` appears instead.
 - **On-demand diagnostics panels.** `IngressAnalysisPanel` and `NetworkPolicyAnalysisPanel` are self-loading panel components. They fetch point-in-time evidence on open or refresh and deliberately stay outside the main browse-data refresh loop.
 - **YAML search** is implemented entirely in `yamlHighlight.js` (`searchInPre`, `clearSearch`). Blazor calls JSInterop on each input change; match count is displayed in the search bar.
