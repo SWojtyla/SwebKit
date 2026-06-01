@@ -5,18 +5,16 @@
     <PageHeader Eyebrow="@ResolvedEyebrow" Title="@ResolvedTitle" Subtitle="@ResolvedSubtitle" Meta="@ResolvedMeta"
                 Actions="@Actions" />
 }
-else if (Meta is not null || Actions is not null)
+else
+{
+    <PageHeader Eyebrow="@ResolvedEyebrow" Title="@ResolvedTitle" Subtitle="@ResolvedSubtitle"
+                Actions="@Actions" VisuallyHideCopy="true" />
+}
+
+@if (!ShowSupportingContent && Meta is not null)
 {
     <div class="page-support-strip">
-        @if (Meta is not null)
-        {
-            <div class="page-support-strip__meta">@Meta</div>
-        }
-
-        @if (Actions is not null)
-        {
-            <div class="page-support-strip__actions">@Actions</div>
-        }
+        <div class="page-support-strip__meta">@Meta</div>
     </div>
 }
 

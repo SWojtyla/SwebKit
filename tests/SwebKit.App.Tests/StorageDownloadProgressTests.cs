@@ -10,6 +10,7 @@ using SwebKit.Core.Models;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public class StorageDownloadProgressTests : TestContext
 {
     public StorageDownloadProgressTests()
@@ -88,6 +89,73 @@ public class StorageDownloadProgressTests : TestContext
     }
 
     [Fact]
+    public void BlobDetailPane_EscapedJsonStringPayload_ShowsPrettifiedJsonByDefault()
+    {
+        var blob = CreateBlob(sizeBytes: 96);
+        var escapedJson = "\"{\\r\\n  \\\"message\\\": \\\"hello\\\",\\r\\n  \\\"count\\\": 2\\r\\n}\"";
+        var content = new StorageBlobContent(
+            ContainerName: "reports",
+            BlobName: blob.Name,
+            Content: escapedJson,
+            ContentType: "application/octet-stream",
+            TotalSizeBytes: escapedJson.Length,
+            WasTruncated: false,
+            IsBinary: false);
+        var client = CreateClient(blobItems: [blob], content: content);
+
+        var cut = RenderComponent<BlobDetailPane>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.ContainerName, "reports")
+            .Add(p => p.Blob, blob));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("JSON prettified", cut.Markup);
+            Assert.Contains("Show raw", cut.Markup);
+            Assert.Contains("message", cut.Find("pre").TextContent);
+            Assert.Contains("hello", cut.Find("pre").TextContent);
+            Assert.DoesNotContain("\\r\\n", cut.Find("pre").TextContent);
+        });
+
+        BeginPrivateAsyncMethod(cut, "TogglePreviewFormatting");
+
+        cut.WaitForAssertion(() => Assert.Contains("\\r\\n", cut.Find("pre").TextContent));
+    }
+
+    [Fact]
+    public void BlobDetailPane_EscapedXmlPayload_ShowsPrettifiedXmlAndCanToggleRaw()
+    {
+        var blob = CreateBlob(sizeBytes: 120);
+        var escapedXml = "&lt;quoteConfirmation&gt;&lt;product code=\"AUTO\"&gt;&lt;premium&gt;5151.65&lt;/premium&gt;&lt;/product&gt;&lt;/quoteConfirmation&gt;";
+        var content = new StorageBlobContent(
+            ContainerName: "reports",
+            BlobName: "quoteconfirmation.request.txt",
+            Content: escapedXml,
+            ContentType: "application/octet-stream",
+            TotalSizeBytes: escapedXml.Length,
+            WasTruncated: false,
+            IsBinary: false);
+        var client = CreateClient(blobItems: [blob], content: content);
+
+        var cut = RenderComponent<BlobDetailPane>(ps => ps
+            .Add(p => p.Client, client)
+            .Add(p => p.ContainerName, "reports")
+            .Add(p => p.Blob, blob));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("XML prettified", cut.Markup);
+            Assert.Contains("Show raw", cut.Markup);
+            Assert.Contains("quoteConfirmation", cut.Find("pre").TextContent);
+            Assert.DoesNotContain("&lt;", cut.Find("pre").TextContent);
+        });
+
+        BeginPrivateAsyncMethod(cut, "TogglePreviewFormatting");
+
+        cut.WaitForAssertion(() => Assert.Contains("&lt;quoteConfirmation&gt;", cut.Find("pre").TextContent));
+    }
+
+    [Fact]
     public void StorageBlobList_ShowsProgressForContextMenuDownload()
     {
         var blob = CreateBlob(sizeBytes: 2048);
@@ -117,7 +185,8 @@ public class StorageDownloadProgressTests : TestContext
 
     private static PendingDownloadStorageClient CreateClient(
         IReadOnlyList<StorageBlobItem>? blobItems = null,
-        IReadOnlyList<BlobVersionItem>? versions = null)
+        IReadOnlyList<BlobVersionItem>? versions = null,
+        StorageBlobContent? content = null)
     {
         var primaryBlob = blobItems?.FirstOrDefault() ?? CreateBlob();
         return new PendingDownloadStorageClient(
@@ -137,7 +206,7 @@ public class StorageDownloadProgressTests : TestContext
                 CacheControl: null,
                 Metadata: new Dictionary<string, string>(),
                 Tags: new Dictionary<string, string>()),
-            new StorageBlobContent(
+            content ?? new StorageBlobContent(
                 ContainerName: "reports",
                 BlobName: primaryBlob.Name,
                 Content: "a,b,c",

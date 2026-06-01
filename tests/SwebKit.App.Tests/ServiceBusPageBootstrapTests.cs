@@ -36,6 +36,7 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());
         Services.AddSingleton<IServiceBusNamespaceBootstrapper>(_bootstrapper);
+        Services.AddSingleton<IServiceBusClientFactory>(new FakeServiceBusClientFactory());
         Services.AddSingleton<IServiceBusWarmupCache>(new ServiceBusWarmupCache());
         Services.AddScoped<OperatorWorkspaceService>();
         Services.AddSingleton<IncidentInvestigationLauncher>();
@@ -162,6 +163,13 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         public Task ResubmitDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, string? targetEntityPath, RemapRules? remapRules = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default) => Task.CompletedTask;
         public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+    }
+
+    private sealed class FakeServiceBusClientFactory : IServiceBusClientFactory
+    {
+        public IServiceBusClient Create(string connectionString) => new FakeServiceBusClient();
+
+        public string ParseFullyQualifiedNamespace(string connectionString) => "test.servicebus.windows.net";
     }
 
     private sealed class FakeCredentialStore : ICredentialStore

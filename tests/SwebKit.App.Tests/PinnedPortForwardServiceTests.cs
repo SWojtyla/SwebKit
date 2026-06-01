@@ -130,20 +130,22 @@ public sealed class PinnedPortForwardServiceTests
 
     private sealed class AppDataSandbox : IDisposable
     {
+        private const string AppDataRootOverrideVariable = "SWEBKIT_APPDATA_ROOT";
+
         private readonly string? _original;
         private readonly string _temp;
 
         public AppDataSandbox()
         {
-            _original = Environment.GetEnvironmentVariable("APPDATA");
+            _original = Environment.GetEnvironmentVariable(AppDataRootOverrideVariable);
             _temp = Path.Combine(Path.GetTempPath(), "SwebKit.AppTests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_temp);
-            Environment.SetEnvironmentVariable("APPDATA", _temp);
+            Environment.SetEnvironmentVariable(AppDataRootOverrideVariable, _temp);
         }
 
         public void Dispose()
         {
-            Environment.SetEnvironmentVariable("APPDATA", _original);
+            Environment.SetEnvironmentVariable(AppDataRootOverrideVariable, _original);
             if (Directory.Exists(_temp))
                 Directory.Delete(_temp, recursive: true);
         }

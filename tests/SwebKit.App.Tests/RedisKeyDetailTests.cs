@@ -3,6 +3,7 @@ using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using SwebKit.App.Components.Redis;
 using SwebKit.App.Services;
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
 

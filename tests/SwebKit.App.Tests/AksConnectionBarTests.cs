@@ -124,4 +124,21 @@ public class AksConnectionBarTests : TestContext
 
         Assert.Equal("orders,payments", changedNamespace);
     }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_CheckingAllNamespaces_RemainsExplicitSelection()
+    {
+        string? changedNamespace = null;
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "orders")
+            .Add(p => p.OnNamespaceChanged, value => changedNamespace = value));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+        cut.Find("input[aria-label='default']").Change(true);
+        cut.Find("input[aria-label='payments']").Change(true);
+        cut.Find("button.aks-ns-apply").Click();
+
+        Assert.Equal("default,orders,payments", changedNamespace);
+    }
 }

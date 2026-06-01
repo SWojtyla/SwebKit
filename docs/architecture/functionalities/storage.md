@@ -8,8 +8,10 @@
 - Breadcrumb path bar reflecting the current virtual folder depth.
 - Blob list grid: name, human-readable size, content-type, last modified, action buttons.
 - Full blob properties panel: metadata, tags, ETag, content-type, lease status, access tier, size.
-- Inline content preview for text, JSON, and XML blobs.
-  - JSON pretty-printed via `System.Text.Json`; fallback to raw text on malformed input.
+- Content-first blob inspector for text, JSON, XML, and message payload blobs; properties and versions remain secondary tabs.
+  - Structured preview workbench uses a docked sidebar on wide layouts, supports drag-resizing for the detail pane, persists the chosen width in UI state, and falls back to a stacked layout on narrower windows.
+  - JSON and XML payloads can be prettified from the preview toolbar, with a raw toggle for returning to the original blob text.
+  - Escaped JSON strings and HTML-encoded XML payloads are detected and unescaped before formatting, while still allowing a toggle back to the raw source.
   - Size-gated: warn at 512 KB; hard cap at 2 MB with "Load anyway" escape.
 - Download blobs and blob versions to the user's Downloads folder with inline in-flight progress in the blob list and detail pane.
 - Copy blob direct URL to clipboard (no SAS expiry).
@@ -24,7 +26,7 @@
 3. If set: constructs `AzureStorageClient(config, CredentialStore)` directly (no DI; same pattern as Redis/AKS).
 4. `StorageContainerTree` calls `ListContainersAsync` on first render; selection fires `SelectedContainerChanged`.
 5. `StorageBlobList` calls `ListBlobsAsync` with current prefix and pagination token; breadcrumb segments drive prefix navigation.
-6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently.
+6. Selecting a blob row renders `BlobDetailPane`, which calls `GetBlobPropertiesAsync` and `GetBlobContentAsync` concurrently, opens on the content tab, and keeps properties/versions in adjacent tabs.
 7. Single-file downloads in `StorageBlobList` and `BlobDetailPane` pass a byte-progress callback through `IStorageClient.DownloadBlobAsync`; the UI renders determinate progress when blob size is known and falls back to an indeterminate in-flight state otherwise.
 8. SAS URL generation via `GetBlobSasUrlAsync`; failures surfaced inline (not dialog) per UX decision.
 9. Account, container, and blob selection changes publish a semantic workspace snapshot; route-first restore reapplies that selection through `StoragePage`.

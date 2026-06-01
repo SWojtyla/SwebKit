@@ -25,9 +25,16 @@ public sealed class AppFixture : IAsyncLifetime
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private Process? _appProcess;
+    private string? _originalAppDataRoot;
+    private string? _appDataRoot;
 
     public async Task InitializeAsync()
     {
+        _originalAppDataRoot = Environment.GetEnvironmentVariable("SWEBKIT_APPDATA_ROOT");
+        _appDataRoot = Path.Combine(Path.GetTempPath(), "SwebKit.E2E", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_appDataRoot);
+        Environment.SetEnvironmentVariable("SWEBKIT_APPDATA_ROOT", _appDataRoot);
+
         if (!await IsCdpListeningAsync())
         {
             _appProcess = LaunchApp();
@@ -89,11 +96,13 @@ public sealed class AppFixture : IAsyncLifetime
         await Page.EvaluateAsync(
             """
             path => {
-                // Drive Blazor's client-side route pipeline directly. In the WebView2/CDP
-                // test harness, forcing document navigation can load the right page markup
-                // without refreshing shell route state the same way a routed transition does.
                 const target = new URL(path, window.location.href);
                 const next = `${target.pathname}${target.search}${target.hash}`;
+                if (window.Blazor?.navigateTo) {
+                    window.Blazor.navigateTo(next, { forceLoad: false, replaceHistoryEntry: true });
+                    return;
+                }
+
                 history.replaceState(history.state, '', next);
                 dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
             }
@@ -130,6 +139,12 @@ public sealed class AppFixture : IAsyncLifetime
         {
             try { _appProcess.Kill(entireProcessTree: true); } catch { /* best-effort */ }
             _appProcess.Dispose();
+        }
+
+        Environment.SetEnvironmentVariable("SWEBKIT_APPDATA_ROOT", _originalAppDataRoot);
+        if (_appDataRoot is not null && Directory.Exists(_appDataRoot))
+        {
+            try { Directory.Delete(_appDataRoot, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
 
@@ -194,6 +209,11 @@ public sealed class AppFixture : IAsyncLifetime
         var psi = new ProcessStartInfo(exePath) { UseShellExecute = false };
         psi.EnvironmentVariables["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] =
             $"--remote-debugging-port={CdpPort}";
+        var appDataRoot = Environment.GetEnvironmentVariable("SWEBKIT_APPDATA_ROOT");
+        if (!string.IsNullOrWhiteSpace(appDataRoot))
+        {
+            psi.EnvironmentVariables["SWEBKIT_APPDATA_ROOT"] = appDataRoot;
+        }
 
         return Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process: {exePath}");
@@ -230,9 +250,9 @@ public sealed class AppFixture : IAsyncLifetime
 
         var candidates = new[]
         {
-            Path.Combine(outputRoot, "SwebKit.App.exe"),
             Path.Combine(outputRoot, "win-x64", "SwebKit.App.exe"),
             Path.Combine(outputRoot, "win-arm64", "SwebKit.App.exe"),
+            Path.Combine(outputRoot, "SwebKit.App.exe"),
         };
 
         var exePath = candidates.FirstOrDefault(File.Exists);

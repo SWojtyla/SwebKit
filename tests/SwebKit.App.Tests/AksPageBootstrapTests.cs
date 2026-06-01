@@ -15,6 +15,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
+[Collection("AppDataSerial")]
 public sealed class AksPageBootstrapTests : TestContext
 {
     private readonly AppStateService _appState;
@@ -49,6 +50,9 @@ public sealed class AksPageBootstrapTests : TestContext
         Services.AddSingleton(_appState);
         Services.AddSingleton(uiState);
         Services.AddSingleton<INotificationService>(new NotificationService(uiState));
+        var userSettings = new UserSettingsRepository();
+        Services.AddSingleton(userSettings);
+        Services.AddSingleton(new PinnedPortForwardService(userSettings));
         Services.AddSingleton<IPortForwardSessionService>(new FakePortForwardSessionService());
         Services.AddSingleton<IConnectionStateService, ConnectionStateService>();
         Services.AddSingleton<ISelectionContext>(new FakeSelectionContext());

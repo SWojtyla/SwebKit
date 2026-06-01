@@ -1,28 +1,50 @@
 @inject IJSRuntime JS
 @inject INotificationService Notifications
+@using System.Net
 @using System.Text.Json
+@using System.Xml
+@using System.Xml.Linq
 @using SwebKit.Azure.Storage
 
 <div class="blob-detail-pane">
-
-    @if (_loadingProperties && _properties is null)
+    @if (_loadingProperties && _loadingContent && _properties is null && _content is null)
     {
         <div class="blob-detail-pane__loading">
             <FluentProgressRing />
         </div>
     }
-    else if (_propertiesError is not null)
+    else
     {
-        <div class="blob-detail-pane__message blob-detail-pane__message--error">@_propertiesError</div>
-    }
-    else if (_properties is not null)
-    {
+        <div class="blob-detail-pane__header">
+            <div class="blob-detail-pane__identity">
+                <div class="blob-detail-pane__name" title="@Blob.Name">@Blob.Name</div>
+                <div class="blob-detail-pane__meta">
+                    <span>@ContainerName</span>
+                    <span>@FormatSize(_properties?.SizeBytes ?? Blob.SizeBytes ?? 0)</span>
+                    @if (!string.IsNullOrWhiteSpace(_properties?.ContentType ?? Blob.ContentType))
+                    {
+                        <span>@(_properties?.ContentType ?? Blob.ContentType)</span>
+                    }
+                </div>
+            </div>
+            <div class="blob-detail-pane__toolbar">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(_downloadState is not null)"
+                              @onclick="DownloadAsync">@(_downloadState is null ? "Download" : "Downloading...")</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
+                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
+            </div>
+        </div>
+
         <div class="blob-detail-pane__tab-bar">
-            <button type="button" class="blob-detail-pane__tab @(_activeTab == "properties" ? "is-active" : null)"
-                    @onclick='() => _activeTab = "properties"'>
+            <button type="button" class="blob-detail-pane__tab @(_activeTab == ContentTab ? "is-active" : null)"
+                    @onclick="SelectContentTab">
+                Content
+            </button>
+            <button type="button" class="blob-detail-pane__tab @(_activeTab == PropertiesTab ? "is-active" : null)"
+                    @onclick="SelectPropertiesTab">
                 Properties
             </button>
-            <button type="button" class="blob-detail-pane__tab @(_activeTab == "versions" ? "is-active" : null)"
+            <button type="button" class="blob-detail-pane__tab @(_activeTab == VersionsTab ? "is-active" : null)"
                     @onclick="SelectVersionsTabAsync">
                 Versions
             </button>
@@ -45,7 +67,7 @@
                 {
                     <div class="blob-detail-pane__progress-pending">
                         <FluentProgressRing Width="14px" Height="14px" />
-                        <span>Waiting for total size…</span>
+                        <span>Waiting for total size...</span>
                     </div>
                 }
             </div>
@@ -59,147 +81,192 @@
             </div>
         }
 
-        @if (_activeTab == "properties")
+        @if (_activeTab == ContentTab)
+        {
+            <div class="blob-detail-pane__content blob-detail-pane__content--preview">
+                @if (_loadingContent)
+                {
+                    <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
+                        <FluentProgressRing />
+                    </div>
+                }
+                else if (_content is null)
+                {
+                    <div class="blob-detail-pane__message">Loading content...</div>
+                }
+                else if (_content.IsBinary || _binaryOverride)
+                {
+                    <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--neutral"
+                         title="@_binaryDetectionMethod">
+                        <span>Binary content - use Download to inspect this blob.</span>
+                        @if (_binaryDetectionMethod is not null)
+                        {
+                            <span class="blob-detail-pane__preview-note">(@_binaryDetectionMethod)</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="blob-detail-pane__preview-workbench">
+                        <aside class="blob-detail-pane__preview-sidebar">
+                            <div class="blob-detail-pane__preview-sidebar-block">
+                                <div class="blob-detail-pane__preview-eyebrow">Preview</div>
+                                <div class="blob-detail-pane__preview-mode">@PreviewModeLabel</div>
+                                <div class="blob-detail-pane__preview-supporting">@PreviewSourceHint</div>
+                            </div>
+
+                            <div class="blob-detail-pane__preview-sidebar-block blob-detail-pane__preview-sidebar-block--stats">
+                                <div class="blob-detail-pane__preview-stat">
+                                    <span class="blob-detail-pane__preview-stat-label">Format</span>
+                                    <span class="blob-detail-pane__preview-stat-value">@PreviewFormatLabel</span>
+                                </div>
+                                <div class="blob-detail-pane__preview-stat">
+                                    <span class="blob-detail-pane__preview-stat-label">Size</span>
+                                    <span class="blob-detail-pane__preview-stat-value">@FormatSize(_content.TotalSizeBytes)</span>
+                                </div>
+                            </div>
+
+                            <div class="blob-detail-pane__preview-actions blob-detail-pane__preview-actions--sidebar">
+                                @if (CanPrettifyPreview)
+                                {
+                                    <FluentButton Appearance="Appearance.Accent" @onclick="TogglePreviewFormatting">@PreviewToggleLabel
+                                    </FluentButton>
+                                }
+                                <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content
+                                </FluentButton>
+                            </div>
+                        </aside>
+
+                        <div class="blob-detail-pane__preview-surface">
+                            @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
+                            {
+                                <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
+                                    Preview limited to 512 KB. Download for full content.
+                                </div>
+                            }
+                            else if (_content.WasTruncated)
+                            {
+                                <div
+                                    class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--warning blob-detail-pane__preview-callout--actionable">
+                                    <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
+                                    <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
+                                                  @onclick="LoadFullPreviewAsync">Load</FluentButton>
+                                </div>
+                            }
+
+                            @if (_structuredContentWasUnescaped)
+                            {
+                                <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
+                                    @EscapedPayloadMessage
+                                </div>
+                            }
+
+                            <pre class="blob-detail-pane__preview">@PreviewContent</pre>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else if (_activeTab == PropertiesTab)
         {
             <div class="blob-detail-pane__content">
-                <div class="blob-detail-pane__toolbar">
-                    <FluentButton Appearance="Appearance.Accent" Disabled="@(_downloadState is not null)"
-                                  @onclick="DownloadAsync">@(_downloadState is null ? "Download" : "Downloading...")</FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyUrlAsync">Copy URL</FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="CopySasAsync">Copy SAS URL</FluentButton>
-                </div>
-
-                <div class="blob-detail-pane__section-title">Properties</div>
-                <table class="blob-detail-pane__property-table">
-                    @foreach (var row in GetPropertyRows(_properties))
-                    {
-                        <tr class="blob-detail-pane__property-row">
-                            <td class="blob-detail-pane__property-key">@row.Key</td>
-                            <td class="blob-detail-pane__property-value">@row.Value</td>
-                        </tr>
-                    }
-                </table>
-
-                <div class="blob-detail-pane__section">
-                    <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showMetadata"
-                            @onclick="() => _showMetadata = !_showMetadata">
-                        <span class="blob-detail-pane__toggle-glyph">@(_showMetadata ? "▼" : "▶")</span>
-                        <span>Metadata</span>
-                    </button>
-                    @if (_showMetadata)
-                    {
-                        <div class="blob-detail-pane__section-body">
-                            @if (_editingMetadata)
-                            {
-                                <BlobMetadataEditor CurrentMetadata="_properties.Metadata" ReadOnly="false"
-                                                    OnSave="SaveMetadataAsync" />
-                                <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = false">Cancel
-                                </FluentButton>
-                            }
-                            else
-                            {
-                                @if (_properties.Metadata.Count == 0)
-                                {
-                                    <div class="blob-detail-pane__empty">No metadata.</div>
-                                }
-                                else
-                                {
-                                    <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
-                                        @foreach (var kv in _properties.Metadata)
-                                        {
-                                            <tr class="blob-detail-pane__property-row">
-                                                <td class="blob-detail-pane__property-key">@kv.Key</td>
-                                                <td class="blob-detail-pane__property-value">@kv.Value</td>
-                                            </tr>
-                                        }
-                                    </table>
-                                }
-                                @if (AllowMutations)
-                                {
-                                    <div class="blob-detail-pane__section-actions">
-                                        <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = true">Edit
-                                            metadata</FluentButton>
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        }
+                @if (_loadingProperties)
+                {
+                    <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
+                        <FluentProgressRing />
                     </div>
+                }
+                else if (_propertiesError is not null)
+                {
+                    <div class="blob-detail-pane__message blob-detail-pane__message--error">@_propertiesError</div>
+                }
+                else if (_properties is not null)
+                {
+                    <div class="blob-detail-pane__section-title">Properties</div>
+                    <table class="blob-detail-pane__property-table">
+                        @foreach (var row in GetPropertyRows(_properties))
+                        {
+                            <tr class="blob-detail-pane__property-row">
+                                <td class="blob-detail-pane__property-key">@row.Key</td>
+                                <td class="blob-detail-pane__property-value">@row.Value</td>
+                            </tr>
+                        }
+                    </table>
 
-                    <div class="blob-detail-pane__section blob-detail-pane__section--spaced">
-                        <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showTags"
-                                @onclick="() => _showTags = !_showTags">
-                            <span class="blob-detail-pane__toggle-glyph">@(_showTags ? "▼" : "▶")</span>
-                            <span>Tags</span>
+                    <div class="blob-detail-pane__section">
+                        <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showMetadata"
+                                @onclick="() => _showMetadata = !_showMetadata">
+                            <span class="blob-detail-pane__toggle-glyph">@(_showMetadata ? "▼" : "▶")</span>
+                            <span>Metadata</span>
                         </button>
-                        @if (_showTags)
+                        @if (_showMetadata)
                         {
                             <div class="blob-detail-pane__section-body">
-                                @if (_properties.Tags.Count == 0)
+                                @if (_editingMetadata)
                                 {
-                                    <div class="blob-detail-pane__empty">No tags.</div>
+                                    <BlobMetadataEditor CurrentMetadata="_properties.Metadata" ReadOnly="false"
+                                                        OnSave="SaveMetadataAsync" />
+                                    <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = false">Cancel
+                                    </FluentButton>
                                 }
                                 else
                                 {
-                                    <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
-                                        @foreach (var kv in _properties.Tags)
-                                        {
-                                            <tr class="blob-detail-pane__property-row">
-                                                <td class="blob-detail-pane__property-key">@kv.Key</td>
-                                                <td class="blob-detail-pane__property-value">@kv.Value</td>
-                                            </tr>
+                                    @if (_properties.Metadata.Count == 0)
+                                    {
+                                        <div class="blob-detail-pane__empty">No metadata.</div>
+                                    }
+                                    else
+                                    {
+                                        <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                            @foreach (var kv in _properties.Metadata)
+                                            {
+                                                <tr class="blob-detail-pane__property-row">
+                                                    <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                                    <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                                </tr>
+                                            }
+                                        </table>
+                                    }
+                                    @if (AllowMutations)
+                                    {
+                                        <div class="blob-detail-pane__section-actions">
+                                            <FluentButton Appearance="Appearance.Lightweight" @onclick="() => _editingMetadata = true">Edit
+                                                metadata</FluentButton>
+                                            </div>
                                         }
-                                    </table>
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    <div class="blob-detail-pane__section-title blob-detail-pane__section-title--preview">Content Preview</div>
-
-                    @if (_loadingContent)
-                    {
-                        <div class="blob-detail-pane__loading blob-detail-pane__loading--section">
-                            <FluentProgressRing />
-                        </div>
-                    }
-                    else if (_content is null)
-                    {
-                        <div class="blob-detail-pane__message">Loading content...</div>
-                    }
-                    else if (_content.IsBinary || _binaryOverride)
-                    {
-                        <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--neutral"
-                             title="@_binaryDetectionMethod">
-                            <span>Binary content - use Download to inspect this blob.</span>
-                            @if (_binaryDetectionMethod is not null)
-                            {
-                                <span class="blob-detail-pane__preview-note">(@_binaryDetectionMethod)</span>
+                                    }
+                                </div>
                             }
                         </div>
-                    }
-                    else
-                    {
-                        @if (_content.WasTruncated && _content.TotalSizeBytes > 2_097_152)
-                        {
-                            <div class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--info">
-                                Preview limited to 512 KB. Download for full content.
-                            </div>
-                        }
-                        else if (_content.WasTruncated)
-                        {
-                            <div
-                                class="blob-detail-pane__preview-callout blob-detail-pane__preview-callout--warning blob-detail-pane__preview-callout--actionable">
-                                <span>This blob is @FormatSize(_content.TotalSizeBytes). Load full preview?</span>
-                                <FluentButton Appearance="Appearance.Lightweight" Disabled="@_loadingContent"
-                                              @onclick="LoadFullPreviewAsync">Load</FluentButton>
-                            </div>
-                        }
 
-                        <div class="blob-detail-pane__preview-actions">
-                            <FluentButton Appearance="Appearance.Lightweight" @onclick="CopyContentAsync">Copy content</FluentButton>
+                        <div class="blob-detail-pane__section blob-detail-pane__section--spaced">
+                            <button type="button" class="blob-detail-pane__toggle" aria-expanded="@_showTags"
+                                    @onclick="() => _showTags = !_showTags">
+                                <span class="blob-detail-pane__toggle-glyph">@(_showTags ? "▼" : "▶")</span>
+                                <span>Tags</span>
+                            </button>
+                            @if (_showTags)
+                            {
+                                <div class="blob-detail-pane__section-body">
+                                    @if (_properties.Tags.Count == 0)
+                                    {
+                                        <div class="blob-detail-pane__empty">No tags.</div>
+                                    }
+                                    else
+                                    {
+                                        <table class="blob-detail-pane__property-table blob-detail-pane__property-table--nested">
+                                            @foreach (var kv in _properties.Tags)
+                                            {
+                                                <tr class="blob-detail-pane__property-row">
+                                                    <td class="blob-detail-pane__property-key">@kv.Key</td>
+                                                    <td class="blob-detail-pane__property-value">@kv.Value</td>
+                                                </tr>
+                                            }
+                                        </table>
+                                    }
+                                </div>
+                            }
                         </div>
-                        <pre class="blob-detail-pane__preview">@_displayContent</pre>
                     }
                 </div>
             }
@@ -229,26 +296,26 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var v in _versions)
+                                @foreach (var version in _versions)
                                 {
                                     <tr class="blob-detail-pane__versions-row">
                                         <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--mono"
-                                            title="@v.VersionId">@v.VersionId</td>
+                                            title="@version.VersionId">@version.VersionId</td>
                                         <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--nowrap">
-                                            @(v.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                            @(version.CreatedOn?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
                                             <td
                                                 class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--right blob-detail-pane__versions-cell--nowrap">
-                                                @FormatSize(v.ContentLength ?? 0)</td>
+                                                @FormatSize(version.ContentLength ?? 0)</td>
                                                 <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--center">
-                                                    @(v.IsCurrentVersion ? "✔" : "")</td>
+                                                    @(version.IsCurrentVersion ? "*" : "")</td>
                                                     <td class="blob-detail-pane__versions-cell blob-detail-pane__versions-cell--actions">
                                                         <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_downloadState is not null)"
-                                                                      @onclick="() => DownloadVersionAsync(v)">@((IsDownloadingVersion(v) ? "Downloading..." :
-                                                            "⬇"))</FluentButton>
+                                                                      @onclick="() => DownloadVersionAsync(version)">@((IsDownloadingVersion(version) ?
+                                                                                 "Downloading..." : "Download"))</FluentButton>
                                                             @if (AllowMutations)
                                                             {
                                                                 <FluentButton Appearance="Appearance.Lightweight" Disabled="@(_loadingComparison)"
-                                                                              @onclick="() => CompareVersionAsync(v)">Compare</FluentButton>
+                                                                              @onclick="() => CompareVersionAsync(version)">Compare</FluentButton>
                                                             }
                                                         </td>
                                                     </tr>
@@ -285,10 +352,7 @@
                                 </div>
                             }
                         }
-
-
                     </div>
-
 
 @code {
     [Parameter, EditorRequired] public IStorageClient Client { get; set; } = default!;
@@ -296,9 +360,17 @@
     [Parameter, EditorRequired] public StorageBlobItem Blob { get; set; } = default!;
     [Parameter] public bool AllowMutations { get; set; }
 
+    private const string ContentTab = "content";
+    private const string PropertiesTab = "properties";
+    private const string VersionsTab = "versions";
+
     private BlobProperties? _properties;
     private StorageBlobContent? _content;
-    private string? _displayContent;
+    private string? _previewDisplayContent;
+    private string? _previewRawContent;
+    private StructuredContentFormat _previewFormat;
+    private bool _structuredContentWasUnescaped;
+    private bool _showRawPreview;
     private bool _loadingProperties;
     private bool _loadingContent;
     private string? _propertiesError;
@@ -307,32 +379,60 @@
     private bool _showMetadata;
     private bool _showTags;
     private string? _loadedBlobName;
-
-    // STG-6: Versions tab
-    private string _activeTab = "properties";
+    private string _activeTab = ContentTab;
     private IReadOnlyList<BlobVersionItem>? _versions;
     private bool _loadingVersions;
     private string? _versionsError;
-
-    // STG-7: Binary detection override
     private bool _binaryOverride;
     private string? _binaryDetectionMethod;
-
-    // Wave 2 - Metadata editor
     private bool _editingMetadata;
-
-    // Wave 2 - Version comparison
     private string? _selectedCompareVersionId;
     private BlobVersionComparison? _versionComparison;
     private bool _loadingComparison;
     private string? _comparisonError;
-
-    // Wave 3 - Capabilities
     private StorageCapabilities? _capabilities;
-
     private DownloadUiState? _downloadState;
     private long _lastDownloadUiBytes = -1;
     private DateTimeOffset _lastDownloadUiUpdate = DateTimeOffset.MinValue;
+
+    private string? PreviewContent => _showRawPreview || !CanPrettifyPreview
+        ? _previewRawContent
+        : _previewDisplayContent;
+
+    private bool CanPrettifyPreview => !string.IsNullOrEmpty(_previewDisplayContent)
+        && !string.Equals(_previewDisplayContent, _previewRawContent, StringComparison.Ordinal);
+
+    private string PreviewFormatLabel => _previewFormat switch
+    {
+        StructuredContentFormat.Json => "JSON",
+        StructuredContentFormat.Xml => "XML",
+        _ => "Text"
+    };
+
+    private string PreviewModeLabel => CanPrettifyPreview
+        ? _showRawPreview
+            ? "Raw source"
+            : $"{PreviewFormatLabel} prettified"
+        : "Raw text";
+
+    private string PreviewSourceHint => _structuredContentWasUnescaped
+        ? "Detected as escaped structured content and decoded before formatting."
+        : CanPrettifyPreview
+            ? "Structured content detected automatically from the blob payload."
+            : "Showing the blob as-is because no structured format was detected.";
+
+    private string PreviewToggleLabel => _showRawPreview ? $"Prettify {PreviewFormatLabel}" : "Show raw";
+
+    private string EscapedPayloadMessage => _showRawPreview
+        ? $"Escaped {PreviewFormatLabel} payload detected. Prettify unescapes it before formatting."
+        : $"Escaped {PreviewFormatLabel} payload detected. Preview is currently unescaped and prettified.";
+
+    private enum StructuredContentFormat
+    {
+        None,
+        Json,
+        Xml,
+    }
 
     private sealed class DownloadUiState
     {
@@ -343,6 +443,12 @@
         public long BytesTransferred { get; set; }
     }
 
+    private readonly record struct BlobContentDisplay(
+        string RawContent,
+        string DisplayContent,
+        StructuredContentFormat Format,
+        bool WasUnescaped);
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedBlobName == Blob.Name)
@@ -351,14 +457,18 @@
         _loadedBlobName = Blob.Name;
         _properties = null;
         _content = null;
-        _displayContent = null;
+        _previewDisplayContent = null;
+        _previewRawContent = null;
+        _previewFormat = StructuredContentFormat.None;
+        _structuredContentWasUnescaped = false;
+        _showRawPreview = false;
         _propertiesError = null;
         _actionMessage = null;
         _showMetadata = false;
         _showTags = false;
         _loadingProperties = true;
         _loadingContent = true;
-        _activeTab = "properties";
+        _activeTab = ContentTab;
         _versions = null;
         _versionsError = null;
         _binaryOverride = false;
@@ -372,6 +482,16 @@
 
         await InvokeAsync(StateHasChanged);
         await Task.WhenAll(LoadPropertiesAsync(), LoadContentAsync(524_288));
+    }
+
+    private void SelectContentTab() => _activeTab = ContentTab;
+
+    private void SelectPropertiesTab() => _activeTab = PropertiesTab;
+
+    private void TogglePreviewFormatting()
+    {
+        _showRawPreview = !_showRawPreview;
+        StateHasChanged();
     }
 
     private async Task LoadPropertiesAsync()
@@ -399,7 +519,6 @@
             var raw = await Client.GetBlobContentAsync(ContainerName, Blob.Name, maxBytes);
             _content = raw;
 
-            // STG-7: Binary detection via magic bytes
             _binaryOverride = false;
             _binaryDetectionMethod = null;
             if (raw.IsBinary)
@@ -417,13 +536,22 @@
                 }
             }
 
-            _displayContent = BuildDisplayContent(raw);
+            var display = BuildDisplayContent(raw);
+            _previewRawContent = display.RawContent;
+            _previewDisplayContent = display.DisplayContent;
+            _previewFormat = display.Format;
+            _structuredContentWasUnescaped = display.WasUnescaped;
+            _showRawPreview = false;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _content = new StorageBlobContent(ContainerName, Blob.Name, $"Error: {ex.Message}", null, 0, false, false);
-            _displayContent = _content.Content;
+            _previewRawContent = _content.Content?.ReplaceLineEndings("\n");
+            _previewDisplayContent = _previewRawContent;
+            _previewFormat = StructuredContentFormat.None;
+            _structuredContentWasUnescaped = false;
+            _showRawPreview = false;
         }
         finally
         {
@@ -442,7 +570,7 @@
 
     private async Task SelectVersionsTabAsync()
     {
-        _activeTab = "versions";
+        _activeTab = VersionsTab;
         var tasks = new List<Task>();
         if (_versions is null && !_loadingVersions)
             tasks.Add(LoadVersionsAsync());
@@ -556,7 +684,7 @@
         {
             _versionsError = "Versioning is not enabled on this container.";
             _versions = [];
-            _ = ex; // consumed
+            _ = ex;
         }
         finally
         {
@@ -571,10 +699,9 @@
             return;
 
         var destPath = BuildDownloadPath(Blob.Name, version.VersionId);
-        var label = $"Downloading version {ShortVersionId(version.VersionId)}";
         var downloadState = new DownloadUiState
         {
-            Label = label,
+            Label = $"Downloading version {ShortVersionId(version.VersionId)}",
             DestinationPath = destPath,
             VersionId = version.VersionId,
             TotalBytes = version.ContentLength > 0 ? version.ContentLength : null,
@@ -610,39 +737,156 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private static string BuildDisplayContent(StorageBlobContent content)
+    private static BlobContentDisplay BuildDisplayContent(StorageBlobContent content)
     {
-        if (content.IsBinary) return string.Empty;
-        var isJson = content.ContentType?.StartsWith("application/json") == true
-        || content.BlobName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-        if (isJson)
-        {
-            try
-            {
-                var elem = JsonSerializer.Deserialize<JsonElement>(content.Content);
-                return JsonSerializer.Serialize(elem, _prettyPrintOptions);
-            }
-            catch { }
-        }
-        return content.Content;
+        if (content.IsBinary)
+            return new BlobContentDisplay(string.Empty, string.Empty, StructuredContentFormat.None, false);
+
+        var raw = NormalizePreviewText(content.Content);
+        if (TryBuildEscapedStructuredDisplay(raw, out var escapedFormat, out var escapedFormatted))
+            return new BlobContentDisplay(raw, escapedFormatted, escapedFormat, true);
+
+        if (TryBuildHtmlDecodedStructuredDisplay(raw, out var decodedFormat, out var decodedFormatted))
+            return new BlobContentDisplay(raw, decodedFormatted, decodedFormat, true);
+
+        if (TryBuildJsonDisplay(raw, out var formattedJson))
+            return new BlobContentDisplay(raw, formattedJson, StructuredContentFormat.Json, false);
+
+        if (TryBuildXmlDisplay(raw, out var formattedXml))
+            return new BlobContentDisplay(raw, formattedXml, StructuredContentFormat.Xml, false);
+
+        return new BlobContentDisplay(raw, raw, StructuredContentFormat.None, false);
     }
 
-    private static readonly System.Text.Json.JsonSerializerOptions _prettyPrintOptions = new() { WriteIndented = true };
-
-    private static IEnumerable<KeyValuePair<string, string>> GetPropertyRows(BlobProperties p)
+    private static bool TryBuildEscapedStructuredDisplay(string raw, out StructuredContentFormat format, out string display)
     {
-        yield return new("Name", p.Name);
-        yield return new("Size", FormatSize(p.SizeBytes));
-        yield return new("Content-Type", p.ContentType);
-        yield return new("ETag", p.ETag);
-        yield return new("Last Modified", p.LastModified.ToString("yyyy-MM-dd HH:mm:ss zzz"));
-        if (p.AccessTier is not null) yield return new("Access Tier", p.AccessTier);
-        if (p.AccessTierInferred is not null) yield return new("Tier Inferred", p.AccessTierInferred.Value.ToString());
-        if (p.LeaseStatus is not null) yield return new("Lease Status", p.LeaseStatus);
-        if (p.LeaseState is not null) yield return new("Lease State", p.LeaseState);
-        if (p.ContentEncoding is not null) yield return new("Content-Encoding", p.ContentEncoding);
-        if (p.ContentLanguage is not null) yield return new("Content-Language", p.ContentLanguage);
-        if (p.CacheControl is not null) yield return new("Cache-Control", p.CacheControl);
+        format = StructuredContentFormat.None;
+        display = string.Empty;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        try
+        {
+            using var envelope = JsonDocument.Parse(raw);
+            if (envelope.RootElement.ValueKind != JsonValueKind.String)
+                return false;
+
+            var inner = NormalizePreviewText(envelope.RootElement.GetString());
+            return TryBuildStructuredDisplay(inner, out format, out display)
+                || TryBuildHtmlDecodedStructuredDisplay(inner, out format, out display);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryBuildHtmlDecodedStructuredDisplay(string raw, out StructuredContentFormat format, out string
+display)
+    {
+        format = StructuredContentFormat.None;
+        display = string.Empty;
+
+        var decoded = WebUtility.HtmlDecode(raw);
+        if (string.Equals(decoded, raw, StringComparison.Ordinal))
+            return false;
+
+        return TryBuildStructuredDisplay(NormalizePreviewText(decoded), out format, out display);
+    }
+
+    private static bool TryBuildStructuredDisplay(string raw, out StructuredContentFormat format, out string display)
+    {
+        if (TryBuildJsonDisplay(raw, out display))
+        {
+            format = StructuredContentFormat.Json;
+            return true;
+        }
+
+        if (TryBuildXmlDisplay(raw, out display))
+        {
+            format = StructuredContentFormat.Xml;
+            return true;
+        }
+
+        format = StructuredContentFormat.None;
+        display = string.Empty;
+        return false;
+    }
+
+    private static bool TryBuildJsonDisplay(string raw, out string display)
+    {
+        display = string.Empty;
+        if (!LooksLikeJsonDocument(raw))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            display = JsonSerializer.Serialize(document.RootElement, _prettyPrintOptions);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryBuildXmlDisplay(string raw, out string display)
+    {
+        display = string.Empty;
+        if (!LooksLikeXmlDocument(raw))
+            return false;
+
+        try
+        {
+            var document = XDocument.Parse(raw, LoadOptions.None);
+            display = document.ToString().ReplaceLineEndings("\n");
+            return true;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
+    }
+
+    private static bool LooksLikeJsonDocument(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith('{') || trimmed.StartsWith('[');
+    }
+
+    private static bool LooksLikeXmlDocument(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith('<');
+    }
+
+    private static string NormalizePreviewText(string? value) =>
+        (value ?? string.Empty).TrimStart('\uFEFF').ReplaceLineEndings("\n");
+
+    private static readonly JsonSerializerOptions _prettyPrintOptions = new() { WriteIndented = true };
+
+    private static IEnumerable<KeyValuePair<string, string>> GetPropertyRows(BlobProperties properties)
+    {
+        yield return new("Name", properties.Name);
+        yield return new("Size", FormatSize(properties.SizeBytes));
+        yield return new("Content-Type", properties.ContentType);
+        yield return new("ETag", properties.ETag);
+        yield return new("Last Modified", properties.LastModified.ToString("yyyy-MM-dd HH:mm:ss zzz"));
+        if (properties.AccessTier is not null) yield return new("Access Tier", properties.AccessTier);
+        if (properties.AccessTierInferred is not null) yield return new("Tier Inferred",
+properties.AccessTierInferred.Value.ToString());
+        if (properties.LeaseStatus is not null) yield return new("Lease Status", properties.LeaseStatus);
+        if (properties.LeaseState is not null) yield return new("Lease State", properties.LeaseState);
+        if (properties.ContentEncoding is not null) yield return new("Content-Encoding", properties.ContentEncoding);
+        if (properties.ContentLanguage is not null) yield return new("Content-Language", properties.ContentLanguage);
+        if (properties.CacheControl is not null) yield return new("Cache-Control", properties.CacheControl);
     }
 
     private static string FormatSize(long bytes)
@@ -694,10 +938,10 @@
 
     private async Task CopyContentAsync()
     {
-        if (_displayContent is null) return;
+        if (PreviewContent is null) return;
         try
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _displayContent);
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", PreviewContent);
             Notifications.ShowSuccess("Copied!");
             _actionOk = true;
             _actionMessage = "Content copied.";
