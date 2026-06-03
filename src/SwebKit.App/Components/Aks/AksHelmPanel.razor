@@ -14,6 +14,10 @@
             @if (_rollbackMode)
             {
                 <div class="aks-rollback-hint">Select a revision to rollback to:</div>
+                @if (_rollbackInProgress && _rollbackRevisionInProgress.HasValue)
+                {
+                    <div class="aks-rollback-hint">Rolling back to revision @_rollbackRevisionInProgress.Value...</div>
+                }
             }
             <div class="aks-yaml-content">
                 @if (_historyLoading)
@@ -52,6 +56,7 @@
                                             var r = rev;
                                             <button class="ctx-item aks-rollback-btn"
                                                     style="display:inline-flex; align-items:center; gap:4px;"
+                                                    disabled="@_rollbackInProgress"
                                                     @onclick="() => OnPreviewRollbackToRevision(r)">
                                                 <FluentIcon Value="@(new Icons.Regular.Size16.SplitHorizontal())" Width="14px" />
                                                 Diff
@@ -63,15 +68,17 @@
                                             <div style="display:inline-flex; align-items:center; gap:4px;">
                                                 <button class="ctx-item aks-rollback-btn"
                                                         style="display:inline-flex; align-items:center; gap:4px;"
+                                                        disabled="@_rollbackInProgress"
                                                         @onclick="() => OnPreviewRollbackToRevision(r)">
                                                     <FluentIcon Value="@(new Icons.Regular.Size16.Eye())" Width="14px" />
                                                     Preview
                                                 </button>
                                                 <button class="ctx-item destructive aks-rollback-btn"
                                                         style="display:inline-flex; align-items:center; gap:4px;"
+                                                        disabled="@_rollbackInProgress"
                                                         @onclick="() => OnRollbackToRevision(r)">
                                                     <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="14px" />
-                                                    Rollback
+                                                    @(_rollbackInProgress && _rollbackRevisionInProgress == r.Revision ? "Rolling back..." : "Rollback")
                                                 </button>
                                             </div>
                                         }
@@ -124,6 +131,8 @@
     private List<HelmRevisionInfo> _history = [];
     private bool _historyLoading;
     private bool _rollbackMode;
+    private bool _rollbackInProgress;
+    private int? _rollbackRevisionInProgress;
     private string _sortColumn = "rev";
     private bool _sortAscending = false;
 
@@ -164,8 +173,8 @@
     {
         if (Client is null) return;
         CloseValues();
+        ResetHistoryState();
         _historyTarget = releaseName;
-        _rollbackMode = false;
         _historyLoading = true;
         StateHasChanged();
 
@@ -199,6 +208,7 @@
     {
         if (Client is null) return;
         CloseValues();
+        ResetHistoryState();
         _historyTarget = releaseName;
         _rollbackMode = true;
         _historyLoading = true;
@@ -221,10 +231,17 @@
 
     public void CloseHistory()
     {
+        ResetHistoryState();
+        _rollbackInProgress = false;
+        _rollbackRevisionInProgress = null;
+        StateHasChanged();
+    }
+
+    private void ResetHistoryState()
+    {
         _historyTarget = null;
         _history = [];
         _rollbackMode = false;
-        StateHasChanged();
     }
 
     public void CloseValues()
@@ -244,7 +261,7 @@
 
     private async Task OnRollbackToRevision(HelmRevisionInfo rev)
     {
-        if (_historyTarget is null || Client is null) return;
+        if (_historyTarget is null || Client is null || _rollbackInProgress) return;
         var releaseName = _historyTarget;
 
         var confirmed = await Confirm.ShowAsync(
@@ -253,17 +270,38 @@
             requireTypedName: IsProduction);
         if (!confirmed) return;
 
+        _rollbackInProgress = true;
+        _rollbackRevisionInProgress = rev.Revision;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
             await Client.RollbackHelmReleaseAsync(Namespace, releaseName, rev.Revision);
-            CloseHistory();
-            await OnDataChanged.InvokeAsync();
             Notifications.ShowSuccess("Helm rollback complete", $"{releaseName} → revision {rev.Revision}");
+            ResetHistoryState();
+
+            try
+            {
+                await OnDataChanged.InvokeAsync();
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                await OnError.InvokeAsync(ex.Message);
+                Notifications.ShowWarning("Helm rollback complete, refresh failed", ex.Message);
+            }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             await OnError.InvokeAsync(ex.Message);
             Notifications.ShowError("Helm rollback failed", ex: ex);
+        }
+        finally
+        {
+            _rollbackInProgress = false;
+            _rollbackRevisionInProgress = null;
+            await InvokeAsync(StateHasChanged);
         }
     }
 

@@ -47,6 +47,7 @@
 - HPA inline status — HPA badge on Deployment and StatefulSet rows showing current/max replicas and CPU%; detail panel summarizes autoscaler state, replica movement, metrics, and conditions.
 - HPA detail panel actions for `View YAML` and `Edit YAML`, reusing the shared AKS YAML viewer/apply workflow instead of a separate HPA-specific editor.
 - Helm history, values, and rollback.
+- Helm rollback now shows inline progress while the command is running and surfaces the success toast before the follow-up grid refresh, so operators still get confirmation when refresh takes longer than the rollback itself.
 - Pod metrics retrieval where available — CPU and Memory columns always visible in the Pods grid; show "—" when metrics are unavailable.
 - YAML viewer includes inline search (highlight + scroll to match).
 - Ingress host cells are clickable — single click opens the URL in the default browser; right-click context menu offers "Open URL in browser" and "Copy URL" options.
@@ -99,6 +100,7 @@
 - **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
 - `KubernetesAksClient` keeps kubeconfig exec auth as the primary path for Azure-backed clusters. When SDK config construction fails specifically because the kubeconfig external auth command returns broken output or cannot start, the client rebuilds the config through the Azure credential fallback path instead of failing during exec-credential handling.
 - Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
+- Helm rollback feedback is split into two phases: the panel shows an in-progress state while `helm rollback --wait` runs, then the UI raises success immediately after the command completes and treats the subsequent AKS data refresh as best-effort follow-up work.
 - **Port-forward session management** is handled by `IPortForwardSessionService` (singleton). It holds a list of `PortForwardSession` objects, each with a `Status` enum (`Starting, Active, Stopping, Stopped, Error`) and an `OnStatusChanged` callback wired by the service. `KubernetesAksClient` sets `EnableRaisingEvents = true` and fires the callback on stdout/stderr/process-exit events. `StopAllAsync` is called from `AppDomain.CurrentDomain.ProcessExit` in `App.xaml.cs`. Sessions panel is rendered as a sticky-bottom strip in `AksPage.razor`; the status bar shows an active count button that navigates to AKS and opens the panel via `OpenPortForwardPanelEvent`.
 
 ## Main Code Locations
