@@ -70,8 +70,7 @@
                     }
                     <div class="aks-ns-dropdown-actions">
                         <button type="button" class="aks-ns-action" @onclick="SelectAllNamespaces">All</button>
-                        <button type="button" class="aks-ns-action aks-ns-apply" disabled="@(!_pendingNamespaces.Any())"
-                                @onclick="ApplyNamespaceSelectionAsync">
+                        <button type="button" class="aks-ns-action aks-ns-apply" @onclick="ApplyNamespaceSelectionAsync">
                             Apply
                         </button>
                     </div>
@@ -148,7 +147,7 @@
     [Parameter] public string ActiveContext { get; set; } = "";
     [Parameter] public string? DefaultContext { get; set; }
     [Parameter] public List<string> Namespaces { get; set; } = [];
-    [Parameter] public string CurrentNamespace { get; set; } = "default";
+    [Parameter] public string CurrentNamespace { get; set; } = string.Empty;
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public bool IsConnected { get; set; }
     [Parameter] public string ActiveResourceType { get; set; } = "Deployments";
@@ -246,7 +245,12 @@
         get
         {
             var scope = GetNamespaceScope();
-            return string.IsNullOrWhiteSpace(scope.DisplayText) ? CurrentNamespace : scope.DisplayText;
+            if (!string.IsNullOrWhiteSpace(scope.DisplayText))
+            {
+                return scope.DisplayText;
+            }
+
+            return string.IsNullOrWhiteSpace(CurrentNamespace) ? "Select namespaces" : CurrentNamespace;
         }
     }
 
@@ -312,12 +316,10 @@
 
     private async Task ApplyNamespaceSelectionAsync()
     {
-        if (_pendingNamespaces.Count == 0)
-        {
-            return;
-        }
-
-        await SelectNs(AksNamespaceScope.FromNamespaces(OrderNamespaces(_pendingNamespaces)).SelectionToken);
+        var selection = _pendingNamespaces.Count == 0
+            ? string.Empty
+            : AksNamespaceScope.FromNamespaces(OrderNamespaces(_pendingNamespaces)).SelectionToken;
+        await SelectNs(selection);
     }
 
     private AksNamespaceScope GetNamespaceScope()

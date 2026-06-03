@@ -8,11 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.60.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="coverlet.collector" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,9 +24,7 @@
       powershell -ExecutionPolicy Bypass -File tests/SwebKit.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium
   -->
   <Target Name="InstallPlaywrightBrowsers" AfterTargets="Build">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;playwright.ps1&quot; install chromium"
-          WorkingDirectory="$(OutputPath)"
-          ContinueOnError="true" />
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;playwright.ps1&quot; install chromium" WorkingDirectory="$(OutputPath)" ContinueOnError="true" />
   </Target>
 
 </Project>

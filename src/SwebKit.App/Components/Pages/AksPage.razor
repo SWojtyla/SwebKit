@@ -701,7 +701,7 @@ false)
         List<CronJobInfo> CronJobs,
         List<PodMetrics> PodMetricsList);
 
-    private string CurrentNamespace = "default";
+    private string CurrentNamespace = string.Empty;
     private string ActiveContext = string.Empty;
     private string ActiveResourceType = "Deployments";
     private bool _suppressWorkspaceRecent;
@@ -945,7 +945,7 @@ OnCtxRestartDeployment();
     }
 
     private static string NormalizeDefaultNamespace(AksConfig? config) =>
-        string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config.DefaultNamespace;
+        string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? string.Empty : config.DefaultNamespace.Trim();
 
     private async Task BootstrapAndLoadAsync(string requestedContext, string requestedNamespace)
     {
@@ -966,11 +966,12 @@ OnCtxRestartDeployment();
                 var warm = AksWarmupCache.TryGet();
                 if (warm is not null
                     && warm.Status == AksClientBootstrapStatus.Connected
-                    && warm.Client is not null)
+                    && warm.Client is not null
+                    && CanReuseWarmBootstrapResult(warm, requestedContext, requestedNamespace))
                 {
                     Client = warm.Client;
                     Contexts = warm.Contexts.ToList();
-                    Namespaces = warm.Namespaces.Count > 0 ? warm.Namespaces.ToList() : ["default"];
+                    Namespaces = warm.Namespaces.ToList();
                     ActiveContext = warm.ActiveContext;
                     CurrentNamespace = warm.CurrentNamespace;
                     AksWarmupCache.Invalidate(); // consume once
@@ -996,7 +997,7 @@ OnCtxRestartDeployment();
 
             Client = result.Client;
             Contexts = result.Contexts.ToList();
-            Namespaces = result.Namespaces.Count > 0 ? result.Namespaces.ToList() : ["default"];
+            Namespaces = result.Namespaces.ToList();
             ActiveContext = result.ActiveContext;
             CurrentNamespace = result.CurrentNamespace;
 
@@ -1078,6 +1079,31 @@ OnCtxRestartDeployment();
     private async Task LoadAsync()
     {
         if (Client is null) return;
+
+        if (CurrentNamespaceScope.Namespaces.Count == 0)
+        {
+            ClearSelection();
+            _detailPanels?.ResetAllPanels();
+            Deployments = [];
+            StatefulSets = [];
+            Pods = [];
+            Services = [];
+            Ingresses = [];
+            GatewayClasses = [];
+            Gateways = [];
+            HttpRoutes = [];
+            HelmReleases = [];
+            ConfigMaps = [];
+            Secrets = [];
+            Hpas = [];
+            Events = [];
+            _eventWarningCount = 0;
+            Jobs = [];
+            CronJobs = [];
+            PodMetricsList = [];
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
 
         // PERF-18: Restore cached data for instant back-navigation rendering
         var cacheKey = CurrentCacheKey;
@@ -1265,12 +1291,28 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
         }
     }
 
+    private static bool CanReuseWarmBootstrapResult(
+        AksClientBootstrapResult warm,
+        string requestedContext,
+        string requestedNamespace)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedContext)
+            && !string.Equals(warm.ActiveContext, requestedContext, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return string.Equals(warm.CurrentNamespace, requestedNamespace, StringComparison.Ordinal);
+    }
+
     private async Task HandleContextChangedAsync(string newContext)
     {
         if (newContext == ActiveContext) return;
         Cache.InvalidateByPrefix("aks:"); // PERF-18: context switch — invalidate stale cache
         ActiveContext = newContext;
-        await BootstrapAndLoadAsync(newContext, CurrentNamespace);
+        CurrentNamespace = string.Empty;
+        _detailPanels?.ResetAllPanels();
+        await BootstrapAndLoadAsync(newContext, string.Empty);
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
 

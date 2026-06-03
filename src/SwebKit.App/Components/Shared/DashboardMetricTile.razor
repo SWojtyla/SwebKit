@@ -1,0 +1,113 @@
+<section class="dashboard-metric-tile @CssClass" aria-label="@AreaLabel status">
+    <div class="dashboard-metric-tile__header">
+        <span class="dashboard-metric-tile__eyebrow">@AreaLabel</span>
+        <div class="dashboard-metric-tile__actions">
+            @if (IsLoading)
+            {
+                <span class="dashboard-metric-tile__refresh" title="Refreshing @AreaLabel tile">
+                    <FluentProgressRing Width="14px" Height="14px" />
+                    <span>Refreshing</span>
+                </span>
+            }
+            @if (!string.IsNullOrWhiteSpace(OpenHref))
+            {
+                <a class="dashboard-metric-tile__link" href="@OpenHref">Open</a>
+            }
+        </div>
+    </div>
+
+    @if (!IsConfigured)
+    {
+        <p class="dashboard-metric-tile__message">Not configured</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <p class="dashboard-metric-tile__message dashboard-metric-tile__message--error">@Error</p>
+    }
+    else if (Data is null)
+    {
+        <div class="dashboard-metric-tile__refresh dashboard-metric-tile__refresh--body">
+            <FluentProgressRing Width="16px" Height="16px" />
+            <span>Loading...</span>
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-metric-tile__metric">
+            <strong>@Data.Value</strong>
+            <span>@(string.IsNullOrWhiteSpace(Data.Label) ? FallbackLabel : Data.Label)</span>
+        </div>
+
+        @if (IsLoading)
+        {
+            <div class="dashboard-metric-tile__refresh dashboard-metric-tile__refresh--body">
+                <FluentProgressRing Width="14px" Height="14px" />
+                <span>Refreshing...</span>
+            </div>
+        }
+        else
+        {
+            <p class="dashboard-metric-tile__message">Updated @RelativeTime(Data.LastUpdated)</p>
+        }
+    }
+</section>
+
+@code {
+    private MetricRenderSnapshot _snapshot = MetricRenderSnapshot.Empty;
+    private bool _shouldRender = true;
+
+    [Parameter, EditorRequired] public string AreaLabel { get; set; } = string.Empty;
+    [Parameter] public string OpenHref { get; set; } = string.Empty;
+    [Parameter] public bool IsConfigured { get; set; } = true;
+    [Parameter] public HealthTileData? Data { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string FallbackLabel { get; set; } = string.Empty;
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        var next = new MetricRenderSnapshot(
+            AreaLabel,
+            OpenHref,
+            IsConfigured,
+            Data?.Value,
+            Data?.Label,
+            Data?.LastUpdated,
+            Error,
+            FallbackLabel,
+            IsLoading,
+            CssClass);
+
+        _shouldRender = !_snapshot.Equals(next);
+        _snapshot = next;
+    }
+
+    protected override bool ShouldRender() => _shouldRender;
+
+    private static string RelativeTime(DateTimeOffset at)
+    {
+        var elapsed = DateTimeOffset.Now - at;
+        return elapsed.TotalSeconds < 60
+            ? $"{(int)elapsed.TotalSeconds}s ago"
+            : elapsed.TotalMinutes < 60
+                ? $"{(int)elapsed.TotalMinutes}m ago"
+                : $"{(int)elapsed.TotalHours}h ago";
+    }
+
+    private sealed record MetricRenderSnapshot(
+        string AreaLabel,
+        string OpenHref,
+        bool IsConfigured,
+        int? Value,
+        string? Label,
+        DateTimeOffset? LastUpdated,
+        string? Error,
+        string FallbackLabel,
+        bool IsLoading,
+        string CssClass)
+    {
+        public static readonly MetricRenderSnapshot Empty = new(string.Empty, string.Empty, true, null, null, null, null,
+string.Empty, false, string.Empty);
+    }
+}

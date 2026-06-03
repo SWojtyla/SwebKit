@@ -1,0 +1,91 @@
+.dashboard-metric-tile {
+    position: relative;
+    display: grid;
+    gap: var(--spacing-xs);
+    min-width: 0;
+    padding: var(--spacing-md);
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-surface) 96%, white);
+    overflow: hidden;
+}
+
+.dashboard-metric-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: color-mix(in srgb, var(--color-accent) 42%, transparent);
+}
+
+.dashboard-metric-tile--service-bus::before { background: var(--color-nav-servicebus); }
+.dashboard-metric-tile--aks::before { background: var(--color-nav-aks); }
+.dashboard-metric-tile--redis::before { background: var(--color-nav-redis); }
+.dashboard-metric-tile--pipelines::before { background: var(--color-nav-pipelines); }
+
+.dashboard-metric-tile__header,
+.dashboard-metric-tile__actions,
+.dashboard-metric-tile__refresh {
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-metric-tile__header {
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+.dashboard-metric-tile__actions,
+.dashboard-metric-tile__refresh {
+    gap: 8px;
+}
+
+.dashboard-metric-tile__eyebrow,
+.dashboard-metric-tile__message,
+.dashboard-metric-tile__refresh,
+.dashboard-metric-tile__metric span {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.dashboard-metric-tile__eyebrow {
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.dashboard-metric-tile__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-surface-2) 70%, var(--color-surface));
+    color: var(--color-text);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.dashboard-metric-tile__metric {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dashboard-metric-tile__metric strong {
+    color: var(--color-text);
+    font-size: clamp(1.35rem, 2.6vw, 2rem);
+    line-height: 1;
+}
+
+.dashboard-metric-tile__message {
+    margin: 0;
+    line-height: 1.35;
+}
+
+.dashboard-metric-tile__message--error {
+    color: var(--color-error);
+}

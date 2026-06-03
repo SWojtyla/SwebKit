@@ -8,6 +8,7 @@
 - Context switching and namespace filtering (single, selected multiple, and all namespaces).
 - Namespace picker supports explicit multi-selection so operators can compare a scoped set of namespaces without switching to full-cluster all-namespaces mode.
 - AKS namespace selection is normalized through the app-layer `AksNamespaceScope` model, preserving the external `*` and comma-separated selection tokens while keeping page and toolbar logic typed.
+- Default namespace is optional. When no default namespace is configured, AKS stays unselected until the operator picks a namespace or all-namespaces mode; switching contexts clears the previous namespace selection instead of silently carrying it forward.
 - Monitor namespace selector now supports case-insensitive text filtering for long namespace lists, with an explicit no-match empty state.
 - Browse deployments, pods, Services, ingresses, Helm releases, Jobs, and CronJobs.
 - Pods hide terminal `Completed` / `Succeeded` rows by default so completed Job pods do not crowd active troubleshooting; a pod-list checkbox reveals them on demand.
@@ -78,6 +79,7 @@
 - **Wave 2 diagnostics contract.** `IAksClient` now exposes `AnalyzeIngressAsync` and `AnalyzeNetworkPoliciesAsync`. These return typed evidence summaries plus explicit limitation text instead of pushing raw object interpretation into Razor components.
 - **Gateway API contract.** `IAksClient` exposes `GetGatewayClassesAsync`, `GetGatewaysAsync`, and `GetHttpRoutesAsync`. `KubernetesAksClient` queries Gateway API CRDs through the custom-objects client with `v1`/`v1beta1`/`v1alpha2` fallback so Envoy Gateway migrations remain visible even when classic `Ingress` is empty.
 - **Bootstrap seam.** `IAksClientBootstrapper` now owns AKS client creation, context discovery, namespace discovery, and current-selection normalization. `AksPage` keeps a small signature guard so repeated parent re-renders do not restart the same bootstrap or reconnect path.
+- **Namespace selection seam.** Empty namespace selection is preserved end-to-end instead of coercing to `default`. The page skips namespace-scoped data loads until the operator explicitly selects a namespace or all-namespaces mode, which also avoids wasteful reloads immediately after a context switch.
 - **Batch browse model.** `JobInfo` carries status, active/succeeded/failed counts, desired completions, timestamps, source provenance, and labels so the Jobs grid can render operationally useful rows without a second read.
 - **Batch YAML parity.** `GetResourceYamlAsync` explicitly supports `job` and `cronjob`. `DemoAksClient` emits batch/v1 YAML for both resource kinds, matching the live-client viewer flow.
 - **Trigger provenance and sanitization.** `KubernetesAksClient` clones CronJob job templates or Job specs, strips controller-owned metadata and selectors, and annotates created Jobs with `swebkit.io/source-kind` and `swebkit.io/source-name`. Source mapping prefers owner references first, then these annotations.
@@ -95,7 +97,7 @@
 - **Secret values are never eagerly loaded.** `SecretInfo` holds only key names. Values are fetched on demand via `GetSecretValuesAsync` and cached for the panel lifetime.
 - **HPA API versioning.** `GetHpasAsync` targets `autoscaling/v2` (K8s 1.23+) and falls back to `v1` silently on 404.
 - **Container detail env resolution** batches ConfigMap lookups by name — one API call per unique ConfigMap. `envFrom` bulk-import rows are shown as synthetic flag entries.
-- `KubernetesAksClient` includes Azure token fallback logic when kubeconfig exec auth is not enough.
+- `KubernetesAksClient` keeps kubeconfig exec auth as the primary path for Azure-backed clusters. When SDK config construction fails specifically because the kubeconfig external auth command returns broken output or cannot start, the client rebuilds the config through the Azure credential fallback path instead of failing during exec-credential handling.
 - Helm operations are implemented through secret introspection and shelling out to `helm` for some commands.
 - **Port-forward session management** is handled by `IPortForwardSessionService` (singleton). It holds a list of `PortForwardSession` objects, each with a `Status` enum (`Starting, Active, Stopping, Stopped, Error`) and an `OnStatusChanged` callback wired by the service. `KubernetesAksClient` sets `EnableRaisingEvents = true` and fires the callback on stdout/stderr/process-exit events. `StopAllAsync` is called from `AppDomain.CurrentDomain.ProcessExit` in `App.xaml.cs`. Sessions panel is rendered as a sticky-bottom strip in `AksPage.razor`; the status bar shows an active count button that navigates to AKS and opens the panel via `OpenPortForwardPanelEvent`.
 

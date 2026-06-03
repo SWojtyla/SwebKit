@@ -26,3 +26,7 @@ Thumbs.db
 
 # App data (runtime)
 *.log
+
+# Copilot local validation output
+artifacts/copilot-build/
+artifacts/copilot-obj/

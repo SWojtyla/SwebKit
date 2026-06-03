@@ -262,6 +262,9 @@ public class UiStateFilterTests
         Assert.True(preferences.Tiles[0].IsVisible);
         Assert.False(preferences.Tiles[1].IsVisible);
         Assert.Equal("3x2", preferences.Tiles[0].Size);
+        Assert.Single(preferences.Views);
+        Assert.Equal("Default view", preferences.Views[0].Title);
+        Assert.Equal(preferences.Views[0].Id, preferences.ActiveViewId);
     }
 
     [Fact]
@@ -360,6 +363,97 @@ public class UiStateFilterTests
         Assert.Equal("order-created", preferences.Tiles[0].Settings["entityPath"]);
         Assert.Equal("2x1", preferences.Tiles[0].Size);
         Assert.DoesNotContain(preferences.Tiles, static tile => tile.TileId.StartsWith("unknown.template", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DashboardPreferences_LegacyTilesMigrateIntoGeneratedDefaultView()
+    {
+        using var _ = new AppDataSandbox();
+
+        var json =
+            """
+            {
+                "dashboard": {
+                    "schemaVersion": 1,
+                    "tiles": [
+                        { "tileId": "service-bus.dead-letters", "isVisible": false, "size": "small" },
+                        { "tileId": "shell.favorites", "isVisible": true, "size": "wide" }
+                    ]
+                }
+            }
+            """;
+
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.UiStateJson, json);
+
+        var repo = new UiStateRepository();
+        await repo.LoadAsync();
+
+        var preferences = repo.GetDashboardPreferences(DefaultDashboardTiles());
+
+        Assert.Equal(2, preferences.SchemaVersion);
+        Assert.Single(preferences.Views);
+        Assert.Equal("Default view", preferences.Views[0].Title);
+        Assert.Equal(preferences.Views[0].Id, preferences.ActiveViewId);
+        Assert.Equal(preferences.Views[0].Tiles.Select(static tile => tile.TileId), preferences.Tiles.Select(static tile => tile.TileId));
+        Assert.False(preferences.Views[0].Tiles[0].IsVisible);
+        Assert.Equal("1x1", preferences.Views[0].Tiles[0].Size);
+    }
+
+    [Fact]
+    public async Task SaveDashboardPreferencesAsync_RoundTripsViewsAndActiveView()
+    {
+        using var _ = new AppDataSandbox();
+
+        var writer = new UiStateRepository();
+        await writer.SaveDashboardPreferencesAsync(new DashboardPreferences
+        {
+            ActiveViewId = "focus",
+            Views =
+            [
+                new DashboardViewPreference
+                {
+                    Id = "default",
+                    Title = "Default view",
+                    IsDefault = true,
+                    Tiles = DefaultDashboardTiles().Select(static tile => tile with { }).ToList(),
+                    Filters = new DashboardViewFilterPreference { Area = "all", Severity = "all", TimeWindow = "live", LiveMode = "live" },
+                    Layout = new DashboardViewLayoutPreference { ShowKpiRibbon = true, CollapseInsightDock = false }
+                },
+                new DashboardViewPreference
+                {
+                    Id = "focus",
+                    Title = "Attention only",
+                    Tiles =
+                    [
+                        new DashboardTilePreference { TileId = "service-bus.dead-letters", IsVisible = true, Size = "small" },
+                        new DashboardTilePreference { TileId = "service-bus.entity-watch:abc123", IsVisible = true, Size = "2x2" }
+                    ],
+                    Filters = new DashboardViewFilterPreference { Area = "service-bus", Severity = "attention", TimeWindow = "1h", LiveMode = "snapshot" },
+                    Layout = new DashboardViewLayoutPreference { ShowKpiRibbon = false, CollapseInsightDock = true, DensityMode = "compact", BackgroundStyle = "contrast" }
+                }
+            ]
+        }, DefaultDashboardTiles());
+
+        var reader = new UiStateRepository();
+        await reader.LoadAsync();
+
+        var preferences = reader.GetDashboardPreferences(DefaultDashboardTiles());
+        var activeView = Assert.Single(preferences.Views.Where(static view => view.Id == "focus"));
+
+        Assert.Equal("focus", preferences.ActiveViewId);
+        Assert.Equal(2, preferences.Views.Count);
+        Assert.Equal("Attention only", activeView.Title);
+        Assert.Equal("service-bus", activeView.Filters.Area);
+        Assert.Equal("attention", activeView.Filters.Severity);
+        Assert.Equal("snapshot", activeView.Filters.LiveMode);
+        Assert.False(activeView.Layout.ShowKpiRibbon);
+        Assert.True(activeView.Layout.CollapseInsightDock);
+        Assert.Equal("compact", activeView.Layout.DensityMode);
+        Assert.Equal("contrast", activeView.Layout.BackgroundStyle);
+        Assert.Equal(activeView.Tiles.Select(static tile => tile.TileId), preferences.Tiles.Select(static tile => tile.TileId));
+        Assert.Equal("1x1", activeView.Tiles[0].Size);
+        Assert.Equal("2x2", activeView.Tiles[1].Size);
     }
 
     private static IReadOnlyList<DashboardTilePreference> DefaultDashboardTiles() =>

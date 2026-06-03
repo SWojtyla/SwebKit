@@ -16,7 +16,7 @@
             }
             <div class="aks-ns-picker" style="width:100%;">
                 <input class="aks-ns-select aks-ns-search app-native-control" style="width:100%;"
-                       value="@(_ctxDropOpen? _ctxSearchText : (string.IsNullOrWhiteSpace(KubeconfigContext) ? string.Empty : KubeconfigContext))"
+                       value="@(_ctxDropOpen ? _ctxSearchText : (string.IsNullOrWhiteSpace(KubeconfigContext) ? string.Empty : KubeconfigContext))"
                        placeholder="@(_ctxDropOpen ? "Filter…" : "(use current from kubeconfig)")" @onfocus="OpenCtxDrop"
                        @oninput="OnCtxSearchInput" readonly="@(!_ctxDropOpen)" @onkeydown="OnCtxKeyDown" />
                 @if (_ctxDropOpen)
@@ -41,7 +41,7 @@
         </div>
 
         <FluentTextField Label="Default Namespace (optional)" @bind-Value="DefaultNamespace" style="width:100%;"
-                         Placeholder="default" />
+                         Placeholder="Leave blank to choose later" />
 
         <div style="display:flex; align-items:center; gap:8px;">
             <FluentButton Appearance="Appearance.Accent" @onclick="SaveAsync">Save AKS</FluentButton>
@@ -57,7 +57,8 @@
                 <strong>Current:</strong>
                 Path: @(Environment.AksConfig.KubeconfigPath ?? "(default)") &middot;
                 Context: @(Environment.AksConfig.KubeconfigContext ?? "(current)") &middot;
-                Namespace: @Environment.AksConfig.DefaultNamespace
+                Namespace: @(string.IsNullOrWhiteSpace(Environment.AksConfig.DefaultNamespace) ? "(none)" :
+                        Environment.AksConfig.DefaultNamespace)
             </div>
         }
     </div>
@@ -68,7 +69,7 @@
 
     private string KubeconfigPath = string.Empty;
     private string KubeconfigContext = string.Empty;
-    private string DefaultNamespace = "default";
+    private string DefaultNamespace = string.Empty;
     private bool ShowSaved;
 
     // Context dropdown state
@@ -86,7 +87,7 @@
         var config = Environment.AksConfig;
         KubeconfigPath = config?.KubeconfigPath ?? string.Empty;
         KubeconfigContext = config?.KubeconfigContext ?? string.Empty;
-        DefaultNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config!.DefaultNamespace;
+        DefaultNamespace = config?.DefaultNamespace ?? string.Empty;
         LoadContexts();
     }
 
@@ -140,7 +141,7 @@
         var config = Environment.AksConfig ??= new AksConfig();
         config.KubeconfigPath = string.IsNullOrWhiteSpace(KubeconfigPath) ? null : KubeconfigPath.Trim();
         config.KubeconfigContext = string.IsNullOrWhiteSpace(KubeconfigContext) ? null : KubeconfigContext.Trim();
-        config.DefaultNamespace = string.IsNullOrWhiteSpace(DefaultNamespace) ? "default" : DefaultNamespace.Trim();
+        config.DefaultNamespace = string.IsNullOrWhiteSpace(DefaultNamespace) ? string.Empty : DefaultNamespace.Trim();
 
         await OnSaved.InvokeAsync();
 

@@ -379,6 +379,43 @@ users:
         Assert.NotNull(ex);
     }
 
+    [Fact]
+    public void BuildClientConfiguration_WithAksExecAuth_DoesNotExecuteBrokenAuthPlugin()
+    {
+        using var kubeconfig = CreateTempKubeconfig("https://cluster.region.azmk8s.io:443");
+
+        var ex = Record.Exception(() => KubernetesAksClient.BuildClientConfiguration(null, kubeconfig.Path));
+
+        Assert.Null(ex);
+
+        var config = KubernetesAksClient.BuildClientConfiguration(null, kubeconfig.Path);
+        Assert.Equal("https://cluster.region.azmk8s.io:443", config.Host);
+        Assert.True(string.IsNullOrWhiteSpace(config.AccessToken));
+    }
+
+    [Fact]
+    public void BuildClientConfiguration_WithWorkingAksExecAuth_PreservesExecProviderToken()
+    {
+        using var kubeconfig = CreateTempKubeconfig(
+            "https://cluster.region.azmk8s.io:443",
+            GetWorkingExecCommandYaml("test-token"));
+
+        var config = KubernetesAksClient.BuildClientConfiguration(null, kubeconfig.Path);
+
+        Assert.Equal("https://cluster.region.azmk8s.io:443", config.Host);
+        Assert.Equal("test-token", config.AccessToken);
+    }
+
+    [Fact]
+    public void BuildClientConfiguration_WithNonAksExecAuth_StillUsesConfiguredExecPlugin()
+    {
+        using var kubeconfig = CreateTempKubeconfig("https://example.local:443");
+
+        var ex = Record.Exception(() => KubernetesAksClient.BuildClientConfiguration(null, kubeconfig.Path));
+
+        Assert.NotNull(ex);
+    }
+
     // ── CPU parsing tests ──
 
     [Theory]
@@ -671,5 +708,80 @@ users:
                 Succeeded = 1
             }
         };
+    }
+
+    private static TempKubeconfig CreateTempKubeconfig(string server, string? execCommandYaml = null)
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        var path = Path.Combine(directory.FullName, "config");
+        var kubeconfig = string.Join(
+                        "\n",
+                        [
+                                        "apiVersion: v1",
+                                                                "kind: Config",
+                                                                "clusters:",
+                                                                "- cluster:",
+                                                                $"    server: {server}",
+                                                                "  name: test-cluster",
+                                                                "contexts:",
+                                                                "- context:",
+                                                                "    cluster: test-cluster",
+                                                                "    user: test-user",
+                                                                "  name: test-context",
+                                                                "current-context: test-context",
+                                                                "preferences: {}",
+                                                                "users:",
+                                                                "- name: test-user",
+                                                                "  user:",
+                                                                "    exec:",
+                                                                "      apiVersion: client.authentication.k8s.io/v1beta1",
+                                                                execCommandYaml ?? $"      command: {GetBrokenExecCommand()}"
+                        ]) + "\n";
+
+        File.WriteAllText(path, kubeconfig);
+        return new TempKubeconfig(directory, path);
+    }
+
+    private static string GetBrokenExecCommand()
+    {
+        return OperatingSystem.IsWindows()
+                ? "__definitely_missing_exec_command__"
+                : "__definitely_missing_exec_command__";
+    }
+
+    private static string GetWorkingExecCommandYaml(string token)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var payload = $"{{\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"kind\":\"ExecCredential\",\"status\":{{\"token\":\"{token}\"}}}}";
+            return string.Join(
+                "\n",
+                [
+                    "      command: cmd.exe",
+                    "      args:",
+                    "      - /c",
+                    $"      - echo {payload}"
+                ]);
+        }
+
+        return string.Join(
+            "\n",
+            [
+                "      command: /bin/sh",
+                "      args:",
+                "      - -c",
+                $"      - printf '%s' '{{\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"kind\":\"ExecCredential\",\"status\":{{\"token\":\"{token}\"}}}}'"
+            ]);
+    }
+
+    private sealed class TempKubeconfig(DirectoryInfo directory, string path) : IDisposable
+    {
+        public string Path { get; } = path;
+
+        public void Dispose()
+        {
+            if (directory.Exists)
+                directory.Delete(recursive: true);
+        }
     }
 }

@@ -141,4 +141,36 @@ public class AksConnectionBarTests : TestContext
 
         Assert.Equal("default,orders,payments", changedNamespace);
     }
+
+    [Fact]
+    public void AksConnectionBar_WithoutCurrentNamespace_DoesNotPreselectDefault()
+    {
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, string.Empty));
+
+        var namespaceInput = cut.FindAll("input.aks-ns-search").Last();
+
+        Assert.Equal("Select namespaces", namespaceInput.GetAttribute("value"));
+
+        namespaceInput.Focus();
+
+        Assert.DoesNotContain("checked", cut.Find("input[aria-label='default']").OuterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AksConnectionBar_NamespacePicker_CanClearSelection()
+    {
+        string? changedNamespace = null;
+        var cut = RenderComponent<AksConnectionBar>(ps => ps
+            .Add(p => p.Namespaces, ["default", "orders", "payments"])
+            .Add(p => p.CurrentNamespace, "orders")
+            .Add(p => p.OnNamespaceChanged, value => changedNamespace = value));
+
+        cut.FindAll("input.aks-ns-search").Last().Focus();
+        cut.Find("input[aria-label='orders']").Change(false);
+        cut.Find("button.aks-ns-apply").Click();
+
+        Assert.Equal(string.Empty, changedNamespace);
+    }
 }

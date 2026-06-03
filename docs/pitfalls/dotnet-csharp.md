@@ -63,4 +63,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-6 — `BuildConfigFromConfigFile` can eagerly execute kubeconfig auth plugins
+
+**Symptom:** AKS client construction fails before the first API call with a deserialization error from `ExecuteExternalCommand`, often because the kubeconfig `exec` command returned empty stdout.
+
+**Cause:** `KubernetesClientConfiguration.BuildConfigFromConfigFile(...)` can execute kubeconfig `exec` or auth-provider flows while building the client configuration. Any Azure fallback logic that runs after config construction is already too late.
+
+**Fix:** Keep kubeconfig exec auth as the primary path. Only when `BuildConfigFromConfigFile(...)` fails with a kubeconfig external-exec error for an AKS host should you load the kubeconfig object, clear the selected user's `ExternalExecution` / `AuthProvider`, and rebuild through the Azure credential fallback path.
+
+---
+
 _See also: [blazor-maui.md](blazor-maui.md) · [azure-sdk.md](azure-sdk.md)_

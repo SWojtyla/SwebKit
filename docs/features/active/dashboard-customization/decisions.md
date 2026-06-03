@@ -43,3 +43,45 @@ Change:
 
 - Continue incrementally patching the current grouped dashboard layout. Rejected because the layout problems are structural and would keep producing one-off exceptions.
 - Restart the whole dashboard feature including persistence and providers. Rejected because the non-visual architecture is useful and already validated by build and persistence tests.
+
+## Decision 002 - Use Power Grid Command Center as the implementation baseline
+
+**Status:** Accepted
+
+**Date:** 2026-06-02
+
+### Context
+
+The feature now has two full visual-overhaul proposals:
+
+- `Power Grid Command Center` — closest to a Power BI-like analytical workspace.
+- `Ops Atlas Workbench` — more experimental and scene-oriented.
+
+The user asked for a total dashboard revamp that is more Power BI alike, visually stronger, more useful, and highly customizable.
+
+### Decision
+
+Use `Power Grid Command Center` as the execution baseline for the next implementation plan.
+
+Adopt these as first-class requirements:
+
+- global slicer bar
+- KPI ribbon
+- analytic grid with responsive widget footprints
+- shared BI-style widget frame
+- collapsible insight dock
+- saved dashboard views
+
+Keep selected ideas from `Ops Atlas Workbench` as follow-on candidates rather than mixing both concepts into the first ship.
+
+### Consequences
+
+- The next plan should split work into shell framing, widget-frame migration, saved-view persistence, and targeted widget upgrades.
+- Existing dashboard widgets will be retained and upgraded rather than replaced wholesale.
+- The persistence model needs to evolve from one flat tile list toward saved views without breaking current payloads.
+- The dashboard will start reading more like an analytical workspace than a phone-home-screen widget board.
+
+### Alternatives Considered
+
+- Implement `Ops Atlas Workbench` first. Rejected because it is a weaker match for the Power BI reference and carries higher interaction risk.
+- Blend both proposals immediately. Rejected because it would weaken the first implementation slice and blur the visual hierarchy.

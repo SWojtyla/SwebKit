@@ -119,6 +119,27 @@ public sealed class AksPageBootstrapTests : TestContext
         Assert.Equal("alt-context", _bootstrapper.Requests[^1].RequestedContext);
     }
 
+    [Fact]
+    public async Task ContextChange_ClearsNamespaceSelectionBeforeBootstrap()
+    {
+        _bootstrapper.EnqueueImmediateResult(FakeAksClientBootstrapper.Success(new StubAksClient(), "test-context", "orders,payments"));
+        _bootstrapper.EnqueueImmediateResult(FakeAksClientBootstrapper.Success(new StubAksClient(), "alt-context", string.Empty));
+
+        var cut = RenderComponent<AksPage>();
+        cut.WaitForAssertion(() => Assert.Single(_bootstrapper.Requests));
+
+        var contextChanged = typeof(AksPage).GetMethod(
+            "HandleContextChangedAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(contextChanged);
+
+        await cut.InvokeAsync(() => (Task)contextChanged!.Invoke(cut.Instance, ["alt-context"])!);
+
+        cut.WaitForAssertion(() => Assert.Equal(2, _bootstrapper.Requests.Count));
+        Assert.Equal(string.Empty, _bootstrapper.Requests[^1].RequestedNamespace);
+    }
+
     private sealed class FakeAksClientBootstrapper : IAksClientBootstrapper
     {
         private readonly Queue<TaskCompletionSource<AksClientBootstrapResult>> _pendingResults = new();
