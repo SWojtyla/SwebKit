@@ -70,6 +70,7 @@
                     }
                     <div class="aks-ns-dropdown-actions">
                         <button type="button" class="aks-ns-action" @onclick="SelectAllNamespaces">All</button>
+                        <button type="button" class="aks-ns-action" @onclick="ClearNamespaceSelection">None</button>
                         <button type="button" class="aks-ns-action aks-ns-apply" @onclick="ApplyNamespaceSelectionAsync">
                             Apply
                         </button>
@@ -298,6 +299,8 @@
     }
 
     private Task SelectAllNamespaces() => SelectNs("*");
+
+    private void ClearNamespaceSelection() => _pendingNamespaces.Clear();
 
     private bool IsPendingNamespace(string ns)
         => _pendingNamespaces.Contains(ns);

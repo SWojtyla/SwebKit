@@ -1312,6 +1312,14 @@ Events = r; _eventWarningCount = r.Count(e => e.Type == "Warning"); }),
         ActiveContext = newContext;
         CurrentNamespace = string.Empty;
         _detailPanels?.ResetAllPanels();
+        ClearSelection();
+        // Clear stale data immediately so the loading spinner is shown instead of
+        // old pods/deployments from the previous context bleeding through.
+        Deployments = []; StatefulSets = []; Pods = []; Services = [];
+        Ingresses = []; GatewayClasses = []; Gateways = []; HttpRoutes = [];
+        HelmReleases = []; ConfigMaps = []; Secrets = []; Hpas = [];
+        Events = []; Jobs = []; CronJobs = []; PodMetricsList = [];
+        _eventWarningCount = 0;
         await BootstrapAndLoadAsync(newContext, string.Empty);
         await PublishWorkspaceSnapshotAsync(recordRecent: false);
     }
