@@ -15,7 +15,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
 
     public bool IsMulti => IsAll || Namespaces.Count > 1;
 
-    public string Primary => Namespaces.FirstOrDefault() ?? "default";
+    public string Primary => Namespaces.FirstOrDefault() ?? string.Empty;
 
     public string SelectionToken => IsAll
         ? AllNamespacesToken
@@ -39,7 +39,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
     public static AksNamespaceScope FromSelection(
         string? selection,
         IReadOnlyList<string> availableNamespaces,
-        string fallbackNamespace = "default")
+        string fallbackNamespace = "")
     {
         var available = NormalizeNamespaces(availableNamespaces).ToList();
         if (string.Equals(selection?.Trim(), AllNamespacesToken, StringComparison.Ordinal))
@@ -76,7 +76,7 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
     public static string NormalizeSelection(
         string? selection,
         IReadOnlyList<string> availableNamespaces,
-        string fallbackNamespace = "default")
+        string fallbackNamespace = "")
         => FromSelection(selection, availableNamespaces, fallbackNamespace).SelectionToken;
 
     private static IEnumerable<string> NormalizeNamespaces(IEnumerable<string> namespaces)
@@ -96,6 +96,6 @@ public sealed record AksNamespaceScope(AksNamespaceScopeMode Mode, IReadOnlyList
             }
         }
 
-        return availableNamespaces.Count > 0 ? [availableNamespaces[0]] : [];
+        return [];
     }
 }

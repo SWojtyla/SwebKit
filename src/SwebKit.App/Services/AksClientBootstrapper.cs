@@ -153,16 +153,19 @@ public sealed class AksClientBootstrapper : IAksClientBootstrapper
         AksConfig? config)
     {
         var resolvedNamespace = NormalizeRequestedNamespace(requestedNamespace, config);
-        return AksNamespaceScope.NormalizeSelection(resolvedNamespace, namespaces);
+        var fallbackNamespace = string.IsNullOrWhiteSpace(config?.DefaultNamespace)
+            ? string.Empty
+            : config.DefaultNamespace.Trim();
+        return AksNamespaceScope.NormalizeSelection(resolvedNamespace, namespaces, fallbackNamespace);
     }
 
     private static string NormalizeRequestedNamespace(string? requestedNamespace, AksConfig? config)
     {
         if (!string.IsNullOrWhiteSpace(requestedNamespace))
         {
-            return requestedNamespace;
+            return requestedNamespace.Trim();
         }
 
-        return string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? "default" : config.DefaultNamespace;
+        return string.IsNullOrWhiteSpace(config?.DefaultNamespace) ? string.Empty : config.DefaultNamespace.Trim();
     }
 }

@@ -7,6 +7,7 @@
 @inject IRedisClientFactory RedisClientFactory
 @inject IAppEventBus Events
 @inject ICredentialStore CredentialStore
+@inject INotificationService Notifications
 @inject IPodHealthMonitorService Monitor
 @inject NavigationManager Nav
 @inject UiStateRepository UiState
@@ -17,23 +18,33 @@
 @implements IDisposable
 
 @{
-    var pinnedItems = GetPinnedItems();
-    var recentItems = GetRecentItems();
-    var openTabs = GetOpenTabs();
-    var visibleTiles = GetVisibleTileDefinitions();
-    var editorRows = GetTileEditorRows();
-    var serviceBusNamespaces = GetServiceBusNamespaceOptions();
+    var renderState = GetRenderState();
+    var activeView = renderState.ActiveView;
+    var activeFilters = activeView.Filters;
+    var activeLayout = activeView.Layout;
+    var dashboardViews = renderState.DashboardViews;
+    var pinnedItems = renderState.PinnedItems;
+    var recentItems = renderState.RecentItems;
+    var openTabs = renderState.OpenTabs;
+    var visibleTiles = renderState.VisibleTiles;
+    var kpiTiles = renderState.KpiTiles;
+    var boardTiles = renderState.BoardTiles;
+    var editorRows = renderState.EditorRows;
+    var serviceBusNamespaces = renderState.ServiceBusNamespaces;
+    var attentionCount = GetAttentionCount();
 }
 
-<div class="dashboard-page">
-    <RoutePageHeader Area="dashboard" Subtitle="Custom operations surface for the resources you watch most.">
+<div class="@renderState.PageClass">
+    <RoutePageHeader Area="dashboard"
+                     Subtitle="Your operational home page for live posture, quick resume context, and drill-through.">
         <Meta>
         @if (AppState.UseDemoData)
         {
             <span class="shell-pill shell-pill--warning">Demo mode</span>
         }
+        <span class="shell-pill shell-pill--accent">@activeView.Title</span>
         <span class="shell-pill shell-pill--muted">@pinnedItems.Count favorite@(pinnedItems.Count == 1 ? "" :
-                                                                                                         "s")</span>
+                                                                                                                                                                     "s")</span>
             <span class="shell-pill shell-pill--muted">@visibleTiles.Count tile@(visibleTiles.Count == 1 ? "" : "s")</span>
             @if (Monitor.IsMonitoring)
             {
@@ -54,509 +65,732 @@
             </Actions>
         </RoutePageHeader>
 
-        @if (_isCustomizing)
+        <DashboardOverviewStrip Title="@activeView.Title" AttentionCount="@attentionCount"
+                                VisibleTileCount="@visibleTiles.Count" ResumeCount="@(pinnedItems.Count + openTabs.Count)"
+                                HomeModeLabel="@GetHomeModeLabel()" AreaLabel="@GetAreaFilterLabel(activeFilters.Area)"
+                                FocusLabel="@GetSeverityFilterLabel(activeFilters.Severity)"
+                                TimeWindowLabel="@GetTimeWindowLabel(activeFilters.TimeWindow)"
+                                ConnectedAreasCount="@GetConfiguredSystemsCount()"
+                                RefreshCadenceLabel="@GetRefreshCadenceLabel(activeFilters.LiveMode)" RecentResourceCount="@recentItems.Count"
+                                IsMonitoring="@Monitor.IsMonitoring" MonitoredNamespaceCount="@Monitor.MonitoredNamespaces.Count">
+            <Controls>
+                <section class="dashboard-shell-controls" aria-label="Dashboard saved views and filters">
+                    <label class="dashboard-shell-control">
+                        <span>View</span>
+                        <select class="dashboard-field dashboard-shell-control__input" value="@activeView.Id"
+                                @onchange="OnActiveViewChangedAsync">
+                            @foreach (var view in dashboardViews)
+                            {
+                                <option value="@view.Id">@view.Title</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label class="dashboard-shell-control">
+                        <span>Area</span>
+                        <select class="dashboard-field dashboard-shell-control__input" value="@activeFilters.Area"
+                                @onchange="OnAreaFilterChangedAsync">
+                            <option value="all">All areas</option>
+                            <option value="dashboard">Workspace</option>
+                            <option value="service-bus">Service Bus</option>
+                            <option value="aks">AKS</option>
+                            <option value="redis">Redis</option>
+                            <option value="pipelines">Pipelines</option>
+                        </select>
+                    </label>
+
+                    <label class="dashboard-shell-control">
+                        <span>Focus</span>
+                        <select class="dashboard-field dashboard-shell-control__input" value="@activeFilters.Severity"
+                                @onchange="OnSeverityFilterChangedAsync">
+                            <option value="all">All widgets</option>
+                            <option value="attention">Needs attention</option>
+                            <option value="healthy">Healthy only</option>
+                        </select>
+                    </label>
+
+                    <label class="dashboard-shell-control">
+                        <span>Window</span>
+                        <select class="dashboard-field dashboard-shell-control__input" value="@activeFilters.TimeWindow"
+                                @onchange="OnTimeWindowChangedAsync">
+                            <option value="live">Live</option>
+                            <option value="15m">15 minutes</option>
+                            <option value="1h">1 hour</option>
+                            <option value="4h">4 hours</option>
+                            <option value="today">Today</option>
+                        </select>
+                    </label>
+
+                    <label class="dashboard-shell-control">
+                        <span>Refresh</span>
+                        <select class="dashboard-field dashboard-shell-control__input" value="@activeFilters.LiveMode"
+                                @onchange="OnLiveModeChangedAsync">
+                            <option value="live">Live cadence</option>
+                            <option value="snapshot">Manual snapshot</option>
+                        </select>
+                    </label>
+                </section>
+            </Controls>
+            <Actions>
+                <div class="dashboard-shell-actions" aria-label="Dashboard view actions">
+                    <button class="dashboard-action-button" type="button" disabled="@(!_dashboardPreferencesReady)"
+                            @onclick="CreateDashboardViewAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Width="16px" />
+                        <span>New view</span>
+                    </button>
+                    <button class="dashboard-action-button" type="button" disabled="@(!_dashboardPreferencesReady)"
+                            @onclick="DuplicateDashboardViewAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.DocumentMultiple())" Width="16px" />
+                        <span>Duplicate</span>
+                    </button>
+                    <button class="dashboard-action-button" type="button" disabled="@(!_dashboardPreferencesReady)"
+                            @onclick="BeginRenameDashboardView">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" Width="16px" />
+                        <span>Rename</span>
+                    </button>
+                    <button class="dashboard-action-button" type="button"
+                            disabled="@(!_dashboardPreferencesReady || dashboardViews.Count <= 1)"
+                            @onclick="DeleteDashboardViewAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Width="16px" />
+                        <span>Delete</span>
+                    </button>
+                    <button class="dashboard-action-button" type="button" disabled="@(!_dashboardPreferencesReady)"
+                            @onclick="ToggleKpiRibbonAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="16px" />
+                        <span>@(activeLayout.ShowKpiRibbon ? "Hide KPI" : "Show KPI")</span>
+                    </button>
+                    <button class="dashboard-action-button" type="button" disabled="@(!_dashboardPreferencesReady)"
+                            @onclick="ToggleInsightDockAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.PanelRight())" Width="16px" />
+                        <span>@(activeLayout.CollapseInsightDock ? "Show Dock" : "Collapse Dock")</span>
+                    </button>
+                </div>
+            </Actions>
+        </DashboardOverviewStrip>
+
+        @if (_isEditingViewTitle)
         {
-            <section class="dashboard-builder" aria-label="Dashboard customization">
-                <div class="dashboard-builder__templates">
-                    <div class="dashboard-builder__heading">
-                        <h2>Tile Library</h2>
-                        <button class="dashboard-reset-button" type="button" @onclick="ResetDashboardPreferencesAsync">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="16px" /> Reset
-                        </button>
-                    </div>
-
-                    @if (!string.IsNullOrWhiteSpace(_customizerMessage))
-                    {
-                        <p class="dashboard-builder__message">@_customizerMessage</p>
-                    }
-
-                    <article class="dashboard-template-card dashboard-template-card--service-bus">
-                        <div>
-                            <span class="dashboard-template-card__eyebrow">Service Bus</span>
-                            <h3>Entity Watch</h3>
-                        </div>
-                        <label>
-                            <span>Namespace</span>
-                            <select class="dashboard-field" @bind="_newServiceBusNamespaceId">
-                                @foreach (var ns in serviceBusNamespaces)
-                                {
-                                    <option value="@ns.Id">@ns.Label</option>
-                                }
-                            </select>
-                        </label>
-                        <label>
-                            <span>Queue or subscription path</span>
-                            <input class="dashboard-field" @bind="_newServiceBusEntityPath"
-                                   placeholder="orders or topic/subscriptions/consumer" />
-                        </label>
-                        <label>
-                            <span>Title</span>
-                            <input class="dashboard-field" @bind="_newServiceBusTileTitle" placeholder="Orders backlog" />
-                        </label>
-                        <div class="dashboard-size-picker" role="group" aria-label="Service Bus entity tile size">
-                            @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.ServiceBusEntityWatch))
-                            {
-                                <button type="button" class="@GetSizeButtonClass(size, _newServiceBusTileSize)"
-                                        @onclick="() => _newServiceBusTileSize = size">
-                                    @GetTileSizeLabel(size)
-                                </button>
-                            }
-                        </div>
-                        <button class="dashboard-add-button" type="button" disabled="@(serviceBusNamespaces.Count == 0)"
-                                @onclick="AddServiceBusEntityTileAsync">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
-                        </button>
-                    </article>
-
-                    <article class="dashboard-template-card dashboard-template-card--aks">
-                        <div>
-                            <span class="dashboard-template-card__eyebrow">AKS</span>
-                            <h3>Namespace Watch</h3>
-                        </div>
-                        <label>
-                            <span>Context</span>
-                            <input class="dashboard-field" @bind="_newAksContext" placeholder="current context" />
-                        </label>
-                        <label>
-                            <span>Namespace</span>
-                            <input class="dashboard-field" @bind="_newAksNamespace" placeholder="default" />
-                        </label>
-                        <label>
-                            <span>Title</span>
-                            <input class="dashboard-field" @bind="_newAksTileTitle" placeholder="Production namespace" />
-                        </label>
-                        <div class="dashboard-size-picker" role="group" aria-label="AKS namespace tile size">
-                            @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.AksNamespaceWatch))
-                            {
-                                <button type="button" class="@GetSizeButtonClass(size, _newAksTileSize)"
-                                        @onclick="() => _newAksTileSize = size">
-                                    @GetTileSizeLabel(size)
-                                </button>
-                            }
-                        </div>
-                        <button class="dashboard-add-button" type="button" disabled="@(!_aksConfigured)"
-                                @onclick="AddAksNamespaceTileAsync">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
-                        </button>
-                    </article>
-                </div>
-
-                <div class="dashboard-builder__layout">
-                    <div class="dashboard-builder__heading">
-                        <h2>Active Dashboard</h2>
-                    </div>
-                    <div class="dashboard-layout-list">
-                        @foreach (var row in editorRows)
-                        {
-                            <article class="dashboard-layout-row @(row.Preference.IsVisible ? "" : "dashboard-layout-row--hidden")">
-                                <label class="dashboard-layout-row__toggle">
-                                    <input type="checkbox" checked="@row.Preference.IsVisible"
-                                           @onchange="async args => await SetTileVisibilityAsync(row.Preference.TileId, args.Value is bool visible && visible)" />
-                                    <span>@row.DisplayTitle</span>
-                                </label>
-                                <span class="dashboard-layout-row__meta">@row.Description</span>
-                                <div class="dashboard-size-picker dashboard-size-picker--row" role="group"
-                                     aria-label="Size for @row.DisplayTitle">
-                                    @foreach (var size in GetSupportedTileSizes(row.Preference.TileId))
-                                    {
-                                        <button type="button" class="@GetSizeButtonClass(size, row.Preference.Size)"
-                                                title="Use @GetTileSizeLabel(size) size"
-                                                @onclick="() => SetTileSizeAsync(row.Preference.TileId, size)">
-                                            @GetTileSizeLabel(size)
-                                        </button>
-                                    }
-                                </div>
-                                <div class="dashboard-layout-row__actions">
-                                    @if (IsEditableCustomTile(row.Preference))
-                                    {
-                                        <button type="button" title="@(IsEditingTile(row.Preference.TileId) ? "Cancel edit" : "Edit")"
-                                                aria-label="Edit @row.DisplayTitle"
-                                                class="@(IsEditingTile(row.Preference.TileId) ? "is-active" : "")"
-                                                @onclick="() => ToggleEditTile(row.Preference.TileId)">
-                                            <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="16px" />
-                                        </button>
-                                    }
-                                    <button type="button" title="Move up" aria-label="Move @row.DisplayTitle up"
-                                            disabled="@IsFirstTile(row.Definition.Id)"
-                                            @onclick="() => MoveTileAsync(row.Preference.TileId, -1)">
-                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUp())" Width="16px" />
-                                    </button>
-                                    <button type="button" title="Move down" aria-label="Move @row.DisplayTitle down"
-                                            disabled="@IsLastTile(row.Definition.Id)"
-                                            @onclick="() => MoveTileAsync(row.Preference.TileId, 1)">
-                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDown())" Width="16px" />
-                                    </button>
-                                    <button type="button" title="Remove" aria-label="Remove @row.DisplayTitle"
-                                            @onclick="() => RemoveTileAsync(row.Preference.TileId)">
-                                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="16px" />
-                                    </button>
-                                </div>
-                                @if (IsEditingTile(row.Preference.TileId))
-                                {
-                                    <div class="dashboard-layout-row__edit">
-                                        @if (DashboardTileRegistry.IsAksNamespaceWatch(row.Preference.TileId))
-                                        {
-                                            <label>
-                                                <span>Context</span>
-                                                <input class="dashboard-field" @bind="_editAksContext" placeholder="current context" />
-                                            </label>
-                                            <label>
-                                                <span>Namespace</span>
-                                                <input class="dashboard-field" @bind="_editAksNamespace" placeholder="default" />
-                                            </label>
-                                            <label>
-                                                <span>Title</span>
-                                                <input class="dashboard-field" @bind="_editAksTitle" placeholder="Production namespace" />
-                                            </label>
-                                        }
-                                        else if (DashboardTileRegistry.IsServiceBusEntityWatch(row.Preference.TileId))
-                                        {
-                                            <label>
-                                                <span>Namespace</span>
-                                                <select class="dashboard-field" @bind="_editServiceBusNamespaceId">
-                                                    @foreach (var ns in GetServiceBusNamespaceOptions())
-                                                    {
-                                                        <option value="@ns.Id">@ns.Label</option>
-                                                    }
-                                                </select>
-                                            </label>
-                                            <label>
-                                                <span>Queue or subscription path</span>
-                                                <input class="dashboard-field" @bind="_editServiceBusEntityPath"
-                                                       placeholder="orders or topic/subscriptions/consumer" />
-                                            </label>
-                                            <label>
-                                                <span>Title</span>
-                                                <input class="dashboard-field" @bind="_editServiceBusTitle" placeholder="Orders backlog" />
-                                            </label>
-                                        }
-                                        <div class="dashboard-layout-row__edit-actions">
-                                            <button type="button" class="dashboard-add-button"
-                                                    @onclick="() => SaveEditedTileAsync(row.Preference.TileId)">
-                                                Save
-                                            </button>
-                                            <button type="button" @onclick="() => ToggleEditTile(row.Preference.TileId)">Cancel</button>
-                                        </div>
-                                    </div>
-                                }
-                            </article>
-                        }
+            <div class="dashboard-view-editor" aria-label="Rename dashboard view">
+                <label class="dashboard-shell-control dashboard-shell-control--wide">
+                    <span>View title</span>
+                    <input class="dashboard-field dashboard-shell-control__input" @bind="_viewTitleDraft"
+                           placeholder="Operations review" />
+                </label>
+                <div class="dashboard-view-editor__actions">
+                    <button class="dashboard-add-button" type="button" @onclick="RenameDashboardViewAsync">Save
+                        view</button>
+                        <button class="dashboard-action-button" type="button" @onclick="CancelRenameDashboardView">Cancel</button>
                     </div>
                 </div>
-            </section>
-        }
-
-        <section class="dashboard-canvas" aria-label="Dashboard tiles">
-            @if (visibleTiles.Count == 0)
-            {
-                <EmptyState Icon="⌘" Title="No dashboard tiles selected"
-                            Subtitle="Turn on at least one tile to rebuild the dashboard." />
             }
-            else
+
+            @if (activeLayout.ShowKpiRibbon && kpiTiles.Count > 0)
             {
-                <div class="@GetTileGridClass(visibleTiles)">
-                    @foreach (var tile in visibleTiles)
+                <section class="dashboard-kpi-ribbon" aria-label="Priority KPI ribbon">
+                    @if (HasVisibleTile(kpiTiles, DashboardTileRegistry.ServiceBusDeadLetters))
                     {
-                        <div class="@GetTileClass(tile)">
-                            @switch (DashboardTileRegistry.GetTemplateId(tile.Id))
-                            {
-                                case DashboardTileRegistry.Favorites:
-                                    <section class="dashboard-panel dashboard-panel--workspace">
-                                        <div class="dashboard-panel__header">
-                                            <div>
-                                                <span class="dashboard-panel__eyebrow">Workspace</span>
-                                                <h3>Favorites</h3>
-                                            </div>
-                                            <strong>@pinnedItems.Count</strong>
-                                        </div>
-                                        @if (pinnedItems.Count == 0)
+                        <DashboardMetricTile AreaLabel="Service Bus" OpenHref="/service-bus" IsConfigured="@_sbConfigured"
+                                             Data="@_sbData" Error="@_sbError" FallbackLabel="dead-lettered" IsLoading="@_sbLoading"
+                                             CssClass="dashboard-metric-tile--service-bus" />
+                    }
+                    @if (HasVisibleTile(kpiTiles, DashboardTileRegistry.AksUnhealthyPods))
+                    {
+                        <DashboardMetricTile AreaLabel="AKS" OpenHref="/aks" IsConfigured="@_aksConfigured" Data="@_aksData"
+                                             Error="@_aksError" FallbackLabel="unhealthy pods" IsLoading="@_aksLoading"
+                                             CssClass="dashboard-metric-tile--aks" />
+                    }
+                    @if (HasVisibleTile(kpiTiles, DashboardTileRegistry.RedisExpiringKeys))
+                    {
+                        <DashboardMetricTile AreaLabel="Redis" OpenHref="/redis" IsConfigured="@_redisConfigured" Data="@_redisData"
+                                             Error="@_redisError" FallbackLabel="expiring < 5m" IsLoading="@_redisLoading"
+                                             CssClass="dashboard-metric-tile--redis" />
+                    }
+                    @if (HasVisibleTile(kpiTiles, DashboardTileRegistry.PendingApprovals))
+                    {
+                        <DashboardMetricTile AreaLabel="Pipelines" OpenHref="/pipelines" IsConfigured="@_releasesConfigured"
+                                             Data="@_releasesData" Error="@_releasesError" FallbackLabel="pending approvals"
+                                             IsLoading="@_releasesLoading" CssClass="dashboard-metric-tile--pipelines" />
+                    }
+                </section>
+            }
+
+            <div class="dashboard-home-layout">
+                <div class="dashboard-home-layout__board">
+                    @if (_isCustomizing)
+                    {
+                        <section class="dashboard-builder" aria-label="Dashboard customization">
+                            <div class="dashboard-builder__templates">
+                                <div class="dashboard-builder__heading">
+                                    <h2>Tile Library</h2>
+                                    <button class="dashboard-reset-button" type="button" @onclick="ResetDashboardPreferencesAsync">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Width="16px" />
+                                        Reset
+                                    </button>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(_customizerMessage))
+                                {
+                                    <p class="dashboard-builder__message">@_customizerMessage</p>
+                                }
+
+                                <article class="dashboard-template-card dashboard-template-card--service-bus">
+                                    <div>
+                                        <span class="dashboard-template-card__eyebrow">Service Bus</span>
+                                        <h3>Entity Watch</h3>
+                                    </div>
+                                    <label>
+                                        <span>Namespace</span>
+                                        <select class="dashboard-field" @bind="_newServiceBusNamespaceId">
+                                            @foreach (var ns in serviceBusNamespaces)
+                                            {
+                                                <option value="@ns.Id">@ns.Label</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>Queue or subscription path</span>
+                                        <input class="dashboard-field" @bind="_newServiceBusEntityPath"
+                                               placeholder="orders or topic/subscriptions/consumer" />
+                                    </label>
+                                    <label>
+                                        <span>Title</span>
+                                        <input class="dashboard-field" @bind="_newServiceBusTileTitle"
+                                               placeholder="Orders backlog" />
+                                    </label>
+                                    <div class="dashboard-size-picker" role="group" aria-label="Service Bus entity tile size">
+                                        @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.ServiceBusEntityWatch))
                                         {
-                                            <EmptyState Icon="⌘" Title="No favorites"
-                                                        Subtitle="Save queues, topics, subscriptions, or workloads as favorites to keep them close.">
-                                                <Actions>
-                                                    <a href="/service-bus">Browse Service Bus</a>
-                                                    <a href="/aks">Browse AKS</a>
-                                                </Actions>
-                                            </EmptyState>
+                                            <button type="button" class="@GetSizeButtonClass(size, _newServiceBusTileSize)"
+                                                    @onclick="() => _newServiceBusTileSize = size">
+                                                @GetTileSizeLabel(size)
+                                            </button>
                                         }
-                                        else
+                                    </div>
+                                    <button class="dashboard-add-button" type="button" disabled="@(serviceBusNamespaces.Count == 0)"
+                                            @onclick="AddServiceBusEntityTileAsync">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
+                                    </button>
+                                </article>
+
+                                <article class="dashboard-template-card dashboard-template-card--aks">
+                                    <div>
+                                        <span class="dashboard-template-card__eyebrow">AKS</span>
+                                        <h3>Namespace Watch</h3>
+                                    </div>
+                                    <label>
+                                        <span>Context</span>
+                                        <input class="dashboard-field" @bind="_newAksContext" placeholder="current context" />
+                                    </label>
+                                    <label>
+                                        <span>Namespace</span>
+                                        <input class="dashboard-field" @bind="_newAksNamespace" placeholder="namespace" />
+                                    </label>
+                                    <label>
+                                        <span>Title</span>
+                                        <input class="dashboard-field" @bind="_newAksTileTitle"
+                                               placeholder="Production namespace" />
+                                    </label>
+                                    <div class="dashboard-size-picker" role="group" aria-label="AKS namespace tile size">
+                                        @foreach (var size in GetSupportedTileSizes(DashboardTileRegistry.AksNamespaceWatch))
                                         {
-                                            <div class="pinned-chips">
-                                                @foreach (var pin in pinnedItems)
+                                            <button type="button" class="@GetSizeButtonClass(size, _newAksTileSize)"
+                                                    @onclick="() => _newAksTileSize = size">
+                                                @GetTileSizeLabel(size)
+                                            </button>
+                                        }
+                                    </div>
+                                    <button class="dashboard-add-button" type="button" disabled="@(!_aksConfigured)"
+                                            @onclick="AddAksNamespaceTileAsync">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="16px" /> Add tile
+                                    </button>
+                                </article>
+                            </div>
+
+                            <div class="dashboard-builder__layout">
+                                <div class="dashboard-builder__heading">
+                                    <h2>Active Dashboard</h2>
+                                </div>
+                                <div class="dashboard-layout-list">
+                                    @foreach (var row in editorRows)
+                                    {
+                                        <article
+                                            class="dashboard-layout-row @(row.Preference.IsVisible ? "" : "dashboard-layout-row--hidden")">
+                                            <label class="dashboard-layout-row__toggle">
+                                                <input type="checkbox" checked="@row.Preference.IsVisible"
+                                                       @onchange="async args => await SetTileVisibilityAsync(row.Preference.TileId, args.Value is bool visible && visible)" />
+                                                <span>@row.DisplayTitle</span>
+                                            </label>
+                                            <span class="dashboard-layout-row__meta">@row.Description</span>
+                                            <div class="dashboard-size-picker dashboard-size-picker--row" role="group"
+                                                 aria-label="Size for @row.DisplayTitle">
+                                                @foreach (var size in GetSupportedTileSizes(row.Preference.TileId))
                                                 {
-                                                    <button class="pinned-chip" @onclick="() => NavigateToPin(pin)"
-                                                            title="@(pin.Snapshot.Resource.DisplayPath ?? pin.Snapshot.Resource.DisplayName)">
-                                                        <span class="pinned-chip-icon">@pin.Icon</span>
-                                                        <span class="pinned-chip-name">@pin.DisplayPath</span>
+                                                    <button type="button" class="@GetSizeButtonClass(size, row.Preference.Size)"
+                                                            title="Use @GetTileSizeLabel(size) size"
+                                                            @onclick="() => SetTileSizeAsync(row.Preference.TileId, size)">
+                                                        @GetTileSizeLabel(size)
                                                     </button>
                                                 }
                                             </div>
+                                            <div class="dashboard-layout-row__actions">
+                                                @if (IsEditableCustomTile(row.Preference))
+                                                {
+                                                    <button type="button"
+                                                            title="@(IsEditingTile(row.Preference.TileId) ? "Cancel edit" : "Edit")"
+                                                            aria-label="Edit @row.DisplayTitle"
+                                                            class="@(IsEditingTile(row.Preference.TileId) ? "is-active" : "")"
+                                                            @onclick="() => ToggleEditTile(row.Preference.TileId)">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="16px" />
+                                                    </button>
+                                                }
+                                                <button type="button" title="Move up" aria-label="Move @row.DisplayTitle up"
+                                                        disabled="@IsFirstTile(row.Definition.Id)"
+                                                        @onclick="() => MoveTileAsync(row.Preference.TileId, -1)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUp())" Width="16px" />
+                                                </button>
+                                                <button type="button" title="Move down" aria-label="Move @row.DisplayTitle down"
+                                                        disabled="@IsLastTile(row.Definition.Id)"
+                                                        @onclick="() => MoveTileAsync(row.Preference.TileId, 1)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDown())" Width="16px" />
+                                                </button>
+                                                <button type="button" title="Remove" aria-label="Remove @row.DisplayTitle"
+                                                        @onclick="() => RemoveTileAsync(row.Preference.TileId)">
+                                                    <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="16px" />
+                                                </button>
+                                            </div>
+                                            @if (IsEditingTile(row.Preference.TileId))
+                                            {
+                                                <div class="dashboard-layout-row__edit">
+                                                    @if (DashboardTileRegistry.IsAksNamespaceWatch(row.Preference.TileId))
+                                                    {
+                                                        <label>
+                                                            <span>Context</span>
+                                                            <input class="dashboard-field" @bind="_editAksContext"
+                                                                   placeholder="current context" />
+                                                        </label>
+                                                        <label>
+                                                            <span>Namespace</span>
+                                                            <input class="dashboard-field" @bind="_editAksNamespace" placeholder="namespace" />
+                                                        </label>
+                                                        <label>
+                                                            <span>Title</span>
+                                                            <input class="dashboard-field" @bind="_editAksTitle"
+                                                                   placeholder="Production namespace" />
+                                                        </label>
+                                                    }
+                                                    else if (DashboardTileRegistry.IsServiceBusEntityWatch(row.Preference.TileId))
+                                                    {
+                                                        <label>
+                                                            <span>Namespace</span>
+                                                            <select class="dashboard-field" @bind="_editServiceBusNamespaceId">
+                                                                @foreach (var ns in GetServiceBusNamespaceOptions())
+                                                                {
+                                                                    <option value="@ns.Id">@ns.Label</option>
+                                                                }
+                                                            </select>
+                                                        </label>
+                                                        <label>
+                                                            <span>Queue or subscription path</span>
+                                                            <input class="dashboard-field" @bind="_editServiceBusEntityPath"
+                                                                   placeholder="orders or topic/subscriptions/consumer" />
+                                                        </label>
+                                                        <label>
+                                                            <span>Title</span>
+                                                            <input class="dashboard-field" @bind="_editServiceBusTitle"
+                                                                   placeholder="Orders backlog" />
+                                                        </label>
+                                                    }
+                                                    <div class="dashboard-layout-row__edit-actions">
+                                                        <button type="button" class="dashboard-add-button"
+                                                                @onclick="() => SaveEditedTileAsync(row.Preference.TileId)">
+                                                            Save
+                                                        </button>
+                                                        <button type="button"
+                                                                @onclick="() => ToggleEditTile(row.Preference.TileId)">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </article>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+                    }
+
+                    <section class="dashboard-canvas" aria-label="Dashboard tiles">
+                        @if (boardTiles.Count == 0)
+                        {
+                            <EmptyState Icon="⌘" Title="No board widgets selected"
+                                        Subtitle="The KPI ribbon is active, but the main board has no visible widgets yet." />
+                        }
+                        else
+                        {
+                            <div class="@GetTileGridClass(boardTiles)">
+                                @foreach (var tile in boardTiles)
+                                {
+                                    <div class="@GetTileClass(tile)">
+                                        @switch (DashboardTileRegistry.GetTemplateId(tile.Id))
+                                        {
+                                            case DashboardTileRegistry.Favorites:
+                                                <section class="dashboard-panel dashboard-panel--workspace">
+                                                    <div class="dashboard-panel__header">
+                                                        <div>
+                                                            <span class="dashboard-panel__eyebrow">Workspace</span>
+                                                            <h3>Favorites</h3>
+                                                        </div>
+                                                        <strong>@pinnedItems.Count</strong>
+                                                    </div>
+                                                    @if (pinnedItems.Count == 0)
+                                                    {
+                                                        <EmptyState Icon="⌘" Title="No favorites"
+                                                                    Subtitle="Save queues, topics, subscriptions, or workloads as favorites to keep them close.">
+                                                            <Actions>
+                                                                <a href="/service-bus">Browse Service Bus</a>
+                                                                <a href="/aks">Browse AKS</a>
+                                                            </Actions>
+                                                        </EmptyState>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="pinned-chips">
+                                                            @foreach (var pin in pinnedItems)
+                                                            {
+                                                                <button class="pinned-chip" @onclick="() => NavigateToPin(pin)"
+                                                                        title="@(pin.Snapshot.Resource.DisplayPath ?? pin.Snapshot.Resource.DisplayName)">
+                                                                    <span class="pinned-chip-icon">@pin.Icon</span>
+                                                                    <span class="pinned-chip-name">@pin.DisplayPath</span>
+                                                                </button>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </section>
+                                                break;
+                                            case DashboardTileRegistry.RecentResources:
+                                                <section class="dashboard-panel dashboard-panel--workspace dashboard-panel--table">
+                                                    <div class="dashboard-panel__header">
+                                                        <div>
+                                                            <span class="dashboard-panel__eyebrow">Workspace</span>
+                                                            <h3>Recent Resources</h3>
+                                                        </div>
+                                                        <strong>@recentItems.Count</strong>
+                                                    </div>
+                                                    @if (recentItems.Count == 0)
+                                                    {
+                                                        <EmptyState Icon="⋯" Title="No recent resources"
+                                                                    Subtitle="Resources opened from the shell will appear here.">
+                                                            <Actions>
+                                                                <a href="/service-bus">Open Service Bus</a>
+                                                                <a href="/aks">Open AKS</a>
+                                                            </Actions>
+                                                        </EmptyState>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="resource-row-list">
+                                                            @foreach (var item in recentItems)
+                                                            {
+                                                                <button class="resource-row" @onclick="() => NavigateToResource(item)"
+                                                                        title="@(item.Snapshot.Resource.DisplayPath ?? item.Snapshot.Resource.DisplayName)">
+                                                                    <span class="resource-row-icon">@item.Icon</span>
+                                                                    <span class="resource-row-main">
+                                                                        <span class="resource-row-name">@item.DisplayPath</span>
+                                                                        <span class="resource-row-meta">@GetResourceAreaLabel(item) ·
+                                                                            @GetResourceKindLabel(item)</span>
+                                                                        </span>
+                                                                        <span class="resource-row-time">@RelativeTime(item.Timestamp)</span>
+                                                                    </button>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </section>
+                                                    break;
+                                case DashboardTileRegistry.OpenTabs:
+                                                        <section class="dashboard-panel dashboard-panel--workspace">
+                                                            <div class="dashboard-panel__header">
+                                                                <div>
+                                                                    <span class="dashboard-panel__eyebrow">Workspace</span>
+                                                                    <h3>Open Tabs</h3>
+                                                                </div>
+                                                                <strong>@openTabs.Count</strong>
+                                                            </div>
+                                                            @if (openTabs.Count == 0)
+                                                            {
+                                                                <EmptyState Icon="□" Title="No restorable tabs"
+                                                                            Subtitle="Open workspace tabs are restored here after they are saved in local state." />
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="open-tab-list">
+                                                                    @foreach (var tab in openTabs)
+                                                                    {
+                                                                        <button class="open-tab-chip" @onclick="() => NavigateToTab(tab)">
+                                                                            <span class="open-tab-icon">@GetAreaIcon(tab.Area)</span>
+                                                                            <span class="open-tab-name">@tab.Title</span>
+                                                                            <span class="open-tab-area">@ShellNavigation.ForArea(tab.Area).Label</span>
+                                                                        </button>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </section>
+                                                        break;
+                                                    case DashboardTileRegistry.ServiceBusDeadLetters:
+                                                        <DashboardMetricTile AreaLabel="Service Bus" OpenHref="/service-bus"
+                                                                             IsConfigured="@_sbConfigured" Data="@_sbData" Error="@_sbError"
+                                                                             FallbackLabel="dead-lettered" IsLoading="@_sbLoading"
+                                                                             CssClass="dashboard-metric-tile--service-bus" />
+                                                        break;
+                                                    case DashboardTileRegistry.AksUnhealthyPods:
+                                                        <DashboardMetricTile AreaLabel="AKS" OpenHref="/aks" IsConfigured="@_aksConfigured"
+                                                                             Data="@_aksData" Error="@_aksError" FallbackLabel="unhealthy pods" IsLoading="@_aksLoading"
+                                                                             CssClass="dashboard-metric-tile--aks" />
+                                                        break;
+                                                    case DashboardTileRegistry.RedisExpiringKeys:
+                                                        <DashboardMetricTile AreaLabel="Redis" OpenHref="/redis" IsConfigured="@_redisConfigured"
+                                                                             Data="@_redisData" Error="@_redisError" FallbackLabel="expiring < 5m"
+                                                                             IsLoading="@_redisLoading" CssClass="dashboard-metric-tile--redis" />
+                                                        break;
+                                                    case DashboardTileRegistry.PendingApprovals:
+                                                        <DashboardMetricTile AreaLabel="Pipelines" OpenHref="/pipelines"
+                                                                             IsConfigured="@_releasesConfigured" Data="@_releasesData" Error="@_releasesError"
+                                                                             FallbackLabel="pending approvals" IsLoading="@_releasesLoading"
+                                                                             CssClass="dashboard-metric-tile--pipelines" />
+                                                        break;
+                                                    case DashboardTileRegistry.ServiceBusEntityWatch:
+                                                        var entityPreference = GetTilePreference(tile.Id);
+                                                        var entityMetric = GetServiceBusEntityMetric(tile.Id);
+                                                        <section class="dashboard-panel dashboard-watch dashboard-watch--service-bus">
+                                                            <DashboardWatchTile AreaLabel="Service Bus Entity"
+                                                                                Title="@GetTileDisplayTitle(tile, entityPreference)"
+                                                                                Target="@GetServiceBusEntityTileTargetLabel(entityPreference)"
+                                                                                Stats="@GetServiceBusEntityStats(entityMetric)"
+                                                                                LastUpdated="@(entityMetric?.LastUpdated ?? default)" Error="@entityMetric?.Error"
+                                                                                IsLoading="@IsServiceBusEntityTileLoading(tile.Id)"
+                                                                                LoadingText="Loading entity stats..."
+                                                                                OnOpen="@(() => OpenServiceBusEntityTileAsync(entityPreference))" />
+                                                        </section>
+                                                        break;
+                                                    case DashboardTileRegistry.AksNamespaceWatch:
+                                                        var namespacePreference = GetTilePreference(tile.Id);
+                                                        var namespaceMetric = GetAksNamespaceMetric(tile.Id);
+                                                        <section class="dashboard-panel dashboard-watch dashboard-watch--aks">
+                                                            <DashboardWatchTile AreaLabel="AKS Namespace"
+                                                                                Title="@GetTileDisplayTitle(tile, namespacePreference)"
+                                                                                Target="@GetAksTileTargetLabel(namespacePreference)"
+                                                                                Stats="@GetAksNamespaceStats(namespaceMetric)"
+                                                                                LastUpdated="@(namespaceMetric?.LastUpdated ?? default)"
+                                                                                Error="@GetAksNamespaceTileError(namespaceMetric)"
+                                                                                Note="@GetAksNamespaceTileNote(namespaceMetric)"
+                                                                                IsLoading="@IsAksNamespaceTileLoading(tile.Id)"
+                                                                                LoadingText="Loading namespace summary..."
+                                                                                OnOpen="@(() => OpenAksNamespaceTile(namespacePreference))" />
+                                                        </section>
+                                                        break;
+                                                    case DashboardTileRegistry.PodHealthAlerts:
+                                                        <section class="dashboard-panel dashboard-panel--aks-events">
+                                                            <div class="dashboard-panel__header">
+                                                                <div>
+                                                                    <span class="dashboard-panel__eyebrow">AKS</span>
+                                                                    <h3>Pod Health</h3>
+                                                                </div>
+                                                                @if (Monitor.IsMonitoring)
+                                                                {
+                                                                    <span class="ph-monitoring-badge">monitoring</span>
+                                                                }
+                                                            </div>
+                                                            @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
+                                                            {
+                                                                <div class="ph-ns-row">
+                                                                    @foreach (var ns in Monitor.MonitoredNamespaces)
+                                                                    {
+                                                                        <span class="ph-ns-chip">
+                                                                            <span class="ph-ns-chip-label">@ns</span>
+                                                                            <button class="ph-ns-chip-remove" title="Stop monitoring @ns"
+                                                                                    aria-label="Stop monitoring @ns"
+                                                                                    @onclick="() => StopMonitoringNamespaceAsync(ns)">✕</button>
+                                                                        </span>
+                                                                    }
+                                                                    @if (Monitor.MonitoredNamespaces.Count > 1)
+                                                                    {
+                                                                        <button class="ph-ns-stop-all" @onclick="StopAllMonitoringAsync"
+                                                                                title="Stop all pod health monitoring">
+                                                                            Stop all
+                                                                        </button>
+                                                                    }
+                                                                </div>
+                                                            }
+
+                                                            @if (_monitorAlerts.Count == 0)
+                                                            {
+                                                                <p class="dashboard-empty">No pod health events detected.</p>
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="ph-alert-list">
+                                                                    @foreach (var evt in _monitorAlerts.Take(6))
+                                                                    {
+                                                                        <div class="ph-alert-row ph-@evt.EventType.ToString().ToLowerInvariant()">
+                                                                            <span class="ph-alert-icon">⚠</span>
+                                                                            <div class="ph-alert-body">
+                                                                                <span class="ph-alert-pod">@evt.PodName</span>
+                                                                                <span class="ph-alert-meta">@evt.Namespace — @evt.EventType</span>
+                                                                            </div>
+                                                                            <span class="ph-alert-time">@RelativeTime(evt.DetectedAt)</span>
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                                @if (_monitorAlerts.Count > 6)
+                                                                {
+                                                                    <p class="ph-overflow-hint">+@(_monitorAlerts.Count - 6) more — see AKS page for full
+                                                                        history</p>
+                                                                    }
+                                                                }
+                                                            </section>
+                                                            break;
+                                                case DashboardTileRegistry.RecentActivity:
+                                                                <section class="dashboard-panel dashboard-panel--activity">
+                                                                    <div class="dashboard-panel__header">
+                                                                        <div>
+                                                                            <span class="dashboard-panel__eyebrow">Session</span>
+                                                                            <h3>Recent Activity</h3>
+                                                                        </div>
+                                                                        <strong>@_activities.Count</strong>
+                                                                    </div>
+                                                                    @if (_activities.Count == 0)
+                                                                    {
+                                                                        <EmptyState Icon="⋯" Title="No recent activity"
+                                                                                    Subtitle="Actions you take across Service Bus, AKS, and Pipelines will appear here.">
+                                                                            <Actions>
+                                                                                <a href="/service-bus">Open Service Bus</a>
+                                                                                <a href="/aks">Open AKS</a>
+                                                                            </Actions>
+                                                                        </EmptyState>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <div class="activity-list">
+                                                                            @foreach (var a in _activities)
+                                                                            {
+                                                                                <div class="activity-item">
+                                                                                    <span class="activity-icon">@a.Icon</span>
+                                                                                    <span class="activity-desc">@a.Description</span>
+                                                                                    <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
+                                                                                </div>
+                                                                            }
+                                                                        </div>
+                                                                    }
+                                                                </section>
+                                                                break;
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
                                         }
                                     </section>
-                                    break;
-                                case DashboardTileRegistry.RecentResources:
-                                    <section class="dashboard-panel dashboard-panel--workspace dashboard-panel--table">
-                                        <div class="dashboard-panel__header">
-                                            <div>
-                                                <span class="dashboard-panel__eyebrow">Workspace</span>
-                                                <h3>Recent Resources</h3>
+                                </div>
+
+                                @if (!activeLayout.CollapseInsightDock)
+                                {
+                                    <aside class="dashboard-insight-dock" aria-label="Home insight dock">
+                                        <section class="dashboard-dock-card">
+                                            <div class="dashboard-dock-card__header">
+                                                <div>
+                                                    <span class="dashboard-dock-card__eyebrow">Quick Actions</span>
+                                                    <h3>Jump Into Work</h3>
+                                                </div>
                                             </div>
-                                            <strong>@recentItems.Count</strong>
-                                        </div>
-                                        @if (recentItems.Count == 0)
-                                        {
-                                            <EmptyState Icon="⋯" Title="No recent resources"
-                                                        Subtitle="Resources opened from the shell will appear here.">
-                                                <Actions>
-                                                    <a href="/service-bus">Open Service Bus</a>
-                                                    <a href="/aks">Open AKS</a>
-                                                </Actions>
-                                            </EmptyState>
-                                        }
-                                        else
-                                        {
-                                            <div class="resource-row-list">
-                                                @foreach (var item in recentItems)
-                                                {
-                                                    <button class="resource-row" @onclick="() => NavigateToResource(item)"
-                                                            title="@(item.Snapshot.Resource.DisplayPath ?? item.Snapshot.Resource.DisplayName)">
-                                                        <span class="resource-row-icon">@item.Icon</span>
-                                                        <span class="resource-row-main">
-                                                            <span class="resource-row-name">@item.DisplayPath</span>
-                                                            <span class="resource-row-meta">@GetResourceAreaLabel(item) ·
-                                                                @GetResourceKindLabel(item)</span>
-                                                            </span>
-                                                            <span class="resource-row-time">@RelativeTime(item.Timestamp)</span>
-                                                        </button>
+                                            <div class="dashboard-dock-actions">
+                                                <a class="dashboard-dock-action" href="/service-bus">Service Bus</a>
+                                                <a class="dashboard-dock-action" href="/aks">AKS</a>
+                                                <a class="dashboard-dock-action" href="/redis">Redis</a>
+                                                <a class="dashboard-dock-action" href="/pipelines">Pipelines</a>
+                                                <a class="dashboard-dock-action" href="/observability">Observability</a>
+                                                <a class="dashboard-dock-action" href="/settings">Settings</a>
+                                            </div>
+                                        </section>
+
+                                        <section class="dashboard-dock-card">
+                                            <div class="dashboard-dock-card__header">
+                                                <div>
+                                                    <span class="dashboard-dock-card__eyebrow">Live Watch</span>
+                                                    <h3>Current Posture</h3>
+                                                </div>
+                                            </div>
+                                            <div class="dashboard-dock-metrics">
+                                                <div>
+                                                    <span>Mode</span>
+                                                    <strong>@GetHomeModeLabel()</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Attention</span>
+                                                    <strong>@attentionCount</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Refresh</span>
+                                                    <strong>60s</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Monitoring</span>
+                                                    <strong>@(Monitor.IsMonitoring ? $"{Monitor.MonitoredNamespaces.Count} live" : "off")</strong>
+                                                </div>
+                                            </div>
+                                            @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
+                                            {
+                                                <div class="dashboard-dock-tags">
+                                                    @foreach (var ns in Monitor.MonitoredNamespaces.Take(4))
+                                                    {
+                                                        <span class="dashboard-dock-tag">@ns</span>
                                                     }
                                                 </div>
                                             }
                                         </section>
-                                        break;
-                                case DashboardTileRegistry.OpenTabs:
-                                            <section class="dashboard-panel dashboard-panel--workspace">
-                                                <div class="dashboard-panel__header">
-                                                    <div>
-                                                        <span class="dashboard-panel__eyebrow">Workspace</span>
-                                                        <h3>Open Tabs</h3>
-                                                    </div>
+
+                                        <section class="dashboard-dock-card">
+                                            <div class="dashboard-dock-card__header">
+                                                <div>
+                                                    <span class="dashboard-dock-card__eyebrow">Workspace Resume</span>
+                                                    <h3>Continue Where You Left Off</h3>
+                                                </div>
+                                            </div>
+                                            <div class="dashboard-dock-metrics dashboard-dock-metrics--workspace">
+                                                <div>
+                                                    <span>Favorites</span>
+                                                    <strong>@pinnedItems.Count</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Recent</span>
+                                                    <strong>@recentItems.Count</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Open Tabs</span>
                                                     <strong>@openTabs.Count</strong>
                                                 </div>
-                                                @if (openTabs.Count == 0)
-                                                {
-                                                    <EmptyState Icon="□" Title="No restorable tabs"
-                                                                Subtitle="Open workspace tabs are restored here after they are saved in local state." />
-                                                }
-                                                else
-                                                {
-                                                    <div class="open-tab-list">
-                                                        @foreach (var tab in openTabs)
-                                                        {
-                                                            <button class="open-tab-chip" @onclick="() => NavigateToTab(tab)">
-                                                                <span class="open-tab-icon">@GetAreaIcon(tab.Area)</span>
-                                                                <span class="open-tab-name">@tab.Title</span>
-                                                                <span class="open-tab-area">@ShellNavigation.ForArea(tab.Area).Label</span>
+                                            </div>
+
+                                            @if (recentItems.Count == 0)
+                                            {
+                                                <p class="dashboard-dock-empty">Open resources from any area and your last context will appear here.</p>
+                                            }
+                                            else
+                                            {
+                                                <div class="dashboard-dock-resource-list">
+                                                    @foreach (var item in recentItems.Take(3))
+                                                    {
+                                                        <button class="dashboard-dock-resource" @onclick="() => NavigateToResource(item)">
+                                                            <span class="dashboard-dock-resource__icon">@item.Icon</span>
+                                                            <span class="dashboard-dock-resource__body">
+                                                                <span class="dashboard-dock-resource__name">@item.DisplayPath</span>
+                                                                <span class="dashboard-dock-resource__meta">@GetResourceAreaLabel(item) ·
+                                                                    @RelativeTime(item.Timestamp)</span>
+                                                                </span>
                                                             </button>
                                                         }
                                                     </div>
                                                 }
                                             </section>
-                                            break;
-                                        case DashboardTileRegistry.ServiceBusDeadLetters:
-                                            <section class="dashboard-signal dashboard-signal--service-bus">
-                                                <span class="dashboard-signal__area">Service Bus</span>
-                                                @RenderMetricBody(_sbConfigured, _sbData, _sbError, "dead-lettered")
-                                            </section>
-                                            break;
-                                        case DashboardTileRegistry.AksUnhealthyPods:
-                                            <section class="dashboard-signal dashboard-signal--aks">
-                                                <span class="dashboard-signal__area">AKS</span>
-                                                @RenderMetricBody(_aksConfigured, _aksData, _aksError, "unhealthy pods")
-                                            </section>
-                                            break;
-                                        case DashboardTileRegistry.RedisExpiringKeys:
-                                            <section class="dashboard-signal dashboard-signal--redis">
-                                                <span class="dashboard-signal__area">Redis</span>
-                                                @RenderMetricBody(_redisConfigured, _redisData, _redisError, "expiring < 5m")
-                                            </section>
-                                            break;
-                                        case DashboardTileRegistry.PendingApprovals:
-                                            <section class="dashboard-signal dashboard-signal--pipelines">
-                                                <span class="dashboard-signal__area">Pipelines</span>
-                                                @RenderMetricBody(_releasesConfigured, _releasesData, _releasesError, "pending approvals")
-                                            </section>
-                                            break;
-                                        case DashboardTileRegistry.ServiceBusEntityWatch:
-                                            var entityPreference = GetTilePreference(tile.Id);
-                                            var entityMetric = GetServiceBusEntityMetric(tile.Id);
-                                            <section class="dashboard-panel dashboard-watch dashboard-watch--service-bus">
-                                                <div class="dashboard-panel__header">
-                                                    <div>
-                                                        <span class="dashboard-panel__eyebrow">Service Bus Entity</span>
-                                                        <h3>@GetTileDisplayTitle(tile, entityPreference)</h3>
-                                                    </div>
-                                                    <button class="dashboard-panel__link" type="button"
-                                                            @onclick="() => OpenServiceBusEntityTileAsync(entityPreference)">Open</button>
-                                                </div>
-                                                <p class="dashboard-watch__target">@GetSetting(entityPreference, "namespaceLabel") /
-                                                    @GetSetting(entityPreference, "entityPath")</p>
-                                                    @if (entityMetric is null)
-                                                    {
-                                                        <p class="dashboard-empty">Loading entity stats...</p>
-                                                    }
-                                                    else if (!string.IsNullOrWhiteSpace(entityMetric.Error))
-                                                    {
-                                                        <p class="dashboard-error">@entityMetric.Error</p>
-                                                    }
-                                                    else
-                                                    {
-                                                        <div class="dashboard-watch__stats">
-                                                            <span><strong>@entityMetric.ActiveMessages</strong> active</span>
-                                                            <span><strong>@entityMetric.DeadLetterMessages</strong> dead-letter</span>
-                                                            <span><strong>@entityMetric.ScheduledMessages</strong> scheduled</span>
-                                                        </div>
-                                                        <p class="dashboard-watch__updated">Updated @RelativeTime(entityMetric.LastUpdated)</p>
-                                                    }
-                                                </section>
-                                                break;
-                            case DashboardTileRegistry.AksNamespaceWatch:
-                                                    var namespacePreference = GetTilePreference(tile.Id);
-                                                    var namespaceMetric = GetAksNamespaceMetric(tile.Id);
-                                                    <section class="dashboard-panel dashboard-watch dashboard-watch--aks">
-                                                        <div class="dashboard-panel__header">
-                                                            <div>
-                                                                <span class="dashboard-panel__eyebrow">AKS Namespace</span>
-                                                                <h3>@GetTileDisplayTitle(tile, namespacePreference)</h3>
-                                                            </div>
-                                                            <button class="dashboard-panel__link" type="button"
-                                                                    @onclick="() => OpenAksNamespaceTile(namespacePreference)">Open</button>
-                                                        </div>
-                                                        <p class="dashboard-watch__target">@GetAksTileTargetLabel(namespacePreference)</p>
-                                                        @if (namespaceMetric is null)
-                                                        {
-                                                            <p class="dashboard-empty">Loading namespace summary...</p>
-                                                        }
-                                                        else if (!string.IsNullOrWhiteSpace(namespaceMetric.Error) &&
-                    !IsDeploymentPermissionError(namespaceMetric.Error))
-                                                        {
-                                                            <p class="dashboard-error">@namespaceMetric.Error</p>
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="dashboard-watch__stats">
-                                                                <span><strong>@namespaceMetric.PodCount</strong> pods</span>
-                                                                <span><strong>@namespaceMetric.UnhealthyPods</strong> unhealthy</span>
-                                                                <span><strong>@namespaceMetric.RestartCount</strong> restarts</span>
-                                                            </div>
-                                                            @if (IsDeploymentPermissionError(namespaceMetric.Error))
-                                                            {
-                                                                <p class="dashboard-watch__note">Ignoring deployment permissions; this tile uses pod data.</p>
-                                                            }
-                                                            <p class="dashboard-watch__updated">Updated @RelativeTime(namespaceMetric.LastUpdated)</p>
-                                                        }
-                                                    </section>
-                                                    break;
-                                                case DashboardTileRegistry.PodHealthAlerts:
-                                                    <section class="dashboard-panel dashboard-panel--aks-events">
-                                                        <div class="dashboard-panel__header">
-                                                            <div>
-                                                                <span class="dashboard-panel__eyebrow">AKS</span>
-                                                                <h3>Pod Health</h3>
-                                                            </div>
-                                                            @if (Monitor.IsMonitoring)
-                                                            {
-                                                                <span class="ph-monitoring-badge">monitoring</span>
-                                                            }
-                                                        </div>
-                                                        @if (Monitor.IsMonitoring && Monitor.MonitoredNamespaces.Count > 0)
-                                                        {
-                                                            <div class="ph-ns-row">
-                                                                @foreach (var ns in Monitor.MonitoredNamespaces)
-                                                                {
-                                                                    <span class="ph-ns-chip">
-                                                                        <span class="ph-ns-chip-label">@ns</span>
-                                                                        <button class="ph-ns-chip-remove" title="Stop monitoring @ns"
-                                                                                aria-label="Stop monitoring @ns"
-                                                                                @onclick="() => StopMonitoringNamespaceAsync(ns)">✕</button>
-                                                                    </span>
-                                                                }
-                                                                @if (Monitor.MonitoredNamespaces.Count > 1)
-                                                                {
-                                                                    <button class="ph-ns-stop-all" @onclick="StopAllMonitoringAsync"
-                                                                            title="Stop all pod health monitoring">
-                                                                        Stop all
-                                                                    </button>
-                                                                }
-                                                            </div>
-                                                        }
-
-                                                        @if (_monitorAlerts.Count == 0)
-                                                        {
-                                                            <p class="dashboard-empty">No pod health events detected.</p>
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="ph-alert-list">
-                                                                @foreach (var evt in _monitorAlerts.Take(6))
-                                                                {
-                                                                    <div class="ph-alert-row ph-@evt.EventType.ToString().ToLowerInvariant()">
-                                                                        <span class="ph-alert-icon">⚠</span>
-                                                                        <div class="ph-alert-body">
-                                                                            <span class="ph-alert-pod">@evt.PodName</span>
-                                                                            <span class="ph-alert-meta">@evt.Namespace — @evt.EventType</span>
-                                                                        </div>
-                                                                        <span class="ph-alert-time">@RelativeTime(evt.DetectedAt)</span>
-                                                                    </div>
-                                                                }
-                                                            </div>
-                                                            @if (_monitorAlerts.Count > 6)
-                                                            {
-                                                                <p class="ph-overflow-hint">+@(_monitorAlerts.Count - 6) more — see AKS page for full history</p>
-                                                            }
-                                                        }
-                                                    </section>
-                                                    break;
-                                                case DashboardTileRegistry.RecentActivity:
-                                                    <section class="dashboard-panel dashboard-panel--activity">
-                                                        <div class="dashboard-panel__header">
-                                                            <div>
-                                                                <span class="dashboard-panel__eyebrow">Session</span>
-                                                                <h3>Recent Activity</h3>
-                                                            </div>
-                                                            <strong>@_activities.Count</strong>
-                                                        </div>
-                                                        @if (_activities.Count == 0)
-                                                        {
-                                                            <EmptyState Icon="⋯" Title="No recent activity"
-                                                                        Subtitle="Actions you take across Service Bus, AKS, and Pipelines will appear here.">
-                                                                <Actions>
-                                                                    <a href="/service-bus">Open Service Bus</a>
-                                                                    <a href="/aks">Open AKS</a>
-                                                                </Actions>
-                                                            </EmptyState>
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="activity-list">
-                                                                @foreach (var a in _activities)
-                                                                {
-                                                                    <div class="activity-item">
-                                                                        <span class="activity-icon">@a.Icon</span>
-                                                                        <span class="activity-desc">@a.Description</span>
-                                                                        <span class="activity-time">@RelativeTime(a.OccurredAt)</span>
-                                                                    </div>
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </section>
-                                                    break;
-                                                }
-                                            </div>
-                                        }
-                                    </div>
-                            }
-                        </section>
-                    </div>
+                                        </aside>
+                                    }
+                                </div>
+                            </div>
 
 @code {
     // ── Health state ────────────────────────────────────────────────────────────────
@@ -596,6 +830,18 @@
         int RestartCount,
         DateTimeOffset LastUpdated,
         string? Error = null);
+    private sealed record DashboardRenderState(
+        DashboardViewPreference ActiveView,
+        IReadOnlyList<DashboardViewPreference> DashboardViews,
+        IReadOnlyList<DashboardPinnedItem> PinnedItems,
+        IReadOnlyList<DashboardResourceItem> RecentItems,
+        IReadOnlyList<OpenTab> OpenTabs,
+        IReadOnlyList<DashboardTileDefinition> VisibleTiles,
+        IReadOnlyList<DashboardTileDefinition> KpiTiles,
+        IReadOnlyList<DashboardTileDefinition> BoardTiles,
+        IReadOnlyList<DashboardTileEditorRow> EditorRows,
+        IReadOnlyList<DashboardServiceBusNamespaceOption> ServiceBusNamespaces,
+        string PageClass);
 
     // ── Dashboard preferences ───────────────────────────────────────────────────────
     private static readonly Guid DemoOrdersNamespaceId = new("00000000-0000-0000-0000-000000000001");
@@ -605,12 +851,14 @@
     private bool _isCustomizing;
     private bool _dashboardPreferencesReady;
     private string? _customizerMessage;
+    private bool _isEditingViewTitle;
+    private string _viewTitleDraft = string.Empty;
     private string _newServiceBusNamespaceId = string.Empty;
     private string _newServiceBusEntityPath = string.Empty;
     private string _newServiceBusTileTitle = string.Empty;
     private string _newServiceBusTileSize = "2x1";
     private string _newAksContext = string.Empty;
-    private string _newAksNamespace = "default";
+    private string _newAksNamespace = string.Empty;
     private string _newAksTileTitle = string.Empty;
     private string _newAksTileSize = "2x1";
     private string? _editingTileId;
@@ -620,18 +868,46 @@
     private string _editServiceBusNamespaceId = string.Empty;
     private string _editServiceBusEntityPath = string.Empty;
     private string _editServiceBusTitle = string.Empty;
+    private bool _sbLoading;
+    private bool _aksLoading;
+    private bool _redisLoading;
+    private bool _releasesLoading;
     private readonly Lock _customTileMetricsLock = new();
+    private readonly HashSet<string> _serviceBusEntityTilesLoading = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _aksNamespaceTilesLoading = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DashboardServiceBusEntityMetric> _serviceBusEntityMetrics =
 new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DashboardAksNamespaceMetric> _aksNamespaceMetrics =
 new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly TimeSpan HealthRefreshBudget = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan RenderCoalescingWindow = TimeSpan.FromMilliseconds(75);
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────────
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _healthRefreshGate = new(1, 1);
     private PeriodicTimer? _refreshTimer;
+    private readonly Lock _renderStateLock = new();
+    private bool _renderStateDirty = true;
+    private bool _renderQueued;
+    private DashboardRenderState _renderState = new(
+        new DashboardViewPreference
+        {
+            Id = "default",
+            Title = "Default view",
+            IsDefault = true,
+            Tiles = []
+        },
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        "dashboard-page");
 
     protected override void OnInitialized()
     {
@@ -649,11 +925,12 @@ new(StringComparer.OrdinalIgnoreCase);
         Workspaces.Changed += OnWorkspaceChanged;
         // Seed from ring buffer so alerts already recorded before dashboard load are visible.
         _monitorAlerts.AddRange(Monitor.RecentEvents);
+        InvalidateRenderState();
     }
 
     protected override Task OnInitializedAsync()
     {
-        _ = LoadHealthDataAsync(_cts.Token);
+        RefreshAll();
         _ = StartRefreshLoopAsync();
         return Task.CompletedTask;
     }
@@ -664,7 +941,12 @@ new(StringComparer.OrdinalIgnoreCase);
         try
         {
             while (await _refreshTimer.WaitForNextTickAsync(_cts.Token))
-                await LoadHealthDataAsync(_cts.Token);
+            {
+                if (IsLiveRefreshEnabled())
+                {
+                    RefreshAll();
+                }
+            }
         }
         catch (OperationCanceledException) { }
     }
@@ -676,7 +958,7 @@ new(StringComparer.OrdinalIgnoreCase);
             _monitorAlerts.Insert(0, evt);
             if (_monitorAlerts.Count > 50)
                 _monitorAlerts.RemoveAt(_monitorAlerts.Count - 1);
-            StateHasChanged();
+            RequestShellRender();
         });
     }
 
@@ -688,7 +970,7 @@ new(StringComparer.OrdinalIgnoreCase);
             _activities.Insert(0, record);
             if (_activities.Count > 10)
                 _activities.RemoveAt(_activities.Count - 1);
-            StateHasChanged();
+            RequestTileRender();
         });
     }
 
@@ -702,28 +984,49 @@ new(StringComparer.OrdinalIgnoreCase);
         _ = InvokeAsync(RefreshAll);
     }
 
-    private void OnWorkspaceChanged() => InvokeAsync(StateHasChanged);
+    private void OnWorkspaceChanged() => RequestShellRender();
 
-    private Task RefreshAll() => LoadHealthDataAsync(_cts.Token);
+    private void RefreshAll() => _ = RunRefreshAsync(_cts.Token);
+
+    private async Task RunRefreshAsync(CancellationToken ct)
+    {
+        try
+        {
+            await LoadHealthDataAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                Notifications.ShowError("Dashboard refresh failed", ex: ex);
+                System.Diagnostics.Debug.WriteLine($"Dashboard refresh failed: {ex}");
+            }
+        }
+    }
 
     private async Task StopMonitoringNamespaceAsync(string ns)
     {
         await Monitor.RemoveNamespaceAsync(ns);
-        await InvokeAsync(StateHasChanged);
+        RequestShellRender();
     }
 
     private async Task StopAllMonitoringAsync()
     {
         await Monitor.StopAsync();
-        await InvokeAsync(StateHasChanged);
+        RequestShellRender();
     }
 
     private async Task LoadHealthDataAsync(CancellationToken ct)
     {
         var enteredGate = false;
 
-        DetermineConfiguredState();
-        await InvokeAsync(StateHasChanged);
+        if (DetermineConfiguredState())
+        {
+            RequestShellRender();
+        }
 
         try
         {
@@ -735,10 +1038,14 @@ new(StringComparer.OrdinalIgnoreCase);
 
             var refreshTasks = new List<Task>
             {
-                RefreshHealthTileAsync("Service Bus", FetchServiceBusAsync, error => _sbError = error, ct),
-                RefreshHealthTileAsync("AKS", FetchAksAsync, error => _aksError = error, ct),
-                RefreshHealthTileAsync("Redis", FetchRedisAsync, error => _redisError = error, ct),
-                RefreshHealthTileAsync("Pipelines", FetchReleasesAsync, error => _releasesError = error, ct)
+                RefreshHealthTileAsync("Service Bus", FetchServiceBusAsync, data => _sbData = data, error => _sbError = error,
+                    isLoading => _sbLoading = isLoading, ct),
+                RefreshHealthTileAsync("AKS", FetchAksAsync, data => _aksData = data, error => _aksError = error,
+                    isLoading => _aksLoading = isLoading, ct),
+                RefreshHealthTileAsync("Redis", FetchRedisAsync, data => _redisData = data, error => _redisError = error,
+                    isLoading => _redisLoading = isLoading, ct),
+                RefreshHealthTileAsync("Pipelines", FetchReleasesAsync, data => _releasesData = data, error => _releasesError = error,
+                    isLoading => _releasesLoading = isLoading, ct)
             };
 
             refreshTasks.AddRange(GetVisibleTilePreferences(DashboardTileRegistry.ServiceBusEntityWatch)
@@ -758,21 +1065,37 @@ new(StringComparer.OrdinalIgnoreCase);
                 _healthRefreshGate.Release();
             }
         }
-        // Each tile calls StateHasChanged when it finishes — no single batch update needed here.
     }
 
     private async Task RefreshHealthTileAsync(
         string areaName,
-        Func<CancellationToken, Task> refresh,
+        Func<CancellationToken, Task<HealthTileData?>> refresh,
+        Action<HealthTileData?> setData,
         Action<string?> setError,
+        Action<bool> setLoading,
         CancellationToken ct)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(HealthRefreshBudget);
 
+        await InvokeAsync(() =>
+        {
+            setLoading(true);
+            RequestTileRender();
+        });
+
         try
         {
-            await refresh(timeoutCts.Token);
+            var data = await Task.Run(() => refresh(timeoutCts.Token), timeoutCts.Token);
+
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                {
+                    setData(data);
+                    setError(null);
+                });
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -780,42 +1103,244 @@ new(StringComparer.OrdinalIgnoreCase);
         }
         catch (OperationCanceledException)
         {
-            setError($"Timed out while refreshing {areaName}.");
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() => setError($"Timed out while refreshing {areaName}."));
+            }
         }
         catch (Exception ex)
         {
-            setError(ex.Message);
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() => setError(ex.Message));
+            }
         }
         finally
         {
-            // Update this tile's UI as soon as it finishes, independent of the other tiles.
-            // OperationCanceledException (navigation away) skips this via the throw above.
             if (!ct.IsCancellationRequested)
-                await InvokeAsync(StateHasChanged);
+            {
+                await InvokeAsync(() =>
+                {
+                    setLoading(false);
+                    RequestTileRender();
+                });
+            }
         }
     }
 
-    private void DetermineConfiguredState()
+    private bool DetermineConfiguredState()
     {
-        _sbConfigured = AppState.UseDemoData || AppState.ServiceBusNamespaces.Count > 0;
-        _aksConfigured = AppState.UseDemoData || AppState.Config.AksConfig is not null;
-        _redisConfigured = AppState.UseDemoData || AppState.Config.RedisConfig?.ActiveCache is not null;
-        _releasesConfigured = AppState.UseDemoData ||
+        var sbConfigured = AppState.UseDemoData || AppState.ServiceBusNamespaces.Count > 0;
+        var aksConfigured = AppState.UseDemoData || !string.IsNullOrWhiteSpace(GetConfiguredAksNamespace());
+        var redisConfigured = AppState.UseDemoData || AppState.Config.RedisConfig?.ActiveCache is not null;
+        var releasesConfigured = AppState.UseDemoData ||
             (AppState.Config.DevOpsConfig is not null && !string.IsNullOrEmpty(AppState.Config.DevOpsConfig.Organization));
+
+        var changed = sbConfigured != _sbConfigured
+            || aksConfigured != _aksConfigured
+            || redisConfigured != _redisConfigured
+            || releasesConfigured != _releasesConfigured;
+
+        _sbConfigured = sbConfigured;
+        _aksConfigured = aksConfigured;
+        _redisConfigured = redisConfigured;
+        _releasesConfigured = releasesConfigured;
+        return changed;
     }
 
     private void LoadDashboardPreferences()
     {
         _dashboardPreferences = UiState.GetDashboardPreferences(DashboardTileRegistry.DefaultPreferences);
+        InvalidateRenderState();
     }
+
+    private void InvalidateRenderState() => _renderStateDirty = true;
+
+    private DashboardRenderState GetRenderState()
+    {
+        if (!_renderStateDirty)
+        {
+            return _renderState;
+        }
+
+        lock (_renderStateLock)
+        {
+            if (!_renderStateDirty)
+            {
+                return _renderState;
+            }
+
+            _renderState = BuildRenderState();
+            _renderStateDirty = false;
+            return _renderState;
+        }
+    }
+
+    private DashboardRenderState BuildRenderState()
+    {
+        var activeView = GetActiveDashboardView();
+        var visibleTiles = GetVisibleTileDefinitions();
+
+        return new DashboardRenderState(
+            activeView,
+            GetDashboardViews(),
+            GetPinnedItems(),
+            GetRecentItems(),
+            GetOpenTabs(),
+            visibleTiles,
+            GetKpiTileDefinitions(visibleTiles),
+            GetBoardTileDefinitions(visibleTiles),
+            GetTileEditorRows(),
+            GetServiceBusNamespaceOptions(),
+            BuildDashboardPageClass(activeView.Layout));
+    }
+
+    private void RequestShellRender(bool immediate = false) => RequestRender(immediate, invalidateRenderState: true);
+
+    private void RequestTileRender(bool immediate = false) => RequestRender(immediate, invalidateRenderState: false);
+
+    private void RequestRender(bool immediate = false, bool invalidateRenderState = true)
+    {
+        if (invalidateRenderState)
+        {
+            InvalidateRenderState();
+        }
+
+        if (immediate)
+        {
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _ = QueueRenderAsync();
+    }
+
+    private async Task QueueRenderAsync()
+    {
+        lock (_renderStateLock)
+        {
+            if (_renderQueued)
+            {
+                return;
+            }
+
+            _renderQueued = true;
+        }
+
+        try
+        {
+            await Task.Delay(RenderCoalescingWindow, _cts.Token);
+            if (!_cts.IsCancellationRequested)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            lock (_renderStateLock)
+            {
+                _renderQueued = false;
+            }
+        }
+    }
+
+    private DashboardViewPreference GetActiveDashboardView()
+    {
+        if (_dashboardPreferences.Views.Count == 0)
+        {
+            return new DashboardViewPreference
+            {
+                Id = "default",
+                Title = "Default view",
+                IsDefault = true,
+                Tiles = _dashboardPreferences.Tiles.Select(static tile => tile with { }).ToList()
+            };
+        }
+
+        return _dashboardPreferences.Views.FirstOrDefault(view =>
+                   string.Equals(view.Id, _dashboardPreferences.ActiveViewId, StringComparison.OrdinalIgnoreCase))
+               ?? _dashboardPreferences.Views[0];
+    }
+
+    private IReadOnlyList<DashboardViewPreference> GetDashboardViews() => _dashboardPreferences.Views;
+
+    private IReadOnlyList<DashboardTilePreference> GetActiveTilePreferences() => GetActiveDashboardView().Tiles;
+
+    private DashboardPreferences ReplaceActiveDashboardView(DashboardViewPreference updatedView, string? activeViewId =
+null)
+    {
+        var current = GetActiveDashboardView();
+        var views = _dashboardPreferences.Views.Count == 0
+            ? [updatedView]
+            : _dashboardPreferences.Views
+                .Select(view => string.Equals(view.Id, current.Id, StringComparison.OrdinalIgnoreCase) ? updatedView : view)
+                .ToList();
+
+        if (!views.Any(view => string.Equals(view.Id, updatedView.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            views.Add(updatedView);
+        }
+
+        return _dashboardPreferences with
+        {
+            ActiveViewId = activeViewId ?? updatedView.Id,
+            Views = views,
+            Tiles = updatedView.Tiles.Select(static tile => tile with { }).ToList()
+        };
+    }
+
+    private DashboardPreferences SetActiveDashboardViewId(string viewId)
+    {
+        var activeView = _dashboardPreferences.Views.FirstOrDefault(view =>
+                             string.Equals(view.Id, viewId, StringComparison.OrdinalIgnoreCase))
+                         ?? _dashboardPreferences.Views.FirstOrDefault()
+                         ?? GetActiveDashboardView();
+
+        return _dashboardPreferences with
+        {
+            ActiveViewId = activeView.Id,
+            Tiles = activeView.Tiles.Select(static tile => tile with { }).ToList()
+        };
+    }
+
+    private async Task UpdateActiveDashboardViewAsync(Func<DashboardViewPreference, DashboardViewPreference> update)
+    {
+        var current = GetActiveDashboardView();
+        _dashboardPreferences = ReplaceActiveDashboardView(update(current));
+        await SaveDashboardPreferencesAsync();
+    }
+
+    private static DashboardViewPreference CreateDashboardView(
+        string id,
+        string title,
+        IEnumerable<DashboardTilePreference> tiles,
+        DashboardViewFilterPreference? filters = null,
+        DashboardViewLayoutPreference? layout = null,
+        bool isDefault = false) => new()
+        {
+            Id = id,
+            Title = title,
+            IsDefault = isDefault,
+            Tiles = tiles.Select(static tile => tile with { }).ToList(),
+            Filters = filters ?? new DashboardViewFilterPreference(),
+            Layout = layout ?? new DashboardViewLayoutPreference()
+        };
+
+    private static string CreateDashboardViewId(string? seed = null) => string.IsNullOrWhiteSpace(seed)
+        ? $"view-{Guid.NewGuid():N}"
+        : $"{seed.Trim().ToLowerInvariant().Replace(' ', '-')}-{Guid.NewGuid():N}";
 
     private void OnAppStateInitialized()
     {
         _ = InvokeAsync(() =>
         {
             LoadDashboardPreferences();
+            InitializeBuilderDefaults();
             _dashboardPreferencesReady = true;
-            StateHasChanged();
+            RequestShellRender(immediate: true);
         });
     }
 
@@ -826,6 +1351,7 @@ new(StringComparer.OrdinalIgnoreCase);
             return;
         }
 
+        _isEditingViewTitle = false;
         InitializeBuilderDefaults();
         _customizerMessage = null;
         _isCustomizing = !_isCustomizing;
@@ -841,7 +1367,7 @@ new(StringComparer.OrdinalIgnoreCase);
 
         if (string.IsNullOrWhiteSpace(_newAksNamespace))
         {
-            _newAksNamespace = AppState.Config.AksConfig?.DefaultNamespace ?? "default";
+            _newAksNamespace = GetConfiguredAksNamespace();
         }
 
         if (string.IsNullOrWhiteSpace(_newAksContext))
@@ -850,20 +1376,21 @@ new(StringComparer.OrdinalIgnoreCase);
         }
     }
 
-    private IReadOnlyList<DashboardTileDefinition> GetVisibleTileDefinitions() => _dashboardPreferences.Tiles
+    private IReadOnlyList<DashboardTileDefinition> GetVisibleTileDefinitions() => GetActiveTilePreferences()
         .Select(static (preference, index) => (Preference: preference, Index: index))
         .Where(static item => item.Preference.IsVisible)
         .Select(static item => (Definition: DashboardTileRegistry.Find(item.Preference.TileId), item.Preference, item.Index))
         .Where(static tile => tile.Definition is not null)
         .Select(static tile => (Definition: tile.Definition! with { Size = tile.Preference.Size }, tile.Index))
         .Where(tile => ShouldRenderTile(tile.Definition))
+        .Where(tile => MatchesActiveFilters(tile.Definition))
         .OrderBy(static tile => GetTileVisualGroup(tile.Definition.Id))
         .ThenBy(static tile => tile.Index)
         .Select(static tile => tile.Definition)
         .ToList();
 
     private IReadOnlyList<DashboardTilePreference> GetVisibleTilePreferences(string templateId) =>
-_dashboardPreferences.Tiles
+GetActiveTilePreferences()
         .Where(preference => preference.IsVisible
             && DashboardTileRegistry.GetTemplateId(preference.TileId).Equals(templateId, StringComparison.OrdinalIgnoreCase)
             && DashboardTileRegistry.IsCustomTile(preference.TileId))
@@ -885,7 +1412,7 @@ _dashboardPreferences.Tiles
         _ => 4
     };
 
-    private IReadOnlyList<DashboardTileEditorRow> GetTileEditorRows() => _dashboardPreferences.Tiles
+    private IReadOnlyList<DashboardTileEditorRow> GetTileEditorRows() => GetActiveTilePreferences()
         .Select(preference => (Definition: DashboardTileRegistry.Find(preference.TileId), Preference: preference))
         .Where(static row => row.Definition is not null)
         .Where(static row => !IsHiddenTemplatePreference(row.Preference))
@@ -914,7 +1441,7 @@ IsHiddenTemplateTile(preference.TileId);
     private bool IsLastTile(string tileId)
     {
         var index = FindTilePreferenceIndex(tileId);
-        return index < 0 || index >= _dashboardPreferences.Tiles.Count - 1;
+        return index < 0 || index >= GetActiveTilePreferences().Count - 1;
     }
 
     private async Task SetTileVisibilityAsync(string tileId, bool isVisible)
@@ -930,10 +1457,9 @@ IsHiddenTemplateTile(preference.TileId);
             return;
         }
 
-        var tiles = _dashboardPreferences.Tiles.ToList();
+        var tiles = GetActiveTilePreferences().ToList();
         tiles[index] = tiles[index] with { IsVisible = isVisible };
-        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
-        await SaveDashboardPreferencesAsync();
+        await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
     }
 
     private async Task SetTileSizeAsync(string tileId, string size)
@@ -950,10 +1476,9 @@ IsHiddenTemplateTile(preference.TileId);
             return;
         }
 
-        var tiles = _dashboardPreferences.Tiles.ToList();
+        var tiles = GetActiveTilePreferences().ToList();
         tiles[index] = tiles[index] with { Size = normalizedSize };
-        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
-        await SaveDashboardPreferencesAsync();
+        await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
     }
 
     private static bool IsEditableCustomTile(DashboardTilePreference preference) =>
@@ -973,7 +1498,7 @@ IsHiddenTemplateTile(preference.TileId);
             return;
         }
 
-        var preference = _dashboardPreferences.Tiles
+        var preference = GetActiveTilePreferences()
             .FirstOrDefault(candidate => string.Equals(candidate.TileId, tileId, StringComparison.OrdinalIgnoreCase));
         if (preference is null || !IsEditableCustomTile(preference))
         {
@@ -1010,7 +1535,7 @@ IsHiddenTemplateTile(preference.TileId);
             return;
         }
 
-        var current = _dashboardPreferences.Tiles[index];
+        var current = GetActiveTilePreferences()[index];
         if (!IsEditableCustomTile(current))
         {
             return;
@@ -1074,9 +1599,9 @@ entityPath
             return;
         }
 
-        var tiles = _dashboardPreferences.Tiles.ToList();
+        var tiles = GetActiveTilePreferences().ToList();
         tiles[index] = current with { Settings = settings };
-        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
+        _dashboardPreferences = ReplaceActiveDashboardView(GetActiveDashboardView() with { Tiles = tiles });
 
         // Drop AKS metric cache so the tile re-queries with the new namespace.
         if (DashboardTileRegistry.IsAksNamespaceWatch(tileId))
@@ -1090,7 +1615,7 @@ entityPath
         _editingTileId = null;
         _customizerMessage = "Tile updated.";
         await SaveDashboardPreferencesAsync();
-        _ = RefreshAll();
+        RefreshAll();
     }
 
     private async Task RemoveTileAsync(string tileId)
@@ -1102,10 +1627,10 @@ entityPath
 
         if (DashboardTileRegistry.IsCustomTile(tileId))
         {
-            var tiles = _dashboardPreferences.Tiles
+            var tiles = GetActiveTilePreferences()
                 .Where(preference => !string.Equals(preference.TileId, tileId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
+            await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
         }
         else
         {
@@ -1115,12 +1640,10 @@ entityPath
                 return;
             }
 
-            var tiles = _dashboardPreferences.Tiles.ToList();
+            var tiles = GetActiveTilePreferences().ToList();
             tiles[index] = tiles[index] with { IsVisible = false };
-            _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
+            await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
         }
-
-        await SaveDashboardPreferencesAsync();
     }
 
     private async Task AddServiceBusEntityTileAsync()
@@ -1202,14 +1725,14 @@ entityPath
 
         await AddCustomTileAsync(tile);
         _newAksContext = AppState.Config.AksConfig?.KubeconfigContext ?? string.Empty;
-        _newAksNamespace = AppState.Config.AksConfig?.DefaultNamespace ?? "default";
+        _newAksNamespace = GetConfiguredAksNamespace();
         _newAksTileTitle = string.Empty;
         _customizerMessage = $"Added {title}.";
     }
 
     private async Task AddCustomTileAsync(DashboardTilePreference tile)
     {
-        var tiles = _dashboardPreferences.Tiles.ToList();
+        var tiles = GetActiveTilePreferences().ToList();
         var insertIndex = tiles.FindIndex(preference => DashboardTileRegistry.GetTemplateId(preference.TileId) is
 DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
         if (insertIndex < 0)
@@ -1221,9 +1744,8 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
             tiles.Insert(insertIndex, tile);
         }
 
-        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
-        await SaveDashboardPreferencesAsync();
-        _ = LoadHealthDataAsync(_cts.Token);
+        await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
+        RefreshAll();
     }
 
     private async Task MoveTileAsync(string tileId, int offset)
@@ -1235,15 +1757,14 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
 
         var currentIndex = FindTilePreferenceIndex(tileId);
         var nextIndex = currentIndex + offset;
-        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= _dashboardPreferences.Tiles.Count)
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= GetActiveTilePreferences().Count)
         {
             return;
         }
 
-        var tiles = _dashboardPreferences.Tiles.ToList();
+        var tiles = GetActiveTilePreferences().ToList();
         (tiles[currentIndex], tiles[nextIndex]) = (tiles[nextIndex], tiles[currentIndex]);
-        _dashboardPreferences = _dashboardPreferences with { Tiles = tiles };
-        await SaveDashboardPreferencesAsync();
+        await UpdateActiveDashboardViewAsync(view => view with { Tiles = tiles });
     }
 
     private async Task ResetDashboardPreferencesAsync()
@@ -1253,11 +1774,182 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
             return;
         }
 
-        _dashboardPreferences = new DashboardPreferences
+        await UpdateActiveDashboardViewAsync(view => view with
         {
-            Tiles = DashboardTileRegistry.DefaultPreferences.Select(static preference => preference with { }).ToList()
-        };
+            Tiles = DashboardTileRegistry.DefaultPreferences.Select(static preference => preference with { }).ToList(),
+            Filters = new DashboardViewFilterPreference(),
+            Layout = new DashboardViewLayoutPreference()
+        });
+    }
 
+    private async Task OnActiveViewChangedAsync(ChangeEventArgs args)
+    {
+        if (!_dashboardPreferencesReady)
+        {
+            return;
+        }
+
+        var requestedViewId = args.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(requestedViewId))
+        {
+            return;
+        }
+
+        _isEditingViewTitle = false;
+        _dashboardPreferences = SetActiveDashboardViewId(requestedViewId);
+        await SaveDashboardPreferencesAsync();
+    }
+
+    private async Task OnAreaFilterChangedAsync(ChangeEventArgs args) =>
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Filters = view.Filters with { Area = NormalizeDashboardFilter(args.Value, "all") }
+        });
+
+    private async Task OnSeverityFilterChangedAsync(ChangeEventArgs args) =>
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Filters = view.Filters with { Severity = NormalizeDashboardFilter(args.Value, "all") }
+        });
+
+    private async Task OnTimeWindowChangedAsync(ChangeEventArgs args) =>
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Filters = view.Filters with { TimeWindow = NormalizeDashboardFilter(args.Value, "live") }
+        });
+
+    private async Task OnLiveModeChangedAsync(ChangeEventArgs args)
+    {
+        var mode = NormalizeDashboardFilter(args.Value, "live");
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Filters = view.Filters with { LiveMode = mode }
+        });
+
+        if (string.Equals(mode, "live", StringComparison.OrdinalIgnoreCase))
+        {
+            RefreshAll();
+        }
+    }
+
+    private async Task ToggleKpiRibbonAsync() =>
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Layout = view.Layout with { ShowKpiRibbon = !view.Layout.ShowKpiRibbon }
+        });
+
+    private async Task ToggleInsightDockAsync() =>
+        await UpdateActiveDashboardViewAsync(view => view with
+        {
+            Layout = view.Layout with { CollapseInsightDock = !view.Layout.CollapseInsightDock }
+        });
+
+    private async Task CreateDashboardViewAsync()
+    {
+        if (!_dashboardPreferencesReady)
+        {
+            return;
+        }
+
+        var viewNumber = _dashboardPreferences.Views.Count + 1;
+        var view = CreateDashboardView(
+            CreateDashboardViewId("view"),
+            $"View {viewNumber}",
+            DashboardTileRegistry.DefaultPreferences,
+            new DashboardViewFilterPreference(),
+            new DashboardViewLayoutPreference());
+
+        _dashboardPreferences = _dashboardPreferences with
+        {
+            ActiveViewId = view.Id,
+            Views = [.. _dashboardPreferences.Views, view],
+            Tiles = view.Tiles.Select(static tile => tile with { }).ToList()
+        };
+        _isEditingViewTitle = false;
+        _customizerMessage = $"Created {view.Title}.";
+        await SaveDashboardPreferencesAsync();
+    }
+
+    private async Task DuplicateDashboardViewAsync()
+    {
+        if (!_dashboardPreferencesReady)
+        {
+            return;
+        }
+
+        var source = GetActiveDashboardView();
+        var copy = CreateDashboardView(
+            CreateDashboardViewId(source.Title),
+            $"{source.Title} copy",
+            source.Tiles,
+            source.Filters,
+            source.Layout);
+
+        _dashboardPreferences = _dashboardPreferences with
+        {
+            ActiveViewId = copy.Id,
+            Views = [.. _dashboardPreferences.Views, copy],
+            Tiles = copy.Tiles.Select(static tile => tile with { }).ToList()
+        };
+        _isEditingViewTitle = false;
+        _customizerMessage = $"Duplicated {source.Title}.";
+        await SaveDashboardPreferencesAsync();
+    }
+
+    private void BeginRenameDashboardView()
+    {
+        if (!_dashboardPreferencesReady)
+        {
+            return;
+        }
+
+        _viewTitleDraft = GetActiveDashboardView().Title;
+        _isEditingViewTitle = true;
+        _customizerMessage = null;
+    }
+
+    private void CancelRenameDashboardView()
+    {
+        _isEditingViewTitle = false;
+        _viewTitleDraft = string.Empty;
+    }
+
+    private async Task RenameDashboardViewAsync()
+    {
+        var title = _viewTitleDraft.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            _customizerMessage = "Enter a view title.";
+            return;
+        }
+
+        await UpdateActiveDashboardViewAsync(view => view with { Title = title });
+        _isEditingViewTitle = false;
+        _viewTitleDraft = string.Empty;
+        _customizerMessage = $"Renamed view to {title}.";
+    }
+
+    private async Task DeleteDashboardViewAsync()
+    {
+        if (!_dashboardPreferencesReady || _dashboardPreferences.Views.Count <= 1)
+        {
+            return;
+        }
+
+        var current = GetActiveDashboardView();
+        var views = _dashboardPreferences.Views
+            .Where(view => !string.Equals(view.Id, current.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var next = views[0];
+
+        _dashboardPreferences = _dashboardPreferences with
+        {
+            ActiveViewId = next.Id,
+            Views = views,
+            Tiles = next.Tiles.Select(static tile => tile with { }).ToList()
+        };
+        _isEditingViewTitle = false;
+        _customizerMessage = $"Deleted {current.Title}.";
         await SaveDashboardPreferencesAsync();
     }
 
@@ -1265,48 +1957,45 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
     {
         await UiState.SaveDashboardPreferencesAsync(_dashboardPreferences, DashboardTileRegistry.DefaultPreferences);
         LoadDashboardPreferences();
-        await InvokeAsync(StateHasChanged);
+        InitializeBuilderDefaults();
     }
 
-    private int FindTilePreferenceIndex(string tileId) => _dashboardPreferences.Tiles.FindIndex(preference =>
+    private int FindTilePreferenceIndex(string tileId) => GetActiveTilePreferences().ToList().FindIndex(preference =>
         string.Equals(preference.TileId, tileId, StringComparison.OrdinalIgnoreCase));
 
     // ── Service Bus ─────────────────────────────────────────────────────────────────
 
-    private async Task FetchServiceBusAsync(CancellationToken ct)
+    private async Task<HealthTileData?> FetchServiceBusAsync(CancellationToken ct)
     {
-        if (!_sbConfigured) return;
-        try
+        if (!_sbConfigured)
         {
-            long dlq = 0;
-            if (AppState.UseDemoData)
+            return null;
+        }
+
+        long dlq = 0;
+        if (AppState.UseDemoData)
+        {
+            dlq += await SumDlqAsync(DemoServiceBusClient.OrdersDev(), ct);
+        }
+        else
+        {
+            foreach (var ns in AppState.ServiceBusNamespaces)
             {
-                dlq += await SumDlqAsync(DemoServiceBusClient.OrdersDev(), ct);
-            }
-            else
-            {
-                foreach (var ns in AppState.ServiceBusNamespaces)
+                var connStr = CredentialStore.Get(ns.CredentialKey);
+                if (string.IsNullOrWhiteSpace(connStr)) continue;
+                var client = SbClientFactory.Create(connStr);
+                try
                 {
-                    var connStr = CredentialStore.Get(ns.CredentialKey);
-                    if (string.IsNullOrWhiteSpace(connStr)) continue;
-                    var client = SbClientFactory.Create(connStr);
-                    try
-                    {
-                        dlq += await SumDlqAsync(client, ct);
-                    }
-                    finally
-                    {
-                        if (client is IAsyncDisposable d) await d.DisposeAsync();
-                    }
+                    dlq += await SumDlqAsync(client, ct);
+                }
+                finally
+                {
+                    if (client is IAsyncDisposable d) await d.DisposeAsync();
                 }
             }
-            _sbData = new HealthTileData((int)dlq, "dead-lettered", DateTimeOffset.Now);
-            _sbError = null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _sbError = ex.Message;
-        }
+
+        return new HealthTileData((int)dlq, "dead-lettered", DateTimeOffset.Now);
     }
 
     private static async Task<long> SumDlqAsync(IServiceBusClient client, CancellationToken ct)
@@ -1317,77 +2006,69 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
 
     // ── AKS ─────────────────────────────────────────────────────────────────────────
 
-    private async Task FetchAksAsync(CancellationToken ct)
+    private async Task<HealthTileData?> FetchAksAsync(CancellationToken ct)
     {
-        if (!_aksConfigured) return;
-        try
+        if (!_aksConfigured)
         {
-            var aksConfig = AppState.Config.AksConfig;
-            var ns = aksConfig?.DefaultNamespace ?? "default";
-
-            IAksClient client = AppState.UseDemoData
-                ? DemoAksClient
-                : AksClientFactory.Create(aksConfig!.KubeconfigContext, aksConfig.KubeconfigPath);
-
-            var pods = await client.GetPodsAsync(ns, null, ct);
-            var unhealthy = pods.Count(p => p.Status is not ("Running" or "Succeeded" or "Completed"));
-            _aksData = new HealthTileData(unhealthy, "unhealthy pods", DateTimeOffset.Now);
-            _aksError = null;
+            return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        var aksConfig = AppState.Config.AksConfig;
+        var ns = GetConfiguredAksNamespace();
+        if (string.IsNullOrWhiteSpace(ns))
         {
-            _aksError = ex.Message;
+            return null;
         }
+
+        IAksClient client = AppState.UseDemoData
+            ? DemoAksClient
+            : AksClientFactory.Create(aksConfig!.KubeconfigContext, aksConfig.KubeconfigPath);
+
+        var pods = await client.GetPodsAsync(ns, null, ct);
+        var unhealthy = pods.Count(p => p.Status is not ("Running" or "Succeeded" or "Completed"));
+        return new HealthTileData(unhealthy, "unhealthy pods", DateTimeOffset.Now);
     }
 
     // ── Redis ────────────────────────────────────────────────────────────────────────
 
-    private async Task FetchRedisAsync(CancellationToken ct)
+    private async Task<HealthTileData?> FetchRedisAsync(CancellationToken ct)
     {
-        if (!_redisConfigured) return;
-        try
+        if (!_redisConfigured)
         {
-            IRedisClient client = AppState.UseDemoData
-                ? DemoRedisClient
-                : await RedisClientFactory.CreateAsync(AppState.Config.RedisConfig!.ActiveCache!, ct);
-
-            using (client)
-            {
-                var scan = await client.ScanKeysAsync("*", 0, 100, ct);
-                var infoTasks = scan.Keys.Select(k => client.GetKeyInfoAsync(k, ct));
-                var infos = await Task.WhenAll(infoTasks);
-                var nearExpiry = infos.Count(i => i.Ttl is { } ttl && ttl < TimeSpan.FromMinutes(5) && ttl > TimeSpan.Zero);
-                _redisData = new HealthTileData(nearExpiry, "keys expiring < 5m", DateTimeOffset.Now);
-                _redisError = null;
-            }
+            return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        IRedisClient client = AppState.UseDemoData
+            ? DemoRedisClient
+            : await RedisClientFactory.CreateAsync(AppState.Config.RedisConfig!.ActiveCache!, ct);
+
+        using (client)
         {
-            _redisError = ex.Message;
+            var scan = await client.ScanKeysAsync("*", 0, 100, ct);
+            var infoTasks = scan.Keys.Select(k => client.GetKeyInfoAsync(k, ct));
+            var infos = await Task.WhenAll(infoTasks);
+            var nearExpiry = infos.Count(i => i.Ttl is { } ttl && ttl < TimeSpan.FromMinutes(5) && ttl > TimeSpan.Zero);
+            return new HealthTileData(nearExpiry, "keys expiring < 5m", DateTimeOffset.Now);
         }
     }
 
     // ── Releases ─────────────────────────────────────────────────────────────────────
 
-    private async Task FetchReleasesAsync(CancellationToken ct)
+    private async Task<HealthTileData?> FetchReleasesAsync(CancellationToken ct)
     {
-        if (!_releasesConfigured) return;
-        try
+        if (!_releasesConfigured)
         {
-            IDevOpsClient client = AppState.UseDemoData
-                ? DemoDevOpsClient
-                : CreateLiveDevOpsClient();
-            var projects = await client.GetProjectsAsync(ct);
-            var approvalTasks = projects.Select(p => client.GetPendingApprovalsAsync(p.Name, ct));
-            var results = await Task.WhenAll(approvalTasks);
-            var total = results.Sum(r => r.Count);
-            _releasesData = new HealthTileData(total, "pending approvals", DateTimeOffset.Now);
-            _releasesError = null;
+            return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _releasesError = ex.Message;
-        }
+
+        IDevOpsClient client = AppState.UseDemoData
+            ? DemoDevOpsClient
+            : CreateLiveDevOpsClient();
+        var projects = await client.GetProjectsAsync(ct);
+        var approvalTasks = projects.Select(p => client.GetPendingApprovalsAsync(p.Name, ct));
+        var results = await Task.WhenAll(approvalTasks);
+        var total = results.Sum(r => r.Count);
+        return new HealthTileData(total, "pending approvals", DateTimeOffset.Now);
     }
 
     private IDevOpsClient CreateLiveDevOpsClient()
@@ -1401,45 +2082,89 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
     private async Task RefreshServiceBusEntityWatchAsync(DashboardTilePreference preference, CancellationToken ct)
     {
         var tileId = preference.TileId;
-        var namespaceId = GetSetting(preference, "namespaceId");
-        var entityPath = GetSetting(preference, "entityPath");
-        if (string.IsNullOrWhiteSpace(namespaceId) || string.IsNullOrWhiteSpace(entityPath))
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(HealthRefreshBudget);
+
+        if (!ct.IsCancellationRequested)
         {
-            SetServiceBusEntityMetric(tileId, new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, "Tile target is incomplete."));
-            return;
+            await InvokeAsync(() =>
+            {
+                SetServiceBusEntityTileLoading(tileId, true);
+                RequestTileRender();
+            });
         }
 
-        IServiceBusClient? client = null;
         try
         {
-            client = CreateServiceBusClient(namespaceId);
-            if (client is null)
+            var metric = await Task.Run(async () =>
             {
-                SetServiceBusEntityMetric(tileId, new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, "Namespace is not available."));
-                return;
-            }
+                var namespaceId = GetSetting(preference, "namespaceId");
+                var entityPath = GetSetting(preference, "entityPath");
+                if (string.IsNullOrWhiteSpace(namespaceId) || string.IsNullOrWhiteSpace(entityPath))
+                {
+                    return new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, "Tile target is incomplete.");
+                }
 
-            var stats = await client.GetEntityStatsAsync(entityPath, ct);
-            SetServiceBusEntityMetric(tileId, new DashboardServiceBusEntityMetric(
-                stats.ActiveMessageCount,
-                stats.DeadLetterMessageCount,
-                stats.ScheduledMessageCount,
-                stats.UpdatedAt ?? DateTimeOffset.Now));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            SetServiceBusEntityMetric(tileId, new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, ex.Message));
-        }
-        finally
-        {
-            if (client is IAsyncDisposable disposable)
-            {
-                await disposable.DisposeAsync();
-            }
+                var client = CreateServiceBusClient(namespaceId);
+                if (client is null)
+                {
+                    return new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, "Namespace is not available.");
+                }
+
+                try
+                {
+                    var stats = await client.GetEntityStatsAsync(entityPath, timeoutCts.Token);
+                    return new DashboardServiceBusEntityMetric(
+                        stats.ActiveMessageCount,
+                        stats.DeadLetterMessageCount,
+                        stats.ScheduledMessageCount,
+                        stats.UpdatedAt ?? DateTimeOffset.Now);
+                }
+                finally
+                {
+                    if (client is IAsyncDisposable disposable)
+                    {
+                        await disposable.DisposeAsync();
+                    }
+                }
+            }, timeoutCts.Token);
 
             if (!ct.IsCancellationRequested)
             {
-                await InvokeAsync(StateHasChanged);
+                await InvokeAsync(() => SetServiceBusEntityMetric(tileId, metric));
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                    SetServiceBusEntityMetric(tileId,
+                        new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now,
+                            "Timed out while refreshing Service Bus entity tile.")));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                    SetServiceBusEntityMetric(tileId,
+                        new DashboardServiceBusEntityMetric(0, 0, 0, DateTimeOffset.Now, ex.Message)));
+            }
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                {
+                    SetServiceBusEntityTileLoading(tileId, false);
+                    RequestTileRender();
+                });
             }
         }
     }
@@ -1447,40 +2172,81 @@ DashboardTileRegistry.RecentResources or DashboardTileRegistry.Favorites);
     private async Task RefreshAksNamespaceWatchAsync(DashboardTilePreference preference, CancellationToken ct)
     {
         var tileId = preference.TileId;
-        var @namespace = GetSetting(preference, "namespace", AppState.Config.AksConfig?.DefaultNamespace ?? "default");
-        if (string.IsNullOrWhiteSpace(@namespace))
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(HealthRefreshBudget);
+
+        if (!ct.IsCancellationRequested)
         {
-            SetAksNamespaceMetric(tileId, new DashboardAksNamespaceMetric(0, 0, 0, DateTimeOffset.Now, "Namespace is not configured."));
-            return;
+            await InvokeAsync(() =>
+            {
+                SetAksNamespaceTileLoading(tileId, true);
+                RequestTileRender();
+            });
         }
 
         try
         {
-            var context = GetSetting(preference, "context", AppState.Config.AksConfig?.KubeconfigContext ?? string.Empty);
-            IAksClient client = AppState.UseDemoData
-                ? DemoAksClient
-                : AksClientFactory.Create(string.IsNullOrWhiteSpace(context) ? null : context,
-AppState.Config.AksConfig!.KubeconfigPath);
+            var metric = await Task.Run(async () =>
+            {
+                var @namespace = GetSetting(preference, "namespace", GetConfiguredAksNamespace());
+                if (string.IsNullOrWhiteSpace(@namespace))
+                {
+                    return new DashboardAksNamespaceMetric(0, 0, 0, DateTimeOffset.Now, "Namespace is not configured.");
+                }
 
-            var pods = await client.GetPodsAsync(@namespace, null, ct);
-            var unhealthyPods = pods.Count(static pod => !pod.Ready || pod.Status is not ("Running" or "Succeeded" or "Completed"));
-            var restartCount = pods.Sum(static pod => pod.RestartCount);
+                var context = GetSetting(preference, "context", AppState.Config.AksConfig?.KubeconfigContext ?? string.Empty);
+                IAksClient client = AppState.UseDemoData
+                    ? DemoAksClient
+                    : AksClientFactory.Create(string.IsNullOrWhiteSpace(context) ? null : context,
+                        AppState.Config.AksConfig!.KubeconfigPath);
 
-            SetAksNamespaceMetric(tileId, new DashboardAksNamespaceMetric(
-                pods.Count,
-                unhealthyPods,
-                restartCount,
-                DateTimeOffset.Now));
+                var pods = await client.GetPodsAsync(@namespace, null, timeoutCts.Token);
+                var unhealthyPods = pods.Count(static pod => !pod.Ready || pod.Status is not ("Running" or "Succeeded" or "Completed"));
+                var restartCount = pods.Sum(static pod => pod.RestartCount);
+
+                return new DashboardAksNamespaceMetric(
+                    pods.Count,
+                    unhealthyPods,
+                    restartCount,
+                    DateTimeOffset.Now);
+            }, timeoutCts.Token);
+
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() => SetAksNamespaceMetric(tileId, metric));
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                    SetAksNamespaceMetric(tileId,
+                        new DashboardAksNamespaceMetric(0, 0, 0, DateTimeOffset.Now,
+                            "Timed out while refreshing AKS namespace tile.")));
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            SetAksNamespaceMetric(tileId, new DashboardAksNamespaceMetric(0, 0, 0, DateTimeOffset.Now, ex.Message));
+            if (!ct.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                    SetAksNamespaceMetric(tileId,
+                        new DashboardAksNamespaceMetric(0, 0, 0, DateTimeOffset.Now, ex.Message)));
+            }
         }
         finally
         {
             if (!ct.IsCancellationRequested)
             {
-                await InvokeAsync(StateHasChanged);
+                await InvokeAsync(() =>
+                {
+                    SetAksNamespaceTileLoading(tileId, false);
+                    RequestTileRender();
+                });
             }
         }
     }
@@ -1517,11 +2283,41 @@ AppState.Config.AksConfig!.KubeconfigPath);
         }
     }
 
+    private void SetServiceBusEntityTileLoading(string tileId, bool isLoading)
+    {
+        lock (_customTileMetricsLock)
+        {
+            if (isLoading)
+            {
+                _serviceBusEntityTilesLoading.Add(tileId);
+            }
+            else
+            {
+                _serviceBusEntityTilesLoading.Remove(tileId);
+            }
+        }
+    }
+
     private void SetAksNamespaceMetric(string tileId, DashboardAksNamespaceMetric metric)
     {
         lock (_customTileMetricsLock)
         {
             _aksNamespaceMetrics[tileId] = metric;
+        }
+    }
+
+    private void SetAksNamespaceTileLoading(string tileId, bool isLoading)
+    {
+        lock (_customTileMetricsLock)
+        {
+            if (isLoading)
+            {
+                _aksNamespaceTilesLoading.Add(tileId);
+            }
+            else
+            {
+                _aksNamespaceTilesLoading.Remove(tileId);
+            }
         }
     }
 
@@ -1533,11 +2329,27 @@ AppState.Config.AksConfig!.KubeconfigPath);
         }
     }
 
+    private bool IsServiceBusEntityTileLoading(string tileId)
+    {
+        lock (_customTileMetricsLock)
+        {
+            return _serviceBusEntityTilesLoading.Contains(tileId);
+        }
+    }
+
     private DashboardAksNamespaceMetric? GetAksNamespaceMetric(string tileId)
     {
         lock (_customTileMetricsLock)
         {
             return _aksNamespaceMetrics.GetValueOrDefault(tileId);
+        }
+    }
+
+    private bool IsAksNamespaceTileLoading(string tileId)
+    {
+        lock (_customTileMetricsLock)
+        {
+            return _aksNamespaceTilesLoading.Contains(tileId);
         }
     }
 
@@ -1686,8 +2498,112 @@ StringSplitOptions.TrimEntries).LastOrDefault() ?? entityPath,
     }
 
     private DashboardTilePreference? GetTilePreference(string tileId) =>
-_dashboardPreferences.Tiles.FirstOrDefault(preference =>
+GetActiveTilePreferences().FirstOrDefault(preference =>
         string.Equals(preference.TileId, tileId, StringComparison.OrdinalIgnoreCase));
+
+    private bool IsLiveRefreshEnabled() =>
+        !string.Equals(GetActiveDashboardView().Filters.LiveMode, "snapshot", StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildDashboardPageClass(DashboardViewLayoutPreference layout)
+    {
+        var classes = new List<string> { "dashboard-page" };
+
+        if (string.Equals(layout.DensityMode, "compact", StringComparison.OrdinalIgnoreCase))
+        {
+            classes.Add("dashboard-page--compact");
+        }
+        else if (string.Equals(layout.DensityMode, "comfortable", StringComparison.OrdinalIgnoreCase))
+        {
+            classes.Add("dashboard-page--comfortable");
+        }
+
+        if (string.Equals(layout.BackgroundStyle, "contrast", StringComparison.OrdinalIgnoreCase))
+        {
+            classes.Add("dashboard-page--contrast");
+        }
+
+        return string.Join(' ', classes);
+    }
+
+    private bool MatchesActiveFilters(DashboardTileDefinition tile)
+    {
+        var filters = GetActiveDashboardView().Filters;
+        if (!string.Equals(filters.Area, "all", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(tile.Area, filters.Area, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return MatchesSeverityFilter(tile, filters.Severity);
+    }
+
+    private bool MatchesSeverityFilter(DashboardTileDefinition tile, string severity)
+    {
+        if (string.Equals(severity, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!TryGetAttentionState(tile, out var needsAttention))
+        {
+            return true;
+        }
+
+        return string.Equals(severity, "attention", StringComparison.OrdinalIgnoreCase)
+            ? needsAttention
+            : !needsAttention;
+    }
+
+    private bool TryGetAttentionState(DashboardTileDefinition tile, out bool needsAttention)
+    {
+        var templateId = DashboardTileRegistry.GetTemplateId(tile.Id);
+        switch (templateId)
+        {
+            case DashboardTileRegistry.ServiceBusDeadLetters:
+                needsAttention = !string.IsNullOrWhiteSpace(_sbError) || (_sbData?.Value ?? 0) > 0;
+                return true;
+            case DashboardTileRegistry.AksUnhealthyPods:
+                needsAttention = !string.IsNullOrWhiteSpace(_aksError) || (_aksData?.Value ?? 0) > 0;
+                return true;
+            case DashboardTileRegistry.RedisExpiringKeys:
+                needsAttention = !string.IsNullOrWhiteSpace(_redisError) || (_redisData?.Value ?? 0) > 0;
+                return true;
+            case DashboardTileRegistry.PendingApprovals:
+                needsAttention = !string.IsNullOrWhiteSpace(_releasesError) || (_releasesData?.Value ?? 0) > 0;
+                return true;
+            case DashboardTileRegistry.ServiceBusEntityWatch:
+                {
+                    var metric = GetServiceBusEntityMetric(tile.Id);
+                    if (metric is null)
+                    {
+                        needsAttention = false;
+                        return false;
+                    }
+
+                    needsAttention = !string.IsNullOrWhiteSpace(metric.Error) || metric.DeadLetterMessages > 0;
+                    return true;
+                }
+            case DashboardTileRegistry.AksNamespaceWatch:
+                {
+                    var metric = GetAksNamespaceMetric(tile.Id);
+                    if (metric is null)
+                    {
+                        needsAttention = false;
+                        return false;
+                    }
+
+                    needsAttention = metric.UnhealthyPods > 0 || (!string.IsNullOrWhiteSpace(metric.Error) &&
+    !IsDeploymentPermissionError(metric.Error));
+                    return true;
+                }
+            case DashboardTileRegistry.PodHealthAlerts:
+                needsAttention = _monitorAlerts.Count > 0;
+                return true;
+            default:
+                needsAttention = false;
+                return false;
+        }
+    }
 
     private static string GetTileDisplayTitle(DashboardTileDefinition tile, DashboardTilePreference? preference) =>
         GetSetting(preference, "title", tile.Title);
@@ -1705,10 +2621,71 @@ _dashboardPreferences.Tiles.FirstOrDefault(preference =>
 
     private string GetAksTileTargetLabel(DashboardTilePreference? preference)
     {
-        var @namespace = GetSetting(preference, "namespace", AppState.Config.AksConfig?.DefaultNamespace ?? "default");
+        var @namespace = GetSetting(preference, "namespace", GetConfiguredAksNamespace());
         var context = GetSetting(preference, "context", AppState.Config.AksConfig?.KubeconfigContext ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(@namespace))
+        {
+            return string.IsNullOrWhiteSpace(context)
+                ? "Namespace not configured"
+                : $"{context} / namespace not configured";
+        }
+
         return string.IsNullOrWhiteSpace(context) ? @namespace : $"{context} / {@namespace}";
     }
+
+    private static string GetServiceBusEntityTileTargetLabel(DashboardTilePreference? preference)
+    {
+        var namespaceLabel = GetSetting(preference, "namespaceLabel", "Namespace not configured");
+        var entityPath = GetSetting(preference, "entityPath", "entity path not configured");
+        return $"{namespaceLabel} / {entityPath}";
+    }
+
+    private static IReadOnlyList<DashboardStatItem>? GetServiceBusEntityStats(DashboardServiceBusEntityMetric? metric)
+    {
+        if (metric is null || !string.IsNullOrWhiteSpace(metric.Error))
+        {
+            return null;
+        }
+
+        return
+        [
+            new(metric.ActiveMessages.ToString(), "active"),
+            new(metric.DeadLetterMessages.ToString(), "dead-letter"),
+            new(metric.ScheduledMessages.ToString(), "scheduled")
+        ];
+    }
+
+    private IReadOnlyList<DashboardStatItem>? GetAksNamespaceStats(DashboardAksNamespaceMetric? metric)
+    {
+        if (metric is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(metric.Error) && !IsDeploymentPermissionError(metric.Error))
+        {
+            return null;
+        }
+
+        return
+        [
+            new(metric.PodCount.ToString(), "pods"),
+            new(metric.UnhealthyPods.ToString(), "unhealthy"),
+            new(metric.RestartCount.ToString(), "restarts")
+        ];
+    }
+
+    private string? GetAksNamespaceTileError(DashboardAksNamespaceMetric? metric) =>
+        metric is null || string.IsNullOrWhiteSpace(metric.Error) || IsDeploymentPermissionError(metric.Error)
+            ? null
+            : metric.Error;
+
+    private string? GetAksNamespaceTileNote(DashboardAksNamespaceMetric? metric) =>
+        metric is not null && IsDeploymentPermissionError(metric.Error)
+            ? "Ignoring deployment permissions; this tile uses pod data."
+            : null;
+
+    private string GetConfiguredAksNamespace() => AppState.Config.AksConfig?.DefaultNamespace?.Trim() ?? string.Empty;
 
     private static string GetSetting(DashboardTilePreference? preference, string key, string fallback = "") =>
         preference?.Settings is not null && preference.Settings.TryGetValue(key, out var value) &&
@@ -1722,6 +2699,61 @@ _dashboardPreferences.Tiles.FirstOrDefault(preference =>
         2 => "dashboard-tile-grid dashboard-tile-grid--pair",
         _ => "dashboard-tile-grid"
     };
+
+    private static IReadOnlyList<DashboardTileDefinition> GetKpiTileDefinitions(IReadOnlyList<DashboardTileDefinition>
+visibleTiles) =>
+        visibleTiles.Where(tile => IsKpiTemplateId(DashboardTileRegistry.GetTemplateId(tile.Id))).ToList();
+
+    private static IReadOnlyList<DashboardTileDefinition> GetBoardTileDefinitions(IReadOnlyList<DashboardTileDefinition>
+visibleTiles) =>
+        visibleTiles.Where(tile => !IsKpiTemplateId(DashboardTileRegistry.GetTemplateId(tile.Id))).ToList();
+
+    private static bool HasVisibleTile(IReadOnlyList<DashboardTileDefinition> tiles, string templateId) =>
+        tiles.Any(tile => string.Equals(DashboardTileRegistry.GetTemplateId(tile.Id), templateId,
+            StringComparison.OrdinalIgnoreCase));
+
+    private static string NormalizeDashboardFilter(object? value, string fallback)
+    {
+        var normalized = value?.ToString()?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
+    }
+
+    private static string GetAreaFilterLabel(string area) => area switch
+    {
+        "dashboard" => "Workspace",
+        "service-bus" => "Service Bus",
+        "aks" => "AKS",
+        "redis" => "Redis",
+        "pipelines" => "Pipelines",
+        _ => "All areas"
+    };
+
+    private static string GetSeverityFilterLabel(string severity) => severity switch
+    {
+        "attention" => "Needs attention",
+        "healthy" => "Healthy only",
+        _ => "All widgets"
+    };
+
+    private static string GetTimeWindowLabel(string timeWindow) => timeWindow switch
+    {
+        "15m" => "15 minutes",
+        "1h" => "1 hour",
+        "4h" => "4 hours",
+        "today" => "Today",
+        _ => "Live"
+    };
+
+    private static string GetRefreshCadenceLabel(string liveMode) =>
+        string.Equals(liveMode, "snapshot", StringComparison.OrdinalIgnoreCase)
+            ? "Manual snapshot mode"
+            : "60s live refresh cadence";
+
+    private static bool IsKpiTemplateId(string templateId) => templateId is
+        DashboardTileRegistry.ServiceBusDeadLetters or
+        DashboardTileRegistry.AksUnhealthyPods or
+        DashboardTileRegistry.RedisExpiringKeys or
+        DashboardTileRegistry.PendingApprovals;
 
     private static IReadOnlyList<string> GetSupportedTileSizes(string tileId)
     {
@@ -1771,50 +2803,21 @@ _dashboardPreferences.Tiles.FirstOrDefault(preference =>
         return count;
     }
 
-    private RenderFragment RenderMetricBody(bool isConfigured, HealthTileData? data, string? error, string fallbackLabel) =>
-builder =>
+    private int GetConfiguredSystemsCount()
     {
-        if (!isConfigured)
-        {
-            builder.OpenElement(0, "p");
-            builder.AddAttribute(1, "class", "dashboard-signal__empty");
-            builder.AddContent(2, "Not configured");
-            builder.CloseElement();
-            return;
-        }
+        var count = 0;
+        if (_sbConfigured) count++;
+        if (_aksConfigured) count++;
+        if (_redisConfigured) count++;
+        if (_releasesConfigured) count++;
+        return count;
+    }
 
-        if (!string.IsNullOrWhiteSpace(error))
-        {
-            builder.OpenElement(3, "p");
-            builder.AddAttribute(4, "class", "dashboard-signal__error");
-            builder.AddContent(5, error);
-            builder.CloseElement();
-            return;
-        }
-
-        if (data is null)
-        {
-            builder.OpenElement(6, "p");
-            builder.AddAttribute(7, "class", "dashboard-signal__empty");
-            builder.AddContent(8, "Loading...");
-            builder.CloseElement();
-            return;
-        }
-
-        builder.OpenElement(9, "div");
-        builder.AddAttribute(10, "class", "dashboard-signal__metric");
-        builder.OpenElement(11, "strong");
-        builder.AddContent(12, data.Value);
-        builder.CloseElement();
-        builder.OpenElement(13, "span");
-        builder.AddContent(14, string.IsNullOrWhiteSpace(data.Label) ? fallbackLabel : data.Label);
-        builder.CloseElement();
-        builder.CloseElement();
-        builder.OpenElement(15, "p");
-        builder.AddAttribute(16, "class", "dashboard-signal__updated");
-        builder.AddContent(17, $"Updated {RelativeTime(data.LastUpdated)}");
-        builder.CloseElement();
-    };
+    private string GetHomeModeLabel() => AppState.UseDemoData
+        ? "Demo data"
+        : AppState.Config.IsProduction
+            ? "Production profile"
+            : "Live workspace";
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────
 

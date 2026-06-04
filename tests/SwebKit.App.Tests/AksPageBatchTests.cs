@@ -98,6 +98,46 @@ public sealed class AksPageBatchTests : TestContext
     }
 
     [Fact]
+    public void AksPage_HelmRollback_ShowsProgressAndSuccessNotification()
+    {
+        _appState.Config.AksConfig!.DefaultNamespace = "orders";
+
+        var client = new TrackingAksClient(namespaces: ["orders"], deferHelmRollback: true);
+        var cut = RenderAksPage(client);
+
+        OpenResourceTab(cut, "Helm");
+        OpenHelmMenu(cut, client.FindHelmRelease("orders", "orders-api"));
+        ClickContextMenuButton(cut, "Rollback...");
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Select a revision to rollback to:", cut.Markup, StringComparison.Ordinal));
+
+        cut.FindAll("button.aks-rollback-btn.destructive")
+            .Single(button => NormalizeText(button.TextContent).Contains("Rollback", StringComparison.OrdinalIgnoreCase))
+            .Click();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("button.confirm-btn.confirm-yes")));
+        cut.Find("button.confirm-btn.confirm-yes").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(client.RollbackHelmCalls,
+                call => call.Namespace == "orders"
+                    && call.ReleaseName == "orders-api"
+                    && call.Revision == 2);
+            Assert.Contains("Rolling back to revision 2...", cut.Markup, StringComparison.Ordinal);
+        });
+
+        client.CompleteDeferredHelmRollback();
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(_notifications.All,
+                notification => notification.Severity == NotificationSeverity.Success
+                    && notification.Message == "Helm rollback complete"
+                    && notification.Detail == "orders-api → revision 2"));
+    }
+
+    [Fact]
     public void AksPage_JobsTab_AllNamespacesModeWithMoreThanThreeNamespaces_IncludesDefaultNamespace()
     {
         var client = new TrackingAksClient(
@@ -527,6 +567,11 @@ public sealed class AksPageBatchTests : TestContext
         InvokePrivateMenuHelper(cut, "ShowCronJobMenu", cronJob);
     }
 
+    private static void OpenHelmMenu(IRenderedComponent<AksPage> cut, HelmReleaseInfo helmRelease)
+    {
+        InvokePrivateMenuHelper(cut, "ShowHelmMenu", helmRelease);
+    }
+
     private static void OpenHttpRouteMenu(IRenderedComponent<AksPage> cut, HttpRouteInfo httpRoute)
     {
         InvokePrivateMenuHelper(cut, "ShowHttpRouteMenu", httpRoute);
@@ -597,19 +642,25 @@ public sealed class AksPageBatchTests : TestContext
         private readonly List<GatewayClassInfo> _gatewayClasses;
         private readonly Dictionary<string, List<GatewayInfo>> _gatewaysByNamespace;
         private readonly Dictionary<string, List<HttpRouteInfo>> _httpRoutesByNamespace;
+        private readonly Dictionary<string, List<HelmReleaseInfo>> _helmReleasesByNamespace;
+        private readonly Dictionary<(string Namespace, string ReleaseName), List<HelmRevisionInfo>> _helmHistoryByRelease;
         private readonly IReadOnlyList<string> _namespaces;
         private readonly bool _cancelCronJobTrigger;
         private readonly bool _cancelJobRerun;
+        private readonly TaskCompletionSource _deferredHelmRollback = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly bool _deferHelmRollback;
 
         public TrackingAksClient(
             IReadOnlyList<string>? namespaces = null,
             bool includeDefaultNamespaceBatchData = false,
             bool cancelCronJobTrigger = false,
-            bool cancelJobRerun = false)
+            bool cancelJobRerun = false,
+            bool deferHelmRollback = false)
         {
             _namespaces = namespaces?.ToList() ?? ["orders", "payments"];
             _cancelCronJobTrigger = cancelCronJobTrigger;
             _cancelJobRerun = cancelJobRerun;
+            _deferHelmRollback = deferHelmRollback;
 
             _deploymentsByNamespace = new Dictionary<string, List<DeploymentInfo>>(StringComparer.Ordinal)
             {
@@ -797,6 +848,82 @@ public sealed class AksPageBatchTests : TestContext
                         [
                             new ServicePortInfo { Name = "http", Protocol = "TCP", Port = 80, TargetPort = "8080" }
                         ]
+                    }
+                ]
+            };
+
+            _helmReleasesByNamespace = new Dictionary<string, List<HelmReleaseInfo>>(StringComparer.Ordinal)
+            {
+                ["orders"] =
+                [
+                    new HelmReleaseInfo
+                    {
+                        Name = "orders-api",
+                        Namespace = "orders",
+                        Revision = 3,
+                        Status = "deployed",
+                        Chart = "orders-api-1.2.3",
+                        AppVersion = "1.2.3",
+                        Updated = DateTimeOffset.UtcNow.AddMinutes(-8)
+                    }
+                ],
+                ["payments"] =
+                [
+                    new HelmReleaseInfo
+                    {
+                        Name = "payments-gateway",
+                        Namespace = "payments",
+                        Revision = 7,
+                        Status = "deployed",
+                        Chart = "payments-gateway-4.5.6",
+                        AppVersion = "4.5.6",
+                        Updated = DateTimeOffset.UtcNow.AddMinutes(-11)
+                    }
+                ]
+            };
+
+            _helmHistoryByRelease = new Dictionary<(string Namespace, string ReleaseName), List<HelmRevisionInfo>>()
+            {
+                [("orders", "orders-api")] =
+                [
+                    new HelmRevisionInfo
+                    {
+                        Revision = 3,
+                        Status = "deployed",
+                        Chart = "orders-api-1.2.3",
+                        AppVersion = "1.2.3",
+                        Updated = DateTimeOffset.UtcNow.AddMinutes(-8),
+                        Description = "Upgrade complete"
+                    },
+                    new HelmRevisionInfo
+                    {
+                        Revision = 2,
+                        Status = "superseded",
+                        Chart = "orders-api-1.2.2",
+                        AppVersion = "1.2.2",
+                        Updated = DateTimeOffset.UtcNow.AddHours(-2),
+                        Description = "Previous stable release"
+                    }
+                ],
+                [("payments", "payments-gateway")] =
+                [
+                    new HelmRevisionInfo
+                    {
+                        Revision = 7,
+                        Status = "deployed",
+                        Chart = "payments-gateway-4.5.6",
+                        AppVersion = "4.5.6",
+                        Updated = DateTimeOffset.UtcNow.AddMinutes(-11),
+                        Description = "Upgrade complete"
+                    },
+                    new HelmRevisionInfo
+                    {
+                        Revision = 6,
+                        Status = "superseded",
+                        Chart = "payments-gateway-4.5.5",
+                        AppVersion = "4.5.5",
+                        Updated = DateTimeOffset.UtcNow.AddHours(-3),
+                        Description = "Previous stable release"
                     }
                 ]
             };
@@ -1118,6 +1245,7 @@ public sealed class AksPageBatchTests : TestContext
         public List<(string Namespace, string Kind, string Name)> YamlRequests { get; } = [];
         public List<(string Namespace, string Name)> TriggerCronJobCalls { get; } = [];
         public List<(string Namespace, string Name)> RerunJobCalls { get; } = [];
+        public List<(string Namespace, string ReleaseName, int Revision)> RollbackHelmCalls { get; } = [];
         public List<(string Namespace, string IngressName)> IngressAnalysisCalls { get; } = [];
         public List<(string Namespace, string WorkloadKind, string WorkloadName)> NetworkPolicyAnalysisCalls { get; } = [];
 
@@ -1135,6 +1263,9 @@ public sealed class AksPageBatchTests : TestContext
         public CronJobInfo FindCronJob(string ns, string name)
             => _cronJobsByNamespace[ns].Single(job => job.Name == name);
 
+        public HelmReleaseInfo FindHelmRelease(string ns, string name)
+            => _helmReleasesByNamespace[ns].Single(release => release.Name == name);
+
         public ServiceInfo FindService(string ns, string name)
             => _servicesByNamespace[ns].Single(service => service.Name == name);
 
@@ -1146,6 +1277,9 @@ public sealed class AksPageBatchTests : TestContext
 
         public HttpRouteInfo FindHttpRoute(string ns, string name)
             => _httpRoutesByNamespace[ns].Single(route => route.Name == name);
+
+        public void CompleteDeferredHelmRollback()
+            => _deferredHelmRollback.TrySetResult();
 
         public Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<DeploymentInfo>>(_deploymentsByNamespace[ns].ToList());
@@ -1320,7 +1454,7 @@ public sealed class AksPageBatchTests : TestContext
             => Task.FromResult<IReadOnlyList<HttpRouteInfo>>(_httpRoutesByNamespace[ns].ToList());
 
         public Task<IReadOnlyList<HelmReleaseInfo>> GetHelmReleasesAsync(string ns, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>([]);
+            => Task.FromResult<IReadOnlyList<HelmReleaseInfo>>(_helmReleasesByNamespace[ns].ToList());
 
         public Task<IReadOnlyList<string>> GetNamespacesAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<string>>(_namespaces.ToList());
@@ -1363,13 +1497,22 @@ public sealed class AksPageBatchTests : TestContext
 
         public Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName,
             CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<HelmRevisionInfo>>([]);
+            => Task.FromResult<IReadOnlyList<HelmRevisionInfo>>(_helmHistoryByRelease[(ns, releaseName)].ToList());
 
         public Task<string> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default)
             => Task.FromResult(string.Empty);
 
         public Task RollbackHelmReleaseAsync(string ns, string releaseName, int targetRevision, CancellationToken ct = default)
-            => Task.CompletedTask;
+        {
+            RollbackHelmCalls.Add((ns, releaseName, targetRevision));
+
+            if (!_deferHelmRollback)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _deferredHelmRollback.Task.WaitAsync(ct);
+        }
 
         public Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(string ns, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<PodMetrics>>([]);

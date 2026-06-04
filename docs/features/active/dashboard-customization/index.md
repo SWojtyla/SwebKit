@@ -4,6 +4,8 @@
 
 Redesign the initial dashboard into a responsive widget board where each user can arrange, size, and configure the operational tiles that matter to their workflow. The target interaction model should feel closer to a phone home screen with widgets than to a static operations report.
 
+The next design pass should push the experience further toward a Power BI-like operational workspace: richer analytics framing, stronger information hierarchy, and more expressive but still practical customization.
+
 ## Scope
 
 - Inventory the dashboard tiles worth supporting.
@@ -44,6 +46,21 @@ This is a UI-layer redesign, not a reset of the dashboard architecture. The curr
 - Entry point: `src/SwebKit.App/Components/Pages/DashboardPage.razor`
 - Existing tile component: `src/SwebKit.App/Components/Shared/HealthTile.razor`
 - Persistence starting point: `src/SwebKit.Core/Configuration/UiStateRepository.cs`
+- Proposal module: `docs/features/active/dashboard-customization/ui-overhaul-proposals.md`
+- Frontend plan: `docs/features/active/dashboard-customization/frontend.md`
+- Persistence plan: `docs/features/active/dashboard-customization/persistence.md`
+- Decisions: `docs/features/active/dashboard-customization/decisions.md`
+
+## Current Proposal Track
+
+The feature now has two documented full-dashboard redesign directions:
+
+- `Power Grid Command Center`: the recommended direction, closest to a Power BI command surface.
+- `Ops Atlas Workbench`: a more experimental scene-based operations canvas with narrative and spatial emphasis.
+
+Both proposals preserve the current tile registry, UI-state persistence, and drill-through contracts instead of resetting the underlying architecture.
+
+The implementation baseline is now `Power Grid Command Center`, with the next execution work split into dedicated frontend and persistence modules.
 
 ## Current Dashboard Inventory
 

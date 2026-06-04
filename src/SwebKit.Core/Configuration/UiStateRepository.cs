@@ -248,12 +248,84 @@ public class UiStateRepository
         }
 
         var knownIds = defaults.Select(static tile => tile.TileId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var normalized = new DashboardPreferences { SchemaVersion = 1 };
+        var normalizedViews = new List<DashboardViewPreference>();
+        var seenViewIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (preferences?.Views is { Count: > 0 })
+        {
+            foreach (var view in preferences.Views)
+            {
+                var viewId = NormalizeDashboardViewId(view.Id, seenViewIds, normalizedViews.Count);
+                normalizedViews.Add(new DashboardViewPreference
+                {
+                    Id = viewId,
+                    Title = NormalizeDashboardViewTitle(view.Title, normalizedViews.Count),
+                    IsDefault = view.IsDefault,
+                    Tiles = NormalizeDashboardTiles(view.Tiles, defaults, knownIds),
+                    Filters = NormalizeDashboardViewFilters(view.Filters),
+                    Layout = NormalizeDashboardViewLayout(view.Layout)
+                });
+            }
+        }
+
+        if (normalizedViews.Count == 0)
+        {
+            normalizedViews.Add(new DashboardViewPreference
+            {
+                Id = "default",
+                Title = "Default view",
+                IsDefault = true,
+                Tiles = NormalizeDashboardTiles(preferences?.Tiles, defaults, knownIds),
+                Filters = new DashboardViewFilterPreference(),
+                Layout = new DashboardViewLayoutPreference()
+            });
+        }
+
+        var defaultViewId = normalizedViews.FirstOrDefault(static view => view.IsDefault)?.Id
+            ?? normalizedViews[0].Id;
+        var activeViewId = normalizedViews.Any(view => string.Equals(view.Id, preferences?.ActiveViewId, StringComparison.OrdinalIgnoreCase))
+            ? preferences!.ActiveViewId.Trim()
+            : defaultViewId;
+
+        if (preferences?.Tiles is { Count: > 0 })
+        {
+            var activeIndex = normalizedViews.FindIndex(view => string.Equals(view.Id, activeViewId, StringComparison.OrdinalIgnoreCase));
+            if (activeIndex >= 0)
+            {
+                normalizedViews[activeIndex] = normalizedViews[activeIndex] with
+                {
+                    Tiles = NormalizeDashboardTiles(preferences.Tiles, defaults, knownIds)
+                };
+            }
+        }
+
+        normalizedViews = normalizedViews
+            .Select(view => view with { IsDefault = string.Equals(view.Id, defaultViewId, StringComparison.OrdinalIgnoreCase) })
+            .ToList();
+
+        var activeView = normalizedViews.First(view => string.Equals(view.Id, activeViewId, StringComparison.OrdinalIgnoreCase));
+
+        return new DashboardPreferences
+        {
+            SchemaVersion = preferences?.SchemaVersion >= 2 ? preferences.SchemaVersion : 2,
+            ActiveViewId = activeView.Id,
+            Views = normalizedViews,
+            // Keep the active view mirrored at the root for callers that still read/write the legacy flat tile list.
+            Tiles = activeView.Tiles.Select(CloneDashboardTilePreference).ToList()
+        };
+    }
+
+    private static List<DashboardTilePreference> NormalizeDashboardTiles(
+        IEnumerable<DashboardTilePreference>? preferences,
+        IReadOnlyList<DashboardTilePreference> defaultTiles,
+        HashSet<string> knownIds)
+    {
+        var normalized = new List<DashboardTilePreference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (preferences?.Tiles is not null)
+        if (preferences is not null)
         {
-            foreach (var tile in preferences.Tiles)
+            foreach (var tile in preferences)
             {
                 var tileId = tile.TileId?.Trim() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(tileId) || !IsKnownDashboardTileId(tileId, knownIds) || !seen.Add(tileId))
@@ -261,7 +333,7 @@ public class UiStateRepository
                     continue;
                 }
 
-                normalized.Tiles.Add(CloneDashboardTilePreference(tile) with
+                normalized.Add(CloneDashboardTilePreference(tile) with
                 {
                     TileId = tileId,
                     Size = NormalizeDashboardTileSize(tile.Size)
@@ -269,11 +341,11 @@ public class UiStateRepository
             }
         }
 
-        foreach (var defaultTile in defaults)
+        foreach (var defaultTile in defaultTiles)
         {
             if (seen.Add(defaultTile.TileId))
             {
-                normalized.Tiles.Add(CloneDashboardTilePreference(defaultTile));
+                normalized.Add(CloneDashboardTilePreference(defaultTile));
             }
         }
 
@@ -293,8 +365,20 @@ public class UiStateRepository
 
     private static DashboardPreferences CloneDashboardPreferences(DashboardPreferences preferences) => new()
     {
-        SchemaVersion = preferences.SchemaVersion <= 0 ? 1 : preferences.SchemaVersion,
+        SchemaVersion = preferences.SchemaVersion <= 0 ? 2 : preferences.SchemaVersion,
+        ActiveViewId = preferences.ActiveViewId?.Trim() ?? string.Empty,
+        Views = preferences.Views?.Select(CloneDashboardViewPreference).ToList() ?? [],
         Tiles = preferences.Tiles?.Select(CloneDashboardTilePreference).ToList() ?? []
+    };
+
+    private static DashboardViewPreference CloneDashboardViewPreference(DashboardViewPreference preference) => new()
+    {
+        Id = preference.Id?.Trim() ?? string.Empty,
+        Title = preference.Title?.Trim() ?? string.Empty,
+        IsDefault = preference.IsDefault,
+        Tiles = preference.Tiles?.Select(CloneDashboardTilePreference).ToList() ?? [],
+        Filters = NormalizeDashboardViewFilters(preference.Filters),
+        Layout = NormalizeDashboardViewLayout(preference.Layout)
     };
 
     private static DashboardTilePreference CloneDashboardTilePreference(DashboardTilePreference preference) => new()
@@ -308,6 +392,55 @@ public class UiStateRepository
                 .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
                 .ToDictionary(static entry => entry.Key.Trim(), static entry => entry.Value, StringComparer.Ordinal)
     };
+
+    private static string NormalizeDashboardViewId(string? viewId, HashSet<string> seenViewIds, int index)
+    {
+        var normalized = string.IsNullOrWhiteSpace(viewId) ? $"view-{index + 1}" : viewId.Trim();
+        if (seenViewIds.Add(normalized))
+        {
+            return normalized;
+        }
+
+        var suffix = 2;
+        var candidate = $"{normalized}-{suffix}";
+        while (!seenViewIds.Add(candidate))
+        {
+            suffix++;
+            candidate = $"{normalized}-{suffix}";
+        }
+
+        return candidate;
+    }
+
+    private static string NormalizeDashboardViewTitle(string? title, int index) => string.IsNullOrWhiteSpace(title)
+        ? index == 0 ? "Default view" : $"View {index + 1}"
+        : title.Trim();
+
+    private static DashboardViewFilterPreference NormalizeDashboardViewFilters(DashboardViewFilterPreference? filters) => new()
+    {
+        ProfileId = filters?.ProfileId?.Trim() ?? string.Empty,
+        Environment = NormalizeDashboardFilterValue(filters?.Environment, "all", "all", "production", "non-production", "demo"),
+        Area = NormalizeDashboardFilterValue(filters?.Area, "all", "all", "dashboard", "service-bus", "aks", "redis", "pipelines", "observability", "settings"),
+        Severity = NormalizeDashboardFilterValue(filters?.Severity, "all", "all", "attention", "healthy"),
+        TimeWindow = NormalizeDashboardFilterValue(filters?.TimeWindow, "live", "live", "15m", "1h", "4h", "today"),
+        LiveMode = NormalizeDashboardFilterValue(filters?.LiveMode, "live", "live", "snapshot")
+    };
+
+    private static DashboardViewLayoutPreference NormalizeDashboardViewLayout(DashboardViewLayoutPreference? layout) => new()
+    {
+        ShowKpiRibbon = layout?.ShowKpiRibbon ?? true,
+        CollapseInsightDock = layout?.CollapseInsightDock ?? false,
+        DensityMode = NormalizeDashboardFilterValue(layout?.DensityMode, "default", "default", "compact", "comfortable"),
+        BackgroundStyle = NormalizeDashboardFilterValue(layout?.BackgroundStyle, "default", "default", "calm", "contrast")
+    };
+
+    private static string NormalizeDashboardFilterValue(string? value, string fallback, params string[] allowedValues)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        return allowedValues.Contains(normalized, StringComparer.OrdinalIgnoreCase)
+            ? normalized.ToLowerInvariant()
+            : fallback;
+    }
 
     private static string NormalizeDashboardTileSize(string? size) => size switch
     {
@@ -346,8 +479,38 @@ public class UiState
 
 public record DashboardPreferences
 {
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
+    public string ActiveViewId { get; init; } = string.Empty;
+    public List<DashboardViewPreference> Views { get; init; } = [];
     public List<DashboardTilePreference> Tiles { get; init; } = [];
+}
+
+public record DashboardViewPreference
+{
+    public string Id { get; init; } = string.Empty;
+    public string Title { get; init; } = "Default view";
+    public bool IsDefault { get; init; }
+    public List<DashboardTilePreference> Tiles { get; init; } = [];
+    public DashboardViewFilterPreference Filters { get; init; } = new();
+    public DashboardViewLayoutPreference Layout { get; init; } = new();
+}
+
+public record DashboardViewFilterPreference
+{
+    public string ProfileId { get; init; } = string.Empty;
+    public string Environment { get; init; } = "all";
+    public string Area { get; init; } = "all";
+    public string Severity { get; init; } = "all";
+    public string TimeWindow { get; init; } = "live";
+    public string LiveMode { get; init; } = "live";
+}
+
+public record DashboardViewLayoutPreference
+{
+    public bool ShowKpiRibbon { get; init; } = true;
+    public bool CollapseInsightDock { get; init; }
+    public string DensityMode { get; init; } = "default";
+    public string BackgroundStyle { get; init; } = "default";
 }
 
 public record DashboardTilePreference

@@ -1,0 +1,109 @@
+.dashboard-watch-tile {
+    display: grid;
+    gap: var(--spacing-xs);
+}
+
+.dashboard-watch-tile__header,
+.dashboard-watch-tile__actions,
+.dashboard-watch-tile__refresh {
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-watch-tile__header {
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+.dashboard-watch-tile__heading {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dashboard-watch-tile__heading h3 {
+    margin: 0;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    line-height: 1.2;
+}
+
+.dashboard-watch-tile__actions,
+.dashboard-watch-tile__refresh {
+    gap: 8px;
+}
+
+.dashboard-watch-tile__eyebrow,
+.dashboard-watch-tile__target,
+.dashboard-watch-tile__updated,
+.dashboard-watch-tile__note,
+.dashboard-watch-tile__refresh {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    line-height: 1.35;
+}
+
+.dashboard-watch-tile__eyebrow {
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dashboard-watch-tile__target {
+    margin: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-watch-tile__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--spacing-xs);
+}
+
+.dashboard-watch-tile__stats span {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.dashboard-watch-tile__stats strong {
+    color: var(--color-text);
+    font-size: var(--font-size-md);
+}
+
+.dashboard-watch-tile__updated,
+.dashboard-watch-tile__note,
+.dashboard-watch-tile__error {
+    margin: 0;
+}
+
+.dashboard-watch-tile__error {
+    color: var(--color-error);
+    font-size: var(--font-size-xs);
+    line-height: 1.35;
+}
+
+.dashboard-watch-tile__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-surface) 94%, var(--color-surface-2));
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-xs);
+    font-weight: 650;
+    cursor: pointer;
+}

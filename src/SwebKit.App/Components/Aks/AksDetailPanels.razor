@@ -36,8 +36,8 @@
                                     @onclick="() => _scaleReplicas = Math.Min(100, _scaleReplicas + 1)">+</button>
                         </div>
                         <div class="aks-scale-current">Currently: @(_scaleIsStatefulSet
-                                                                                                                                                                                                                                                                                                                                                                                                        ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
-                                                                                                                                                                                                                                                                                                                                                                                                        : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
+                                                                                                                                                                                                                                                                                                                                                                                                                                    ? (StatefulSets.FirstOrDefault(s => s.Name == _scaleTarget)?.Replicas ?? 0)
+                                                                                                                                                                                                                                                                                                                                                                                                                                    : (Deployments.FirstOrDefault(d => d.Name == _scaleTarget)?.Replicas ?? 0)) replicas</div>
                             <div class="aks-scale-actions">
                                 <button class="confirm-btn confirm-yes" @onclick="OnScaleConfirm">Apply</button>
                                 <button class="confirm-btn confirm-no" @onclick="CancelScale">Cancel</button>
@@ -526,6 +526,34 @@
     }
 
     public void CloseYaml() => _yamlViewer?.Close();
+
+    public void ResetAllPanels()
+    {
+        _pendingYamlOpen = null;
+        _pendingHelmOpen = null;
+        _yamlViewer?.Close();
+        _helmPanel?.CloseHistory();
+        _helmPanel?.CloseValues();
+        _scaleTarget = null;
+        _scaleNamespace = null;
+        _scaleReplicas = 0;
+        _scaleIsStatefulSet = false;
+        CloseLogs();
+        _containerDetailPodName = null;
+        _containerDetailNamespace = null;
+        _configMapDetailTarget = null;
+        _secretDetailTarget = null;
+        _hpaDetailTarget = null;
+        _ingressAnalysisTarget = null;
+        _networkPolicyAnalysisTarget = null;
+        _namespaceQuotaTarget = null;
+        _pdbTarget = null;
+        _probeFailureTarget = null;
+        _placementTarget = null;
+        _helmDiffPreviewTarget = null;
+        _helmRollbackPreviewTarget = null;
+        NotifyPanelStateChanged();
+    }
 
     // Helm
     public async Task ShowHelmHistoryAsync(string releaseName)

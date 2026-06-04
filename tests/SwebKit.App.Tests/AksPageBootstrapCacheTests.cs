@@ -122,6 +122,20 @@ public sealed class AksPageBootstrapCacheTests : TestContext
         cut.WaitForAssertion(() => Assert.Single(_bootstrapper.Requests));
     }
 
+    [Fact]
+    public void WarmCacheWithDifferentNamespace_FallsThroughToBootstrapper()
+    {
+        _appState.Config.AksConfig!.DefaultNamespace = string.Empty;
+        _aksCache.Store(WarmSuccess(new StubAksClient()));
+
+        _bootstrapper.EnqueueImmediateResult(
+            AksClientBootstrapResult("ctx", string.Empty, new StubAksClient()));
+
+        var cut = RenderComponent<AksPage>();
+
+        cut.WaitForAssertion(() => Assert.Single(_bootstrapper.Requests));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static AksClientBootstrapResult WarmSuccess(IAksClient client) =>

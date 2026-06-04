@@ -150,7 +150,7 @@ public sealed class RedisClient : IRedisClient
     public async Task SetKeyValueAsync(string key, string value, TimeSpan? expiry = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        await _db.StringSetAsync(key, value, expiry);
+        await _db.StringSetAsync(key, value, expiry, When.Always);
     }
 
     public async Task SetHashFieldAsync(string key, string field, string value, CancellationToken ct = default)
@@ -292,7 +292,7 @@ public sealed class RedisClient : IRedisClient
         switch (entry.Type.Trim().ToLowerInvariant())
         {
             case "string":
-                await _db.StringSetAsync(entry.Key, entry.StringValue ?? string.Empty, entry.Ttl);
+                await _db.StringSetAsync(entry.Key, entry.StringValue ?? string.Empty, entry.Ttl, When.Always);
                 return true;
             case "hash":
                 if (entry.HashFields.Count == 0)

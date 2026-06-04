@@ -4,6 +4,24 @@
 
 Validate that dashboard widget selection, ordering, sizing, configuration, default behavior, responsive layout, and refresh states work without regressing the existing dashboard metrics.
 
+For the visual-overhaul proposal phase, validate that the chosen concept improves scan speed, drill-through clarity, saved-layout usefulness, and responsive composition before committing to implementation.
+
+## Proposal Evaluation Checks
+
+- The selected proposal has a clear first-ship slice that fits the current dashboard architecture.
+- The selected proposal explains how existing widgets map into the new visual hierarchy instead of replacing them with vague placeholders.
+- The selected proposal defines what happens at desktop, snapped-window, tablet-like, and mobile-like widths.
+- The selected proposal includes an explicit customization model: saved views, tile sizes, tile variants, and what global filters apply.
+- The selected proposal names at least one distinctive interaction pattern that improves usefulness, not just aesthetics.
+- The rejected or deferred proposal is still documented well enough to mine later for ideas without redoing discovery work.
+
+## Planned Execution Order Checks
+
+- Slice 1 shell framing lands before the team attempts to redesign every existing widget.
+- Saved views and global slicers are validated against `UiStateRepository` normalization before broad widget rollout.
+- New dashboard components are added to `tests/SwebKit.App.Tests/SwebKit.App.Tests.csproj` so bUnit can compile them.
+- Shared widget-frame behavior is tested once and reused, instead of revalidating loading and stale states ad hoc inside each tile.
+
 ## Component Tests
 
 - Renders the default dashboard layout when no dashboard preferences exist.
@@ -61,6 +79,9 @@ Validate that dashboard widget selection, ordering, sizing, configuration, defau
 - Empty dashboards, sparse dashboards, and busy dashboards all feel intentionally composed.
 - The configuration surface is compact enough for repeated use but still gives enough room for target selection and preview.
 - No tile relies on visible instructional copy to explain basic actions that should be represented by familiar controls and tooltips.
+- The chosen overhaul feels materially closer to a modern analytics workspace than to the current widget board.
+- Saved views and global filtering feel like real workflow tools rather than optional decoration.
+- Large-format widgets justify their footprint with trend, comparison, or narrative value.
 
 ## Initial Validation Command
 
@@ -72,6 +93,8 @@ dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0 -
 
 ## Current Validation Status
 
+- Proposal comparison documented in `ui-overhaul-proposals.md`; `Power Grid Command Center` is the active implementation baseline.
+- Frontend and persistence execution modules are now partially implemented on the live dashboard home route.
 - App build passed with existing warnings after the first implementation slice.
 - UX overhaul build passed with existing warnings using alternate output path `artifacts/copilot-build/ux-overhaul/`; the standard build output was locked by a running `SwebKit.App.exe` process.
 - Full custom-dashboard overhaul build passed with existing warnings using alternate output path `artifacts/copilot-build/dashboard-custom/`; generated output was removed after validation.
@@ -80,10 +103,10 @@ dotnet build src/SwebKit.App/SwebKit.App.csproj -f net10.0-windows10.0.19041.0 -
 - Validation-gate recheck passed for UI-state hydration safety and persisted tile-size rendering.
 - Added persistence tests for defaults, unknown tile IDs, preference round-tripping, and custom template-instance preservation.
 - Updated persistence tests to assert legacy dashboard sizes migrate from `small`, `medium`, and `wide` to `1x1`, `2x1`, and `3x2` footprints.
-- Focused Core test execution is currently blocked before the new tests run by existing `DeploymentValidationServiceTests.FakeAksClient` compile errors for missing `IAksClient.DeleteIngressAsync` and `IAksClient.DeleteHttpRouteAsync` implementations.
+- Saved-view implementation build passed through `src/SwebKit.App/SwebKit.App.csproj` with the same existing WinAppSDK PRI qualifier warnings only.
+- Focused `tests/SwebKit.Core.Tests/UiStateFilterTests.cs` execution passed, including saved-view migration and multi-view round-tripping coverage.
 - Widget-board implementation build passed through `build-maui-windows` with existing warnings.
 - Widget row stretching and top-bar favorites popover fixes passed through `build-maui-windows` with existing warnings.
 - `3x2` footprint and list-row spacing changes passed through `build-maui-windows` with existing warnings.
-- Focused Core test execution remains blocked before the dashboard preference tests run by the existing `DeploymentValidationServiceTests.FakeAksClient` compile errors.
 - Manual dashboard builder smoke validation is still pending.
 - Manual visual review of the redesigned dashboard is still pending.

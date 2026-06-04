@@ -1,0 +1,118 @@
+<section class="dashboard-watch-tile @CssClass" aria-label="@Title">
+    <div class="dashboard-watch-tile__header">
+        <div class="dashboard-watch-tile__heading">
+            <span class="dashboard-watch-tile__eyebrow">@AreaLabel</span>
+            <h3>@Title</h3>
+        </div>
+        <div class="dashboard-watch-tile__actions">
+            @if (IsLoading)
+            {
+                <span class="dashboard-watch-tile__refresh" title="Refreshing @Title">
+                    <FluentProgressRing Width="14px" Height="14px" />
+                    <span>Refreshing</span>
+                </span>
+            }
+            <button class="dashboard-watch-tile__link" type="button" @onclick="OnOpen">Open</button>
+        </div>
+    </div>
+
+    <p class="dashboard-watch-tile__target">@Target</p>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <p class="dashboard-watch-tile__error">@Error</p>
+    }
+    else if (Stats is null)
+    {
+        <div class="dashboard-watch-tile__refresh dashboard-watch-tile__refresh--body">
+            <FluentProgressRing Width="16px" Height="16px" />
+            <span>@LoadingText</span>
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-watch-tile__stats">
+            @foreach (var stat in Stats)
+            {
+                <span>
+                    <strong>@stat.Value</strong>
+                    @stat.Label
+                </span>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Note))
+        {
+            <p class="dashboard-watch-tile__note">@Note</p>
+        }
+        <p class="dashboard-watch-tile__updated">Updated @RelativeTime(LastUpdated)</p>
+    }
+</section>
+
+@code {
+    private WatchRenderSnapshot _snapshot = WatchRenderSnapshot.Empty;
+    private bool _shouldRender = true;
+
+    [Parameter, EditorRequired] public string AreaLabel { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Target { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<DashboardStatItem>? Stats { get; set; }
+    [Parameter] public DateTimeOffset LastUpdated { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string LoadingText { get; set; } = "Loading...";
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnOpen { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        var statsFingerprint = Stats is null
+            ? string.Empty
+            : string.Join('|', Stats.Select(static stat => $"{stat.Value}:{stat.Label}"));
+
+        var next = new WatchRenderSnapshot(
+            AreaLabel,
+            Title,
+            Target,
+            statsFingerprint,
+            LastUpdated,
+            Error,
+            Note,
+            IsLoading,
+            LoadingText,
+            CssClass,
+            OnOpen);
+
+        _shouldRender = !_snapshot.Equals(next);
+        _snapshot = next;
+    }
+
+    protected override bool ShouldRender() => _shouldRender;
+
+    private static string RelativeTime(DateTimeOffset at)
+    {
+        var elapsed = DateTimeOffset.Now - at;
+        return elapsed.TotalSeconds < 60
+            ? $"{(int)elapsed.TotalSeconds}s ago"
+            : elapsed.TotalMinutes < 60
+                ? $"{(int)elapsed.TotalMinutes}m ago"
+                : $"{(int)elapsed.TotalHours}h ago";
+    }
+
+    private sealed record WatchRenderSnapshot(
+        string AreaLabel,
+        string Title,
+        string Target,
+        string StatsFingerprint,
+        DateTimeOffset LastUpdated,
+        string? Error,
+        string? Note,
+        bool IsLoading,
+        string LoadingText,
+        string CssClass,
+        EventCallback OnOpen)
+    {
+        public static readonly WatchRenderSnapshot Empty = new(string.Empty, string.Empty, string.Empty, string.Empty, default,
+null, null, false, string.Empty, string.Empty, default);
+    }
+}

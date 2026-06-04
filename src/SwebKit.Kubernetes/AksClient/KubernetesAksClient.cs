@@ -1,6 +1,7 @@
 using Azure.Core;
 using Azure.Identity;
 using k8s;
+using k8s.KubeConfigModels;
 using k8s.Models;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Constants;
@@ -11,6 +12,7 @@ using System.Globalization;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.IO.Compression;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -125,9 +127,25 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         if (!hasExplicitKubeconfig && !hasExplicitContext)
             return KubernetesClientConfiguration.BuildDefaultConfig();
 
-        return KubernetesClientConfiguration.BuildConfigFromConfigFile(
-            hasExplicitKubeconfig ? kubeconfigPath : null,
-            hasExplicitContext ? kubeconfigContext : null);
+        try
+        {
+            return KubernetesClientConfiguration.BuildConfigFromConfigFile(
+                hasExplicitKubeconfig ? kubeconfigPath : null,
+                hasExplicitContext ? kubeconfigContext : null);
+        }
+        catch (Exception ex)
+        {
+            if (AksAzureAuthHelpers.ShouldUseAzureCredentialFallbackAfterKubeConfigError(
+                    ex,
+                    hasExplicitKubeconfig ? kubeconfigPath : null,
+                    hasExplicitContext ? kubeconfigContext : null,
+                    out var fallbackConfig))
+            {
+                return fallbackConfig;
+            }
+
+            throw;
+        }
     }
 
     internal static void TryApplyAzureCredentialFallback(KubernetesClientConfiguration config, string? kubeconfigPath)
@@ -3895,6 +3913,158 @@ internal static class AksAzureAuthHelpers
     private static readonly Regex ServerIdRegex = new(
         "--server-id(?:=|\\s+)(?<value>[^\\s\"']+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool TryPrepareKubeconfigForAzureCredentialFallback(K8SConfiguration kubeConfig, string? currentContext)
+    {
+        ArgumentNullException.ThrowIfNull(kubeConfig);
+
+        var selectedContextName = string.IsNullOrWhiteSpace(currentContext)
+            ? kubeConfig.CurrentContext
+            : currentContext;
+
+        if (string.IsNullOrWhiteSpace(selectedContextName))
+            return false;
+
+        var selectedContext = (kubeConfig.Contexts ?? Enumerable.Empty<Context>())
+            .FirstOrDefault(ctx => string.Equals(ctx.Name, selectedContextName, StringComparison.Ordinal));
+        var selectedClusterName = selectedContext?.ContextDetails?.Cluster;
+        var selectedUserName = selectedContext?.ContextDetails?.User;
+
+        if (string.IsNullOrWhiteSpace(selectedClusterName) || string.IsNullOrWhiteSpace(selectedUserName))
+            return false;
+
+        var selectedCluster = (kubeConfig.Clusters ?? Enumerable.Empty<Cluster>())
+            .FirstOrDefault(cluster => string.Equals(cluster.Name, selectedClusterName, StringComparison.Ordinal));
+        var selectedUser = (kubeConfig.Users ?? Enumerable.Empty<User>())
+            .FirstOrDefault(user => string.Equals(user.Name, selectedUserName, StringComparison.Ordinal));
+        var credentials = selectedUser?.UserCredentials;
+
+        if (credentials is null)
+            return false;
+
+        if (!ShouldUseAzureCredentialFallback(selectedCluster?.ClusterEndpoint?.Server, credentials.Token))
+            return false;
+
+        if (credentials.ExternalExecution is null && credentials.AuthProvider is null)
+            return false;
+
+        credentials.ExternalExecution = null;
+        credentials.AuthProvider = null;
+        return true;
+    }
+
+    public static bool ShouldUseAzureCredentialFallbackAfterKubeConfigError(
+        Exception exception,
+        string? kubeconfigPath,
+        string? currentContext,
+        out KubernetesClientConfiguration fallbackConfig)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        fallbackConfig = null!;
+
+        if (!IsBrokenExecCredentialError(exception))
+            return false;
+
+        var effectiveKubeconfigPath = string.IsNullOrWhiteSpace(kubeconfigPath)
+            ? KubernetesClientConfiguration.KubeConfigDefaultLocation
+            : kubeconfigPath;
+
+        if (string.IsNullOrWhiteSpace(effectiveKubeconfigPath) || !File.Exists(effectiveKubeconfigPath))
+            return false;
+
+        var kubeConfig = KubernetesClientConfiguration.LoadKubeConfig(effectiveKubeconfigPath, useRelativePaths: true);
+        if (!TryPrepareKubeconfigForAzureCredentialFallback(kubeConfig, currentContext))
+            return false;
+
+        fallbackConfig = BuildAzureCredentialFallbackConfiguration(kubeConfig, currentContext);
+        return true;
+    }
+
+    public static KubernetesClientConfiguration BuildAzureCredentialFallbackConfiguration(K8SConfiguration kubeConfig, string? currentContext)
+    {
+        ArgumentNullException.ThrowIfNull(kubeConfig);
+
+        var selectedContextName = string.IsNullOrWhiteSpace(currentContext)
+            ? kubeConfig.CurrentContext
+            : currentContext;
+
+        if (string.IsNullOrWhiteSpace(selectedContextName))
+            throw new InvalidOperationException("Unable to determine the active kubeconfig context for AKS credential fallback.");
+
+        var selectedContext = (kubeConfig.Contexts ?? Enumerable.Empty<Context>())
+            .FirstOrDefault(ctx => string.Equals(ctx.Name, selectedContextName, StringComparison.Ordinal));
+        var selectedClusterName = selectedContext?.ContextDetails?.Cluster;
+        var selectedUserName = selectedContext?.ContextDetails?.User;
+
+        if (string.IsNullOrWhiteSpace(selectedClusterName))
+            throw new InvalidOperationException($"Kubeconfig context '{selectedContextName}' does not reference a cluster.");
+
+        var selectedCluster = (kubeConfig.Clusters ?? Enumerable.Empty<Cluster>())
+            .FirstOrDefault(cluster => string.Equals(cluster.Name, selectedClusterName, StringComparison.Ordinal));
+        var selectedUser = (kubeConfig.Users ?? Enumerable.Empty<User>())
+            .FirstOrDefault(user => string.Equals(user.Name, selectedUserName, StringComparison.Ordinal));
+        var endpoint = selectedCluster?.ClusterEndpoint
+            ?? throw new InvalidOperationException($"Kubeconfig cluster '{selectedClusterName}' was not found.");
+        var credentials = selectedUser?.UserCredentials;
+
+        return new KubernetesClientConfiguration
+        {
+            Namespace = selectedContext?.ContextDetails?.Namespace,
+            Host = endpoint.Server,
+            SkipTlsVerify = endpoint.SkipTlsVerify,
+            TlsServerName = endpoint.TlsServerName,
+            SslCaCerts = BuildCertificateAuthorities(endpoint),
+            ClientCertificateData = credentials?.ClientCertificateData,
+            ClientCertificateFilePath = credentials?.ClientCertificate,
+            ClientCertificateKeyData = credentials?.ClientKeyData,
+            ClientKeyFilePath = credentials?.ClientKey,
+            Username = credentials?.UserName,
+            Password = credentials?.Password,
+            AccessToken = credentials?.Token
+        };
+    }
+
+    private static X509Certificate2Collection BuildCertificateAuthorities(ClusterEndpoint endpoint)
+    {
+        var certificates = new X509Certificate2Collection();
+
+        if (!string.IsNullOrWhiteSpace(endpoint.CertificateAuthorityData))
+        {
+            certificates.ImportFromPem(Encoding.UTF8.GetString(Convert.FromBase64String(endpoint.CertificateAuthorityData)));
+            return certificates;
+        }
+
+        if (!string.IsNullOrWhiteSpace(endpoint.CertificateAuthority) && File.Exists(endpoint.CertificateAuthority))
+        {
+            certificates.ImportFromPemFile(endpoint.CertificateAuthority);
+        }
+
+        return certificates;
+    }
+
+    private static bool IsBrokenExecCredentialError(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException!)
+        {
+            if (current is k8s.Exceptions.KubeConfigException kubeConfigException
+                && (kubeConfigException.Message.Contains("external exec failed due to", StringComparison.OrdinalIgnoreCase)
+                    || (kubeConfigException.Message.Contains("ExecuteExternalCommand", StringComparison.Ordinal)
+                        && kubeConfigException.Message.Contains("does not contain any JSON tokens", StringComparison.OrdinalIgnoreCase))))
+            {
+                return true;
+            }
+
+            if (current is JsonException)
+            {
+                var message = current.Message;
+                if (message.Contains("does not contain any JSON tokens", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
 
     public static bool ShouldUseAzureCredentialFallback(string? host, string? accessToken)
     {

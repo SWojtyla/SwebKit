@@ -46,7 +46,26 @@ public sealed class AksClientBootstrapperTests
 
         Assert.Equal(AksClientBootstrapStatus.NotConfigured, result.Status);
         Assert.Null(result.Client);
-        Assert.Equal("default", result.CurrentNamespace);
+        Assert.Equal(string.Empty, result.CurrentNamespace);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_WithoutRequestedOrDefaultNamespace_LeavesSelectionEmpty()
+    {
+        var client = new RecordingAksClient(
+            contexts: [new KubeContextInfo { Name = "ctx-a", IsCurrent = true }],
+            namespaces: ["default", "orders"]);
+        var bootstrapper = MakeBootstrapper();
+
+        var result = await bootstrapper.BootstrapAsync(new AksClientBootstrapRequest(
+            client,
+            UseDemoData: false,
+            Config: new AksConfig(),
+            RequestedContext: null,
+            RequestedNamespace: null));
+
+        Assert.Equal(AksClientBootstrapStatus.Connected, result.Status);
+        Assert.Equal(string.Empty, result.CurrentNamespace);
     }
 
     [Fact]

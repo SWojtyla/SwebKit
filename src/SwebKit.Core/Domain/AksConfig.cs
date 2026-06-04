@@ -4,7 +4,7 @@ public class AksConfig
 {
     public string? KubeconfigPath { get; set; }
     public string? KubeconfigContext { get; set; }
-    public string DefaultNamespace { get; set; } = "default";
+    public string DefaultNamespace { get; set; } = string.Empty;
     public List<string> WatchedDeployments { get; set; } = [];
     public int LogBufferSize { get; set; } = 10_000;
     public int CpuBarCeilingMillicores { get; set; } = 500;
@@ -19,7 +19,5 @@ public class AksConfig
     public void Validate()
     {
         // KubeconfigPath and KubeconfigContext are optional — the client falls back to the default kubeconfig.
-        if (string.IsNullOrWhiteSpace(DefaultNamespace))
-            throw new InvalidOperationException($"{nameof(AksConfig)}.{nameof(DefaultNamespace)} is required.");
     }
 }
