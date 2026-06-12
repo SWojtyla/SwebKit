@@ -10,7 +10,9 @@
          @onclick:stopPropagation="true">
         <div class="alert-rule-modal__header">
             <span class="alert-rule-modal__title">@DrawerTitle</span>
-            <button class="alert-rule-modal__close-btn" @onclick="OnClose" aria-label="Close">✕</button>
+            <button class="alert-rule-modal__close-btn" @onclick="OnClose" aria-label="Close">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="14px" />
+            </button>
         </div>
 
         <div class="alert-rule-modal__body">

@@ -1,6 +1,6 @@
 @using SwebKit.Core.Models
 
-<div class="alert-rule-row @(Rule.Enabled ? string.Empty : "alert-rule-row--disabled")" role="row">
+<div class="alert-rule-row alert-rule-row--status-@DotClass @(Rule.Enabled ? string.Empty : "alert-rule-row--disabled")" role="row">
     <span class="alert-rule-row__dot alert-rule-row__dot--@DotClass" title="@DotTooltip"></span>
 
     <label class="alert-rule-row__toggle-label" title="@(Rule.Enabled ? "Disable rule" : "Enable rule")">
