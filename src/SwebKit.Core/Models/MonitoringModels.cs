@@ -73,6 +73,11 @@ public sealed record AlertFiredEvent(
 
 public enum AlertSignalStatus { Ok, Firing, Skipped, Error }
 
+public sealed record AlertEvaluatedEvent(
+    string RuleId,
+    AlertSignalStatus Status,
+    DateTimeOffset EvaluatedAt);
+
 public sealed record AlertSignalResult(
     AlertSignalStatus Status,
     string? Message = null,

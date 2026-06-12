@@ -50,6 +50,7 @@ public sealed class AlertMonitorService : IAlertMonitorService
     }
 
     public event Action<AlertFiredEvent>? AlertFired;
+    public event Action<AlertEvaluatedEvent>? EvaluationCompleted;
 
     public AlertMonitorService(
         IAlertRuleRepository repository,
@@ -177,11 +178,14 @@ public sealed class AlertMonitorService : IAlertMonitorService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Signal source {Source} threw for rule {RuleId}", rule.Source, rule.Id);
+                rule.LastEvaluatedAt = now;
+                EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, AlertSignalStatus.Error, now));
                 ScheduleWithBackoff(rule.Id, now, intervalSeconds);
                 return;
             }
 
             rule.LastEvaluatedAt = now;
+            EvaluationCompleted?.Invoke(new AlertEvaluatedEvent(rule.Id, result.Status, now));
 
             if (result.Status is AlertSignalStatus.Error or AlertSignalStatus.Skipped)
             {

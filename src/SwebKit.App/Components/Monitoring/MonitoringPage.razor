@@ -69,6 +69,7 @@
     protected override async Task OnInitializedAsync()
     {
         Monitor.AlertFired += OnAlertFired;
+        Monitor.EvaluationCompleted += OnEvaluationCompleted;
         _rules = [.. await RuleRepository.GetAllAsync()];
         _history = [.. Monitor.RecentAlerts];
         _isLoading = false;
@@ -148,8 +149,26 @@
         _history.Clear();
     }
 
+    private async void OnEvaluationCompleted(AlertEvaluatedEvent evt)
+    {
+        var kind = evt.Status switch
+        {
+            AlertSignalStatus.Ok => AlertRuleUiStateKind.Ok,
+            AlertSignalStatus.Skipped => AlertRuleUiStateKind.Skipped,
+            AlertSignalStatus.Error => AlertRuleUiStateKind.Error,
+            AlertSignalStatus.Firing => AlertRuleUiStateKind.Firing,
+            _ => AlertRuleUiStateKind.Unknown
+        };
+
+        _uiStates.TryGetValue(evt.RuleId, out var existing);
+        _uiStates[evt.RuleId] = new AlertRuleUiState(kind, existing.LastFiredAt, evt.EvaluatedAt);
+        _firingCount = _uiStates.Values.Count(s => s.Kind == AlertRuleUiStateKind.Firing);
+        await InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         Monitor.AlertFired -= OnAlertFired;
+        Monitor.EvaluationCompleted -= OnEvaluationCompleted;
     }
 }

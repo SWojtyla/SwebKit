@@ -9,4 +9,5 @@ public interface IAlertMonitorService : IAsyncDisposable
     Task StartAsync(CancellationToken ct = default);
     Task StopAsync();
     event Action<AlertFiredEvent>? AlertFired;
+    event Action<AlertEvaluatedEvent>? EvaluationCompleted;
 }
