@@ -171,6 +171,13 @@
                 </span>
             </div>
         }
+        else if (_activeTab == "Capture")
+        {
+            <PostRequestCaptureBuilder Request="@Request"
+                                       AvailableEnvironments="@AllEnvironments"
+                                       CaptureWarnings="@_captureWarnings"
+                                       OnChanged="@MarkDirtyAsync" />
+        }
     </div>
 
 </div>
@@ -179,6 +186,7 @@
     [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
     [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
     [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }
+    [Parameter] public IReadOnlyList<ApiEnvironment> AllEnvironments { get; set; } = [];
     [Parameter] public bool IsDirty { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<HttpRequestResult> OnResult { get; set; }
@@ -186,9 +194,10 @@
     [Inject] private IHttpRequestExecutor Executor { get; set; } = default!;
     [Inject] private UserSettingsRepository UserSettings { get; set; } = default!;
 
-    private static readonly string[] _tabs = ["Params", "Headers", "Body", "Auth"];
+    private static readonly string[] _tabs = ["Params", "Headers", "Body", "Auth", "Capture"];
     private string _activeTab = "Params";
 
+    private IReadOnlyList<string> _captureWarnings = [];
     private bool _executing;
     private CancellationTokenSource? _executionCts;
 
@@ -342,6 +351,8 @@
         }
 
         await OnResult.InvokeAsync(result);
+        if (result is not null)
+            _captureWarnings = result.CaptureWarnings;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 

@@ -15,4 +15,6 @@ public class AppConfig
     public List<FavoriteResource> FavoriteResources { get; set; } = [];
     public List<SavedWorkspace> SavedWorkspaces { get; set; } = [];
     public Dictionary<string, FilterState> LastUsedFilters { get; set; } = [];
+    /// <summary>Azure Key Vault URL for resolving <c>AzureKeyVault</c> environment variables (e.g. https://my-vault.vault.azure.net/). Optional.</summary>
+    public string? KeyVaultUrl { get; set; }
 }

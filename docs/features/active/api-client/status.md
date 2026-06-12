@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 2 — REST Execution is complete. Starting Phase 3 (Environments and Secrets).
+Phase 3 (Environments and Secrets) complete. Ready for Phase 4 (Authentication).
 
 ## Progress Checklist
 
@@ -38,21 +38,38 @@ Phase 2 — REST Execution is complete. Starting Phase 3 (Environments and Secre
 - [x] `HttpRequestResult.cs` in `SwebKit.Core/Domain/` (4 MB truncation, `ResponseBodyTruncated`)
 - [x] `IHttpRequestExecutor` contract in `SwebKit.Core/Abstractions/`
 - [x] `IVariableSubstitutionService` + `IVariablePreviewService` contracts
-- [x] `VariableSubstitutionService` — collection vars → env vars → `ICredentialStore`; AzureKV deferred to Phase 3
+- [x] `VariableSubstitutionService` — collection vars → env vars → `ICredentialStore`
 - [x] `VariablePreviewService` — secrets masked as `••••••••`; null for unresolved tokens
 - [x] `HttpRequestExecutor` — named `IHttpClientFactory("ApiClient")`, 4 MB `LimitedStream`, all body modes
 - [x] `UserSettings.VerifyApiClientSsl: bool` (default: `true`)
 - [x] Named `HttpClient` + services registered in `MauiProgram.cs`; SSL bypass when setting is `false`
 - [x] `KeyValueGrid.razor` — reusable editable key/value grid (headers, query params, form-data)
-- [x] `RequestBuilderPanel.razor` — method selector, URL bar, tab strip: Params / Headers / Body / Auth
-      — variable preview badges on URL bar; SSL warning badge; cancellation via `CancellationTokenSource`
-- [x] `ResponseViewerPanel.razor` — status badge, timing, size; Body / Headers / Raw tabs;
-      JSON pretty-print; clipboard copy button
-- [x] `ApiClientPage.razor` wired up — `RequestBuilderPanel` + `ResponseViewerPanel` with splitter
-- [x] Unit tests — `VariableSubstitutionServiceTests` (14 tests) + `VariablePreviewServiceTests` (7 tests) — all 21 passing
-- [x] Build clean (no new errors; only pre-existing MSIX signing error in app project)
+- [x] `RequestBuilderPanel.razor` — method selector, URL bar, tab strip: Params / Headers / Body / Auth / Capture
+- [x] `ResponseViewerPanel.razor` — status badge, timing, size; Body / Headers / Raw tabs
+- [x] `ApiClientPage.razor` wired up — left/right splitter with JS drag-resize
+- [x] Unit tests — 21 passing
 
-### Phase 3 — Environments and Secrets
+### Phase 3 — Environments and Secrets ✅
+
+- [x] `CollectionVariable.IsEnabled` property added
+- [x] `AppConfig.KeyVaultUrl` added
+- [x] `HttpRequestResult.CaptureWarnings` added
+- [x] `IKeyVaultSecretResolver` contract in `SwebKit.Core/Abstractions/`
+- [x] `IPostRequestCaptureExecutor` contract in `SwebKit.Core/Abstractions/`
+- [x] `IVariableSubstitutionService.BuildScopeAsync` added (KV resolution)
+- [x] `NoopKeyVaultSecretResolver` — returns `[KV_UNAVAILABLE:name]` when no vault configured
+- [x] `AzureKeyVaultSecretResolver` in `SwebKit.Azure/` with `DefaultAzureCredential`
+- [x] `VariableSubstitutionService` updated: `IsEnabled` check on collection vars; `BuildScopeAsync` for KV vars
+- [x] `PostRequestCaptureExecutor` — JSONPath (`JsonPath.Net`), header, status code extraction; upserts to collection or environment variable; warnings on no-match
+- [x] `HttpRequestExecutor` updated: uses `BuildScopeAsync`; calls `PostRequestCaptureExecutor` after response
+- [x] `MauiProgram.cs` — registers `IPostRequestCaptureExecutor`, `IKeyVaultSecretResolver` (noop vs real based on config)
+- [x] `EnvironmentManagerPanel.razor` + `EnvironmentEditor.razor` — full CRUD, variable grid with type selector
+- [x] `CollectionVariableEditor.razor` — key/value grid with IsEnabled toggle
+- [x] `PostRequestCaptureBuilder.razor` — source type dropdown, JSONPath/header expression, target var + scope
+- [x] `RequestBuilderPanel` — "Capture" tab added, `CaptureWarnings` passed after execution, `AllEnvironments` parameter
+- [x] `ApiClientPage` — overlay panels for environment manager + collection var editor; toolbar buttons
+- [x] Unit tests — `PostRequestCaptureExecutorTests` (10 tests) + `VariableSubstitutionServicePhase3Tests` (4 tests) + `NoopKeyVaultSecretResolverTests` (2 tests) — 16 new tests
+- [x] Total: 540 tests passing, build clean (pre-existing MSIX signing error only)
 
 **Variable scope:**
 

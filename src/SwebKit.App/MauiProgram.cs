@@ -6,6 +6,7 @@ using SwebKit.App.Services;
 using SwebKit.Azure.ServiceBus;
 using SwebKit.Azure.Storage;
 using SwebKit.Azure.ServiceBus.IncidentTimeline;
+using SwebKit.Azure;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Services;
@@ -148,6 +149,16 @@ public static class MauiProgram
         // API Client — variable substitution and HTTP execution
         builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
         builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
+        builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
+        builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>
+        {
+            var config = sp.GetRequiredService<AppStateService>().Config;
+            return string.IsNullOrWhiteSpace(config.KeyVaultUrl)
+                ? new NoopKeyVaultSecretResolver()
+                : new AzureKeyVaultSecretResolver(
+                    config.KeyVaultUrl,
+                    sp.GetRequiredService<ILogger<AzureKeyVaultSecretResolver>>());
+        });
         builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>

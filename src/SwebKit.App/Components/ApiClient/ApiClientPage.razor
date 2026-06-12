@@ -34,6 +34,17 @@
         </div>
 
         <div class="api-client-toolbar__right">
+            @if (_activeCollection is not null)
+            {
+                <button type="button" class="api-client-toolbar-btn" title="Edit collection variables"
+                        @onclick="() => _showCollVarEditor = !_showCollVarEditor">
+                    ⚙ Vars
+                </button>
+            }
+            <button type="button" class="api-client-toolbar-btn" title="Manage environments"
+                    @onclick="() => _showEnvManager = !_showEnvManager">
+                🌍 Envs
+            </button>
             <span class="api-client-toolbar__env-label">Env:</span>
             <select class="api-client-toolbar__env-select" value="@_activeEnvironmentId"
                     @onchange="OnEnvironmentChangedAsync">
@@ -100,7 +111,9 @@
                 <div class="api-client-workspace__panels">
                     <div class="api-client-workspace__builder" @ref="_builderPanelEl">
                         <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
-                                             ActiveEnvironment="@ActiveEnvironment" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
+                                             ActiveEnvironment="@ActiveEnvironment"
+                                             AllEnvironments="@_environments"
+                                             IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
                                              OnResult="@OnRequestResultAsync" />
                     </div>
                     <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
@@ -111,6 +124,26 @@
             }
         </div>
     </div>
+
+    @* ── Overlay: Environment Manager ── *@
+    @if (_showEnvManager)
+    {
+        <div class="api-client-overlay api-client-overlay--right" @onclick:stopPropagation>
+            <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
+        </div>
+        <div class="api-client-overlay-backdrop" @onclick="() => _showEnvManager = false"></div>
+    }
+
+    @* ── Overlay: Collection Variable Editor ── *@
+    @if (_showCollVarEditor && _activeCollection is not null)
+    {
+        <div class="api-client-overlay api-client-overlay--right" @onclick:stopPropagation>
+            <CollectionVariableEditor Collection="@_activeCollection"
+                                      OnSaved="@OnCollVarEditorSavedAsync"
+                                      OnCancelled="@(() => _showCollVarEditor = false)" />
+        </div>
+        <div class="api-client-overlay-backdrop" @onclick="() => _showCollVarEditor = false"></div>
+    }
 </div>
 
 @code {
@@ -127,6 +160,10 @@
 
     // Phase 2 — execution state
     private HttpRequestResult? _lastResult;
+
+    // Phase 3 — overlay panels
+    private bool _showEnvManager;
+    private bool _showCollVarEditor;
 
     // Splitter drag
     private ElementReference _splitterEl;
@@ -250,6 +287,19 @@
         var selected = e.Value as string;
         _activeEnvironmentId = string.IsNullOrEmpty(selected) ? null : selected;
         await EnvironmentRepo.SetActiveEnvironmentAsync(_activeEnvironmentId);
+    }
+
+    private async Task OnEnvironmentsChangedAsync()
+    {
+        _environments = EnvironmentRepo.Environments.ToList();
+        _showEnvManager = false;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnCollVarEditorSavedAsync()
+    {
+        _showCollVarEditor = false;
+        await InvokeAsync(StateHasChanged); // BL-2
     }
 
     // ── Tree callbacks ─────────────────────────────────────────────────────────

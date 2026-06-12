@@ -4,7 +4,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.Core.Tests;
 
-// ── Test double ───────────────────────────────────────────────────────────────
+// ── Test doubles ──────────────────────────────────────────────────────────────
 
 internal sealed class StubCredentialStore : ICredentialStore
 {
@@ -17,12 +17,30 @@ internal sealed class StubCredentialStore : ICredentialStore
         _store.Keys.Where(k => k.StartsWith(prefix)).ToList();
 }
 
+internal sealed class StubKeyVaultResolver : IKeyVaultSecretResolver
+{
+    private readonly Dictionary<string, string> _secrets;
+
+    public StubKeyVaultResolver(bool available = true, Dictionary<string, string>? secrets = null)
+    {
+        IsAvailable = available;
+        _secrets = secrets ?? [];
+    }
+
+    public bool IsAvailable { get; }
+
+    public Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
+        => Task.FromResult(_secrets.TryGetValue(secretName, out var v) ? v : $"[KV_UNAVAILABLE:{secretName}]");
+}
+
 // ── VariableSubstitutionService ────────────────────────────────────────────────
 
 public sealed class VariableSubstitutionServiceTests
 {
-    private static VariableSubstitutionService Create(StubCredentialStore? creds = null)
-        => new(creds ?? new StubCredentialStore());
+    private static VariableSubstitutionService Create(
+        StubCredentialStore? creds = null,
+        StubKeyVaultResolver? kvResolver = null)
+        => new(creds ?? new StubCredentialStore(), kvResolver ?? new StubKeyVaultResolver(available: false));
 
     // ── BuildScope ─────────────────────────────────────────────────────────────
 
@@ -317,5 +335,152 @@ public sealed class VariablePreviewServiceTests
         var svc = Create();
         var result = svc.Preview(string.Empty, new Dictionary<string, string?>());
         Assert.Empty(result);
+    }
+}
+
+// ── Phase 3: BuildScope with IsEnabled on collection vars ─────────────────────
+
+public sealed class VariableSubstitutionServicePhase3Tests
+{
+    private static VariableSubstitutionService Create(
+        StubKeyVaultResolver? kvResolver = null)
+        => new(new StubCredentialStore(), kvResolver ?? new StubKeyVaultResolver(available: false));
+
+    [Fact]
+    public void BuildScope_DisabledCollectionVar_IsExcluded()
+    {
+        var svc = Create();
+        var vars = new[]
+        {
+            new CollectionVariable { Key = "active", Value = "yes", IsEnabled = true },
+            new CollectionVariable { Key = "inactive", Value = "no", IsEnabled = false },
+        };
+
+        var scope = svc.BuildScope(vars, null);
+
+        Assert.True(scope.ContainsKey("active"));
+        Assert.False(scope.ContainsKey("inactive"));
+    }
+
+    [Fact]
+    public async Task BuildScopeAsync_KvUnavailable_KvVarsLeftNull()
+    {
+        var svc = Create(new StubKeyVaultResolver(available: false));
+        var env = new ApiEnvironment
+        {
+            Id = "e1",
+            Name = "Test",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "kv_secret",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "my-secret",
+                    IsEnabled = true,
+                },
+            ],
+        };
+
+        var scope = await svc.BuildScopeAsync([], env);
+
+        Assert.True(scope.ContainsKey("kv_secret"));
+        Assert.Null(scope["kv_secret"]);
+    }
+
+    [Fact]
+    public async Task BuildScopeAsync_KvAvailable_KvVarsResolved()
+    {
+        var kv = new StubKeyVaultResolver(
+            available: true,
+            secrets: new Dictionary<string, string> { ["my-secret"] = "resolved-value" });
+        var svc = Create(kv);
+        var env = new ApiEnvironment
+        {
+            Id = "e1",
+            Name = "Test",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "kv_secret",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "my-secret",
+                    IsEnabled = true,
+                },
+            ],
+        };
+
+        var scope = await svc.BuildScopeAsync([], env);
+
+        Assert.Equal("resolved-value", scope["kv_secret"]);
+    }
+
+    [Fact]
+    public async Task BuildScopeAsync_PlainVars_StillResolved()
+    {
+        var svc = Create();
+        var env = new ApiEnvironment
+        {
+            Id = "e1",
+            Name = "Test",
+            Variables =
+            [
+                new EnvironmentVariable { Key = "host", Value = "api.test.com", IsEnabled = true },
+            ],
+        };
+
+        var scope = await svc.BuildScopeAsync([], env);
+
+        Assert.Equal("api.test.com", scope["host"]);
+    }
+    [Fact]
+    public async Task BuildScopeAsync_KvVar_BlankCredentialKey_IsSkipped()
+    {
+        // A KV variable with a blank CredentialKey is filtered by BuildScopeAsync
+        // and must not trigger a resolver call — it stays null in scope.
+        var kv = new StubKeyVaultResolver(available: true);
+        var svc = Create(kv);
+        var env = new ApiEnvironment
+        {
+            Id = "e1",
+            Name = "Test",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "kv_empty",
+                    SecretSource = EnvironmentVariableSecretSource.AzureKeyVault,
+                    CredentialKey = "",   // blank — should be filtered, not resolved
+                    IsEnabled = true,
+                },
+            ],
+        };
+
+        var scope = await svc.BuildScopeAsync([], env);
+
+        // The sync pass leaves KV vars null; the async pass must skip blank CredentialKey
+        Assert.True(scope.ContainsKey("kv_empty"));
+        Assert.Null(scope["kv_empty"]);
+    }
+}
+
+// ── NoopKeyVaultSecretResolver ────────────────────────────────────────────────
+
+public sealed class NoopKeyVaultSecretResolverTests
+{
+    [Fact]
+    public void IsAvailable_ReturnsFalse()
+    {
+        var resolver = new NoopKeyVaultSecretResolver();
+        Assert.False(resolver.IsAvailable);
+    }
+
+    [Fact]
+    public async Task GetSecretAsync_ReturnsUnavailableToken()
+    {
+        var resolver = new NoopKeyVaultSecretResolver();
+        var result = await resolver.GetSecretAsync("my-secret");
+        Assert.Equal("[KV_UNAVAILABLE:my-secret]", result);
     }
 }

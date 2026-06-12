@@ -66,6 +66,14 @@ public sealed class HttpRequestResult
     /// </summary>
     public bool IsSuccess => ErrorMessage is null && StatusCode is >= 200 and < 300;
 
+    // ── Capture warnings ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Non-empty when one or more post-request capture rules failed to match.
+    /// Each entry is a human-readable message describing the failure.
+    /// </summary>
+    public IReadOnlyList<string> CaptureWarnings { get; set; } = [];
+
     // ── Constants ─────────────────────────────────────────────────────────────
 
     /// <summary>Maximum response body size buffered and displayed (4 MB).</summary>

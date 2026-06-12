@@ -53,7 +53,7 @@ window.SwebKitSplitter = {
 
     function onMouseMove(e) {
       // leftPane: drag right grows; rightPane: drag left grows
-      const delta = leftPane ? (e.clientX - startX) : (startX - e.clientX);
+      const delta = leftPane ? e.clientX - startX : startX - e.clientX;
       applyWidth(startWidth + delta);
     }
 

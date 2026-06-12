@@ -10,10 +10,12 @@ namespace SwebKit.Core.Services;
 /// Default implementation of <see cref="IHttpRequestExecutor"/>.
 /// Uses a named <see cref="HttpClient"/> ("ApiClient") resolved from <see cref="IHttpClientFactory"/>.
 /// Variable substitution is applied to the URL, query string, headers, and body before sending.
+/// Post-request capture rules are applied after a successful response.
 /// </summary>
 public sealed class HttpRequestExecutor(
     IHttpClientFactory httpClientFactory,
-    IVariableSubstitutionService substitution) : IHttpRequestExecutor
+    IVariableSubstitutionService substitution,
+    IPostRequestCaptureExecutor captureExecutor) : IHttpRequestExecutor
 {
     public const string ClientName = "ApiClient";
 
@@ -24,7 +26,7 @@ public sealed class HttpRequestExecutor(
         ApiEnvironment? activeEnvironment,
         CancellationToken cancellationToken = default)
     {
-        var scope = substitution.BuildScope(collection.Variables, activeEnvironment);
+        var scope = await substitution.BuildScopeAsync(collection.Variables, activeEnvironment, cancellationToken);
 
         // Build the URL (with query params merged in)
         var url = BuildUrl(request, scope);
@@ -42,7 +44,14 @@ public sealed class HttpRequestExecutor(
 
             sw.Stop();
 
-            return await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken);
+            var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken);
+
+            // Apply post-request capture rules (mutates collection/environment in place)
+            var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken);
+            if (captureWarnings.Count > 0)
+                result.CaptureWarnings = captureWarnings;
+
+            return result;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
