@@ -145,6 +145,24 @@ public static class MauiProgram
         builder.Services.AddSingleton<RuntimeDriftService>();
         builder.Services.AddSingleton<DeploymentValidationService>();
 
+        // API Client — variable substitution and HTTP execution
+        builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
+        builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
+        builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
+        builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var settings = sp.GetRequiredService<UserSettingsRepository>().Settings;
+                return new HttpClientHandler
+                {
+                    AllowAutoRedirect = true,
+                    ServerCertificateCustomValidationCallback =
+                        settings.VerifyApiClientSsl
+                            ? null
+                            : (_, _, _, _) => true,
+                };
+            });
+
         // Connection warmup
         builder.Services.AddSingleton<IAksWarmupCache, AksWarmupCache>();
         builder.Services.AddSingleton<IRedisWarmupCache, RedisWarmupCache>();

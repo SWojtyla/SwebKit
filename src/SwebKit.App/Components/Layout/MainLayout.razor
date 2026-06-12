@@ -77,9 +77,9 @@
     private bool IsNavExpanded = true;
     private bool IsCommandPaletteOpen;
     private bool _isShortcutsPanelOpen;
-    /// <summary>Tracks whether the nav was expanded before the API client auto-collapsed it, so it can be restored on exit.</summary>
+    // Tracks whether the nav was expanded before the API client auto-collapsed it, so it can be restored on exit.
     private bool _navExpandedBeforeApiClient = true;
-    /// <summary>True when the user explicitly toggled the nav (so auto-restore is suppressed if they collapsed it themselves).</summary>
+    // True when the user explicitly toggled the nav (so auto-restore is suppressed if they collapsed it themselves).
     private bool _userToggledNavInApiClient;
     private DotNetObjectReference<MainLayout>? _jsRef;
     private string _currentTheme = "dark-studio-ledger";

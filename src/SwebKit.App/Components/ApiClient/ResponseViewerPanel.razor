@@ -1,0 +1,212 @@
+<div class="resp-viewer">
+
+    @if (Result is null)
+    {
+        <div class="resp-viewer__placeholder">
+            Send a request to see the response here.
+        </div>
+    }
+    else if (Result.ErrorMessage is not null)
+    {
+        <div class="resp-viewer__error">
+            <div class="resp-viewer__error-icon">⚠</div>
+            <div class="resp-viewer__error-text">@Result.ErrorMessage</div>
+            @if (!string.IsNullOrEmpty(Result.ResolvedUrl))
+            {
+                <div class="resp-viewer__error-url">@Result.Method @Result.ResolvedUrl</div>
+            }
+        </div>
+    }
+    else
+    {
+        @* ── Status bar ────────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__status-bar">
+            <span class="resp-viewer__status-badge resp-viewer__status-badge--@StatusClass(Result.StatusCode)"
+                  title="@Result.StatusText">
+                @Result.StatusCode
+            </span>
+            <span class="resp-viewer__status-text">@Result.StatusText</span>
+            <span class="resp-viewer__meta">
+                <span class="resp-viewer__meta-item" title="Round-trip time">
+                    🕐 @FormatElapsed(Result.Elapsed)
+                </span>
+                @if (Result.ContentLength > 0)
+                {
+                    <span class="resp-viewer__meta-item" title="Content-Length header">
+                        📦 @FormatSize(Result.ContentLength)
+                    </span>
+                }
+                else if (Result.ResponseBody is not null)
+                {
+                    <span class="resp-viewer__meta-item" title="Response body size">
+                        📦 @FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody))
+                    </span>
+                }
+                @if (Result.ResponseBodyTruncated)
+                {
+                    <span class="resp-viewer__truncated-badge" title="Response body was truncated at 4 MB">
+                        ⚠ Truncated
+                    </span>
+                }
+            </span>
+        </div>
+
+        @* ── Tab strip ─────────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__tabs">
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Body" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Body"'>Body</button>
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Headers" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Headers"'>
+                Headers
+                @if (Result.ResponseHeaders.Count > 0)
+                {
+                    <span class="resp-viewer__tab-count">@Result.ResponseHeaders.Count</span>
+                }
+            </button>
+            <button type="button" class="resp-viewer__tab @(_activeTab == "Raw" ? "resp-viewer__tab--active" : "")"
+                    @onclick='() => _activeTab = "Raw"'>Raw</button>
+        </div>
+
+        @* ── Tab content ───────────────────────────────────────────────────────── *@
+        <div class="resp-viewer__content">
+
+            @if (_activeTab == "Body")
+            {
+                @if (Result.ResponseBody is null && Result.ResponseBodyBytes is null)
+                {
+                    <div class="resp-viewer__empty-body">No response body.</div>
+                }
+                else
+                {
+                    <div class="resp-viewer__body-toolbar">
+                        <span class="resp-viewer__content-type">@(Result.ContentType ?? "unknown")</span>
+                        <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
+                            @(_copied ? "✓ Copied" : "Copy")
+                        </button>
+                    </div>
+                    <pre class="resp-viewer__body-pre">@GetDisplayBody()</pre>
+                }
+            }
+            else if (_activeTab == "Headers")
+            {
+                @if (!Result.ResponseHeaders.Any())
+                {
+                    <div class="resp-viewer__empty-body">No response headers.</div>
+                }
+                else
+                {
+                    <div class="resp-viewer__headers-list">
+                        @foreach (var (name, value) in Result.ResponseHeaders.OrderBy(h => h.Name))
+                        {
+                            <div class="resp-viewer__header-row">
+                                <span class="resp-viewer__header-name">@name</span>
+                                <span class="resp-viewer__header-value">@value</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (_activeTab == "Raw")
+            {
+                <pre class="resp-viewer__raw-pre">@BuildRaw()</pre>
+            }
+
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter] public HttpRequestResult? Result { get; set; }
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private string _activeTab = "Body";
+    private bool _copied;
+
+    // Reset to Body tab when the result changes
+    private HttpRequestResult? _lastResult;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_lastResult, Result))
+        {
+            _lastResult = Result;
+            _activeTab = "Body";
+            _copied = false;
+        }
+    }
+
+    private async Task CopyBodyAsync()
+    {
+        var body = GetDisplayBody();
+        if (string.IsNullOrEmpty(body)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", body);
+            _copied = true;
+            await InvokeAsync(StateHasChanged); // BL-2
+            await Task.Delay(1500);
+            _copied = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch { /* clipboard access may fail in some WebView contexts */ }
+    }
+
+    private string? GetDisplayBody()
+    {
+        if (Result?.ResponseBody is null) return null;
+
+        // Pretty-print JSON if applicable
+        if (Result.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(Result.ResponseBody);
+                return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                });
+            }
+            catch { /* not valid JSON — return as-is */ }
+        }
+
+        return Result.ResponseBody;
+    }
+
+    private string BuildRaw()
+    {
+        if (Result is null) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{Result.Method} {Result.ResolvedUrl}");
+        sb.AppendLine($"HTTP/1.1 {Result.StatusText}");
+        foreach (var (name, value) in Result.ResponseHeaders)
+            sb.AppendLine($"{name}: {value}");
+        sb.AppendLine();
+        if (Result.ResponseBody is not null)
+            sb.Append(Result.ResponseBody);
+        return sb.ToString();
+    }
+
+    private static string StatusClass(int code) => code switch
+    {
+        >= 200 and < 300 => "ok",
+        >= 300 and < 400 => "redirect",
+        >= 400 and < 500 => "client-error",
+        >= 500 => "server-error",
+        _ => "unknown",
+    };
+
+    private static string FormatElapsed(TimeSpan t)
+    {
+        if (t.TotalSeconds >= 1) return $"{t.TotalSeconds:F2} s";
+        return $"{t.TotalMilliseconds:F0} ms";
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+}

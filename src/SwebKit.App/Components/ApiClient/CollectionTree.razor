@@ -4,11 +4,8 @@
 
     @* Search bar *@
     <div class="collection-tree__search">
-        <input type="text" placeholder="Filter…"
-               class="collection-tree__search-input"
-               value="@_filter"
-               @oninput="OnFilterInput"
-               aria-label="Filter collection tree" />
+        <input type="text" placeholder="Filter…" class="collection-tree__search-input" value="@_filter"
+               @oninput="OnFilterInput" aria-label="Filter collection tree" />
     </div>
 
     @* Virtualized flat list *@
@@ -16,19 +13,15 @@
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
             <div @key="node.Id"
                  class="collection-tree__row @(node.Node.Id == SelectedRequestId ? "collection-tree__row--selected" : "")"
-                 style="padding-left: @(8 + node.Depth * 16)px"
-                 role="treeitem"
-                 aria-selected="@(node.Node.Id == SelectedRequestId)"
-                 @onclick="() => OnRowClickAsync(node)"
-                 @oncontextmenu="e => ShowContextMenu(e, node)"
-                 @oncontextmenu:preventDefault="true">
+                 style="padding-left: @(8 + node.Depth * 16)px" role="treeitem"
+                 aria-selected="@(node.Node.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
+                 @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
 
                 @* Expand/collapse chevron for folders *@
                 @if (node.Node.Type == ApiCollectionNodeType.Folder)
                 {
                     <button type="button" class="collection-tree__chevron"
-                            aria-label="@(node.IsExpanded ? "Collapse" : "Expand")"
-                            @onclick:stopPropagation="true"
+                            aria-label="@(node.IsExpanded ? "Collapse" : "Expand")" @onclick:stopPropagation="true"
                             @onclick="() => ToggleExpand(node)">
                         @(node.IsExpanded ? "▾" : "▸")
                     </button>
@@ -45,8 +38,9 @@
                 }
                 else if (node.Node.Request is not null)
                 {
-                    <span class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
-                          aria-hidden="true">
+                    <span
+                        class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
+                        aria-hidden="true">
                         @GetMethodLabel(node.Node.Request.Method)
                     </span>
                 }

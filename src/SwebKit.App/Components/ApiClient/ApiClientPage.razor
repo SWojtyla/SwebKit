@@ -4,7 +4,8 @@
 @inject UserSettingsRepository UserSettings
 @inject NavigationManager Nav
 @inject ILogger<ApiClientPage> Logger
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="api-client-page">
 
@@ -12,15 +13,12 @@
     <div class="api-client-toolbar">
         <div class="api-client-toolbar__left">
             <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--primary"
-                    title="New collection (Ctrl+Shift+N)"
-                    @onclick="AddCollectionAsync">
+                    title="New collection (Ctrl+Shift+N)" @onclick="AddCollectionAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
             </button>
-            <button type="button" class="api-client-toolbar-btn"
-                    title="New request (Ctrl+N)"
-                    disabled="@(_activeCollection is null)"
-                    @onclick="AddRequestAsync">
+            <button type="button" class="api-client-toolbar-btn" title="New request (Ctrl+N)"
+                    disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 <span>New Request</span>
             </button>
@@ -37,8 +35,7 @@
 
         <div class="api-client-toolbar__right">
             <span class="api-client-toolbar__env-label">Env:</span>
-            <select class="api-client-toolbar__env-select"
-                    value="@_activeEnvironmentId"
+            <select class="api-client-toolbar__env-select" value="@_activeEnvironmentId"
                     @onchange="OnEnvironmentChangedAsync">
                 <option value="">— None —</option>
                 @foreach (var env in _environments)
@@ -63,12 +60,10 @@
             else if (_collections.Count == 0)
             {
                 <div class="api-client-tree-panel__empty">
-                    <EmptyState Icon="📦"
-                                Title="No collections yet"
+                    <EmptyState Icon="📦" Title="No collections yet"
                                 Subtitle="Create a collection to organise your requests.">
                         <Actions>
-                            <button type="button" class="api-client-empty-action-btn"
-                                    @onclick="AddCollectionAsync">
+                            <button type="button" class="api-client-empty-action-btn" @onclick="AddCollectionAsync">
                                 + New Collection
                             </button>
                         </Actions>
@@ -77,28 +72,23 @@
             }
             else
             {
-                <CollectionTree Collections="@_collections"
-                                SelectedRequestId="@_selectedRequestId"
-                                OnRequestSelected="OnRequestSelectedAsync"
-                                OnAddFolder="OnAddFolderAsync"
-                                OnAddRequest="OnAddRequestInFolderAsync"
-                                OnRenameNode="OnRenameNodeAsync"
+                <CollectionTree Collections="@_collections" SelectedRequestId="@_selectedRequestId"
+                                OnRequestSelected="OnRequestSelectedAsync" OnAddFolder="OnAddFolderAsync"
+                                OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
                                 OnDeleteNode="OnDeleteNodeAsync" />
             }
         </div>
 
-        @* Right: request builder + response viewer (Phase 2+) *@
+        @* Right: request builder + response viewer *@
         <div class="api-client-workspace">
             @if (_selectedRequest is null)
             {
                 <div class="api-client-workspace__empty">
-                    <EmptyState Icon="🌐"
-                                Title="No request selected"
+                    <EmptyState Icon="🌐" Title="No request selected"
                                 Subtitle="Select a request from the collection tree, or create a new one.">
                         <Actions>
                             <button type="button" class="api-client-empty-action-btn"
-                                    disabled="@(_activeCollection is null)"
-                                    @onclick="AddRequestAsync">
+                                    disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
                                 + New Request
                             </button>
                         </Actions>
@@ -107,22 +97,15 @@
             }
             else
             {
-                <div class="api-client-request-stub">
-                    <div class="api-client-request-stub__name">
-                        <span class="api-client-method-badge api-client-method-badge--@_selectedRequest.Method.ToString().ToLowerInvariant()">
-                            @GetMethodLabel(_selectedRequest.Method)
-                        </span>
-                        <span class="api-client-request-stub__label">@_selectedRequest.Name</span>
-                        @if (_isDirty && !_autoSave)
-                        {
-                            <span class="api-client-request-stub__dirty">●</span>
-                        }
+                <div class="api-client-workspace__panels">
+                    <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+                        <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
+                                             ActiveEnvironment="@ActiveEnvironment" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
+                                             OnResult="@OnRequestResultAsync" />
                     </div>
-                    <div class="api-client-request-stub__url">
-                        @_selectedRequest.Url
-                    </div>
-                    <div class="api-client-request-stub__phase-note">
-                        Request builder coming in Phase 2.
+                    <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
+                    <div class="api-client-workspace__response">
+                        <ResponseViewerPanel Result="@_lastResult" />
                     </div>
                 </div>
             }
@@ -141,6 +124,23 @@
     private string? _activeEnvironmentId;
     private bool _isDirty;
     private bool _autoSave;
+
+    // Phase 2 — execution state
+    private HttpRequestResult? _lastResult;
+
+    // Splitter drag
+    private ElementReference _splitterEl;
+    private ElementReference _builderPanelEl;
+    private IJSObjectReference? _splitterHandle;
+    private string? _lastSplitterRequestId;
+
+    // Auto-save debounce
+    private System.Timers.Timer? _autoSaveTimer;
+    private const int AutoSaveDebounceMs = 500;
+
+    // ── Computed ──────────────────────────────────────────────────────────────
+    private ApiEnvironment? ActiveEnvironment =>
+        _environments.FirstOrDefault(e => e.Id == _activeEnvironmentId);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -416,7 +416,84 @@
         _ => "GET",
     };
 
-    // ── IDisposable ────────────────────────────────────────────────────────────
+    // ── Request change + auto-save ─────────────────────────────────────────────
 
-    public void Dispose() { }
+    private async Task OnRequestChangedAsync()
+    {
+        _isDirty = true;
+
+        if (_autoSave)
+        {
+            _autoSaveTimer?.Stop();
+            _autoSaveTimer ??= new System.Timers.Timer(AutoSaveDebounceMs) { AutoReset = false };
+            _autoSaveTimer.Elapsed -= OnAutoSaveElapsed;
+            _autoSaveTimer.Elapsed += OnAutoSaveElapsed;
+            _autoSaveTimer.Start();
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async void OnAutoSaveElapsed(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (_activeCollection is null || _selectedRequest is null) return;
+        try
+        {
+            await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+            _isDirty = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Auto-save failed");
+        }
+    }
+
+    // ── Request result ─────────────────────────────────────────────────────────
+
+    private async Task OnRequestResultAsync(HttpRequestResult result)
+    {
+        _lastResult = result;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Splitter (JS drag) ─────────────────────────────────────────────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Init the splitter whenever the panels become visible for a new request.
+        // _lastSplitterRequestId tracks which request the current JS handle was set up for.
+        if (_selectedRequest is not null && _lastSplitterRequestId != _selectedRequestId)
+        {
+            await DisposeSplitterAsync();
+            _lastSplitterRequestId = _selectedRequestId;
+            _splitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                "SwebKitSplitter.init",
+                _splitterEl,
+                _builderPanelEl,
+                new { leftPane = true, minWidth = 250, maxWidth = 1600 });
+        }
+        else if (_selectedRequest is null && _splitterHandle is not null)
+        {
+            await DisposeSplitterAsync();
+            _lastSplitterRequestId = null;
+        }
+    }
+
+    private async Task DisposeSplitterAsync()
+    {
+        if (_splitterHandle is null) return;
+        try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { /* ignore teardown errors */ }
+        try { await _splitterHandle.DisposeAsync(); } catch { }
+        _splitterHandle = null;
+    }
+
+    // ── IAsyncDisposable ───────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        _autoSaveTimer?.Stop();
+        _autoSaveTimer?.Dispose();
+        await DisposeSplitterAsync();
+    }
 }

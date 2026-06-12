@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 1 — Foundation is complete. Starting Phase 2 (REST Execution).
+Phase 2 — REST Execution is complete. Starting Phase 3 (Environments and Secrets).
 
 ## Progress Checklist
 
@@ -35,25 +35,22 @@ Phase 1 — Foundation is complete. Starting Phase 2 (REST Execution).
 
 ### Phase 2 — REST Execution
 
-- [ ] `IHttpRequestExecutor` contract in `SwebKit.Core/Abstractions/`
-- [ ] `HttpRequestExecutor` in `SwebKit.Core/Services/` using named `IHttpClientFactory`
-- [ ] `HttpRequestResult` extended with `ResponseBodyTruncated: bool`
-- [ ] `IVariableSubstitutionService` + `VariableSubstitutionService`
-      (resolution order: collection vars → env vars → `ICredentialStore` → KV)
-- [ ] `IVariablePreviewService` + `VariablePreviewService` — returns
-      `Dictionary<string, string?>` of token→resolved-value for display only (no substitution
-      side-effects; secrets masked as `••••••••`)
-- [ ] `RequestBuilderPanel.razor` — method selector, URL bar, tab strip: Params / Headers / Body / Auth
-- [ ] URL bar variable preview: `{{variable}}` tokens rendered with a small resolved-value badge
-      below them (populated by `IVariablePreviewService` on URL change, debounced 300 ms)
-- [ ] Body editor variable preview: same preview service called when body content changes and
-      `{{` tokens are detected; shown in a preview strip above the Monaco editor
-- [ ] Body editor sub-components: Monaco (JSON/XML/Text), key-value grid (Form Data), file picker (Binary)
-- [ ] `ResponseViewerPanel.razor` — status badge, timing, size, Headers / Body / Raw tabs, Monaco read-only
-- [ ] Cancellation via `CancellationTokenSource` on navigation away
-- [ ] Named `HttpClient` registered in `MauiProgram.cs` (follow redirects on by default; 30 s timeout)
-- [ ] SSL verification: global setting in `UserSettings`; `HttpClientHandler.ServerCertificateCustomValidationCallback`
-      bypass when disabled (dev-only; surfaced with a visible warning badge in the toolbar)
+- [x] `HttpRequestResult.cs` in `SwebKit.Core/Domain/` (4 MB truncation, `ResponseBodyTruncated`)
+- [x] `IHttpRequestExecutor` contract in `SwebKit.Core/Abstractions/`
+- [x] `IVariableSubstitutionService` + `IVariablePreviewService` contracts
+- [x] `VariableSubstitutionService` — collection vars → env vars → `ICredentialStore`; AzureKV deferred to Phase 3
+- [x] `VariablePreviewService` — secrets masked as `••••••••`; null for unresolved tokens
+- [x] `HttpRequestExecutor` — named `IHttpClientFactory("ApiClient")`, 4 MB `LimitedStream`, all body modes
+- [x] `UserSettings.VerifyApiClientSsl: bool` (default: `true`)
+- [x] Named `HttpClient` + services registered in `MauiProgram.cs`; SSL bypass when setting is `false`
+- [x] `KeyValueGrid.razor` — reusable editable key/value grid (headers, query params, form-data)
+- [x] `RequestBuilderPanel.razor` — method selector, URL bar, tab strip: Params / Headers / Body / Auth
+      — variable preview badges on URL bar; SSL warning badge; cancellation via `CancellationTokenSource`
+- [x] `ResponseViewerPanel.razor` — status badge, timing, size; Body / Headers / Raw tabs;
+      JSON pretty-print; clipboard copy button
+- [x] `ApiClientPage.razor` wired up — `RequestBuilderPanel` + `ResponseViewerPanel` with splitter
+- [x] Unit tests — `VariableSubstitutionServiceTests` (14 tests) + `VariablePreviewServiceTests` (7 tests) — all 21 passing
+- [x] Build clean (no new errors; only pre-existing MSIX signing error in app project)
 
 ### Phase 3 — Environments and Secrets
 

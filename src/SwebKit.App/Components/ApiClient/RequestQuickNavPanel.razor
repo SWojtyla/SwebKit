@@ -2,18 +2,12 @@
 
 @if (IsOpen)
 {
-    <div class="quick-nav-overlay" role="dialog" aria-label="Quick navigation" aria-modal="true"
-         @onkeydown="OnKeyDown">
+    <div class="quick-nav-overlay" role="dialog" aria-label="Quick navigation" aria-modal="true" @onkeydown="OnKeyDown">
         <div class="quick-nav-panel">
             <div class="quick-nav-panel__header">
-                <input type="text" class="quick-nav-panel__filter" placeholder="Jump to request…"
-                       autofocus
-                       value="@_filter"
-                       @oninput="OnFilterInput"
-                       aria-label="Filter requests"
-                       @ref="_filterInput" />
-                <button type="button" class="quick-nav-panel__close"
-                        aria-label="Close quick navigation"
+                <input type="text" class="quick-nav-panel__filter" placeholder="Jump to request…" autofocus value="@_filter"
+                       @oninput="OnFilterInput" aria-label="Filter requests" @ref="_filterInput" />
+                <button type="button" class="quick-nav-panel__close" aria-label="Close quick navigation"
                         @onclick="Close">✕</button>
             </div>
 
@@ -25,13 +19,12 @@
                 else
                 {
                     <Virtualize Items="@_visibleItems" Context="item" ItemSize="36" OverscanCount="6">
-                        <button @key="item.RequestId"
-                                type="button"
+                        <button @key="item.RequestId" type="button"
                                 class="quick-nav-panel__item @(_activeIndex == _visibleItems.IndexOf(item) ? "quick-nav-panel__item--active" : "")"
-                                role="option"
-                                aria-selected="@(_activeIndex == _visibleItems.IndexOf(item))"
+                                role="option" aria-selected="@(_activeIndex == _visibleItems.IndexOf(item))"
                                 @onclick="() => SelectItem(item)">
-                            <span class="quick-nav-panel__item-method quick-nav-panel__item-method--@item.Method.ToString().ToLowerInvariant()">
+                            <span
+                                class="quick-nav-panel__item-method quick-nav-panel__item-method--@item.Method.ToString().ToLowerInvariant()">
                                 @GetMethodLabel(item.Method)
                             </span>
                             <span class="quick-nav-panel__item-path">

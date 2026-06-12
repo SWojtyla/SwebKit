@@ -1,9 +1,12 @@
-// Horizontal splitter: drag to resize the right pane width.
-// Usage: SwebKitSplitter.init(splitterElement, rightPaneElement, { minWidth, maxWidth })
+// Vertical splitter: drag to resize a panel.
+// Usage: SwebKitSplitter.init(splitterElement, paneElement, { leftPane, minWidth, maxWidth, initialWidth })
+//   leftPane: true  → pane is to the LEFT  of the splitter (drag right = grow)
+//   leftPane: false → pane is to the RIGHT of the splitter (drag left  = grow, default)
 window.SwebKitSplitter = {
-  init: function (splitterEl, rightPaneEl, options) {
+  init: function (splitterEl, paneEl, options) {
     const minW = options?.minWidth ?? 200;
-    const maxW = options?.maxWidth ?? 800;
+    const maxW = options?.maxWidth ?? 1600;
+    const leftPane = options?.leftPane ?? false;
     const initialWidth = options?.initialWidth;
     const dotNetRef = options?.dotNetRef;
     const onWidthChangedMethod =
@@ -12,13 +15,13 @@ window.SwebKitSplitter = {
 
     function applyWidth(width) {
       const newWidth = Math.min(maxW, Math.max(minW, width));
-      rightPaneEl.style.width = newWidth + 'px';
-      rightPaneEl.style.flex = '0 0 ' + newWidth + 'px';
+      paneEl.style.width = newWidth + 'px';
+      paneEl.style.flex = '0 0 ' + newWidth + 'px';
       return newWidth;
     }
 
     function getWidth() {
-      return Math.round(rightPaneEl.getBoundingClientRect().width);
+      return Math.round(paneEl.getBoundingClientRect().width);
     }
 
     function notifyWidthChanged() {
@@ -49,8 +52,8 @@ window.SwebKitSplitter = {
     }
 
     function onMouseMove(e) {
-      // Dragging left increases right pane width
-      const delta = startX - e.clientX;
+      // leftPane: drag right grows; rightPane: drag left grows
+      const delta = leftPane ? (e.clientX - startX) : (startX - e.clientX);
       applyWidth(startWidth + delta);
     }
 
