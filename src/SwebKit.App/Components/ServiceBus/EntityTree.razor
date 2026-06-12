@@ -1,9 +1,18 @@
+@implements IAsyncDisposable
 @inject AppStateService AppState
 
-<div class="entity-tree">
-    @if (IsLoading)
+<div class="eb">
+    <!-- Toolbar: filter + refresh -->
+    <div class="eb-toolbar">
+        <input type="search" @bind="_filter" @bind:event="oninput" placeholder="Filter entities…" class="eb-filter"
+               aria-label="Filter entities" />
+        <button type="button" class="eb-refresh-btn @(IsLoading ? "eb-spinning" : "")" @onclick="RefreshAsync"
+                disabled="@IsLoading" title="Refresh entity list" aria-label="Refresh entity list">↻</button>
+    </div>
+
+    @if (IsLoading && !Queues.Any() && !Topics.Any())
     {
-        <SkeletonRows Count="5" />
+        <SkeletonRows Count="8" />
     }
     else if (ErrorMessage is not null)
     {
@@ -11,155 +20,140 @@
     }
     else
     {
-        @if (!Queues.Any() && !Topics.Any())
+        var fq = FilteredQueues;
+        var ft = FilteredTopics;
+
+        @if (!fq.Any() && !ft.Any())
         {
-            <div class="entity-tree-empty-hint">
-                No queues or topics found. If you expect entities here, verify the namespace and that your connection string has
-                Manage rights.
+            <div class="eb-empty">
+                @if (!string.IsNullOrWhiteSpace(_filter))
+                {
+                    <span>No entities match "<strong>@_filter</strong>"</span>
+                }
+                else if (Client is not null)
+                {
+                    <span>No queues or topics.<br />Verify the namespace has Manage rights.</span>
+                }
             </div>
+        }
+
+        @if (fq.Any())
+        {
+            <div class="eb-section">
+                <span class="eb-section-label">Queues</span>
+                <span class="eb-section-count">@fq.Count</span>
+            </div>
+
+            @foreach (var q in fq)
+            {
+                var qPinned = IsEntityLinked(q.EntityPath);
+                <div @key="q.EntityPath"
+                     class="eb-row @(_selectedPath == q.EntityPath ? "selected" : "") @(q.IsDisabled ? "eb-row-disabled" : "")"
+                     @onclick="() => OnEntityRowClickedAsync(q)">
+                    <span class="eb-icon eb-icon-q" title="@(q.IsDisabled ? "Queue (disabled)" : "Queue")">Q</span>
+                    <span class="eb-name" title="@q.Name">@q.Name</span>
+                    @RenderStatsBadges(q)
+                    <div class="eb-acts">
+                        <button type="button" class="eb-act eb-act-open" title="Open active messages for '@q.Name'"
+                                aria-label="Open active messages for @q.Name" @onclick:stopPropagation="true"
+                                @onclick="() => OpenEntity(q)">
+                            ▷
+                        </button>
+                        <button type="button"
+                                class="eb-act eb-act-dlq @(q.Stats?.DeadLetterMessageCount > 0 ? "eb-act-dlq-hot" : "")"
+                                title="Open dead-letter queue for '@q.Name'" aria-label="Open DLQ for @q.Name"
+                                @onclick:stopPropagation="true" @onclick="() => OpenEntity(q, true)">
+                            DLQ
+                        </button>
+                        <button type="button" class="eb-act eb-act-toggle @(q.IsDisabled ? "eb-act-enable" : "eb-act-disable")"
+                                title="@(q.IsDisabled ? "Enable queue" : "Disable queue")" disabled="@IsMutating"
+                                @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(q)">
+                            @(q.IsDisabled ? "Enable" : "Disable")
+                        </button>
+                        <button type="button" class="eb-act eb-act-pin @(qPinned ? "pinned" : "")"
+                                title="@(qPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                aria-label="@(qPinned ? $"Unpin {q.Name} from dashboard" : $"Pin {q.Name} to dashboard")"
+                                @onclick:stopPropagation="true" @onclick="() => ToggleLink(q.EntityPath)">
+                            @(qPinned ? "★" : "☆")
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+
+        @if (ft.Any())
+        {
+            <div class="eb-section @(fq.Any() ? "eb-section--spaced" : "")">
+                <span class="eb-section-label">Topics</span>
+                <span class="eb-section-count">@ft.Count</span>
+            </div>
+
+            @foreach (var t in ft)
+            {
+                var isExpanded = ExpandedTopics.Contains(t.Name);
+                <div @key="t.EntityPath" class="eb-row eb-row-topic @(_selectedPath == t.EntityPath ? "selected" : "")"
+                     @onclick="() => OnTopicRowClickedAsync(t)">
+                    <span class="eb-expand">@(isExpanded ? "▾" : "▸")</span>
+                    <span class="eb-icon eb-icon-t">T</span>
+                    <span class="eb-name" title="@t.Name">@t.Name</span>
+                    <div class="eb-acts"></div>
+                </div>
+
+                @if (isExpanded)
+                {
+                    @if (_loadingTopics.Contains(t.Name))
+                    {
+                        <div class="eb-sub-loading">
+                            <SkeletonRows Count="2" />
+                        </div>
+                    }
+                    else if (Subscriptions.TryGetValue(t.Name, out var subs))
+                    {
+                        @foreach (var s in subs)
+                        {
+                            var sPinned = IsEntityLinked(s.EntityPath);
+                            <div @key="s.EntityPath"
+                                 class="eb-row eb-row-sub @(_selectedPath == s.EntityPath ? "selected" : "") @(s.IsDisabled ? "eb-row-disabled" : "")"
+                                 @onclick="() => OnEntityRowClickedAsync(s)">
+                                <span class="eb-sub-indent"></span>
+                                <span class="eb-icon eb-icon-s" title="@(s.IsDisabled ? "Subscription (disabled)" : "Subscription")">S</span>
+                                <span class="eb-name" title="@s.Name">@s.Name</span>
+                                @RenderStatsBadges(s)
+                                <div class="eb-acts">
+                                    <button type="button" class="eb-act eb-act-open" title="Open active messages for '@s.Name'"
+                                            aria-label="Open active messages for @s.Name" @onclick:stopPropagation="true"
+                                            @onclick="() => OpenEntity(s)">
+                                        ▷
+                                    </button>
+                                    <button type="button"
+                                            class="eb-act eb-act-dlq @(s.Stats?.DeadLetterMessageCount > 0 ? "eb-act-dlq-hot" : "")"
+                                            title="Open dead-letter queue for '@s.Name'" aria-label="Open DLQ for @s.Name"
+                                            @onclick:stopPropagation="true" @onclick="() => OpenEntity(s, true)">
+                                        DLQ
+                                    </button>
+                                    <button type="button" class="eb-act eb-act-toggle @(s.IsDisabled ? "eb-act-enable" : "eb-act-disable")"
+                                            title="@(s.IsDisabled ? "Enable subscription" : "Disable subscription")" disabled="@IsMutating"
+                                            @onclick:stopPropagation="true" @onclick="() => ToggleEntityEnabledAsync(s)">
+                                        @(s.IsDisabled ? "Enable" : "Disable")
+                                    </button>
+                                    <button type="button" class="eb-act eb-act-pin @(sPinned ? "pinned" : "")"
+                                            title="@(sPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                            aria-label="@(sPinned ? $"Unpin {s.Name}" : $"Pin {s.Name} to dashboard")"
+                                            @onclick:stopPropagation="true" @onclick="() => ToggleLink(s.EntityPath)">
+                                        @(sPinned ? "★" : "☆")
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+            }
         }
 
         @if (!string.IsNullOrWhiteSpace(OperationMessage))
         {
-            <div class="entity-tree-operation-message">
-                @OperationMessage
-            </div>
+            <div class="eb-op-message">@OperationMessage</div>
         }
-
-        <div class="entity-tree-action-bar @(SelectedEntity is null ? "empty" : string.Empty)" role="region" aria-label="Entity actions">
-            @if (SelectedEntity is null)
-            {
-                <div class="entity-tree-action-empty">Select an entity to access actions.</div>
-            }
-            else
-            {
-                var selected = SelectedEntity;
-                var statusLabel = GetStatusLabel(selected);
-                var supportsMessageModes = SupportsMessageModes(selected);
-
-                <div class="entity-tree-selected-name" title="@selected.Name">@selected.Name</div>
-                <div class="entity-tree-selected-meta">
-                    <span class="entity-status-dot @(selected.IsDisabled ? "disabled" : "active")"
-                          role="img"
-                          title="@($"Status: {statusLabel}")"
-                          aria-label="@($"Status: {statusLabel}")"></span>
-                    <span class="entity-tree-selected-status">@statusLabel</span>
-                </div>
-                <div class="entity-tree-action-buttons">
-                    <button type="button"
-                            class="entity-tree-action-btn"
-                            disabled="@(IsMutating || IsLoading || !supportsMessageModes)"
-                            title="@(supportsMessageModes ? $"Open active messages for '{selected.Name}'" : "Active mode is not available for topics")"
-                            aria-label="@(supportsMessageModes ? $"Open active messages for {selected.Name}" : "Active mode is not available for topics")"
-                            @onclick="() => OpenEntity(selected)">
-                        Open Active
-                    </button>
-                    <button type="button"
-                            class="entity-tree-action-btn"
-                            disabled="@(IsMutating || IsLoading || !supportsMessageModes)"
-                            title="@(supportsMessageModes ? $"Open dead-letter messages for '{selected.Name}'" : "Dead-letter mode is not available for topics")"
-                            aria-label="@(supportsMessageModes ? $"Open dead-letter messages for {selected.Name}" : "Dead-letter mode is not available for topics")"
-                            @onclick="() => OpenEntity(selected, true)">
-                        Open DLQ
-                    </button>
-                    <button type="button"
-                            class="entity-tree-action-btn"
-                            disabled="@(IsMutating || IsLoading)"
-                            title="@(selected.IsDisabled ? $"Enable '{selected.Name}'" : $"Disable '{selected.Name}'")"
-                            aria-label="@(selected.IsDisabled ? $"Enable {selected.Name}" : $"Disable {selected.Name}")"
-                            @onclick="() => ToggleEntityEnabledAsync(selected)">
-                        @(selected.IsDisabled ? "Enable" : "Disable")
-                    </button>
-                </div>
-            }
-        </div>
-
-        <div class="entity-tree-list">
-            @foreach (var row in _flatRows)
-            {
-                @switch (row.Kind)
-                {
-                    case TreeRowKind.QueueHeader:
-                        <div class="entity-tree-section-label">
-                            Queues
-                        </div>
-                        <div class="entity-tree-section-help">
-                            Click a queue or subscription to open Active messages. Use the selected action bar for DLQ and enable/disable.
-                        </div>
-                        break;
-
-                    case TreeRowKind.Queue:
-                        {
-                            var q = row.Entity!;
-                            var isPinned = IsEntityLinked(q.EntityPath);
-                            <div @key="q.EntityPath" class="@GetEntityRowClass(q)" @onclick="() => OnEntityRowClickedAsync(q)">
-                                <span class="entity-tree-glyph entity-tree-glyph-queue">Q</span>
-                                <span class="entity-tree-name" title="@q.Name">@q.Name</span>
-                                <div class="entity-row-actions">
-                                    <span class="entity-active-chip"
-                                          title="@($"Active messages in '{q.Name}'")"
-                                          aria-label="@($"Active messages in {q.Name}: {FormatCount(q.Stats?.ActiveMessageCount)}")">
-                                        <span class="entity-active-label">A</span>
-                                        <span class="entity-active-count">@FormatCount(q.Stats?.ActiveMessageCount)</span>
-                                    </span>
-                                    <button type="button"
-                                            class="entity-pin-btn entity-icon-btn @(isPinned ? "pinned" : string.Empty)"
-                                            title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
-                                            aria-label="@(isPinned ? $"Unpin queue {q.Name} from dashboard" : $"Pin queue {q.Name} to dashboard")"
-                                            @onclick:stopPropagation="true"
-                                            @onclick="() => ToggleLink(q.EntityPath)">
-                                        <span class="entity-pin-glyph" aria-hidden="true">@(isPinned ? "★" : "☆")</span>
-                                    </button>
-                                </div>
-                            </div>
-                            break;
-                        }
-
-                    case TreeRowKind.TopicHeader:
-                        <div class="entity-tree-section-label entity-tree-section-label-topics">
-                            Topics
-                        </div>
-                        break;
-
-                    case TreeRowKind.Topic:
-                        {
-                            var t = row.Entity!;
-                            <div @key="t.EntityPath" class="@GetEntityRowClass(t, "entity-tree-item entity-tree-topic")" @onclick="() => OnTopicRowClickedAsync(t)">
-                                <span class="entity-tree-glyph entity-tree-glyph-topic">@(ExpandedTopics.Contains(t.Name) ? "-" : "+")</span>
-                                <span class="entity-tree-name" title="@t.Name">@t.Name</span>
-                            </div>
-                            break;
-                        }
-
-                    case TreeRowKind.Subscription:
-                        {
-                            var s = row.Entity!;
-                            var isPinned = IsEntityLinked(s.EntityPath);
-                            <div @key="s.EntityPath" class="@GetEntityRowClass(s, "entity-tree-item entity-tree-subscription")" @onclick="() => OnEntityRowClickedAsync(s)">
-                                <span class="entity-tree-glyph entity-tree-glyph-subscription">&gt;</span>
-                                <span class="entity-tree-name" title="@s.Name">@s.Name</span>
-                                <div class="entity-row-actions">
-                                    <span class="entity-active-chip"
-                                          title="@($"Active messages in '{s.Name}'")"
-                                          aria-label="@($"Active messages in {s.Name}: {FormatCount(s.Stats?.ActiveMessageCount)}")">
-                                        <span class="entity-active-label">A</span>
-                                        <span class="entity-active-count">@FormatCount(s.Stats?.ActiveMessageCount)</span>
-                                    </span>
-                                    <button type="button"
-                                            class="entity-pin-btn entity-icon-btn @(isPinned ? "pinned" : string.Empty)"
-                                            title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
-                                            aria-label="@(isPinned ? $"Unpin subscription {s.Name} from dashboard" : $"Pin subscription {s.Name} to dashboard")"
-                                            @onclick:stopPropagation="true"
-                                            @onclick="() => ToggleLink(s.EntityPath)">
-                                        <span class="entity-pin-glyph" aria-hidden="true">@(isPinned ? "★" : "☆")</span>
-                                    </button>
-                                </div>
-                            </div>
-                            break;
-                        }
-                }
-            }
-        </div>
     }
 </div>
 
@@ -177,161 +171,176 @@
     private List<SbEntityInfo> Topics = [];
     private Dictionary<string, List<SbEntityInfo>> Subscriptions = [];
     private HashSet<string> ExpandedTopics = [];
+    private HashSet<string> _loadingTopics = [];
     private IServiceBusClient? _loadedClient;
-    private List<TreeRow> _flatRows = [];
     private bool IsMutating;
     private string? OperationMessage;
-    private string? _selectedEntityPath;
-    private SbEntityInfo? SelectedEntity;
+    private string? _selectedPath;
+    private string _filter = string.Empty;
 
-    enum TreeRowKind { QueueHeader, Queue, TopicHeader, Topic, Subscription }
+    // Background stats — shared semaphore caps concurrent API calls across all open namespaces
+    private CancellationTokenSource _statsCts = new();
+    private static readonly SemaphoreSlim _statsGate = new(6, 6);
 
-    readonly record struct TreeRow(TreeRowKind Kind, SbEntityInfo? Entity = null);
+    private List<SbEntityInfo> FilteredQueues =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? Queues
+            : Queues.Where(q => q.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private List<SbEntityInfo> FilteredTopics =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? Topics
+            : Topics.Where(t => t.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
 
     protected override async Task OnParametersSetAsync()
     {
         if (Client is null)
         {
-            Queues = [];
-            Topics = [];
-            Subscriptions = [];
-            ExpandedTopics = [];
-            _flatRows = [];
-            _loadedClient = null;
-            _selectedEntityPath = null;
-            SelectedEntity = null;
+            Queues = []; Topics = []; Subscriptions = [];
+            ExpandedTopics = []; _loadingTopics = [];
+            _loadedClient = null; _selectedPath = null;
+            await CancelStatsCtsAsync();
             return;
         }
 
         if (!ReferenceEquals(_loadedClient, Client))
         {
-            _loadedClient = Client; // Set before await to prevent concurrent loads on parent re-render
+            _loadedClient = Client;
             await LoadAsync();
         }
     }
 
-    private void RebuildFlatRows()
+    private async Task RefreshAsync()
     {
-        _flatRows = new List<TreeRow>(Queues.Count + Topics.Count + 4);
-        if (Queues.Count > 0)
-        {
-            _flatRows.Add(new TreeRow(TreeRowKind.QueueHeader));
-            foreach (var q in Queues)
-                _flatRows.Add(new TreeRow(TreeRowKind.Queue, q));
-        }
-        if (Topics.Count > 0)
-        {
-            _flatRows.Add(new TreeRow(TreeRowKind.TopicHeader));
-            foreach (var t in Topics)
-            {
-                _flatRows.Add(new TreeRow(TreeRowKind.Topic, t));
-                if (ExpandedTopics.Contains(t.Name) && Subscriptions.TryGetValue(t.Name, out var subs))
-                {
-                    foreach (var s in subs)
-                        _flatRows.Add(new TreeRow(TreeRowKind.Subscription, s));
-                }
-            }
-        }
-
-        RefreshSelectedEntity();
+        Subscriptions.Clear();
+        ExpandedTopics.Clear();
+        await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         if (Client is null) return;
+
+        await CancelStatsCtsAsync();
+        var ct = _statsCts.Token;
+
         IsLoading = true; ErrorMessage = null;
-        Subscriptions.Clear();
-        ExpandedTopics.Clear();
-        Queues = [];
-        Topics = [];
-        _flatRows = [];
+        Queues = []; Topics = [];
         await InvokeAsync(StateHasChanged);
         try
         {
-            // Load queues first - show them immediately
-            Queues = (await Client.ListQueuesAsync()).ToList();
-            RebuildFlatRows();
-            await InvokeAsync(StateHasChanged); // BL-2: progressive update - queues visible before topics load
+            Queues = (await Client.ListQueuesAsync(ct)).ToList();
+            await InvokeAsync(StateHasChanged);
 
-            // Then load topics
-            Topics = (await Client.ListTopicsAsync()).ToList();
-            RebuildFlatRows();
+            Topics = (await Client.ListTopicsAsync(ct)).ToList();
         }
-        catch (OperationCanceledException) { throw; } // CS-2
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
-            var hint = ex.Message.Contains("401") || ex.Message.Contains("403") || ex.Message.Contains("Unauthorized") ||
-ex.Message.Contains("Forbidden")
-                ? " (Ensure your connection string has 'Manage' rights.)"
-                : string.Empty;
-            ErrorMessage = $"Failed to load queues/topics: {ex.Message}{hint}";
+            var hint = ex.Message.Contains("401") || ex.Message.Contains("403") ||
+                       ex.Message.Contains("Unauthorized") || ex.Message.Contains("Forbidden")
+                ? " (Connection string needs Manage rights.)" : string.Empty;
+            ErrorMessage = $"Failed to load: {ex.Message}{hint}";
         }
         finally
         {
             IsLoading = false;
-            await InvokeAsync(StateHasChanged); // BL-2
+            await InvokeAsync(StateHasChanged);
         }
+
+        // Fire background stats — intentionally not awaited
+        _ = LoadStatsInBackgroundAsync(Queues, ct);
+    }
+
+    private async Task LoadStatsInBackgroundAsync(IReadOnlyList<SbEntityInfo> entities, CancellationToken ct)
+    {
+        var client = Client;
+        if (client is null) return;
+
+        var tasks = entities
+            .Where(e => !e.IsTopic)
+            .Select(async entity =>
+            {
+                if (ct.IsCancellationRequested) return;
+                await _statsGate.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ct.IsCancellationRequested) return;
+                    entity.Stats = await client.GetEntityStatsAsync(entity.EntityPath, ct);
+                    if (!ct.IsCancellationRequested)
+                        await InvokeAsync(StateHasChanged);
+                }
+                catch (OperationCanceledException) { }
+                catch { entity.Stats = new SbEntityStats(); }
+                finally { _statsGate.Release(); }
+            });
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task ToggleTopic(string name)
     {
         if (ExpandedTopics.Contains(name))
         {
-            ExpandedTopics.Remove(name); RebuildFlatRows();
+            ExpandedTopics.Remove(name);
             await InvokeAsync(StateHasChanged);
             return;
         }
         ExpandedTopics.Add(name);
+
         if (!Subscriptions.ContainsKey(name) && Client is not null)
-            Subscriptions[name] = (await Client.ListSubscriptionsAsync(name)).ToList();
-        RebuildFlatRows();
-        await InvokeAsync(StateHasChanged); // BL-2: use InvokeAsync after await
+        {
+            _loadingTopics.Add(name);
+            await InvokeAsync(StateHasChanged);
+            try
+            {
+                var subs = (await Client.ListSubscriptionsAsync(name, _statsCts.Token)).ToList();
+                Subscriptions[name] = subs;
+                _loadingTopics.Remove(name);
+                await InvokeAsync(StateHasChanged);
+                _ = LoadStatsInBackgroundAsync(subs, _statsCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _loadingTopics.Remove(name);
+            }
+            catch (Exception ex)
+            {
+                _loadingTopics.Remove(name);
+                OperationMessage = $"Failed to load subscriptions for {name}: {ex.Message}";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else
+        {
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task ToggleEntityEnabledAsync(SbEntityInfo entity)
     {
         if (Client is null || IsMutating) return;
-
         var shouldEnable = entity.IsDisabled;
-        IsMutating = true;
-        OperationMessage = null;
+        IsMutating = true; OperationMessage = null;
         await InvokeAsync(StateHasChanged);
-
         try
         {
             if (entity.IsSubscription)
             {
-                if (!TryResolveSubscription(entity, out var topicName, out var subscriptionName))
-                {
-                    throw new InvalidOperationException($"Unable to resolve topic/subscription for '{entity.EntityPath}'.");
-                }
-
-                await Client.SetSubscriptionEnabledAsync(topicName, subscriptionName, shouldEnable);
+                if (!TryResolveSubscription(entity, out var topicName, out var subName))
+                    throw new InvalidOperationException($"Cannot resolve subscription path for '{entity.EntityPath}'.");
+                await Client.SetSubscriptionEnabledAsync(topicName, subName, shouldEnable);
             }
             else if (entity.IsTopic)
-            {
                 await Client.SetTopicEnabledAsync(entity.Name, shouldEnable);
-            }
             else
-            {
                 await Client.SetQueueEnabledAsync(entity.Name, shouldEnable);
-            }
 
-            OperationMessage = shouldEnable
-                ? $"Enabled {entity.Name}."
-                : $"Disabled {entity.Name}.";
-
-            await LoadAsync();
+            entity.IsDisabled = !shouldEnable;
+            OperationMessage = $"{(shouldEnable ? "Enabled" : "Disabled")} {entity.Name}.";
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            OperationMessage = $"Failed to update {entity.Name}: {ex.Message}";
-            await InvokeAsync(StateHasChanged);
-        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { OperationMessage = $"Failed to update {entity.Name}: {ex.Message}"; }
         finally
         {
             IsMutating = false;
@@ -341,67 +350,15 @@ ex.Message.Contains("Forbidden")
 
     private async Task OnEntityRowClickedAsync(SbEntityInfo entity)
     {
-        SelectEntity(entity);
+        _selectedPath = entity.EntityPath;
         await OpenEntity(entity);
     }
 
     private async Task OnTopicRowClickedAsync(SbEntityInfo topic)
     {
-        SelectEntity(topic);
+        _selectedPath = topic.EntityPath;
         await ToggleTopic(topic.Name);
     }
-
-    private void SelectEntity(SbEntityInfo entity)
-    {
-        _selectedEntityPath = entity.EntityPath;
-        SelectedEntity = entity;
-    }
-
-    private void RefreshSelectedEntity()
-    {
-        if (string.IsNullOrWhiteSpace(_selectedEntityPath))
-        {
-            SelectedEntity = null;
-            return;
-        }
-
-        SelectedEntity = FindEntityByPath(_selectedEntityPath);
-        if (SelectedEntity is null)
-        {
-            _selectedEntityPath = null;
-        }
-    }
-
-    private SbEntityInfo? FindEntityByPath(string entityPath)
-    {
-        var queue = Queues.FirstOrDefault(q => q.EntityPath == entityPath);
-        if (queue is not null)
-        {
-            return queue;
-        }
-
-        var topic = Topics.FirstOrDefault(t => t.EntityPath == entityPath);
-        if (topic is not null)
-        {
-            return topic;
-        }
-
-        foreach (var subs in Subscriptions.Values)
-        {
-            var subscription = subs.FirstOrDefault(s => s.EntityPath == entityPath);
-            if (subscription is not null)
-            {
-                return subscription;
-            }
-        }
-
-        return null;
-    }
-
-    private string GetEntityRowClass(SbEntityInfo entity, string baseClass = "entity-tree-item") =>
-        string.Equals(_selectedEntityPath, entity.EntityPath, StringComparison.Ordinal)
-            ? $"{baseClass} selected"
-            : baseClass;
 
     private async Task OpenEntity(SbEntityInfo entity, bool isDlq = false)
     {
@@ -410,35 +367,60 @@ ex.Message.Contains("Forbidden")
             await OnEntityModeSelected.InvokeAsync((entity, isDlq));
             return;
         }
-
         await OnEntitySelected.InvokeAsync(entity);
     }
 
-    private static string FormatCount(long? count) => (count ?? 0).ToString();
-
-    private static string GetStatusLabel(SbEntityInfo entity) => entity.IsDisabled ? "Disabled" : "Active";
-
-    private static bool SupportsMessageModes(SbEntityInfo entity) => !entity.IsTopic;
+    private RenderFragment RenderStatsBadges(SbEntityInfo entity) => builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "eb-badges");
+        if (entity.Stats is null)
+        {
+            builder.OpenElement(2, "span");
+            builder.AddAttribute(3, "class", "eb-badge-loading");
+            builder.AddContent(4, "·");
+            builder.CloseElement();
+        }
+        else
+        {
+            if (entity.Stats.ActiveMessageCount > 0)
+            {
+                builder.OpenElement(5, "span");
+                builder.AddAttribute(6, "class", "eb-badge eb-badge-active");
+                builder.AddAttribute(7, "title", $"{entity.Stats.ActiveMessageCount} active");
+                builder.AddContent(8, $"● {entity.Stats.ActiveMessageCount}");
+                builder.CloseElement();
+            }
+            if (entity.Stats.DeadLetterMessageCount > 0)
+            {
+                builder.OpenElement(9, "span");
+                builder.AddAttribute(10, "class", "eb-badge eb-badge-dlq");
+                builder.AddAttribute(11, "title", $"{entity.Stats.DeadLetterMessageCount} dead-lettered");
+                builder.AddContent(12, $"⚠ {entity.Stats.DeadLetterMessageCount}");
+                builder.CloseElement();
+            }
+            if (entity.Stats.ScheduledMessageCount > 0)
+            {
+                builder.OpenElement(13, "span");
+                builder.AddAttribute(14, "class", "eb-badge eb-badge-sched");
+                builder.AddAttribute(15, "title", $"{entity.Stats.ScheduledMessageCount} scheduled");
+                builder.AddContent(16, $"⏱ {entity.Stats.ScheduledMessageCount}");
+                builder.CloseElement();
+            }
+        }
+        builder.CloseElement();
+    };
 
     private static bool TryResolveSubscription(SbEntityInfo entity, out string topicName, out string subscriptionName)
     {
         topicName = entity.TopicName ?? string.Empty;
         subscriptionName = entity.Name;
-
-        if (!string.IsNullOrWhiteSpace(topicName) && !string.IsNullOrWhiteSpace(subscriptionName))
-        {
-            return true;
-        }
-
+        if (!string.IsNullOrWhiteSpace(topicName) && !string.IsNullOrWhiteSpace(subscriptionName)) return true;
         const string marker = "/subscriptions/";
-        var markerIndex = entity.EntityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (markerIndex <= 0)
-        {
-            return false;
-        }
-
-        topicName = entity.EntityPath[..markerIndex];
-        subscriptionName = entity.EntityPath[(markerIndex + marker.Length)..];
+        var idx = entity.EntityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx <= 0) { topicName = string.Empty; subscriptionName = string.Empty; return false; }
+        topicName = entity.EntityPath[..idx];
+        subscriptionName = entity.EntityPath[(idx + marker.Length)..];
         return !string.IsNullOrWhiteSpace(topicName) && !string.IsNullOrWhiteSpace(subscriptionName);
     }
 
@@ -447,4 +429,17 @@ ex.Message.Contains("Forbidden")
 
     private Task ToggleLink(string entityPath) =>
         OnEntityLinkToggled.InvokeAsync(new SbEntityLink { NamespaceId = NamespaceId, EntityPath = entityPath });
+
+    private async Task CancelStatsCtsAsync()
+    {
+        try { await _statsCts.CancelAsync(); } catch { }
+        _statsCts.Dispose();
+        _statsCts = new CancellationTokenSource();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await _statsCts.CancelAsync(); } catch { }
+        _statsCts.Dispose();
+    }
 }

@@ -73,22 +73,28 @@ public sealed class ServiceBusPageBootstrapTests : TestContext
         {
             Assert.Contains("orders-live", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("payments-live", cut.Markup, StringComparison.Ordinal);
-            Assert.Equal(2, cut.FindAll(".sb-ns-row-status-connecting").Count);
+            // Active namespace (orders) is connecting — grid shows skeleton
+            Assert.Single(cut.FindAll(".sbg-loading"));
         });
 
         ordersConnection.SetResult(new ServiceBusNamespaceConnectionResult(new FakeServiceBusClient(), null));
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Single(cut.FindAll(".sb-ns-row-status-connecting"));
-            Assert.Contains("Connected", cut.Markup, StringComparison.Ordinal);
+            // Orders is now connected; skeleton should be gone and no error on active ns
+            Assert.Empty(cut.FindAll(".sbg-loading"));
+            Assert.Empty(cut.FindAll(".sbg-error"));
         });
 
         paymentsConnection.SetResult(new ServiceBusNamespaceConnectionResult(null, "Namespace unavailable"));
 
+        // Switch active namespace to payments to observe its error state
+        await cut.InvokeAsync(() =>
+            cut.Find("select.sbg-ns-select").Change(payments.Id.ToString()));
+
         cut.WaitForAssertion(() =>
         {
-            Assert.Empty(cut.FindAll(".sb-ns-row-status-connecting"));
+            Assert.NotEmpty(cut.FindAll(".sbg-error"));
             Assert.Contains("Namespace unavailable", cut.Markup, StringComparison.Ordinal);
         });
     }

@@ -48,7 +48,7 @@ public sealed class MessageListViewTests : TestContext
             .Add(p => p.EntityPath, "orders")
             .Add(p => p.ShowCompose, true));
 
-        cut.Find("[title='Open message composer or load a template']").Click();
+        cut.Find("[title='Compose and send a new message']").Click();
 
         cut.WaitForAssertion(() =>
         {
@@ -319,7 +319,7 @@ public sealed class MessageListViewTests : TestContext
             .Add(p => p.EntityPath, "slow-queue")
             .Add(p => p.IsDlqMode, false));
 
-        cut.WaitForAssertion(() => Assert.Contains("Loading...", cut.Markup));
+        cut.WaitForAssertion(() => Assert.Contains("Loading", cut.Markup));
 
         cut.SetParametersAndRender(ps => ps
             .Add(p => p.Client, client)
@@ -772,7 +772,7 @@ public sealed class MessageListViewTests : TestContext
             Assert.Contains("Delete 2 filtered message(s)", cut.Markup);
         });
 
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Delete Filtered").Click();
+        cut.Find("button.confirm-dialog-btn--primary").Click();
 
         cut.WaitForAssertion(() =>
         {
@@ -835,7 +835,7 @@ public sealed class MessageListViewTests : TestContext
 
         cut.WaitForAssertion(() => Assert.Contains("Delete Filtered DLQ Messages", cut.Markup));
 
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Delete Filtered").Click();
+        cut.Find("button.confirm-dialog-btn--primary").Click();
 
         cut.WaitForAssertion(() =>
         {

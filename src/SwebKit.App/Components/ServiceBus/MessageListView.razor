@@ -134,10 +134,10 @@
         </div>
         @if (MultiSelect && Messages.Count > 0)
         {
-            <FluentButton @onclick="ToggleSelectAll" Appearance="Appearance.Stealth"
-                          style="font-size:11px; padding:2px 6px;" title="Select / deselect all visible messages">
+            <button type="button" @onclick="ToggleSelectAll" class="message-list-view__toolbar-button"
+                    title="Select / deselect all visible messages">
                 @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
-            </FluentButton>
+            </button>
         }
         <div class="message-list-view__filter-group">
             <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
@@ -190,43 +190,52 @@
         }
         @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
         {
-            <FluentButton @onclick="OnCloseDetails" Appearance="Appearance.Stealth" title="Close message details">
+            <button type="button" @onclick="OnCloseDetails" class="message-list-view__toolbar-button"
+                    title="Close message details">
                 Close Details
-            </FluentButton>
+            </button>
         }
         @if (!IsDlqMode)
         {
-            <FluentButton @onclick="ConfirmDeleteSelectedMessage" Appearance="Appearance.Stealth"
-                          Disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)" title="Delete selected active message">
+            <button type="button" @onclick="ConfirmDeleteSelectedMessage"
+                    class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                    disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)" title="Delete selected active message">
                 Delete Selected
-            </FluentButton>
+            </button>
         }
-        <FluentButton @onclick="ConfirmDeleteFilteredMessages" Appearance="Appearance.Stealth"
-                      Disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
-                      title="Delete currently filtered messages in the current mode">
+        <button type="button" @onclick="ConfirmDeleteFilteredMessages"
+                class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
+                title="Delete currently filtered messages in the current mode">
             Delete Filtered
-        </FluentButton>
-        <FluentButton @onclick="ConfirmPurgeAllMessages" Appearance="Appearance.Stealth"
-                      Disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
-                      title="Permanently delete all messages in the current mode">
+        </button>
+        <button type="button" @onclick="ConfirmPurgeAllMessages"
+                class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
+                title="Permanently delete all messages in the current mode">
             Purge All
-        </FluentButton>
+        </button>
         @if (ShowCompose && !IsDlqMode && Client is not null)
         {
-            <FluentButton @onclick="@(() => _showComposer = !_showComposer)"
-                          Appearance="@(_showComposer? Appearance.Accent: Appearance.Stealth)"
-                          title="Open message composer or load a template">
-                ✉ Compose
-            </FluentButton>
+            <button type="button" @onclick="@(() => _showComposer = !_showComposer)"
+                    class="message-list-view__toolbar-button message-list-view__toolbar-button--compose @(_showComposer ? "message-list-view__toolbar-button--active" : "")"
+                    title="Compose and send a new message">
+                ✉ Send
+            </button>
         }
-        <FluentButton @onclick="ExportFilteredJsonAsync" Appearance="Appearance.Stealth"
-                      Disabled="@(FilteredMessages.Count == 0)" title="Export currently visible messages as JSON">
+        <button type="button" @onclick="ExportFilteredJsonAsync" class="message-list-view__toolbar-button"
+                disabled="@(FilteredMessages.Count == 0)" title="Export currently visible messages as JSON">
             ⬇ Export JSON
-        </FluentButton>
-        <FluentButton data-testid="peek-button" @onclick="LoadInitialWindowAsync" Appearance="Appearance.Accent"
-                      Disabled="@IsLoading">
-            @(IsLoading ? "Loading..." : "Peek")
-        </FluentButton>
+        </button>
+        <button type="button" @onclick="ToggleNsbMode"
+                class="message-list-view__toolbar-button message-list-view__toolbar-button--nsb @(_nsbMode ? "message-list-view__toolbar-button--active" : "")"
+                title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
+            NSB
+        </button>
+        <button type="button" data-testid="peek-button" @onclick="LoadInitialWindowAsync"
+                class="message-list-view__toolbar-button message-list-view__toolbar-button--primary" disabled="@IsLoading">
+            @(IsLoading ? "Loading…" : "↺ Peek")
+        </button>
     </div>
 
     @if (_advancedFilterEnabled)
@@ -345,7 +354,7 @@
                         <TemplateColumn Title="Correlation ID" Width="180px"
                                         SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
                             <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                                                                                                                                                                                           "-")</span>
+                                                                                                                                                                                                                                                                           "-")</span>
                             </TemplateColumn>
                         }
                         @if (IsBuiltInColumnVisible(ColumnSubject))
@@ -388,14 +397,14 @@
                                             SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
                                 <span class="cell-truncate"
                                       title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
-                                                                                                                                                                                                                                         "-")</span>
+                                                                                                                                                                                                                                                                                                                     "-")</span>
                                 </TemplateColumn>
                             }
                             @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
                             {
                                 <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
                                     <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                                                                                                                                                                                                                         "-")</span>
+                                                                                                                                                                                                                                                                                                                                         "-")</span>
                                     </TemplateColumn>
                                 }
                                 @foreach (var customColumn in _customPropertyColumns)
@@ -404,6 +413,33 @@
                                     <TemplateColumn Title="@customColumnName" Width="160px">
                                         <span class="cell-truncate" title="@GetCustomPropertyValue(context, customColumnName)">
                                             @GetCustomPropertyValue(context, customColumnName)
+                                        </span>
+                                    </TemplateColumn>
+                                }
+                                @if (_nsbMode)
+                                {
+                                    <TemplateColumn Title="NSB Endpoint" Width="200px"
+                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.OriginatingEndpoint")))">
+                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.OriginatingEndpoint")">
+                                            @GetNsbProp(context, "NServiceBus.OriginatingEndpoint")
+                                        </span>
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="NSB Message Type">
+                                        <span class="cell-truncate nsb-type-cell"
+                                              title="@GetNsbProp(context, "NServiceBus.EnclosedMessageTypes")">
+                                            @TruncateNsbType(GetNsbProp(context, "NServiceBus.EnclosedMessageTypes"))
+                                        </span>
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="NSB Time Sent" Width="150px"
+                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.TimeSent")))">
+                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.TimeSent")">
+                                            @GetNsbProp(context, "NServiceBus.TimeSent")
+                                        </span>
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="NSB Conversation" Width="200px"
+                                                    SortBy="@(GridSort<SbMessage>.ByAscending(m => GetNsbProp(m, "NServiceBus.ConversationId")))">
+                                        <span class="cell-truncate" title="@GetNsbProp(context, "NServiceBus.ConversationId")">
+                                            @GetNsbProp(context, "NServiceBus.ConversationId")
                                         </span>
                                     </TemplateColumn>
                                 }
@@ -418,10 +454,11 @@
                                     Large window
                                 </span>
                             }
-                            <FluentButton data-testid="load-more-button" @onclick="LoadMoreAsync" Appearance="Appearance.Stealth"
-                                          Disabled="@(!CanLoadMore)" title="Load additional messages into the current window">
+                            <button type="button" data-testid="load-more-button" @onclick="LoadMoreAsync"
+                                    class="message-list-view__toolbar-button" disabled="@(!CanLoadMore)"
+                                    title="Load additional messages into the current window">
                                 @LoadMoreButtonLabel
-                            </FluentButton>
+                            </button>
                         </div>
                         <div class="message-list-view__summary-bar message-list-view__summary-bar--secondary">
                             @CountSummary
@@ -577,6 +614,7 @@
     private string _confirmLabel = "Confirm";
     private bool _requireTypedConfirm;
     private Func<Task>? _pendingMutationAction;
+    private bool _nsbMode;
 
     private readonly SelectionService<string> _selection = new();
     private readonly AutoRefreshController _autoRefresh = new();
@@ -1706,6 +1744,25 @@ sequenceNumber)
             .Select(m => m.SequenceNumber!.Value)
             .Distinct()
             .ToList();
+
+    private void ToggleNsbMode() => _nsbMode = !_nsbMode;
+
+    private static string GetNsbProp(SbMessage m, string key)
+    {
+        if (m.ApplicationProperties is null) return "–";
+        if (m.ApplicationProperties.TryGetValue(key, out var v)) return v?.ToString() ?? "–";
+        return "–";
+    }
+
+    private static string TruncateNsbType(string value)
+    {
+        if (value == "–") return value;
+        // NServiceBus type strings are "Assembly.Namespace.ClassName, AssemblyName" — show only the simple class name
+        var comma = value.IndexOf(',', StringComparison.Ordinal);
+        var typePart = comma > 0 ? value[..comma] : value;
+        var lastDot = typePart.LastIndexOf('.');
+        return lastDot >= 0 ? typePart[(lastDot + 1)..] : typePart;
+    }
 
     public async ValueTask DisposeAsync()
     {

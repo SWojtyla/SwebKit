@@ -1,0 +1,464 @@
+@implements IAsyncDisposable
+@inject AppStateService AppState
+
+<div class="sbg">
+    <!-- Namespace selector + filter -->
+    <div class="sbg-ns-bar">
+        <div class="sbg-ns-selector">
+            @if (NamespaceStates.Any())
+            {
+                var activeNs = ActiveNamespace;
+                var dotClass = activeNs is null ? "err" : activeNs.IsConnecting ? "connecting" : activeNs.Client is not null ? "ok" : "err";
+                <span class="sbg-ns-dot @dotClass"></span>
+                <select class="sbg-ns-select app-native-control app-native-select"
+                        value="@_activeNsId"
+                        @onchange="e => SelectNamespace(Guid.Parse(e.Value?.ToString() ?? string.Empty))">
+                    @foreach (var ns in NamespaceStates)
+                    {
+                        <option value="@ns.Namespace.Id">@ns.Namespace.Alias</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span class="sbg-ns-none">No namespaces —</span>
+            }
+            <a href="/settings?section=servicebus" class="sbg-ns-settings-link">Manage</a>
+        </div>
+
+        <div class="sbg-toolbar-right">
+            <input type="search" @bind="_filter" @bind:event="oninput" placeholder="Filter entities…" class="sbg-filter"
+                   aria-label="Filter entities" />
+            <button type="button" class="sbg-refresh-btn @(IsLoading ? "eb-spinning" : "")" @onclick="RefreshAsync"
+                    disabled="@IsLoading" title="Refresh" aria-label="Refresh entity list">↻</button>
+        </div>
+    </div>
+
+    <!-- Entity table -->
+    @{
+        var active = ActiveNamespace;
+    }
+    @if (active is null)
+    {
+        @if (!NamespaceStates.Any())
+        {
+            <div class="sbg-empty">
+                <div class="sbg-empty-icon">⇄</div>
+                <div class="sbg-empty-title">No namespaces connected</div>
+                <div class="sbg-empty-sub">Click <strong>+ Add</strong> and paste a connection string.</div>
+            </div>
+        }
+    }
+    else if (active.IsConnecting)
+    {
+        <div class="sbg-loading">
+            <SkeletonRows Count="10" />
+        </div>
+    }
+    else if (active.ConnectionError is not null && active.Client is null)
+    {
+        <div class="sbg-error">
+            <ErrorCallout Message="@active.ConnectionError" />
+        </div>
+    }
+    else
+    {
+        var fq = FilteredSortedQueues;
+        var ft = FilteredSortedTopics;
+        var hasQueues = fq.Any();
+        var hasTopics = ft.Any();
+
+        @if (!hasQueues && !hasTopics)
+        {
+            <div class="sbg-empty sbg-empty-inline">
+                @if (!string.IsNullOrWhiteSpace(_filter))
+                {
+                    <span>No entities match "<strong>@_filter</strong>"</span>
+                }
+                else
+                {
+                    <span>No queues or topics. Verify the connection string has Manage rights.</span>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="sbg-panels">
+
+                @if (hasQueues)
+                {
+                    <div class="sbg-panel">
+                        <div class="sbg-cols sbg-cols-sticky" role="row">
+                            <span class="sbg-col-glyph"></span>
+                            <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
+                                    @onclick='() => SetSort("name")' title="Sort by name">
+                                Queues (@fq.Count) @SortArrow("name")
+                            </button>
+                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("active"))"
+                                    @onclick='() => SetSort("active")' title="Sort by active count">
+                                A @SortArrow("active")
+                            </button>
+                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("dlq"))"
+                                    @onclick='() => SetSort("dlq")' title="Sort by dead-letter count">
+                                DLQ @SortArrow("dlq")
+                            </button>
+                            <button type="button" class="sbg-col-count sbg-sort-btn @(SortColClass("sched"))"
+                                    @onclick='() => SetSort("sched")' title="Sort by scheduled count">
+                                Sch @SortArrow("sched")
+                            </button>
+                            <span class="sbg-col-actions"></span>
+                        </div>
+                        <div class="sbg-panel-rows" role="table" aria-label="Queues">
+                            @foreach (var q in fq)
+                            {
+                                var isPinned = IsEntityLinked(active.Namespace.Id, q.EntityPath);
+                                <div @key="q.EntityPath" role="row"
+                                     class="sbg-row @(q.IsDisabled ? "sbg-row-disabled" : "")"
+                                     @onclick="() => OpenEntity(active, q, false)">
+                                    <span class="sbg-col-glyph sbg-glyph-q" title="@(q.IsDisabled ? "Queue (disabled)" : "Queue")">Q</span>
+                                    <span class="sbg-col-name sbg-entity-name" title="@q.Name">@q.Name</span>
+                                    @RenderCount(q.Stats?.ActiveMessageCount, "sbg-col-count sbg-count-active")
+                                    @RenderCount(q.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
+                                    @RenderCount(q.Stats?.ScheduledMessageCount, "sbg-col-count sbg-count-sched")
+                                    <div class="sbg-col-actions">
+                                        <button type="button" class="sbg-act sbg-act-open"
+                                                title="Open active messages for '@q.Name'"
+                                                @onclick="() => OpenEntity(active, q, false)">
+                                            ▷ Active
+                                        </button>
+                                        <button type="button"
+                                                class="sbg-act sbg-act-dlq @(q.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
+                                                title="Open dead-letter queue for '@q.Name'"
+                                                @onclick="() => OpenEntity(active, q, true)">
+                                            ⚠ DLQ
+                                        </button>
+                                        <button type="button" class="sbg-act sbg-act-pin @(isPinned ? "pinned" : "")"
+                                                title="@(isPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                                @onclick="() => ToggleLink(active.Namespace.Id, q)">
+                                            @(isPinned ? "★" : "☆")
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (hasTopics)
+                {
+                    <div class="sbg-panel">
+                        <div class="sbg-cols sbg-cols-sticky" role="row">
+                            <span class="sbg-col-glyph"></span>
+                            <button type="button" class="sbg-col-name sbg-sort-btn @(SortColClass("name"))"
+                                    @onclick='() => SetSort("name")' title="Sort by topics name">
+                                Topics (@ft.Count) @SortArrow("name")
+                            </button>
+                            <span class="sbg-col-count sbg-col-hdr">A</span>
+                            <span class="sbg-col-count sbg-col-hdr">DLQ</span>
+                            <span class="sbg-col-count sbg-col-hdr">Sch</span>
+                            <span class="sbg-col-actions"></span>
+                        </div>
+                        <div class="sbg-panel-rows" role="table" aria-label="Topics">
+                            @foreach (var t in ft)
+                            {
+                                var isExpanded = _expandedTopics.Contains(t.Name);
+                                <div @key="t.EntityPath" role="row"
+                                     class="sbg-row sbg-row-topic @(t.IsDisabled ? "sbg-row-disabled" : "")"
+                                     @onclick="() => OnTopicClickedAsync(active, t)">
+                                    <span class="sbg-col-glyph sbg-glyph-t sbg-glyph-t-expand"
+                                          title="Topic — click to expand">@(isExpanded ? "▾" : "▸")</span>
+                                    <span class="sbg-col-name sbg-entity-name" title="@t.Name">@t.Name</span>
+                                    <span class="sbg-col-count sbg-count-muted">–</span>
+                                    <span class="sbg-col-count sbg-count-muted">–</span>
+                                    <span class="sbg-col-count sbg-count-muted">–</span>
+                                    <div class="sbg-col-actions"></div>
+                                </div>
+
+                                @if (isExpanded)
+                                {
+                                    @if (_loadingTopics.Contains(t.Name))
+                                    {
+                                        <div class="sbg-sub-loading"><SkeletonRows Count="2" /></div>
+                                    }
+                                    else if (_subscriptions.TryGetValue(t.Name, out var subs))
+                                    {
+                                        @foreach (var s in subs)
+                                        {
+                                            var sPinned = IsEntityLinked(active.Namespace.Id, s.EntityPath);
+                                            <div @key="s.EntityPath" role="row"
+                                                 class="sbg-row sbg-row-sub @(s.IsDisabled ? "sbg-row-disabled" : "")">
+                                                <span class="sbg-col-glyph sbg-glyph-s"
+                                                      title="@(s.IsDisabled ? "Subscription (disabled)" : "Subscription")">S</span>
+                                                <span class="sbg-col-name sbg-entity-name" title="@s.Name">@s.Name</span>
+                                                @RenderCount(s.Stats?.ActiveMessageCount, "sbg-col-count sbg-count-active")
+                                                @RenderCount(s.Stats?.DeadLetterMessageCount, "sbg-col-count sbg-count-dlq")
+                                                <span class="sbg-col-count sbg-count-muted">–</span>
+                                                <div class="sbg-col-actions">
+                                                    <button type="button" class="sbg-act sbg-act-open"
+                                                            title="Open active messages for '@s.Name'"
+                                                            @onclick="() => OpenEntity(active, s, false)">
+                                                        ▷ Active
+                                                    </button>
+                                                    <button type="button"
+                                                            class="sbg-act sbg-act-dlq @(s.Stats?.DeadLetterMessageCount > 0 ? "sbg-act-dlq-hot" : "")"
+                                                            title="Open dead-letter queue for '@s.Name'"
+                                                            @onclick="() => OpenEntity(active, s, true)">
+                                                        ⚠ DLQ
+                                                    </button>
+                                                    <button type="button" class="sbg-act sbg-act-pin @(sPinned ? "pinned" : "")"
+                                                            title="@(sPinned ? "Unpin from dashboard" : "Pin to dashboard")"
+                                                            @onclick="() => ToggleLink(active.Namespace.Id, s)">
+                                                        @(sPinned ? "★" : "☆")
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_opMessage))
+        {
+            <div class="sbg-op-message">@_opMessage</div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<NsState> NamespaceStates { get; set; } = [];
+    [Parameter] public IReadOnlyList<SbEntityLink> LinkedEntities { get; set; } = [];
+    [Parameter] public EventCallback<(NsState Ns, SbEntityInfo Entity, bool IsDlq)> OnEntityOpen { get; set; }
+    [Parameter] public EventCallback<NsState> OnScheduledOpen { get; set; }
+    [Parameter] public EventCallback<string> OnAddNamespace { get; set; }
+    [Parameter] public EventCallback<Guid> OnRemoveNamespace { get; set; }
+    [Parameter] public EventCallback<SbEntityLink> OnEntityLinkToggled { get; set; }
+
+    private Guid _activeNsId;
+    private string _filter = string.Empty;
+    private string _sortCol = "name";
+    private bool _sortAsc = true;
+    private bool IsLoading;
+    private List<SbEntityInfo> _queues = [];
+    private List<SbEntityInfo> _topics = [];
+    private Dictionary<string, List<SbEntityInfo>> _subscriptions = [];
+    private HashSet<string> _expandedTopics = [];
+    private HashSet<string> _loadingTopics = [];
+    private string? _opMessage;
+    private NsState? _loadedForNs;
+    private CancellationTokenSource _statsCts = new();
+    private static readonly SemaphoreSlim _statsGate = new(6, 6);
+
+    private NsState? ActiveNamespace =>
+        NamespaceStates.FirstOrDefault(s => s.Namespace.Id == _activeNsId)
+        ?? NamespaceStates.FirstOrDefault();
+
+    private List<SbEntityInfo> FilteredSortedQueues
+    {
+        get
+        {
+            var list = string.IsNullOrWhiteSpace(_filter)
+                ? _queues
+                : _queues.Where(q => q.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+            return Sort(list);
+        }
+    }
+
+    private List<SbEntityInfo> FilteredSortedTopics
+    {
+        get
+        {
+            var list = string.IsNullOrWhiteSpace(_filter)
+                ? _topics
+                : _topics.Where(t => t.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)).ToList();
+            return _sortCol == "name"
+                ? (_sortAsc ? list.OrderBy(t => t.Name).ToList() : list.OrderByDescending(t => t.Name).ToList())
+                : list;
+        }
+    }
+
+    private List<SbEntityInfo> Sort(List<SbEntityInfo> list) => _sortCol switch
+    {
+        "active" => _sortAsc
+            ? list.OrderBy(e => e.Stats?.ActiveMessageCount ?? 0).ToList()
+            : list.OrderByDescending(e => e.Stats?.ActiveMessageCount ?? 0).ToList(),
+        "dlq" => _sortAsc
+            ? list.OrderBy(e => e.Stats?.DeadLetterMessageCount ?? 0).ToList()
+            : list.OrderByDescending(e => e.Stats?.DeadLetterMessageCount ?? 0).ToList(),
+        "sched" => _sortAsc
+            ? list.OrderBy(e => e.Stats?.ScheduledMessageCount ?? 0).ToList()
+            : list.OrderByDescending(e => e.Stats?.ScheduledMessageCount ?? 0).ToList(),
+        _ => _sortAsc
+            ? list.OrderBy(e => e.Name).ToList()
+            : list.OrderByDescending(e => e.Name).ToList(),
+    };
+
+    private void SetSort(string col)
+    {
+        if (_sortCol == col) _sortAsc = !_sortAsc;
+        else { _sortCol = col; _sortAsc = col != "dlq" && col != "active"; }
+    }
+
+    private string SortColClass(string col) => _sortCol == col ? "sbg-sort-active" : "";
+    private string SortArrow(string col) => _sortCol != col ? "" : _sortAsc ? "↑" : "↓";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Auto-select first namespace if nothing selected
+        if (_activeNsId == Guid.Empty || !NamespaceStates.Any(s => s.Namespace.Id == _activeNsId))
+            _activeNsId = NamespaceStates.FirstOrDefault()?.Namespace.Id ?? Guid.Empty;
+
+        var ns = ActiveNamespace;
+        if (ns is not null && !ReferenceEquals(_loadedForNs, ns) && ns.Client is not null)
+        {
+            _loadedForNs = ns;
+            await LoadEntitiesAsync(ns);
+        }
+    }
+
+    private void SelectNamespace(Guid id)
+    {
+        if (id == _activeNsId) return;
+        _activeNsId = id;
+        _queues = []; _topics = [];
+        _subscriptions.Clear(); _expandedTopics.Clear();
+        _loadedForNs = null;
+    }
+
+    private async Task RefreshAsync()
+    {
+        _subscriptions.Clear(); _expandedTopics.Clear();
+        _loadedForNs = null;
+        var ns = ActiveNamespace;
+        if (ns?.Client is not null) await LoadEntitiesAsync(ns);
+    }
+
+    private async Task LoadEntitiesAsync(NsState ns)
+    {
+        if (ns.Client is null) return;
+        await CancelStatsAsync();
+        var ct = _statsCts.Token;
+
+        IsLoading = true;
+        _queues = []; _topics = [];
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            _queues = (await ns.Client.ListQueuesAsync(ct)).ToList();
+            await InvokeAsync(StateHasChanged);
+            _topics = (await ns.Client.ListTopicsAsync(ct)).ToList();
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex)
+        {
+            var hint = ex.Message.Contains("401") || ex.Message.Contains("Unauthorized") || ex.Message.Contains("Forbidden")
+                ? " (Needs Manage rights.)" : "";
+            _opMessage = $"Failed to load: {ex.Message}{hint}";
+        }
+        finally { IsLoading = false; await InvokeAsync(StateHasChanged); }
+
+        _ = LoadStatsAsync(ns.Client, _queues, ct);
+    }
+
+    private async Task LoadStatsAsync(IServiceBusClient client, IReadOnlyList<SbEntityInfo> entities, CancellationToken ct)
+    {
+        var tasks = entities
+            .Where(e => !e.IsTopic)
+            .Select(async entity =>
+            {
+                if (ct.IsCancellationRequested) return;
+                await _statsGate.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ct.IsCancellationRequested) return;
+                    entity.Stats = await client.GetEntityStatsAsync(entity.EntityPath, ct);
+                    if (!ct.IsCancellationRequested) await InvokeAsync(StateHasChanged);
+                }
+                catch (OperationCanceledException) { }
+                catch { entity.Stats = new SbEntityStats(); }
+                finally { _statsGate.Release(); }
+            });
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task OnTopicClickedAsync(NsState ns, SbEntityInfo topic)
+    {
+        if (_expandedTopics.Contains(topic.Name))
+        {
+            _expandedTopics.Remove(topic.Name);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        _expandedTopics.Add(topic.Name);
+        if (!_subscriptions.ContainsKey(topic.Name) && ns.Client is not null)
+        {
+            _loadingTopics.Add(topic.Name);
+            await InvokeAsync(StateHasChanged);
+            try
+            {
+                var subs = (await ns.Client.ListSubscriptionsAsync(topic.Name, _statsCts.Token)).ToList();
+                _subscriptions[topic.Name] = subs;
+                _loadingTopics.Remove(topic.Name);
+                await InvokeAsync(StateHasChanged);
+                _ = LoadStatsAsync(ns.Client, subs, _statsCts.Token);
+            }
+            catch (OperationCanceledException) { _loadingTopics.Remove(topic.Name); }
+            catch (Exception ex)
+            {
+                _loadingTopics.Remove(topic.Name);
+                _opMessage = $"Failed to load subscriptions: {ex.Message}";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else await InvokeAsync(StateHasChanged);
+    }
+
+    private Task OpenEntity(NsState ns, SbEntityInfo entity, bool isDlq) =>
+        OnEntityOpen.InvokeAsync((ns, entity, isDlq));
+
+    private bool IsEntityLinked(Guid nsId, string entityPath) =>
+        LinkedEntities.Any(l => l.NamespaceId == nsId && l.EntityPath == entityPath);
+
+    private Task ToggleLink(Guid nsId, SbEntityInfo entity) =>
+        OnEntityLinkToggled.InvokeAsync(new SbEntityLink { NamespaceId = nsId, EntityPath = entity.EntityPath });
+
+    private RenderFragment RenderCount(long? count, string cssClass) => builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", cssClass);
+        if (count is null)
+        {
+            builder.OpenElement(2, "span"); builder.AddAttribute(3, "class", "sbg-loading-dot"); builder.AddContent(4, "·");
+            builder.CloseElement();
+        }
+        else if (count > 0)
+        {
+            builder.AddContent(5, count.Value.ToString());
+        }
+        else
+        {
+            builder.OpenElement(6, "span"); builder.AddAttribute(7, "class", "sbg-count-zero"); builder.AddContent(8, "–");
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
+    private async Task CancelStatsAsync()
+    {
+        try { await _statsCts.CancelAsync(); } catch { }
+        _statsCts.Dispose();
+        _statsCts = new CancellationTokenSource();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await _statsCts.CancelAsync(); } catch { }
+        _statsCts.Dispose();
+    }
+}

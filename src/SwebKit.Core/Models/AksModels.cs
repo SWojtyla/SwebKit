@@ -35,6 +35,7 @@ public class DeploymentInfo
     public int Replicas { get; set; }
     public int ReadyReplicas { get; set; }
     public string Status { get; set; } = "Unknown";
+    public string? ImageTag { get; set; }
     public Dictionary<string, string> Labels { get; set; } = [];
     public Dictionary<string, string> SelectorLabels { get; set; } = [];
 }
@@ -328,6 +329,7 @@ public class JobInfo
     public int Succeeded { get; set; }
     public int Failed { get; set; }
     public int? DesiredCompletions { get; set; }
+    public int Parallelism { get; set; } = 1;
     public DateTimeOffset? StartTime { get; set; }
     public DateTimeOffset? CompletionTime { get; set; }
     public string? SourceKind { get; set; }

@@ -73,6 +73,14 @@ public interface IAksClient
         => Task.FromException<string>(
             new NotSupportedException("This AKS client does not support rerunning Jobs."));
 
+    Task SuspendCronJobAsync(string ns, string cronJobName, bool suspend, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support suspending CronJobs."));
+
+    Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
+        => Task.FromException(
+            new NotSupportedException("This AKS client does not support setting Job parallelism."));
+
     // Multi-namespace overloads with default implementations
     async Task<IReadOnlyList<DeploymentInfo>> GetDeploymentsAsync(IReadOnlyList<string> namespaces, CancellationToken ct = default)
         => await FanOutNamespacesAsync(namespaces, GetDeploymentsAsync, ct);

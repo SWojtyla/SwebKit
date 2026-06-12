@@ -1,0 +1,364 @@
+/* ═══════════════════════════════════════════════════════════
+   Service Bus Grid — full-width entity overview
+   Columns: [glyph] [name 1fr] [active 64px] [dlq 64px] [sched 64px] [actions auto]
+   ═══════════════════════════════════════════════════════════ */
+
+.sbg {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Namespace selector row ──────────────────────────────── */
+.sbg-ns-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-wrap: wrap;
+}
+
+.sbg-ns-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.sbg-ns-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.sbg-ns-dot.ok         { background: var(--color-success); }
+.sbg-ns-dot.connecting { background: var(--color-warning, #fb8c00); animation: eb-pulse 1.2s ease-in-out infinite; }
+.sbg-ns-dot.err        { background: var(--color-error); }
+
+.sbg-ns-select {
+    min-width: 0;
+    max-width: 280px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    cursor: pointer;
+    outline: none;
+}
+
+.sbg-ns-select:focus { border-color: var(--color-accent); }
+
+.sbg-ns-none {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.sbg-ns-settings-link {
+    font-size: 11px;
+    color: var(--color-accent);
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.sbg-ns-settings-link:hover { text-decoration: underline; }
+
+/* ── Right side toolbar ───────────────────────────────────── */
+.sbg-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.sbg-filter {
+    width: 220px;
+    padding: 5px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    outline: none;
+}
+.sbg-filter:focus { border-color: var(--color-accent); }
+
+.sbg-refresh-btn {
+    width: 30px; height: 30px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface-2); color: var(--color-text-muted); cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+}
+.sbg-refresh-btn:hover:not(:disabled) { color: var(--color-text); border-color: var(--color-accent); }
+.sbg-refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Add form ────────────────────────────────────────────── */
+.sbg-add-form {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-wrap: wrap;
+}
+
+.sbg-add-input, .sbg-add-form ::deep .sbg-add-input {
+    width: 380px; max-width: 100%;
+    font-size: 11px;
+    font-family: Consolas, monospace;
+    padding: 5px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    outline: none;
+}
+.sbg-add-input:focus, .sbg-add-form ::deep .sbg-add-input:focus { border-color: var(--color-accent); }
+
+.sbg-add-error { font-size: 11px; color: var(--color-error); align-self: center; }
+
+.sbg-add-actions { display: flex; gap: 6px; align-items: center; }
+
+.sbg-btn {
+    padding: 5px 14px; font-size: 12px; font-weight: 500;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface-2); color: var(--color-text); cursor: pointer;
+    transition: border-color 0.1s, background 0.1s;
+}
+.sbg-btn:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); }
+.sbg-btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-solid-foreground, white); font-weight: 600; }
+.sbg-btn-primary:hover { background: var(--color-accent-hover, var(--color-accent)); }
+
+/* ── States ──────────────────────────────────────────────── */
+.sbg-loading { padding: 16px; }
+.sbg-error { padding: 16px; }
+.sbg-op-message { padding: 6px 16px; font-size: 11px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
+
+.sbg-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 24px; text-align: center; color: var(--color-text-muted);
+}
+.sbg-empty-icon { font-size: 36px; margin-bottom: 16px; opacity: 0.4; }
+.sbg-empty-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.sbg-empty-sub { font-size: 13px; }
+.sbg-empty-inline { flex: none; padding: 24px 16px; }
+
+/* ── Column headers ───────────────────────────────────────── */
+.sbg-cols {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 28px 1fr 52px 52px 52px 160px;
+    align-items: center;
+    padding: 5px 12px;
+    border-bottom: 2px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-2) 65%, transparent);
+}
+
+.sbg-sort-btn {
+    border: none; background: transparent; cursor: pointer;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--color-text-muted); text-align: left; padding: 0;
+    display: flex; align-items: center; gap: 4px;
+    transition: color 0.1s;
+    white-space: nowrap;
+}
+.sbg-sort-btn:hover { color: var(--color-text); }
+.sbg-sort-active { color: var(--color-accent) !important; }
+
+/* Count header cells: block + text-align so they render identically to data cells */
+.sbg-col-count.sbg-sort-btn {
+    display: block;
+    text-align: right;
+    padding-right: 8px;
+}
+
+/* ── Two-panel layout ────────────────────────────────────── */
+
+/* Side-by-side when wide enough; stacks vertically on narrow screens */
+.sbg-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (max-width: 960px) {
+    .sbg-panels {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+}
+
+.sbg-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--color-border);
+}
+
+.sbg-panel:last-child { border-right: none; }
+
+/* Sticky column headers per panel */
+.sbg-cols-sticky {
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* Scrollable rows area per panel */
+.sbg-panel-rows {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* Column header label — count columns right-align, name column left-aligns */
+.sbg-col-hdr {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    text-align: right;
+    padding-right: 8px;
+    white-space: nowrap;
+}
+
+/* Name-column header: must be left-aligned */
+.sbg-col-name.sbg-col-hdr {
+    text-align: left;
+    padding-right: 0;
+}
+
+/* ── Section labels (kept for single-column fallback) ─────── */
+.sbg-section-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+}
+
+.sbg-section-label--spaced {
+    margin-top: 8px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 14px;
+}
+
+.sbg-section-count {
+    font-size: 10px; font-weight: 600; color: var(--color-text-faint);
+    background: var(--color-surface-2); border: 1px solid var(--color-border);
+    border-radius: 999px; padding: 1px 6px; line-height: 1.4;
+}
+
+.sbg-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 52px 52px 52px 160px;
+    align-items: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+    min-width: 0;
+    transition: background 0.08s;
+}
+
+.sbg-row:hover { background: var(--color-surface-2); }
+.sbg-row-disabled { opacity: 0.5; }
+.sbg-row-topic { cursor: pointer; }
+
+/* Subscription rows: indent name only, glyph stays in column 1 */
+.sbg-row-sub {
+    padding-left: 16px;
+}
+.sbg-row-sub .sbg-col-name {
+    padding-left: 20px;
+}
+
+.sbg-sub-loading { padding: 4px 16px 4px 60px; }
+
+/* Glyph badges */
+.sbg-col-glyph {
+    width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--color-border);
+    font-size: 11px; font-weight: 700; display: inline-flex; align-items: center;
+    justify-content: center; background: var(--color-surface-2); flex-shrink: 0; line-height: 1;
+}
+.sbg-glyph-q { color: var(--color-nav-servicebus, var(--color-accent)); border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); }
+.sbg-glyph-t { color: var(--color-text-muted); }
+/* Topic expand glyph: transparent border, larger text so arrow is readable */
+.sbg-glyph-t-expand {
+    background: transparent;
+    border-color: transparent;
+    font-size: 14px;
+    color: var(--color-text-muted);
+}
+.sbg-row-topic:hover .sbg-glyph-t-expand { color: var(--color-accent); }
+.sbg-glyph-s { color: var(--color-text-muted); font-size: 10px; }
+
+/* Entity name — full text, wraps if needed */
+.sbg-entity-name {
+    font-size: 13px;
+    color: var(--color-text);
+    word-break: break-word;
+    padding-right: 12px;
+    line-height: 1.35;
+}
+
+/* Count cells */
+.sbg-col-count {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    padding-right: 8px;
+    font-weight: 500;
+}
+
+.sbg-count-active { color: var(--color-success); }
+.sbg-count-dlq    { color: var(--color-error); }
+.sbg-count-sched  { color: var(--color-warning, #fb8c00); }
+.sbg-count-muted  { color: var(--color-text-faint); }
+.sbg-count-zero   { color: var(--color-text-faint); font-weight: 400; }
+
+@keyframes sbg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.sbg-loading-dot { animation: sbg-pulse 1.4s ease-in-out infinite; color: var(--color-text-faint); }
+
+/* Row action buttons */
+.sbg-col-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-left: 8px;
+}
+
+.sbg-act {
+    padding: 3px 10px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface-2); color: var(--color-text-muted);
+    cursor: pointer; white-space: nowrap; line-height: 1.4;
+    transition: border-color 0.1s, background 0.1s, color 0.1s;
+}
+.sbg-act:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
+.sbg-act:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+.sbg-act-open:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
+
+.sbg-act-dlq:hover, .sbg-act-dlq-hot {
+    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border));
+    background: rgba(229,57,53,0.08); color: var(--color-error);
+}
+
+.sbg-act-pin { border-radius: 999px; }
+.sbg-act-pin:hover { border-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); }
+.sbg-act-pin.pinned { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-solid-foreground, white); }

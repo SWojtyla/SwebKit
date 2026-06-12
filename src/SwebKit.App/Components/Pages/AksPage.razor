@@ -461,6 +461,7 @@
                                                                                                                                                                                                                                                         <div class="ctx-separator"></div>
                                                                                                                                                                                                                                                         <button class="ctx-item" @onclick="OnCtxRerunJob"><span class="ctx-item-icon">&#8635;</span> Rerun
                                                                                                                                                                                                                                                             job</button>
+                                                                                                                                                                                                                                                        <button class="ctx-item" @onclick="OnCtxToggleJobPause"><span class="ctx-item-icon">@(CtxJob?.Parallelism == 0 ? "▶" : "⏸")</span> @(CtxJob?.Parallelism == 0 ? "Resume job" : "Pause job")</button>
                                                                                                                                                                                                                                                         </ContextMenu>
 
                                                                                                                                                                                                                                                         <ContextMenu @ref="CronJobMenu">
@@ -471,6 +472,7 @@
                                                                                                                                                                                                                                                                     <div class="ctx-separator"></div>
                                                                                                                                                                                                                                                                     <button class="ctx-item" @onclick="OnCtxRunCronJob"><span class="ctx-item-icon">&#9654;</span> Run
                                                                                                                                                                                                                                                                         now</button>
+                                                                                                                                                                                                                                                                    <button class="ctx-item" @onclick="OnCtxToggleCronJobSuspend"><span class="ctx-item-icon">@(CtxCronJob?.Suspend == true ? "▶" : "⏸")</span> @(CtxCronJob?.Suspend == true ? "Resume" : "Suspend")</button>
                                                                                                                                                                                                                                                                     </ContextMenu>
 
                                                                                                                                                                                                                                                                 </div>
@@ -2442,6 +2444,51 @@ SelectedIngress.Namespace); break;
         {
             ErrorMessage = ex.Message;
             Notifications.ShowError("Failed to rerun job", ex: ex);
+        }
+    }
+
+    private async Task OnCtxToggleJobPause()
+    {
+        var job = CtxJob;
+        CloseAllMenus();
+        if (job is null || Client is null) return;
+
+        var pausing = job.Parallelism != 0;
+        var newParallelism = pausing ? 0 : 1;
+        var verb = pausing ? "pause" : "resume";
+
+        try
+        {
+            await Client.SetJobParallelismAsync(job.Namespace, job.Name, newParallelism);
+            Notifications.ShowSuccess($"Job {verb}d", job.Name);
+            _ = RefreshJobsAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            Notifications.ShowError($"Failed to {verb} job", ex: ex);
+        }
+    }
+
+    private async Task OnCtxToggleCronJobSuspend()
+    {
+        var cj = CtxCronJob;
+        CloseAllMenus();
+        if (cj is null || Client is null) return;
+
+        var suspending = !cj.Suspend;
+        var verb = suspending ? "suspend" : "resume";
+
+        try
+        {
+            await Client.SuspendCronJobAsync(cj.Namespace, cj.Name, suspending);
+            Notifications.ShowSuccess($"CronJob {verb}d", cj.Name);
+            _ = RefreshJobsAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            Notifications.ShowError($"Failed to {verb} CronJob", ex: ex);
         }
     }
 

@@ -109,6 +109,63 @@
     color: var(--color-text-muted);
 }
 
+/* Primary (Peek) */
+.message-list-view__toolbar-button--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-solid-foreground, white);
+    font-weight: 600;
+}
+
+.message-list-view__toolbar-button--primary:hover:not(:disabled) {
+    background: var(--color-accent-hover, var(--color-accent));
+    border-color: var(--color-accent-hover, var(--color-accent));
+    color: var(--color-solid-foreground, white);
+}
+
+/* Danger (Delete / Purge) */
+.message-list-view__toolbar-button--danger:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border));
+    background: rgba(229, 57, 53, 0.08);
+    color: var(--color-error);
+}
+
+/* Compose / Send button — always visually distinct */
+.message-list-view__toolbar-button--compose {
+    background: var(--color-accent-subtle);
+    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+    color: var(--color-accent);
+    font-weight: 600;
+}
+.message-list-view__toolbar-button--compose:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    border-color: var(--color-accent);
+}
+
+/* Active state (Compose toggled on) */
+.message-list-view__toolbar-button--active {
+    background: var(--color-accent-subtle);
+    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+    color: var(--color-accent);
+}
+
+/* NServiceBus mode toggle — distinct accent to signal mode change */
+.message-list-view__toolbar-button--nsb {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.message-list-view__toolbar-button--nsb.message-list-view__toolbar-button--active {
+    background: color-mix(in srgb, #7c3aed 12%, transparent);
+    border-color: color-mix(in srgb, #7c3aed 45%, var(--color-border));
+    color: #7c3aed;
+}
+
+/* NSB type cell — truncate long type strings */
+.nsb-type-cell {
+    font-size: 11px;
+    font-style: italic;
+}
+
 .message-list-view__menu {
     position: absolute;
     top: 100%;

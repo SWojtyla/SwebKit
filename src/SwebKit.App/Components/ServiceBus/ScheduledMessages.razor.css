@@ -1,3 +1,97 @@
 .past-entry {
     opacity: 0.6;
 }
+
+.sched-host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.sched-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.sched-refresh-btn {
+    font-size: 11px;
+}
+
+.sched-title { font-size: 12px; font-weight: 600; }
+.sched-subtitle { font-size: 11px; color: var(--color-text-muted); }
+.sched-count { margin-left: auto; font-size: 11px; color: var(--color-text-muted); }
+
+.sched-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.sched-empty-icon { font-size: 28px; margin-bottom: 12px; opacity: 0.4; }
+.sched-empty-title { font-size: 14px; font-weight: 500; }
+.sched-empty-subtitle { font-size: 12px; margin-top: 4px; }
+
+.sched-grid-shell { flex: 1; overflow-y: auto; }
+
+.sched-mono { font-family: var(--font-family-mono, Consolas, monospace); }
+.sched-nowrap { white-space: nowrap; }
+.sched-ellipsis { overflow: hidden; text-overflow: ellipsis; max-width: 160px; white-space: nowrap; display: block; }
+.sched-status { font-size: 11px; }
+.sched-status-past { color: var(--color-text-muted); }
+.sched-status-pending { color: var(--color-success); }
+
+.sched-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    line-height: 1.5;
+}
+
+.sched-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sched-btn-danger { color: var(--color-error); border-color: color-mix(in srgb, var(--color-error) 40%, var(--color-border)); }
+.sched-btn-muted { color: var(--color-text-muted); }
+.sched-btn-ghost { background: transparent; color: var(--color-text-muted); }
+.sched-btn-remove { margin-left: 4px; }
+.sched-btn:hover:not(:disabled) { border-color: var(--color-accent); }
+
+.sched-error-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: var(--z-dropdown, 200);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius-md, 6px);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--color-error);
+    max-width: 360px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sched-error-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    padding: 0;
+    line-height: 1;
+}
+

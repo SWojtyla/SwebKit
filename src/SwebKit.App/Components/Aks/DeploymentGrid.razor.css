@@ -41,6 +41,18 @@
     color: var(--color-text-muted);
 }
 
+.aks-image-tag {
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-family-mono, monospace);
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+    display: block;
+}
+
 .aks-ns-cell {
     color: var(--color-accent);
     cursor: pointer;

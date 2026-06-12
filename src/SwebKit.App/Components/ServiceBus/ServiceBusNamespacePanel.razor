@@ -1,4 +1,5 @@
 <div class="sb-entity-panel @(IsCollapsed ? "collapsed" : string.Empty)">
+    <!-- Collapsed icon strip -->
     <div class="sb-entity-panel-icon-strip">
         <button type="button" class="namespace-pane-toggle" title="Expand namespace panel"
                 aria-label="Expand namespace panel" aria-expanded="false" @onclick="() => SetCollapsedAsync(false)">
@@ -14,128 +15,120 @@
     </div>
 
     <div class="sb-entity-panel-body">
-        <!-- Namespace panel header -->
-        <div class="sb-ns-panel-header">
-            <span class="sb-ns-panel-label">Namespaces</span>
-            <div class="sb-ns-header-actions">
-                <button type="button" class="sb-ns-header-btn sb-ns-header-btn-primary" @onclick="ToggleAddForm">+
-                    Add</button>
-                    <button type="button" class="namespace-pane-toggle sb-ns-header-btn sb-ns-header-btn-toggle"
-                            title="Collapse namespace panel" aria-label="Collapse namespace panel" aria-expanded="true"
-                            @onclick="() => SetCollapsedAsync(true)">
-                        ◀
+        <!-- Namespace pills strip -->
+        <div class="sb-ns-pills-strip">
+            <div class="sb-ns-pills-scroll">
+                @foreach (var ns in NamespaceStates)
+                {
+                    var isActive = ns.Namespace.Id == _activeNsId;
+                    var dotClass = ns.IsConnecting ? "connecting" : ns.Client is not null ? "ok" : "err";
+                    <button type="button"
+                            class="sb-ns-pill @(isActive ? "active" : string.Empty)"
+                            title="@ns.Namespace.FullyQualifiedNamespace"
+                            @onclick="() => SelectNamespace(ns.Namespace.Id)">
+                        <span class="sb-ns-pill-dot @dotClass" aria-hidden="true"></span>
+                        <span class="sb-ns-pill-label">@ns.Namespace.Alias</span>
+                        <span class="sb-ns-pill-btns">
+                            <span class="sb-ns-pill-icon-btn"
+                                  role="button"
+                                  title="View scheduled messages for @ns.Namespace.Alias"
+                                  aria-label="View scheduled messages for @ns.Namespace.Alias"
+                                  @onclick:stopPropagation="true"
+                                  @onclick="() => OnScheduledTabOpen.InvokeAsync(ns)">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="11px" />
+                            </span>
+                            <span class="sb-ns-pill-icon-btn sb-ns-pill-remove-btn"
+                                  role="button"
+                                  title="Remove @ns.Namespace.Alias"
+                                  aria-label="Remove namespace @ns.Namespace.Alias"
+                                  @onclick:stopPropagation="true"
+                                  @onclick="() => OnRemoveNamespace.InvokeAsync(ns.Namespace.Id)">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="9px" />
+                            </span>
+                        </span>
                     </button>
-                </div>
-            </div>
-
-            <!-- Add namespace form -->
-            @if (_showAddForm)
-            {
-                <div class="sb-add-form">
-                    <div class="sb-add-form-field form-group">
-                        <label class="sb-add-form-label form-label">Connection string</label>
-                        @if (_showConnStr)
-                        {
-                            <textarea @bind="_addConnStr" rows="3"
-                                      placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                                      class="sb-add-form-input sb-add-form-textarea form-input" aria-label="Connection string" />
-                        }
-                        else
-                        {
-                            <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
-                                           Label="Connection string"
-                                           Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
-                                           InputClass="sb-add-form-input form-input" />
-                        }
-                        <div class="sb-add-form-hint">Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...</div>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(_addError))
-                    {
-                        <div class="sb-add-form-error">@_addError</div>
-                    }
-                    <div class="sb-add-form-actions">
-                        <button type="button" class="sb-add-form-btn sb-add-form-btn-primary"
-                                @onclick="HandleAddAsync">Add</button>
-                        <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
-                                @onclick="() => _showConnStr = !_showConnStr"
-                                title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ?
-                                                    "Hide" : "Show")</button>
-                            <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
-                                    @onclick="CancelAdd">Cancel</button>
-                        </div>
-                    </div>
                 }
+                <button type="button" class="sb-ns-pill-add" @onclick="ToggleAddForm"
+                        title="Add namespace" aria-label="Add namespace">
+                    + Add
+                </button>
+            </div>
+            <button type="button" class="namespace-pane-toggle sb-ns-collapse-btn"
+                    title="Collapse namespace panel" aria-label="Collapse namespace panel" aria-expanded="true"
+                    @onclick="() => SetCollapsedAsync(true)">
+                ◀
+            </button>
+        </div>
 
-                <!-- Namespace list -->
-                <div class="sb-ns-list">
-                    @if (!NamespaceStates.Any())
+        <!-- Add namespace form -->
+        @if (_showAddForm)
+        {
+            <div class="sb-add-form">
+                <div class="sb-add-form-field form-group">
+                    <label class="sb-add-form-label form-label">Connection string</label>
+                    @if (_showConnStr)
                     {
-                        <div class="sb-empty-hint">
-                            No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
-                        </div>
+                        <textarea @bind="_addConnStr" rows="3"
+                                  placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                  class="sb-add-form-input sb-add-form-textarea form-input" aria-label="Connection string" />
                     }
-
-                    @foreach (var ns in NamespaceStates)
+                    else
                     {
-                        <!-- Namespace header row -->
-                        <div class="sb-ns-row" @onclick="() => ToggleNamespace(ns.Namespace.Id)">
-                            <div class="sb-ns-row-main">
-                                <span class="sb-ns-row-chevron">@(ns.IsExpanded ? "▼" : "▶")</span>
-                                <span class="sb-ns-row-alias"
-                                      title="@ns.Namespace.FullyQualifiedNamespace">@ns.Namespace.Alias</span>
-                            </div>
-
-                            <div class="sb-ns-row-meta">
-                                @if (ns.IsConnecting)
-                                {
-                                    <span class="sb-ns-row-status sb-ns-row-status-connecting">Connecting...</span>
-                                }
-                                else if (ns.Client is not null)
-                                {
-                                    <span class="sb-ns-row-status sb-ns-row-status-success" title="Connected">
-                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" /> Connected
-                                    </span>
-                                }
-                                else
-                                {
-                                    <span class="sb-ns-row-status sb-ns-row-status-error" title="@ns.ConnectionError">
-                                        <FluentIcon Value="@(new Icons.Filled.Size12.Circle())" Width="10px" /> Error
-                                    </span>
-                                }
-                            </div>
-
-                            <div class="sb-ns-row-actions">
-                                <button type="button" class="sb-ns-row-icon-btn" title="View scheduled messages for this namespace"
-                                        aria-label="View scheduled messages for @ns.Namespace.Alias" @onclick:stopPropagation="true"
-                                        @onclick="() => OnScheduledTabOpen.InvokeAsync(ns)">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Width="14px" />
-                                </button>
-                                <button type="button" class="sb-ns-row-icon-btn sb-ns-row-icon-btn-danger" title="Remove namespace"
-                                        aria-label="Remove namespace @ns.Namespace.Alias" @onclick:stopPropagation="true"
-                                        @onclick="() => OnRemoveNamespace.InvokeAsync(ns.Namespace.Id)">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Width="12px" />
-                                </button>
-                            </div>
-                        </div>
-
-                        @if (ns.IsExpanded)
-                        {
-                            @if (ns.ConnectionError is not null && ns.Client is null)
-                            {
-                                <div class="sb-ns-error-message">@ns.ConnectionError</div>
-                            }
-                            else
-                            {
-                                <EntityTree Client="ns.Client" NamespaceId="ns.Namespace.Id" LinkedEntities="LinkedEntities"
-                                            OnEntitySelected="entity => OnEntityTabOpen.InvokeAsync((ns, entity, false))"
-                                            OnEntityModeSelected="selection => OnEntityTabOpen.InvokeAsync((ns, selection.Entity, selection.IsDlq))"
-                                            OnEntityLinkToggled="link => OnEntityLinkToggled.InvokeAsync(link)" />
-                            }
-                        }
+                        <PasswordField Value="@_addConnStr" ValueChanged="@(v => _addConnStr = v ?? string.Empty)"
+                                       Label="Connection string"
+                                       Placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=..."
+                                       InputClass="sb-add-form-input form-input" />
                     }
+                    <div class="sb-add-form-hint">Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...</div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_addError))
+                {
+                    <div class="sb-add-form-error">@_addError</div>
+                }
+                <div class="sb-add-form-actions">
+                    <button type="button" class="sb-add-form-btn sb-add-form-btn-primary"
+                            @onclick="HandleAddAsync">Add</button>
+                    <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
+                            @onclick="() => _showConnStr = !_showConnStr"
+                            title="@(_showConnStr ? "Hide connection string" : "Show connection string")">@(_showConnStr ? "Hide" : "Show")</button>
+                    <button type="button" class="sb-add-form-btn sb-add-form-btn-secondary"
+                            @onclick="CancelAdd">Cancel</button>
                 </div>
             </div>
-        </div>
+        }
+
+        <!-- Active namespace content -->
+        @{
+            var active = ActiveNamespace;
+        }
+        @if (active is null)
+        {
+            @if (!NamespaceStates.Any())
+            {
+                <div class="sb-empty-hint">
+                    No namespaces added yet. Click <strong>+ Add</strong> and paste a connection string.
+                </div>
+            }
+        }
+        else if (active.IsConnecting)
+        {
+            <div class="sb-ns-connecting-state">
+                <SkeletonRows Count="6" />
+            </div>
+        }
+        else if (active.ConnectionError is not null && active.Client is null)
+        {
+            <div class="sb-ns-error-message">@active.ConnectionError</div>
+        }
+        else
+        {
+            <EntityTree Client="active.Client" NamespaceId="active.Namespace.Id" LinkedEntities="LinkedEntities"
+                        OnEntitySelected="entity => OnEntityTabOpen.InvokeAsync((active, entity, false))"
+                        OnEntityModeSelected="selection => OnEntityTabOpen.InvokeAsync((active, selection.Entity, selection.IsDlq))"
+                        OnEntityLinkToggled="link => OnEntityLinkToggled.InvokeAsync(link)" />
+        }
+    </div>
+</div>
 
 @code {
     [Parameter] public List<NsState> NamespaceStates { get; set; } = [];
@@ -152,12 +145,31 @@
     private string _addConnStr = string.Empty;
     private string? _addError;
     private bool _showConnStr;
+    private Guid _activeNsId;
+    private bool _justAdded;
+
+    private NsState? ActiveNamespace =>
+        NamespaceStates.FirstOrDefault(s => s.Namespace.Id == _activeNsId)
+        ?? NamespaceStates.FirstOrDefault();
 
     protected override void OnParametersSet()
     {
         if (IsCollapsed)
             _showAddForm = false;
+
+        // Auto-select the newly added namespace after the parent re-renders with it
+        if (_justAdded && NamespaceStates.Count > 0)
+        {
+            _activeNsId = NamespaceStates[^1].Namespace.Id;
+            _justAdded = false;
+        }
+        else if (_activeNsId == Guid.Empty || !NamespaceStates.Any(s => s.Namespace.Id == _activeNsId))
+        {
+            _activeNsId = NamespaceStates.FirstOrDefault()?.Namespace.Id ?? Guid.Empty;
+        }
     }
+
+    private void SelectNamespace(Guid id) => _activeNsId = id;
 
     private void ToggleAddForm()
     {
@@ -186,13 +198,7 @@
     {
         if (IsCollapsed)
             await OnCollapsedChanged.InvokeAsync(false);
-        ns.IsExpanded = true;
-    }
-
-    private void ToggleNamespace(Guid id)
-    {
-        var ns = NamespaceStates.FirstOrDefault(s => s.Namespace.Id == id);
-        if (ns is not null) ns.IsExpanded = !ns.IsExpanded;
+        _activeNsId = ns.Namespace.Id;
     }
 
     private async Task HandleAddAsync()
@@ -219,13 +225,13 @@
             return;
         }
 
-        // Duplicate check using parameter data
         if (NamespaceStates.Any(n => n.Namespace.FullyQualifiedNamespace.Equals(fqns, StringComparison.OrdinalIgnoreCase)))
         {
             _addError = "This namespace is already added.";
             return;
         }
 
+        _justAdded = true;
         await OnAddNamespace.InvokeAsync(raw);
         _showAddForm = false;
         _addConnStr = string.Empty;

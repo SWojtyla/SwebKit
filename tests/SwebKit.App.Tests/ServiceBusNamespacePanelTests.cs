@@ -1,8 +1,12 @@
 using Bunit;
 using Bunit.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SwebKit.App.Components.ServiceBus;
+using SwebKit.App.Services;
+using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 
 namespace SwebKit.App.Tests;
 
@@ -16,6 +20,11 @@ public class ServiceBusNamespacePanelTests : TestContext
             "Microsoft.FluentUI.AspNetCore.Components.LibraryConfiguration, Microsoft.FluentUI.AspNetCore.Components");
         if (libConfigType is not null)
             Services.AddSingleton(libConfigType, Activator.CreateInstance(libConfigType)!);
+
+        Services.AddSingleton(new AppStateService(
+            new ProfileRepository(),
+            new UiStateRepository(),
+            new AppEventBus(NullLogger<AppEventBus>.Instance)));
     }
 
     [Fact]
@@ -33,7 +42,7 @@ public class ServiceBusNamespacePanelTests : TestContext
         var cut = RenderComponent<ServiceBusNamespacePanel>(ps => ps
             .Add(p => p.NamespaceStates, []));
 
-        cut.Find("button.sb-ns-header-btn-primary").Click();
+        cut.Find("button.sb-ns-pill-add").Click();
 
         Assert.Contains("sb-add-form", cut.Markup);
     }
@@ -45,11 +54,13 @@ public class ServiceBusNamespacePanelTests : TestContext
             .Add(p => p.NamespaceStates, []));
 
         // Open the form
-        cut.Find("button.sb-ns-header-btn-primary").Click();
+        cut.Find("button.sb-ns-pill-add").Click();
         Assert.Contains("sb-add-form", cut.Markup);
 
         // Cancel hides the form
-        cut.Find("button.sb-add-form-btn-secondary:last-of-type").Click();
+        cut.FindAll("button.sb-add-form-btn-secondary")
+            .First(b => b.TextContent.Trim() == "Cancel")
+            .Click();
 
         Assert.DoesNotContain("sb-add-form", cut.Markup);
     }
@@ -65,7 +76,7 @@ public class ServiceBusNamespacePanelTests : TestContext
 
         var states = new List<NsState>
         {
-            new() { Namespace = ns, IsExpanded = false }
+            new() { Namespace = ns }
         };
 
         var cut = RenderComponent<ServiceBusNamespacePanel>(ps => ps

@@ -87,6 +87,8 @@
         <Compile Include="..\..\src\SwebKit.App\Components\Aks\CronNextRun.cs" Link="Components\Aks\CronNextRun.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusGrid.razor" Link="Components\ServiceBus\ServiceBusGrid.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityCommandPalette.razor" Link="Components\ServiceBus\EntityCommandPalette.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageListView.razor" Link="Components\ServiceBus\MessageListView.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\MessageDetailPane.razor" Link="Components\ServiceBus\MessageDetailPane.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\DlqView.razor" Link="Components\ServiceBus\DlqView.razor" />

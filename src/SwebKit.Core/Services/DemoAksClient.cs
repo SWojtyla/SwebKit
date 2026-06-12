@@ -19,6 +19,8 @@ public class DemoAksClient : IAksClient
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly Lock _jobLock = new();
     private readonly Dictionary<string, List<JobInfo>> _createdJobsByNamespace = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _cronJobSuspendOverrides = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _jobParallelismOverrides = new(StringComparer.Ordinal);
     private int _jobSequence;
 
     // Demo tick counter — increments every call to GetPodsAsync.
@@ -44,18 +46,18 @@ public class DemoAksClient : IAksClient
         return s;
     }
 
-    private static readonly (string Name, int Replicas, int Ready, string Status)[] DemoDeployments =
+    private static readonly (string Name, int Replicas, int Ready, string Status, string ImageTag)[] DemoDeployments =
     [
-        ("order-api", 3, 3, "Available"),
-        ("product-catalog", 2, 2, "Available"),
-        ("user-service", 2, 2, "Available"),
-        ("payment-gateway", 3, 3, "Available"),
-        ("inventory-worker", 2, 1, "Progressing"),
-        ("notification-service", 1, 1, "Available"),
-        ("cart-api", 2, 2, "Available"),
-        ("auth-service", 2, 2, "Available"),
-        ("search-indexer", 1, 0, "Unavailable"),
-        ("analytics-collector", 1, 1, "Available")
+        ("order-api", 3, 3, "Available", "3.14.2"),
+        ("product-catalog", 2, 2, "Available", "2.9.0-alpha.1"),
+        ("user-service", 2, 2, "Available", "1.22.5"),
+        ("payment-gateway", 3, 3, "Available", "4.1.0"),
+        ("inventory-worker", 2, 1, "Progressing", "2.3.1-rc.2"),
+        ("notification-service", 1, 1, "Available", "1.8.3"),
+        ("cart-api", 2, 2, "Available", "3.0.0"),
+        ("auth-service", 2, 2, "Available", "2.11.0"),
+        ("search-indexer", 1, 0, "Unavailable", "1.5.0-beta.4"),
+        ("analytics-collector", 1, 1, "Available", "2.2.9")
     ];
 
     private static readonly (string Name, string Status, int Active, int Succeeded, int Failed, int? DesiredCompletions, int StartMinutesAgo, int? CompletionMinutesAgo, string? SourceKind, string? SourceName)[] DemoJobs =
@@ -114,6 +116,7 @@ public class DemoAksClient : IAksClient
             Replicas = d.Replicas,
             ReadyReplicas = d.Ready,
             Status = d.Status,
+            ImageTag = d.ImageTag,
             Labels = new Dictionary<string, string>
             {
                 ["app"] = d.Name,
@@ -1654,18 +1657,38 @@ public class DemoAksClient : IAksClient
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(150, ct);
-        return BuildCronJobs(ns, DateTimeOffset.UtcNow);
+        var cronJobs = BuildCronJobs(ns, DateTimeOffset.UtcNow).ToList();
+        lock (_jobLock)
+        {
+            for (var i = 0; i < cronJobs.Count; i++)
+            {
+                var key = $"{ns}/{cronJobs[i].Name}";
+                if (_cronJobSuspendOverrides.TryGetValue(key, out var suspended))
+                    cronJobs[i].Suspend = suspended;
+            }
+        }
+        return cronJobs;
     }
 
     public async Task<IReadOnlyList<JobInfo>> GetJobsAsync(string ns, CancellationToken ct = default)
     {
         await Task.Delay(150, ct);
 
-        return BuildBaseJobs(ns, DateTimeOffset.UtcNow)
+        var allJobs = BuildBaseJobs(ns, DateTimeOffset.UtcNow)
             .Concat(GetCreatedJobsSnapshot(ns))
             .OrderByDescending(job => job.StartTime ?? DateTimeOffset.MinValue)
             .ThenBy(job => job.Name, StringComparer.Ordinal)
             .ToList();
+        lock (_jobLock)
+        {
+            for (var i = 0; i < allJobs.Count; i++)
+            {
+                var key = $"{ns}/{allJobs[i].Name}";
+                if (_jobParallelismOverrides.TryGetValue(key, out var p))
+                    allJobs[i].Parallelism = p;
+            }
+        }
+        return allJobs;
     }
 
     public async Task<string> TriggerCronJobAsync(string ns, string cronJobName, CancellationToken ct = default)
@@ -1720,6 +1743,20 @@ public class DemoAksClient : IAksClient
 
         StoreCreatedJob(createdJob);
         return createdJob.Name;
+    }
+
+    public async Task SuspendCronJobAsync(string ns, string cronJobName, bool suspend, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+        lock (_jobLock)
+            _cronJobSuspendOverrides[$"{ns}/{cronJobName}"] = suspend;
+    }
+
+    public async Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
+    {
+        await Task.Delay(100, ct);
+        lock (_jobLock)
+            _jobParallelismOverrides[$"{ns}/{jobName}"] = parallelism;
     }
 
     private static IReadOnlyList<CronJobInfo> BuildCronJobs(string ns, DateTimeOffset now)
@@ -1832,6 +1869,7 @@ public class DemoAksClient : IAksClient
             Succeeded = job.Succeeded,
             Failed = job.Failed,
             DesiredCompletions = job.DesiredCompletions,
+            Parallelism = job.Parallelism,
             StartTime = job.StartTime,
             CompletionTime = job.CompletionTime,
             SourceKind = job.SourceKind,
