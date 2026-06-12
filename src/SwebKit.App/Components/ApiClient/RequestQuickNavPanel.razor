@@ -1,0 +1,203 @@
+@* Collapsible overlay panel listing all requests across all collections for fast keyboard navigation *@
+
+@if (IsOpen)
+{
+    <div class="quick-nav-overlay" role="dialog" aria-label="Quick navigation" aria-modal="true"
+         @onkeydown="OnKeyDown">
+        <div class="quick-nav-panel">
+            <div class="quick-nav-panel__header">
+                <input type="text" class="quick-nav-panel__filter" placeholder="Jump to request…"
+                       autofocus
+                       value="@_filter"
+                       @oninput="OnFilterInput"
+                       aria-label="Filter requests"
+                       @ref="_filterInput" />
+                <button type="button" class="quick-nav-panel__close"
+                        aria-label="Close quick navigation"
+                        @onclick="Close">✕</button>
+            </div>
+
+            <div class="quick-nav-panel__list" role="listbox">
+                @if (_visibleItems.Count == 0)
+                {
+                    <div class="quick-nav-panel__empty">No requests found.</div>
+                }
+                else
+                {
+                    <Virtualize Items="@_visibleItems" Context="item" ItemSize="36" OverscanCount="6">
+                        <button @key="item.RequestId"
+                                type="button"
+                                class="quick-nav-panel__item @(_activeIndex == _visibleItems.IndexOf(item) ? "quick-nav-panel__item--active" : "")"
+                                role="option"
+                                aria-selected="@(_activeIndex == _visibleItems.IndexOf(item))"
+                                @onclick="() => SelectItem(item)">
+                            <span class="quick-nav-panel__item-method quick-nav-panel__item-method--@item.Method.ToString().ToLowerInvariant()">
+                                @GetMethodLabel(item.Method)
+                            </span>
+                            <span class="quick-nav-panel__item-path">
+                                @if (!string.IsNullOrEmpty(item.CollectionName))
+                                {
+                                    <span class="quick-nav-panel__item-collection">@item.CollectionName</span>
+                                    <span class="quick-nav-panel__item-sep">/</span>
+                                    @if (!string.IsNullOrEmpty(item.FolderPath))
+                                    {
+                                        <span class="quick-nav-panel__item-folder">@item.FolderPath</span>
+                                        <span class="quick-nav-panel__item-sep">/</span>
+                                    }
+                                }
+                                <span class="quick-nav-panel__item-name">@item.Name</span>
+                            </span>
+                        </button>
+                    </Virtualize>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
+    [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+
+    private string _filter = string.Empty;
+    private int _activeIndex = 0;
+    private List<QuickNavItem> _allItems = [];
+    private List<QuickNavItem> _visibleItems = [];
+    private ElementReference _filterInput;
+
+    private record QuickNavItem(
+        string RequestId,
+        string Name,
+        string CollectionName,
+        string FolderPath,
+        ApiRequestMethod Method,
+        HttpRequestEntry Entry);
+
+    // ── BL-5 guard ────────────────────────────────────────────────────────────
+
+    private IReadOnlyList<ApiCollection>? _prevCollections;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_prevCollections, Collections))
+        {
+            _prevCollections = Collections;
+            RebuildItems();
+        }
+    }
+
+    private void RebuildItems()
+    {
+        _allItems = [];
+
+        foreach (var collection in Collections)
+        {
+            CollectItems(collection.Nodes, collection.Name, folderPath: string.Empty);
+        }
+
+        ApplyFilter();
+    }
+
+    private void CollectItems(List<ApiCollectionNode> nodes, string collectionName, string folderPath)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
+            {
+                _allItems.Add(new QuickNavItem(
+                    RequestId: node.Request.Id,
+                    Name: node.Request.Name,
+                    CollectionName: collectionName,
+                    FolderPath: folderPath,
+                    Method: node.Request.Method,
+                    Entry: node.Request));
+            }
+            else if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var childPath = string.IsNullOrEmpty(folderPath) ? node.Name : $"{folderPath}/{node.Name}";
+                CollectItems(node.Children, collectionName, childPath);
+            }
+        }
+    }
+
+    // ── Filter ─────────────────────────────────────────────────────────────────
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        _filter = e.Value as string ?? string.Empty;
+        _activeIndex = 0;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_filter))
+        {
+            _visibleItems = _allItems;
+        }
+        else
+        {
+            _visibleItems = _allItems
+                .Where(i =>
+                    i.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                    i.CollectionName.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        _activeIndex = Math.Min(_activeIndex, Math.Max(0, _visibleItems.Count - 1));
+    }
+
+    // ── Keyboard navigation ────────────────────────────────────────────────────
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _activeIndex = Math.Min(_activeIndex + 1, _visibleItems.Count - 1);
+                break;
+            case "ArrowUp":
+                _activeIndex = Math.Max(_activeIndex - 1, 0);
+                break;
+            case "Enter":
+                if (_activeIndex >= 0 && _activeIndex < _visibleItems.Count)
+                    await SelectItem(_visibleItems[_activeIndex]);
+                break;
+            case "Escape":
+                await Close();
+                break;
+        }
+    }
+
+    // ── Actions ────────────────────────────────────────────────────────────────
+
+    private async Task SelectItem(QuickNavItem item)
+    {
+        await OnRequestSelected.InvokeAsync(item.Entry);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        _filter = string.Empty;
+        _activeIndex = 0;
+        ApplyFilter();
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private static string GetMethodLabel(ApiRequestMethod method) => method switch
+    {
+        ApiRequestMethod.Get => "GET",
+        ApiRequestMethod.Post => "POST",
+        ApiRequestMethod.Put => "PUT",
+        ApiRequestMethod.Patch => "PATCH",
+        ApiRequestMethod.Delete => "DEL",
+        ApiRequestMethod.Head => "HEAD",
+        ApiRequestMethod.Options => "OPT",
+        ApiRequestMethod.GraphQl => "GQL",
+        ApiRequestMethod.WebSocket => "WS",
+        _ => "GET",
+    };
+}

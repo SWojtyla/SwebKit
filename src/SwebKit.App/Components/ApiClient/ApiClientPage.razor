@@ -1,0 +1,422 @@
+@page "/api-client"
+@inject CollectionRepository CollectionRepo
+@inject EnvironmentRepository EnvironmentRepo
+@inject UserSettingsRepository UserSettings
+@inject NavigationManager Nav
+@inject ILogger<ApiClientPage> Logger
+@implements IDisposable
+
+<div class="api-client-page">
+
+    @* ── Toolbar ── *@
+    <div class="api-client-toolbar">
+        <div class="api-client-toolbar__left">
+            <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--primary"
+                    title="New collection (Ctrl+Shift+N)"
+                    @onclick="AddCollectionAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
+                <span>New Collection</span>
+            </button>
+            <button type="button" class="api-client-toolbar-btn"
+                    title="New request (Ctrl+N)"
+                    disabled="@(_activeCollection is null)"
+                    @onclick="AddRequestAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+                <span>New Request</span>
+            </button>
+        </div>
+
+        <div class="api-client-toolbar__center">
+            @if (_isDirty && !_autoSave)
+            {
+                <span class="api-client-toolbar__dirty-badge" title="Unsaved changes — press Ctrl+S to save">
+                    ● Unsaved
+                </span>
+            }
+        </div>
+
+        <div class="api-client-toolbar__right">
+            <span class="api-client-toolbar__env-label">Env:</span>
+            <select class="api-client-toolbar__env-select"
+                    value="@_activeEnvironmentId"
+                    @onchange="OnEnvironmentChangedAsync">
+                <option value="">— None —</option>
+                @foreach (var env in _environments)
+                {
+                    <option value="@env.Id">@env.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @* ── Main split: collection tree + request workspace ── *@
+    <div class="api-client-body">
+
+        @* Left: collection tree *@
+        <div class="api-client-tree-panel">
+            @if (_loadingCollections)
+            {
+                <div class="api-client-tree-panel__loading">
+                    <LoadingSpinner Message="Loading collections…" />
+                </div>
+            }
+            else if (_collections.Count == 0)
+            {
+                <div class="api-client-tree-panel__empty">
+                    <EmptyState Icon="📦"
+                                Title="No collections yet"
+                                Subtitle="Create a collection to organise your requests.">
+                        <Actions>
+                            <button type="button" class="api-client-empty-action-btn"
+                                    @onclick="AddCollectionAsync">
+                                + New Collection
+                            </button>
+                        </Actions>
+                    </EmptyState>
+                </div>
+            }
+            else
+            {
+                <CollectionTree Collections="@_collections"
+                                SelectedRequestId="@_selectedRequestId"
+                                OnRequestSelected="OnRequestSelectedAsync"
+                                OnAddFolder="OnAddFolderAsync"
+                                OnAddRequest="OnAddRequestInFolderAsync"
+                                OnRenameNode="OnRenameNodeAsync"
+                                OnDeleteNode="OnDeleteNodeAsync" />
+            }
+        </div>
+
+        @* Right: request builder + response viewer (Phase 2+) *@
+        <div class="api-client-workspace">
+            @if (_selectedRequest is null)
+            {
+                <div class="api-client-workspace__empty">
+                    <EmptyState Icon="🌐"
+                                Title="No request selected"
+                                Subtitle="Select a request from the collection tree, or create a new one.">
+                        <Actions>
+                            <button type="button" class="api-client-empty-action-btn"
+                                    disabled="@(_activeCollection is null)"
+                                    @onclick="AddRequestAsync">
+                                + New Request
+                            </button>
+                        </Actions>
+                    </EmptyState>
+                </div>
+            }
+            else
+            {
+                <div class="api-client-request-stub">
+                    <div class="api-client-request-stub__name">
+                        <span class="api-client-method-badge api-client-method-badge--@_selectedRequest.Method.ToString().ToLowerInvariant()">
+                            @GetMethodLabel(_selectedRequest.Method)
+                        </span>
+                        <span class="api-client-request-stub__label">@_selectedRequest.Name</span>
+                        @if (_isDirty && !_autoSave)
+                        {
+                            <span class="api-client-request-stub__dirty">●</span>
+                        }
+                    </div>
+                    <div class="api-client-request-stub__url">
+                        @_selectedRequest.Url
+                    </div>
+                    <div class="api-client-request-stub__phase-note">
+                        Request builder coming in Phase 2.
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    // ── State ─────────────────────────────────────────────────────────────────
+    private bool _loadingCollections = true;
+    private List<ApiCollection> _collections = [];
+    private List<ApiEnvironment> _environments = [];
+    private ApiCollection? _activeCollection;
+    private string? _selectedRequestId;
+    private HttpRequestEntry? _selectedRequest;
+    private string? _activeEnvironmentId;
+    private bool _isDirty;
+    private bool _autoSave;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        _autoSave = UserSettings.Settings.AutoSaveRequests;
+
+        // Load both repositories concurrently — they are independent files
+        await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+
+        _loadingCollections = false;
+    }
+
+    private async Task LoadCollectionsAsync()
+    {
+        try
+        {
+            await CollectionRepo.LoadAsync();
+            _collections = CollectionRepo.Collections.ToList();
+            _activeCollection = _collections.FirstOrDefault();
+
+            // Restore last selected request for the active collection
+            if (_activeCollection is not null &&
+                EnvironmentRepo.UiState.LastSelectedRequestIdByCollection
+                    .TryGetValue(_activeCollection.Id, out var lastId))
+            {
+                RestoreSelectedRequest(lastId);
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load collections");
+            _collections = [];
+        }
+    }
+
+    private async Task LoadEnvironmentsAsync()
+    {
+        try
+        {
+            await EnvironmentRepo.LoadAsync();
+            _environments = EnvironmentRepo.Environments.ToList();
+            _activeEnvironmentId = EnvironmentRepo.UiState.ActiveEnvironmentId;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load environments");
+            _environments = [];
+        }
+    }
+
+    private void RestoreSelectedRequest(string requestId)
+    {
+        if (_activeCollection is null) return;
+        var (_, request) = CollectionRepo.FindRequest(requestId);
+        if (request is not null)
+        {
+            _selectedRequestId = requestId;
+            _selectedRequest = request;
+        }
+    }
+
+    // ── Toolbar actions ───────────────────────────────────────────────────────
+
+    private async Task AddCollectionAsync()
+    {
+        var collection = await CollectionRepo.AddCollectionAsync("New Collection");
+        _collections = CollectionRepo.Collections.ToList();
+        _activeCollection = collection;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task AddRequestAsync()
+    {
+        if (_activeCollection is null) return;
+
+        var request = new HttpRequestEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "New Request",
+            Method = ApiRequestMethod.Get,
+            Url = string.Empty,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        _activeCollection.Nodes.Add(new ApiCollectionNode
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Type = ApiCollectionNodeType.Request,
+            Name = request.Name,
+            Request = request,
+        });
+
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.ToList();
+        _selectedRequestId = request.Id;
+        _selectedRequest = request;
+        _isDirty = false;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnEnvironmentChangedAsync(ChangeEventArgs e)
+    {
+        var selected = e.Value as string;
+        _activeEnvironmentId = string.IsNullOrEmpty(selected) ? null : selected;
+        await EnvironmentRepo.SetActiveEnvironmentAsync(_activeEnvironmentId);
+    }
+
+    // ── Tree callbacks ─────────────────────────────────────────────────────────
+
+    private async Task OnRequestSelectedAsync(HttpRequestEntry request)
+    {
+        _selectedRequest = request;
+        _selectedRequestId = request.Id;
+        _isDirty = false;
+
+        if (_activeCollection is not null)
+        {
+            // Fire-and-forget persistence of last selection; non-blocking
+            _ = PersistLastSelectionAsync(_activeCollection.Id, request.Id);
+        }
+
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private Task PersistLastSelectionAsync(string collectionId, string requestId)
+    {
+        return EnvironmentRepo.SetLastSelectedRequestAsync(collectionId, requestId);
+    }
+
+    private async Task OnAddFolderAsync(ApiCollectionNode parentNode)
+    {
+        var folder = new ApiCollectionNode
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Type = ApiCollectionNodeType.Folder,
+            Name = "New Folder",
+            IsExpanded = true,
+        };
+
+        if (_activeCollection is null) return;
+        AddNodeToParent(_activeCollection.Nodes, parentNode.Id, folder);
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.ToList();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnAddRequestInFolderAsync(ApiCollectionNode parentNode)
+    {
+        if (_activeCollection is null) return;
+
+        var request = new HttpRequestEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "New Request",
+            Method = ApiRequestMethod.Get,
+            Url = string.Empty,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var node = new ApiCollectionNode
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Type = ApiCollectionNodeType.Request,
+            Name = request.Name,
+            Request = request,
+        };
+
+        AddNodeToParent(_activeCollection.Nodes, parentNode.Id, node);
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.ToList();
+        _selectedRequestId = request.Id;
+        _selectedRequest = request;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnRenameNodeAsync((ApiCollectionNode Node, string NewName) args)
+    {
+        if (_activeCollection is null) return;
+        RenameNodeInTree(_activeCollection.Nodes, args.Node.Id, args.NewName);
+        if (args.Node.Request is not null)
+            args.Node.Request.Name = args.NewName;
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.ToList();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnDeleteNodeAsync(ApiCollectionNode node)
+    {
+        if (_activeCollection is null) return;
+        RemoveNodeFromTree(_activeCollection.Nodes, node.Id);
+
+        if (_selectedRequestId is not null &&
+            (node.Request?.Id == _selectedRequestId ||
+             ContainsRequest(node.Children, _selectedRequestId)))
+        {
+            _selectedRequest = null;
+            _selectedRequestId = null;
+            _isDirty = false;
+        }
+
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.ToList();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Tree helpers ───────────────────────────────────────────────────────────
+
+    private static bool AddNodeToParent(List<ApiCollectionNode> nodes, string parentId, ApiCollectionNode newNode)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Id == parentId && node.Type == ApiCollectionNodeType.Folder)
+            {
+                node.Children.Add(newNode);
+                return true;
+            }
+            if (node.Type == ApiCollectionNodeType.Folder && AddNodeToParent(node.Children, parentId, newNode))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool RenameNodeInTree(List<ApiCollectionNode> nodes, string nodeId, string newName)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Id == nodeId) { node.Name = newName; return true; }
+            if (node.Type == ApiCollectionNodeType.Folder && RenameNodeInTree(node.Children, nodeId, newName))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool RemoveNodeFromTree(List<ApiCollectionNode> nodes, string nodeId)
+    {
+        var idx = nodes.FindIndex(n => n.Id == nodeId);
+        if (idx >= 0) { nodes.RemoveAt(idx); return true; }
+
+        foreach (var node in nodes.Where(n => n.Type == ApiCollectionNodeType.Folder))
+        {
+            if (RemoveNodeFromTree(node.Children, nodeId))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsRequest(List<ApiCollectionNode> nodes, string requestId)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request && node.Request?.Id == requestId) return true;
+            if (node.Type == ApiCollectionNodeType.Folder && ContainsRequest(node.Children, requestId)) return true;
+        }
+        return false;
+    }
+
+    private static string GetMethodLabel(ApiRequestMethod method) => method switch
+    {
+        ApiRequestMethod.Get => "GET",
+        ApiRequestMethod.Post => "POST",
+        ApiRequestMethod.Put => "PUT",
+        ApiRequestMethod.Patch => "PATCH",
+        ApiRequestMethod.Delete => "DEL",
+        ApiRequestMethod.Head => "HEAD",
+        ApiRequestMethod.Options => "OPT",
+        ApiRequestMethod.GraphQl => "GQL",
+        ApiRequestMethod.WebSocket => "WS",
+        _ => "GET",
+    };
+
+    // ── IDisposable ────────────────────────────────────────────────────────────
+
+    public void Dispose() { }
+}

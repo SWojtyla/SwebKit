@@ -1,0 +1,160 @@
+/* CollectionTree CSS isolation */
+
+.collection-tree {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── Search ─────────────────────────────────────────────── */
+
+.collection-tree__search {
+    flex-shrink: 0;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.collection-tree__search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+.collection-tree__search-input::placeholder {
+    color: var(--color-text-faint);
+}
+
+.collection-tree__search-input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+/* ── Row list ───────────────────────────────────────────── */
+
+.collection-tree__rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ── Individual row ─────────────────────────────────────── */
+
+.collection-tree__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    cursor: pointer;
+    border-radius: 3px;
+    padding-right: 8px;
+    user-select: none;
+    font-size: 12px;
+    color: var(--color-text);
+    transition: background 0.08s;
+}
+
+.collection-tree__row:hover {
+    background: var(--color-surface-hover);
+}
+
+.collection-tree__row--selected {
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    color: var(--color-text);
+}
+
+.collection-tree__row--selected:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+/* ── Chevron ────────────────────────────────────────────── */
+
+.collection-tree__chevron {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 10px;
+    padding: 0;
+    border-radius: 2px;
+    transition: color 0.1s;
+}
+
+.collection-tree__chevron:hover {
+    color: var(--color-text);
+    background: var(--color-surface-hover);
+}
+
+.collection-tree__chevron--spacer {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* ── Icon ───────────────────────────────────────────────── */
+
+.collection-tree__icon {
+    flex-shrink: 0;
+    font-size: 12px;
+    width: 18px;
+    text-align: center;
+}
+
+/* ── Method badge (tiny, inside tree) ───────────────────── */
+
+.collection-tree__method-badge {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 2px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    min-width: 30px;
+    text-align: center;
+}
+
+.collection-tree__method-badge--get    { background: #1a6b2f; color: #a8f0bd; }
+.collection-tree__method-badge--post   { background: #1a4d8f; color: #a8d0f0; }
+.collection-tree__method-badge--put    { background: #6b5c1a; color: #f0e0a8; }
+.collection-tree__method-badge--patch  { background: #4a1a6b; color: #d8a8f0; }
+.collection-tree__method-badge--delete { background: #6b1a1a; color: #f0a8a8; }
+.collection-tree__method-badge--head   { background: #2a2a2a; color: #aaa; }
+.collection-tree__method-badge--options { background: #2a2a2a; color: #aaa; }
+.collection-tree__method-badge--graphql { background: #4a0d6b; color: #e2a8f0; }
+.collection-tree__method-badge--websocket { background: #0d4a4a; color: #a8e8f0; }
+
+/* ── Label ──────────────────────────────────────────────── */
+
+.collection-tree__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Count badge ────────────────────────────────────────── */
+
+.collection-tree__count-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    background: var(--color-surface-raised);
+    color: var(--color-text-faint);
+    border-radius: 8px;
+    padding: 1px 5px;
+}

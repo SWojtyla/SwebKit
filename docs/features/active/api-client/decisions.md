@@ -71,7 +71,28 @@ import."
 
 ---
 
-## DEC-5: `WebSocketClientService` uses `System.Net.WebSockets` — no third-party library
+## DEC-5: API Client auto-collapses the global left nav on entry, restores on exit
+
+**Decision:** When `OnLocationChanged` transitions into the `api-client` area, `MainLayout`
+auto-collapses `IsNavExpanded` to `false`. When the user navigates away from `api-client` to
+any other area, `IsNavExpanded` is restored to `true` — unless the user had already explicitly
+collapsed it beforehand (tracked by a separate `_userCollapsedNav` flag).
+
+A `[Show nav]` icon button is surfaced in the `ApiClientPage` toolbar so users can manually
+expand the global nav at any time. The existing `ToggleNavAsync` flow handles that.
+
+**Rationale:** The API Client has its own left-rail (collection tree), which competes with the
+global left nav. The feature should feel immersive — like an IDE layout rather than one of many
+pages. Auto-collapsing reclaims ~220 px of horizontal workspace without breaking the shell
+primitives or requiring a new nav mode.
+
+**Implication:** The `MainLayout` `OnLocationChanged` handler gains area-awareness. The previous
+`IsNavExpanded` value before the auto-collapse is stored in `_navExpandedBeforeApiClient` so it
+can be restored on exit.
+
+---
+
+## DEC-6: `WebSocketClientService` uses `System.Net.WebSockets` — no third-party library
 
 **Decision:** Wrap `System.Net.WebSockets.ClientWebSocket` directly.
 

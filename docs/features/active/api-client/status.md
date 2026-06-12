@@ -2,39 +2,36 @@
 
 ## Current State
 
-`Planned`
+`In Progress`
 
 ## Current Focus
 
-Phase 1 — Foundation (not yet started)
+Phase 1 — Foundation is complete. Starting Phase 2 (REST Execution).
 
 ## Progress Checklist
 
 ### Phase 1 — Foundation
 
-- [ ] `ApiClientModels.cs` — `Collection` (+ `List<CollectionVariable>`, `AuthConfig? DefaultAuth`),
-      `RequestFolder` (+ `AuthConfig? DefaultAuth`), `HttpRequestEntry` (+ `List<CaptureRule>`),
-      `ApiEnvironment`, `EnvironmentVariable`, `AuthConfig`, `CollectionVariable`, `CaptureRule`
-      in `SwebKit.Core/Domain/`
-- [ ] `CollectionRepository` — atomic write + `.bak` recovery, `collections.json` via `AppDataFileStore`
-- [ ] `EnvironmentRepository` — atomic write + `.bak` recovery, `environments.json`
-- [ ] `UserSettingsRepository` extended: `AutoSaveRequests: bool` (default: `false`)
-- [ ] Both collection/environment repositories registered in `MauiProgram.cs`
-- [ ] Route `/api-client` wired in `Routes.razor`
-- [ ] Sidebar entry in `LeftNav.razor`
-- [ ] `src/SwebKit.App/Components/ApiClient/` subfolder created
-- [ ] `_Imports.razor` updated with `@using SwebKit.App.Components.ApiClient` (BL-1 guard)
-- [ ] `ApiClientPage.razor` — two-panel layout: collection tree left | request builder+response right
+- [x] `ApiClientModels.cs` — full domain model in `SwebKit.Core/Domain/`
+- [x] `CollectionRepository` — atomic write + `.bak` recovery, `collections.json` via `AppDataFileStore`
+- [x] `EnvironmentRepository` — atomic write + `.bak` recovery, `environments.json`
+- [x] `UserSettingsRepository` extended: `AutoSaveRequests: bool` (default: `false`)
+- [x] Both collection/environment repositories registered in `MauiProgram.cs`
+- [x] Route `/api-client` wired in `Routes.razor`
+- [x] Sidebar entry + "Tools" nav group in `ShellNavigation.cs` / `LeftNav.razor`
+- [x] `src/SwebKit.App/Components/ApiClient/` subfolder created
+- [x] `_Imports.razor` updated with `@using SwebKit.App.Components.ApiClient` (BL-1 guard)
+- [x] `ApiClientPage.razor` — two-panel layout: collection tree left | request builder+response right
       (single-request focus model — one request open at a time)
-- [ ] `CollectionTree.razor` — `<Virtualize>` over flattened node list, expand/collapse state
-- [ ] `RequestQuickNavPanel.razor` — collapsible left-sidebar list of all requests across
-      collections; `Ctrl+P` to focus; click a row to open that request in the builder
-- [ ] [+ New Request] button in toolbar; keyboard shortcut `Ctrl+N`; creates default empty GET
-      request named "New Request" in the active/selected collection
-- [ ] [+ New Collection] button in toolbar; keyboard shortcut `Ctrl+Shift+N`
-- [ ] Auto-save: when `AutoSaveRequests` is `true`, debounce 500 ms after last edit then call
-      `CollectionRepository.SaveAsync`; dirty indicator (asterisk in panel header) when unsaved
-- [ ] Empty state component with actionable prompt ("Create a collection to get started")
+- [x] `CollectionTree.razor` — `<Virtualize>` over flattened node list, expand/collapse state
+- [x] `RequestQuickNavPanel.razor` — collapsible overlay panel; `Ctrl+P` to focus; click a row to open
+- [x] [+ New Request] and [+ New Collection] buttons with keyboard shortcuts
+- [x] Auto-save debounce (500 ms) + dirty indicator when `AutoSaveRequests` is `true`
+- [x] Empty state component with actionable prompt
+- [x] **Nav collapse UX** — left nav auto-collapses to icon-only on entering API client, restores on exit
+      (see `decisions.md` for rationale)
+- [x] Unit tests — `CollectionRepositoryTests` (14 tests), `EnvironmentRepositoryTests` (14 tests),
+      `ApiClientModelsTests` + `UserSettingsAutoSaveTests` (16 tests) — all 44 passing
 
 ### Phase 2 — REST Execution
 

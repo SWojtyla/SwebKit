@@ -63,6 +63,8 @@ public sealed class UserSettings
     public string Theme { get; set; } = string.Empty;
     public bool WarmupConnectionsOnStartup { get; set; } = true;
     public Dictionary<string, List<PinnedPortForwardEntry>> PinnedPortForwards { get; set; } = [];
+    /// <summary>When true, request edits are persisted automatically after a 500 ms debounce.</summary>
+    public bool AutoSaveRequests { get; set; } = false;
 }
 
 public sealed record PinnedPortForwardEntry(

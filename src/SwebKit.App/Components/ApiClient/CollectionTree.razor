@@ -1,0 +1,237 @@
+@* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
+
+<div class="collection-tree">
+
+    @* Search bar *@
+    <div class="collection-tree__search">
+        <input type="text" placeholder="Filter…"
+               class="collection-tree__search-input"
+               value="@_filter"
+               @oninput="OnFilterInput"
+               aria-label="Filter collection tree" />
+    </div>
+
+    @* Virtualized flat list *@
+    <div class="collection-tree__rows" role="tree">
+        <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
+            <div @key="node.Id"
+                 class="collection-tree__row @(node.Node.Id == SelectedRequestId ? "collection-tree__row--selected" : "")"
+                 style="padding-left: @(8 + node.Depth * 16)px"
+                 role="treeitem"
+                 aria-selected="@(node.Node.Id == SelectedRequestId)"
+                 @onclick="() => OnRowClickAsync(node)"
+                 @oncontextmenu="e => ShowContextMenu(e, node)"
+                 @oncontextmenu:preventDefault="true">
+
+                @* Expand/collapse chevron for folders *@
+                @if (node.Node.Type == ApiCollectionNodeType.Folder)
+                {
+                    <button type="button" class="collection-tree__chevron"
+                            aria-label="@(node.IsExpanded ? "Collapse" : "Expand")"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => ToggleExpand(node)">
+                        @(node.IsExpanded ? "▾" : "▸")
+                    </button>
+                }
+                else
+                {
+                    <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true"></span>
+                }
+
+                @* Icon *@
+                @if (node.Node.Type == ApiCollectionNodeType.Folder)
+                {
+                    <span class="collection-tree__icon" aria-hidden="true">📁</span>
+                }
+                else if (node.Node.Request is not null)
+                {
+                    <span class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
+                          aria-hidden="true">
+                        @GetMethodLabel(node.Node.Request.Method)
+                    </span>
+                }
+
+                @* Label *@
+                <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
+
+                @* Child count badge when folder is collapsed *@
+                @if (node.Node.Type == ApiCollectionNodeType.Folder && !node.IsExpanded && node.HasChildren)
+                {
+                    <span class="collection-tree__count-badge" aria-label="@node.Node.Children.Count children">
+                        @node.Node.Children.Count
+                    </span>
+                }
+
+            </div>
+        </Virtualize>
+    </div>
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
+    [Parameter] public string? SelectedRequestId { get; set; }
+    [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+    [Parameter] public EventCallback<ApiCollectionNode> OnAddFolder { get; set; }
+    [Parameter] public EventCallback<ApiCollectionNode> OnAddRequest { get; set; }
+    [Parameter] public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
+    [Parameter] public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
+
+    // ── Flattened tree state ──────────────────────────────────────────────────
+
+    private record FlatTreeNode(
+        ApiCollectionNode Node,
+        int Depth,
+        bool IsExpanded,
+        bool HasChildren,
+        string CollectionId)
+    {
+        public string Id => Node.Id;
+    }
+
+    private List<FlatTreeNode> _flatNodes = [];
+    private List<FlatTreeNode> _visibleNodes = [];
+    private string _filter = string.Empty;
+
+    // ── BL-5 guard ────────────────────────────────────────────────────────────
+
+    private IReadOnlyList<ApiCollection>? _prevCollections;
+    private string? _prevSelectedRequestId;
+
+    protected override void OnParametersSet()
+    {
+        var collectionsChanged = !ReferenceEquals(_prevCollections, Collections);
+        var selectionChanged = _prevSelectedRequestId != SelectedRequestId;
+
+        if (collectionsChanged)
+        {
+            _prevCollections = Collections;
+            RebuildFlatTree();
+        }
+        else if (selectionChanged)
+        {
+            _prevSelectedRequestId = SelectedRequestId;
+        }
+    }
+
+    protected override bool ShouldRender() => true; // allow render on all callbacks; heavy work is guarded above
+
+    // ── Tree flattening ───────────────────────────────────────────────────────
+
+    private void RebuildFlatTree()
+    {
+        _flatNodes = [];
+        foreach (var collection in Collections)
+        {
+            // Collection root node (treated as a folder)
+            var collectionRootNode = new ApiCollectionNode
+            {
+                Id = $"__col__{collection.Id}",
+                Type = ApiCollectionNodeType.Folder,
+                Name = collection.Name,
+                IsExpanded = _GetExpandedState($"__col__{collection.Id}", true),
+                Children = collection.Nodes,
+            };
+
+            _flatNodes.Add(new FlatTreeNode(
+                Node: collectionRootNode,
+                Depth: 0,
+                IsExpanded: collectionRootNode.IsExpanded,
+                HasChildren: collection.Nodes.Count > 0,
+                CollectionId: collection.Id));
+
+            if (collectionRootNode.IsExpanded)
+                FlattenNodes(collection.Nodes, depth: 1, collectionId: collection.Id);
+        }
+
+        ApplyFilter();
+    }
+
+    private void FlattenNodes(List<ApiCollectionNode> nodes, int depth, string collectionId)
+    {
+        foreach (var node in nodes)
+        {
+            var isExpanded = _GetExpandedState(node.Id, node.IsExpanded);
+            _flatNodes.Add(new FlatTreeNode(
+                Node: node,
+                Depth: depth,
+                IsExpanded: isExpanded,
+                HasChildren: node.Children.Count > 0,
+                CollectionId: collectionId));
+
+            if (node.Type == ApiCollectionNodeType.Folder && isExpanded)
+                FlattenNodes(node.Children, depth + 1, collectionId);
+        }
+    }
+
+    // ── Expand/collapse state (in-memory, not persisted for perf) ─────────────
+
+    private readonly Dictionary<string, bool> _expandedOverrides = new(StringComparer.Ordinal);
+
+    private bool _GetExpandedState(string nodeId, bool defaultExpanded)
+        => _expandedOverrides.TryGetValue(nodeId, out var val) ? val : defaultExpanded;
+
+    private void ToggleExpand(FlatTreeNode flatNode)
+    {
+        var current = _GetExpandedState(flatNode.Node.Id, flatNode.Node.IsExpanded);
+        _expandedOverrides[flatNode.Node.Id] = !current;
+        RebuildFlatTree();
+    }
+
+    // ── Filter ─────────────────────────────────────────────────────────────────
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        _filter = e.Value as string ?? string.Empty;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_filter))
+        {
+            _visibleNodes = _flatNodes;
+            return;
+        }
+
+        _visibleNodes = _flatNodes
+            .Where(n => n.Node.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    // ── Row interactions ───────────────────────────────────────────────────────
+
+    private async Task OnRowClickAsync(FlatTreeNode flatNode)
+    {
+        if (flatNode.Node.Type == ApiCollectionNodeType.Folder)
+        {
+            ToggleExpand(flatNode);
+            return;
+        }
+
+        if (flatNode.Node.Request is not null)
+            await OnRequestSelected.InvokeAsync(flatNode.Node.Request);
+    }
+
+    private void ShowContextMenu(MouseEventArgs e, FlatTreeNode node)
+    {
+        // Context menu is deferred to a future iteration
+        // (right-click: Rename, Duplicate, Delete, Add Folder, Add Request)
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+
+    private static string GetMethodLabel(ApiRequestMethod method) => method switch
+    {
+        ApiRequestMethod.Get => "GET",
+        ApiRequestMethod.Post => "POST",
+        ApiRequestMethod.Put => "PUT",
+        ApiRequestMethod.Patch => "PATCH",
+        ApiRequestMethod.Delete => "DEL",
+        ApiRequestMethod.Head => "HEAD",
+        ApiRequestMethod.Options => "OPT",
+        ApiRequestMethod.GraphQl => "GQL",
+        ApiRequestMethod.WebSocket => "WS",
+        _ => "GET",
+    };
+}
