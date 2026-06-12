@@ -59,6 +59,56 @@
     border-color: var(--color-border);
 }
 
+/* Header action buttons (Load Template / Save as Template) */
+.message-composer__action-btn {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    line-height: 1.4;
+    transition: border-color 0.1s, background 0.1s, color 0.1s;
+}
+
+.message-composer__action-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+    background: var(--color-accent-subtle);
+}
+
+/* Send / Schedule / Replay primary button */
+.message-composer__send-btn {
+    margin-left: auto;
+    padding: 5px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    background: var(--color-accent);
+    color: var(--color-solid-foreground, white);
+    cursor: pointer;
+    line-height: 1.4;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.message-composer__send-btn:hover:not(:disabled) {
+    background: var(--color-accent-hover, var(--color-accent));
+    border-color: var(--color-accent-hover, var(--color-accent));
+}
+
+.message-composer__send-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.message-composer__send-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
 .message-composer__panel {
     background: color-mix(in srgb, var(--color-accent-subtle) 58%, var(--color-surface));
     border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border));

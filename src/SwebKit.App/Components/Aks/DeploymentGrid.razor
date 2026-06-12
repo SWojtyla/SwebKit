@@ -34,6 +34,19 @@
             </span>
         </div>
     </TemplateColumn>
+    <TemplateColumn Title="Version" Width="130px" SortBy="@(GridSort<DeploymentInfo>.ByAscending(d => d.ImageTag ?? ""))">
+        <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
+             @oncontextmenu:preventDefault>
+            @if (context.ImageTag is not null)
+            {
+                <span class="aks-image-tag" title="@context.ImageTag">@context.ImageTag</span>
+            }
+            else
+            {
+                <span class="aks-text-muted">—</span>
+            }
+        </div>
+    </TemplateColumn>
     <TemplateColumn Title="HPA" Width="110px">
         <div class="aks-row-ctx" @oncontextmenu="e => OnContextMenu.InvokeAsync((e, context))"
              @oncontextmenu:preventDefault>

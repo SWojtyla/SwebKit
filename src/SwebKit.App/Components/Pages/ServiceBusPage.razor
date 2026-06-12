@@ -21,94 +21,125 @@
         <RoutePageHeader Area="service-bus"
                          Subtitle="Open queues, topics, subscriptions, and dead-letter workflows without leaving the shell.">
             <Actions>
-                @if (_activeTab is not null && !_activeTab.IsDlq && !_activeTab.IsScheduled)
-                {
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="OpenBatchSendPanel"
-                                  data-testid="batch-send-open-btn" title="Send a batch of messages from JSON">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUpload())" Width="14px" />
-                        Batch Send
-                    </FluentButton>
-                }
-                @if (_activeTab is not null && !_activeTab.IsScheduled)
-                {
-                    <button class="page-header-action-btn" data-testid="sb-investigate-btn"
-                            @onclick="LaunchInvestigationFromServiceBus">Investigate</button>
-                }
+                <button type="button" class="page-header-action-btn" title="Jump to entity (Ctrl+K)"
+                        @onclick="OpenPalette">
+                    ⌕ Ctrl+K
+                </button>
             </Actions>
         </RoutePageHeader>
     </div>
 
-    <div class="service-bus-page-shell">
-        <ServiceBusNamespacePanel NamespaceStates="_namespaceStates" IsCollapsed="_isNamespacePaneCollapsed"
-                                  LinkedEntities="CurrentLinkedEntities"
-                                  OnEntityTabOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
-                                  OnScheduledTabOpen="ns => OpenScheduledTab(ns)" OnCollapsedChanged="SetNamespacePaneCollapsedAsync"
-                                  OnRemoveNamespace="RemoveNamespaceAsync" OnAddNamespace="HandleAddNamespaceAsync"
-                                  OnEntityLinkToggled="ToggleEntityLinkAsync" />
-
-        <!-- Right: tabbed content -->
-        <div class="service-bus-right-pane">
-            @if (!_openTabs.Any())
+    @if (!_openTabs.Any())
+    {
+        <!-- VIEW A: Full-width entity grid -->
+        <div class="sb-grid-view">
+            @if (_namespaceStates.Count == 0)
             {
-                @if (_namespaceStates.Count == 0)
-                {
+                <div class="sb-no-ns-state">
                     <EmptyState Icon="⇄" Title="No namespaces connected"
-                                Subtitle="Add a namespace from Settings to start peeking, replaying, and scheduling messages.">
+                                Subtitle="Add a namespace to start peeking, replaying, and scheduling messages.">
                         <Actions>
                             <a href="/settings?section=servicebus">Open Service Bus settings</a>
                         </Actions>
                     </EmptyState>
-                }
-                else
-                {
-                    <EmptyState Icon="⇄" Title="Select a queue or topic"
-                                Subtitle="Choose an entity from the namespace pane to open its message workspace and tools." />
-                }
+                </div>
             }
             else
             {
-                <!-- Tab bar -->
-                <div class="tab-bar sb-tab-bar">
-                    @foreach (var tab in _openTabs)
-                    {
-                        <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
-                            @if (tab.IsDlq)
-                            {
-                                <span class="sb-status-error">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
-                                </span>
-                            }
-                            <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">
-                                <span style="font-size:10px; color:var(--color-text-muted);">@tab.NamespaceAlias /
-                                </span>@tab.Title
+                <ServiceBusGrid NamespaceStates="_namespaceStates"
+                                LinkedEntities="CurrentLinkedEntities"
+                                OnEntityOpen="args => OpenEntityTab(args.Ns, args.Entity, args.IsDlq)"
+                                OnScheduledOpen="ns => OpenScheduledTab(ns)"
+                                OnAddNamespace="HandleAddNamespaceAsync"
+                                OnRemoveNamespace="RemoveNamespaceAsync"
+                                OnEntityLinkToggled="ToggleEntityLinkAsync" />
+            }
+        </div>
+    }
+    else
+    {
+        <!-- VIEW B: Workspace — breadcrumb + tabs + full-width content -->
+        <div class="sb-workspace-view">
+            <!-- Breadcrumb bar -->
+            <div class="sb-breadcrumb">
+                <button type="button" class="sb-breadcrumb-back" @onclick="NavigateToGrid"
+                        title="Return to entity overview">
+                    ← Overview
+                </button>
+                @if (_activeTab is not null)
+                {
+                    <span class="sb-breadcrumb-sep">/</span>
+                    <span class="sb-breadcrumb-ns" title="@_activeTab.NamespaceAlias">@_activeTab.NamespaceAlias</span>
+                    <span class="sb-breadcrumb-sep">/</span>
+                    <span class="sb-breadcrumb-entity">@_activeTab.Title</span>
+                    <div class="sb-breadcrumb-actions">
+                        @if (!_activeTab.IsDlq && !_activeTab.IsScheduled)
+                        {
+                            <button type="button" class="sb-breadcrumb-btn" data-testid="batch-send-open-btn"
+                                    title="Send a batch of messages from JSON"
+                                    @onclick="OpenBatchSendPanel">
+                                ↑ Batch Send
+                            </button>
+                        }
+                        @if (!_activeTab.IsScheduled)
+                        {
+                            <button type="button" class="sb-breadcrumb-btn" data-testid="sb-investigate-btn"
+                                    @onclick="LaunchInvestigationFromServiceBus">Investigate</button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Tab bar -->
+            <div class="tab-bar sb-tab-bar">
+                @foreach (var tab in _openTabs)
+                {
+                    <div class="tab-item @(_activeTab?.Id == tab.Id ? "active" : "")" @onclick="() => SetActive(tab)">
+                        @if (tab.IsDlq)
+                        {
+                            <span class="sb-status-error">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="12px" />
                             </span>
-                            <span class="close-btn" @onclick:stopPropagation="true"
-                                  @onclick="() => CloseTab(tab)">&#x2715;</span>
-                        </div>
-                    }
-                </div>
-                <!-- Active tab content -->
+                        }
+                        <span class="sb-tab-label">
+                            <span class="sb-tab-ns">@tab.NamespaceAlias /</span>@tab.Title
+                        </span>
+                        <span class="close-btn" @onclick:stopPropagation="true"
+                              @onclick="() => CloseTab(tab)">&#x2715;</span>
+                    </div>
+                }
+                <button type="button" class="sb-tab-new" title="Open another entity (Ctrl+K)"
+                        @onclick="OpenPalette">+</button>
+            </div>
+
+            <!-- Active tab content -->
+            <div class="sb-workspace-content">
                 @if (_activeTab is not null)
                 {
                     @if (_activeTab.IsScheduled)
                     {
-                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client" NamespaceId="_activeTab.NamespaceId"
+                        <ScheduledMessages @key="_activeTab.Id" Client="_activeTab.Client"
+                                           NamespaceId="_activeTab.NamespaceId"
                                            EntityPath="@_activeTab.EntityPath" />
                     }
                     else if (_activeTab.IsDlq)
                     {
-                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
+                        <DlqView @key="_activeTab.Id" Client="_activeTab.Client"
+                                 EntityPath="@_activeTab.EntityPath"
                                  AvailableNamespaces="@AvailableNamespaceOptions" />
                     }
                     else
                     {
                         <div @key="_activeTab.Id" class="sb-active-workspace">
-                            <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; min-width:0;">
+                            <div class="sb-message-list-shell">
                                 <MessageListView Client="_activeTab.Client" EntityPath="@_activeTab.EntityPath"
                                                  NamespaceId="_activeTab.NamespaceId" ShowCompose="true"
-                                                 SelectedMessage="_activeTab.SelectedMessage" IsDetailPaneOpen="IsDetailPaneOpen"
-                                                 PinnedSessionId="@_activeTab.PinnedSessionId" TracePivotFilter="@_activeTab.PivotFilter"
-                                                 OnMessageSelected="OnMessageSelectedAsync" OnCloseDetails="CloseDetailPane" />
+                                                 SelectedMessage="_activeTab.SelectedMessage"
+                                                 IsDetailPaneOpen="IsDetailPaneOpen"
+                                                 PinnedSessionId="@_activeTab.PinnedSessionId"
+                                                 TracePivotFilter="@_activeTab.PivotFilter"
+                                                 OnMessageSelected="OnMessageSelectedAsync"
+                                                 OnCloseDetails="CloseDetailPane" />
                             </div>
                             @if (IsDetailPaneOpen)
                             {
@@ -117,15 +148,17 @@
                                     <div class="sb-detail-drawer overlay">
                                         <div class="sb-detail-drawer-header">
                                             <span>Message details</span>
-                                            <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                    @onclick="CloseDetailPane">×</button>
+                                            <button type="button" class="sb-detail-close-btn"
+                                                    title="Close details" @onclick="CloseDetailPane">×</button>
                                         </div>
-                                        <div style="flex:1; overflow:hidden;">
-                                            <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
+                                        <div class="sb-detail-pane-content">
+                                            <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                               EntityPath="@_activeTab.EntityPath"
                                                                OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                               OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                                               OnFilterBySession="PinSessionFilter"
+                                                               OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                         </div>
                                     </div>
                                 }
@@ -135,15 +168,17 @@
                                         <div class="sb-detail-drawer">
                                             <div class="sb-detail-drawer-header">
                                                 <span>Message details</span>
-                                                <button type="button" class="sb-detail-close-btn" title="Close details"
-                                                        @onclick="CloseDetailPane">×</button>
+                                                <button type="button" class="sb-detail-close-btn"
+                                                        title="Close details" @onclick="CloseDetailPane">×</button>
                                             </div>
-                                            <div style="flex:1; overflow:hidden;">
-                                                <MessageDetailPane Message="_activeTab.SelectedMessage" EntityPath="@_activeTab.EntityPath"
+                                            <div class="sb-detail-pane-content">
+                                                <MessageDetailPane Message="_activeTab.SelectedMessage"
+                                                                   EntityPath="@_activeTab.EntityPath"
                                                                    OnEdit="msg => OpenComposer(msg, MessageComposer.ComposerMode.Edit)"
                                                                    OnReplay="msg => OpenComposer(msg, MessageComposer.ComposerMode.Replay)"
                                                                    OnSchedule="msg => OpenComposer(msg, MessageComposer.ComposerMode.Schedule)"
-                                                                   OnFilterBySession="PinSessionFilter" OnApplyTracePivotFilter="HandlePivotFilterAsync" />
+                                                                   OnFilterBySession="PinSessionFilter"
+                                                                   OnApplyTracePivotFilter="HandlePivotFilterAsync" />
                                             </div>
                                         </div>
                                     </ResizablePanel>
@@ -152,10 +187,15 @@
                         </div>
                     }
                 }
-            }
+            </div>
         </div>
-    </div>
+    }
 </div>
+
+<!-- Command palette -->
+<EntityCommandPalette IsOpen="_paletteOpen" NamespaceStates="_namespaceStates"
+                      OnEntityOpen="args => { OpenEntityTab(args.Ns, args.Entity, args.IsDlq); _paletteOpen = false; StateHasChanged(); }"
+                      OnClose="() => { _paletteOpen = false; StateHasChanged(); }" />
 
 <!-- Modal composer (Edit / Replay / Schedule) -->
 <Modal IsOpen="@(_composerMessage is not null && _activeTab is not null)" OnClose="CloseComposer">
@@ -183,6 +223,7 @@
     private SbTab? _activeTab;
     private bool _isNamespacePaneCollapsed;
     private bool _isDetailDrawerOverlay;
+    private bool _paletteOpen;
     private CancellationTokenSource _cts = new();
 
     private const string NamespacePaneStateKey = "service-bus:namespace-pane-collapsed";
@@ -521,8 +562,23 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private void OpenPalette()
+    {
+        _paletteOpen = true;
+        StateHasChanged();
+    }
+
+    private void NavigateToGrid()
+    {
+        _openTabs.Clear();
+        _activeTab = null;
+        Workspaces.ClearCurrentSnapshot("service-bus");
+        StateHasChanged();
+    }
+
     private void OpenEntityTab(NsState ns, SbEntityInfo entity, bool isDlq = false)
     {
+        _paletteOpen = false;
         if (ns.Client is null) return;
         var modeSuffix = isDlq ? "dlq" : "active";
         var id = $"{ns.Namespace.Id}:{entity.EntityPath}:{modeSuffix}";

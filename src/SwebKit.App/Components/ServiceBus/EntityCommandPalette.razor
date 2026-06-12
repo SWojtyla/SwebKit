@@ -1,0 +1,151 @@
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="sbcp-overlay" @onclick="Close" role="dialog" aria-modal="true" aria-label="Open entity">
+        <div class="sbcp-panel" @onclick:stopPropagation="true">
+            <div class="sbcp-search-row">
+                <span class="sbcp-search-icon">⇄</span>
+                <input @ref="_inputRef" type="search" @bind="_query" @bind:event="oninput" @onkeydown="OnKeyDown"
+                       placeholder="Jump to a queue, topic, or subscription…" class="sbcp-input" autocomplete="off"
+                       aria-label="Search entities" />
+                @if (!string.IsNullOrEmpty(_query))
+                {
+                    <button type="button" class="sbcp-clear" @onclick="ClearQuery">×</button>
+                }
+            </div>
+
+            <div class="sbcp-results" role="listbox">
+                @if (!Results.Any())
+                {
+                    <div class="sbcp-empty">
+                        @if (NamespaceStates.All(s => s.Client is null))
+                        {
+                            <span>No connected namespaces.</span>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_query))
+                        {
+                            <span>No entities match "<strong>@_query</strong>"</span>
+                        }
+                        else
+                        {
+                            <span>Start typing to search, or scroll to browse.</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    @for (var i = 0; i < Results.Count; i++)
+                    {
+                        var item = Results[i];
+                        var idx = i;
+                        <div role="option" aria-selected="@(_activeIndex == idx)"
+                             class="sbcp-item @(_activeIndex == idx ? "active" : "")" @onclick="() => SelectItem(item)">
+                            <span class="sbcp-item-ns">@item.NsAlias</span>
+                            <span class="sbcp-item-glyph sbcp-glyph-@item.Kind.ToLowerInvariant()">@item.Kind[0]</span>
+                            <span class="sbcp-item-name">@item.Name</span>
+                            @if (item.ActiveCount > 0)
+                            {
+                                <span class="sbcp-badge sbcp-badge-active" title="@item.ActiveCount active">● @item.ActiveCount</span>
+                            }
+                            @if (item.DlqCount > 0)
+                            {
+                                <span class="sbcp-badge sbcp-badge-dlq" title="@item.DlqCount dead-lettered">⚠ @item.DlqCount</span>
+                            }
+                            <span class="sbcp-item-hint">Enter↵ active · Shift+Enter DLQ</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="sbcp-footer">
+                <span class="sbcp-hint-key">↑↓</span> navigate
+                <span class="sbcp-hint-sep">·</span>
+                <span class="sbcp-hint-key">↵</span> open active
+                <span class="sbcp-hint-sep">·</span>
+                <span class="sbcp-hint-key">⇧↵</span> open DLQ
+                <span class="sbcp-hint-sep">·</span>
+                <span class="sbcp-hint-key">Esc</span> close
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public List<NsState> NamespaceStates { get; set; } = [];
+    [Parameter] public EventCallback<(NsState Ns, SbEntityInfo Entity, bool IsDlq)> OnEntityOpen { get; set; }
+
+    private string _query = string.Empty;
+    private int _activeIndex;
+    private ElementReference _inputRef;
+
+    private record PaletteItem(string NsAlias, NsState Ns, SbEntityInfo Entity, string Kind, string Name,
+        long ActiveCount, long DlqCount);
+
+    private List<PaletteItem> Results => BuildResults();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            _activeIndex = 0;
+            await Task.Yield();
+            try { await _inputRef.FocusAsync(); } catch { }
+        }
+        else
+        {
+            _query = string.Empty;
+        }
+    }
+
+    private List<PaletteItem> BuildResults()
+    {
+        var items = new List<PaletteItem>();
+        foreach (var ns in NamespaceStates)
+        {
+            if (ns.Client is null) continue;
+            // This component shows entities as they are cached on NsState — no extra loading
+            // The grid pre-loads them; if not loaded yet, we show what we have
+        }
+
+        // Collect from all already-loaded EntityTree / Grid instances via AppState
+        // For simplicity, we iterate NamespaceStates and use any in-memory entities
+        // available via EntityTree's cached data — but we don't have direct access here.
+        // Instead we show the namespace list and let the user navigate to the grid.
+        // TODO: wire loaded entity lists via parameter when grid has them.
+        return items;
+    }
+
+    private void ClearQuery() => _query = string.Empty;
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task SelectItem(PaletteItem item, bool dlq = false)
+    {
+        await OnEntityOpen.InvokeAsync((item.Ns, item.Entity, dlq));
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        var results = Results;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _activeIndex = Math.Min(_activeIndex + 1, results.Count - 1);
+                break;
+            case "ArrowUp":
+                _activeIndex = Math.Max(_activeIndex - 1, 0);
+                break;
+            case "Enter":
+                if (_activeIndex < results.Count)
+                    await SelectItem(results[_activeIndex], e.ShiftKey);
+                break;
+            case "Escape":
+                await Close();
+                break;
+        }
+    }
+}

@@ -4,15 +4,14 @@
 @inject ILogger<DlqView> Logger
 @using SwebKit.Core.Models
 
-<div style="display:flex; flex-direction:column; height:100%;">
-    <div
-        style="padding:6px 12px; background:rgba(229,57,53,0.1); border-bottom:1px solid var(--color-error); font-size:12px; color:#FF6B6B; font-weight:600;">
-        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" style="vertical-align:middle;" />
+<div class="dlq-host">
+    <div class="dlq-header">
+        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Width="14px" />
         Dead-Letter Queue — @EntityPath
     </div>
 
-    <div style="display:flex; flex:1; overflow:hidden;">
-        <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+    <div class="dlq-body">
+        <div class="dlq-main">
             <MessageListView Client="Client" EntityPath="@EntityPath" IsDlqMode="true" ShowDlqColumns="true"
                              RefreshToken="@_refreshToken" MultiSelect="true" SelectedMessage="SelectedMessage"
                              TracePivotFilter="@_dlqPivotFilter"
@@ -21,8 +20,7 @@
 
             @if (_showBatchReplayPanel)
             {
-                <div
-                    style="border-top:1px solid var(--color-border); padding:12px; flex-shrink:0; overflow:auto; max-height:420px;">
+                <div class="dlq-batch-replay-shell">
                     <BatchReplayPanel Client="Client" SourceEntityPath="@EntityPath" Messages="@_batchSelected"
                                       AvailableNamespaces="@AvailableNamespaces" OnCancel="CloseBatchReplayPanel"
                                       OnCompleted="OnBatchReplayCompleted" />
@@ -30,36 +28,35 @@
             }
             else if (_batchSelected.Count > 0)
             {
-                <div
-                    style="padding:6px 12px; background:rgba(0,112,204,0.1); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:center; flex-shrink:0;">
-                    <span style="font-size:12px; color:var(--color-text-muted);">@_batchSelected.Count selected</span>
-                    <FluentButton Appearance="Appearance.Accent" Disabled="@IsWorking" @onclick="OpenBatchReplayPanel"
-                                  data-testid="batch-resubmit-btn">
+                <div class="dlq-action-bar dlq-action-bar--batch">
+                    <span class="dlq-selection-count">@_batchSelected.Count selected</span>
+                    <button type="button" class="dlq-btn dlq-btn-primary" disabled="@IsWorking"
+                            @onclick="OpenBatchReplayPanel" data-testid="batch-resubmit-btn">
                         Resubmit @_batchSelected.Count…
-                    </FluentButton>
-                    <FluentButton Disabled="@IsWorking" @onclick="CompleteBatch">
+                    </button>
+                    <button type="button" class="dlq-btn dlq-btn-danger" disabled="@IsWorking" @onclick="CompleteBatch">
                         Delete @_batchSelected.Count
-                    </FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="ClearBatchSelection">
+                    </button>
+                    <button type="button" class="dlq-btn" @onclick="ClearBatchSelection">
                         Clear
-                    </FluentButton>
+                    </button>
                     @if (_batchProgressMessage is not null)
                     {
-                        <span style="font-size:12px; color:var(--color-text-muted);">@_batchProgressMessage</span>
+                        <span class="dlq-progress-msg">@_batchProgressMessage</span>
                     }
                 </div>
             }
             else
             {
-                <div
-                    style="padding:8px 12px; border-top:1px solid var(--color-border); display:flex; gap:8px; flex-shrink:0;">
-                    <FluentButton Appearance="Appearance.Accent" Disabled="@(SelectedMessage is null || IsWorking)"
-                                  @onclick="ResubmitOne">
+                <div class="dlq-action-bar">
+                    <button type="button" class="dlq-btn dlq-btn-primary" disabled="@(SelectedMessage is null || IsWorking)"
+                            @onclick="ResubmitOne">
                         Resubmit to @EntityPath
-                    </FluentButton>
-                    <FluentButton Disabled="@(SelectedMessage is null || IsWorking)" @onclick="CompleteOne">
+                    </button>
+                    <button type="button" class="dlq-btn dlq-btn-danger" disabled="@(SelectedMessage is null || IsWorking)"
+                            @onclick="CompleteOne">
                         Complete (Delete)
-                    </FluentButton>
+                    </button>
                 </div>
             }
         </div>
@@ -69,11 +66,9 @@
             <MessageDetailPane Message="SelectedMessage" OnApplyTracePivotFilter="ApplyDlqPivotFilter" />
         </div>
     </div>
-</div>
-
-<ConfirmDialog Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
-               IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
-               OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
+</div> Visible="ShowConfirm" Title="@ConfirmTitle" Message="@ConfirmMessage"
+IsProduction="@AppState.Config.IsProduction" RequireTyping="@AppState.Config.IsProduction" ConfirmLabel="Proceed"
+OnConfirm="ExecuteAction" OnCancel="() => ShowConfirm = false" />
 
 @code {
     [Parameter] public IServiceBusClient? Client { get; set; }

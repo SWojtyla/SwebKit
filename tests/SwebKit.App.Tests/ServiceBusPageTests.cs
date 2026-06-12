@@ -41,61 +41,39 @@ public sealed class ServiceBusPageTests : TestContext
     }
 
     [Fact]
-    public void NamespacePanelToggle_CollapsesAndExpandsLeftPane()
+    public void GridView_RenderedByDefault_WhenNoTabsOpen()
     {
         var cut = RenderComponent<ServiceBusPage>();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var panel = cut.Find(".sb-entity-panel");
-            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
-        });
-
-        cut.Find("button[aria-label='Collapse namespace panel']").Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
-            var panel = cut.Find(".sb-entity-panel");
-            Assert.Contains("collapsed", panel.ClassName, StringComparison.Ordinal);
-            Assert.NotNull(cut.Find(".service-bus-right-pane"));
-        });
-
-        cut.Find("button[aria-label='Expand namespace panel']").Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.NotNull(cut.Find("button[aria-label='Collapse namespace panel']"));
-            var panel = cut.Find(".sb-entity-panel");
-            Assert.DoesNotContain("collapsed", panel.ClassName, StringComparison.Ordinal);
+            // Grid view is shown (no tabs = grid)
+            Assert.NotNull(cut.Find(".sb-grid-view"));
+            // Workspace view is not shown
+            Assert.Empty(cut.FindAll(".sb-workspace-view"));
         });
     }
 
     [Fact]
-    public async Task NamespacePanelToggle_RestoresPersistedCollapsedState()
+    public void GridView_ShowsNoNamespacesEmpty_WhenNoneConfigured()
     {
-        var uiState = Services.GetRequiredService<UiStateRepository>();
-        await uiState.SaveViewStateAsync("service-bus:namespace-pane-collapsed", true);
-
         var cut = RenderComponent<ServiceBusPage>();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.NotNull(cut.Find("button[aria-label='Expand namespace panel']"));
-            Assert.Contains("collapsed", cut.Find(".sb-entity-panel").ClassName, StringComparison.Ordinal);
+            Assert.NotNull(cut.Find(".sb-no-ns-state"));
         });
     }
 
     [Fact]
-    public void RouteHeader_DoesNotRenderServiceBusSettingsActionButton()
+    public void RouteHeader_HasCtrlKButton()
     {
         var cut = RenderComponent<ServiceBusPage>();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Empty(cut.FindAll(".page-shell-header .page-header-action-btn"));
-            Assert.NotEmpty(cut.FindAll("a[href='/settings?section=servicebus']"));
+            // Ctrl+K button is always present in header actions
+            Assert.NotEmpty(cut.FindAll("button[title='Jump to entity (Ctrl+K)']"));
         });
     }
 

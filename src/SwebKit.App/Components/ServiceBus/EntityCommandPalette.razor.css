@@ -1,0 +1,161 @@
+.sbcp-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-backdrop, rgba(0,0,0,0.45));
+    z-index: var(--z-overlay, 500);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+    animation: sbcp-fade 0.12s ease forwards;
+}
+
+@keyframes sbcp-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.sbcp-panel {
+    width: 580px;
+    max-width: calc(100vw - 32px);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 10px);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 160px);
+    overflow: hidden;
+    animation: sbcp-slide 0.14s ease forwards;
+}
+
+@keyframes sbcp-slide {
+    from { transform: translateY(-8px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.sbcp-search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.sbcp-search-icon {
+    font-size: 18px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.sbcp-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 15px;
+    color: var(--color-text);
+    outline: none;
+}
+
+.sbcp-input::placeholder { color: var(--color-text-faint); }
+
+.sbcp-clear {
+    background: transparent; border: none; cursor: pointer;
+    color: var(--color-text-muted); font-size: 18px; padding: 0; line-height: 1;
+}
+.sbcp-clear:hover { color: var(--color-text); }
+
+.sbcp-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+}
+
+.sbcp-empty {
+    padding: 20px 16px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+.sbcp-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.08s;
+}
+
+.sbcp-item:hover, .sbcp-item.active {
+    background: color-mix(in srgb, var(--color-accent-subtle) 80%, transparent);
+}
+
+.sbcp-item-ns {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    min-width: 48px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sbcp-item-glyph {
+    width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--color-border);
+    font-size: 10px; font-weight: 700; display: inline-flex; align-items: center;
+    justify-content: center; background: var(--color-surface); flex-shrink: 0;
+}
+
+.sbcp-glyph-q { color: var(--color-nav-servicebus, var(--color-accent)); }
+.sbcp-glyph-t { color: var(--color-text-muted); }
+.sbcp-glyph-s { color: var(--color-text-muted); font-size: 9px; }
+
+.sbcp-item-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
+}
+
+.sbcp-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px;
+    border-radius: 999px; border: 1px solid transparent; flex-shrink: 0;
+}
+.sbcp-badge-active { color: var(--color-success); background: rgba(67,160,71,0.12); border-color: rgba(67,160,71,0.3); }
+.sbcp-badge-dlq { color: var(--color-error); background: rgba(229,57,53,0.12); border-color: rgba(229,57,53,0.3); }
+
+.sbcp-item-hint {
+    font-size: 10px; color: var(--color-text-faint);
+    margin-left: auto; flex-shrink: 0; white-space: nowrap;
+}
+
+.sbcp-item:not(:hover):not(.active) .sbcp-item-hint { display: none; }
+
+.sbcp-footer {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-top: 1px solid var(--color-border);
+    font-size: 11px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sbcp-hint-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 1px 5px; border: 1px solid var(--color-border);
+    border-radius: 3px; background: var(--color-surface);
+    font-family: Consolas, monospace; font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.sbcp-hint-sep { opacity: 0.4; }

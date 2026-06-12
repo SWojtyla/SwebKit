@@ -68,13 +68,12 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         var result = new List<SbEntityInfo>();
         await foreach (var q in _adminClient.GetQueuesAsync(ct))
         {
-            var stats = await TryGetQueueStatsAsync(q.Name, ct);
             result.Add(new SbEntityInfo
             {
                 Name = q.Name,
                 EntityPath = q.Name,
-                IsDisabled = IsEntityDisabled(q.Status),
-                Stats = stats ?? new SbEntityStats()
+                IsDisabled = IsEntityDisabled(q.Status)
+                // Stats intentionally null — caller loads them in the background
             });
         }
 
@@ -115,13 +114,11 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         try
         {
             var q = await _adminClient.GetQueueAsync(_scopedEntityPath, ct);
-            var stats = await TryGetQueueStatsAsync(q.Value.Name, ct);
             result.Add(new SbEntityInfo
             {
                 Name = q.Value.Name,
                 EntityPath = q.Value.Name,
-                IsDisabled = IsEntityDisabled(q.Value.Status),
-                Stats = stats ?? new SbEntityStats()
+                IsDisabled = IsEntityDisabled(q.Value.Status)
             });
         }
         catch (OperationCanceledException)
@@ -164,18 +161,16 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         var result = new List<SbEntityInfo>();
         await foreach (var s in _adminClient.GetSubscriptionsAsync(topicName, ct))
         {
-            var stats = await TryGetSubscriptionStatsAsync(topicName, s.SubscriptionName, ct);
             result.Add(new SbEntityInfo
             {
                 Name = s.SubscriptionName,
                 EntityPath = $"{topicName}/subscriptions/{s.SubscriptionName}",
                 IsSubscription = true,
                 TopicName = topicName,
-                IsDisabled = IsEntityDisabled(s.Status),
-                Stats = stats ?? new SbEntityStats()
+                IsDisabled = IsEntityDisabled(s.Status)
+                // Stats intentionally null — caller loads them in the background
             });
         }
-
         return result;
     }
 

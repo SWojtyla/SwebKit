@@ -1,31 +1,28 @@
 <div class="page-header">
-    <div class="header-main">
-        @if (ActiveCacheEntry is not null)
-        {
-            <div class="cache-title">
-                <input class="cache-name-input" type="text" value="@ActiveCacheEntry.DisplayName"
-                       title="@ActiveCacheEntry.DisplayName" aria-label="Redis cache display name"
-                       @onchange="HandleNameChanged" />
-            </div>
-        }
-        else
-        {
-            <h2>Redis</h2>
-        }
-    </div>
-
-    @if (CacheEntries.Count > 1)
+    @if (ActiveCacheEntry is not null)
     {
-        <label class="selector-group">
-            <span class="selector-label">Active cache</span>
-            <select class="cache-selector" @bind="_selectedCacheId" @bind:after="HandleCacheChangedAsync"
-                    aria-label="Select active Redis cache">
-                @foreach (var cache in CacheEntries)
-                {
-                    <option value="@cache.Id">@cache.DisplayName</option>
-                }
-            </select>
-        </label>
+        <div class="cache-bar">
+            @if (_isRenaming)
+            {
+                <input class="cache-rename-input" type="text" @bind="_renameDraft" @bind:event="oninput"
+                       @onkeydown="HandleRenameKeyDown" @onblur="CommitRenameAsync" aria-label="Redis cache display name" />
+            }
+            else
+            {
+                <select class="cache-selector" @bind="_selectedCacheId" @bind:after="HandleCacheChangedAsync"
+                        aria-label="Select active Redis cache">
+                    @foreach (var cache in CacheEntries)
+                    {
+                        <option value="@cache.Id">@cache.DisplayName</option>
+                    }
+                </select>
+                <button class="cache-rename-btn" type="button" @onclick="StartRename" title="Rename">&#9998;</button>
+            }
+        </div>
+    }
+    else
+    {
+        <h2>Redis</h2>
     }
 </div>
 
@@ -37,6 +34,8 @@
     [Parameter] public EventCallback<string> OnCacheNameChanged { get; set; }
 
     private string _selectedCacheId = "";
+    private bool _isRenaming = false;
+    private string _renameDraft = "";
 
     protected override void OnParametersSet()
     {
@@ -45,9 +44,25 @@
 
     private Task HandleCacheChangedAsync() => OnCacheChanged.InvokeAsync(_selectedCacheId);
 
-    private Task HandleNameChanged(ChangeEventArgs e)
+    private void StartRename()
     {
-        var name = e.Value?.ToString()?.Trim() ?? "Cache";
-        return OnCacheNameChanged.InvokeAsync(name);
+        _renameDraft = ActiveCacheEntry?.DisplayName ?? "";
+        _isRenaming = true;
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (!_isRenaming) return;
+        _isRenaming = false;
+        var name = _renameDraft.Trim();
+        if (string.IsNullOrWhiteSpace(name)) name = ActiveCacheEntry?.DisplayName ?? "Cache";
+        await OnCacheNameChanged.InvokeAsync(name);
+    }
+
+    private Task HandleRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") return CommitRenameAsync();
+        if (e.Key == "Escape") { _isRenaming = false; return Task.CompletedTask; }
+        return Task.CompletedTask;
     }
 }

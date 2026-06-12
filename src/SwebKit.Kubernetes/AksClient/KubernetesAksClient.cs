@@ -196,6 +196,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
                 Replicas = d.Spec?.Replicas ?? 0,
                 ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
                 Status = d.Status?.Conditions?.FirstOrDefault(c => c.Type == "Available")?.Status ?? "Unknown",
+                ImageTag = ExtractImageTag(d.Spec?.Template?.Spec?.Containers?.FirstOrDefault()?.Image),
                 Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : [],
                 SelectorLabels = d.Spec?.Selector?.MatchLabels is not null
                     ? new Dictionary<string, string>(d.Spec.Selector.MatchLabels)
@@ -1114,6 +1115,13 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
     private static bool IsPodReady(V1Pod pod) =>
         pod.Status?.ContainerStatuses is { Count: > 0 } statuses
         && statuses.All(status => status.Ready);
+
+    private static string? ExtractImageTag(string? image)
+    {
+        if (string.IsNullOrEmpty(image)) return null;
+        var colonIndex = image.LastIndexOf(':');
+        return colonIndex >= 0 ? image[(colonIndex + 1)..] : null;
+    }
 
     private static DateTimeOffset? TryExtractLogTimestamp(string line)
     {
@@ -3066,6 +3074,28 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
     }
 
+    public async Task SuspendCronJobAsync(string ns, string cronJobName, bool suspend, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var patch = new V1CronJob { Spec = new V1CronJobSpec { Suspend = suspend } };
+            await _client.BatchV1.PatchNamespacedCronJobAsync(
+                new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+                cronJobName, ns, cancellationToken: ct);
+        });
+    }
+
+    public async Task SetJobParallelismAsync(string ns, string jobName, int parallelism, CancellationToken ct = default)
+    {
+        await WithAuthRetryAsync(async () =>
+        {
+            var patch = new V1Job { Spec = new V1JobSpec { Parallelism = parallelism } };
+            await _client.BatchV1.PatchNamespacedJobAsync(
+                new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+                jobName, ns, cancellationToken: ct);
+        });
+    }
+
     public async Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default)
     {
         return await WithAuthRetryAsync(async () =>
@@ -3107,6 +3137,7 @@ public class KubernetesAksClient : IAksClient, IAsyncDisposable
             CompletionTime = job.Status?.CompletionTime.HasValue == true
                 ? new DateTimeOffset(job.Status.CompletionTime.Value)
                 : null,
+            Parallelism = job.Spec?.Parallelism ?? 1,
             SourceKind = sourceKind,
             SourceName = sourceName,
             Labels = RemoveControllerOwnedJobLabels(job.Metadata?.Labels)

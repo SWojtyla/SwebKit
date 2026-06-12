@@ -1,4 +1,4 @@
-/* FQ-19 – CSS isolation: structural styles extracted from ServiceBusPage.razor */
+/* FQ-19 – CSS isolation: structural styles for ServiceBusPage */
 
 .service-bus-page {
     display: flex;
@@ -8,27 +8,156 @@
     overflow: hidden;
 }
 
-.service-bus-page-shell {
-    display: flex;
+/* ── View A: grid (full width, takes remaining height) ──── */
+.sb-grid-view {
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
-.service-bus-right-pane {
+.sb-no-ns-state {
     flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── View B: workspace (breadcrumb + tabs + content) ────── */
+.sb-workspace-view {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
 
-.service-bus-right-pane > .empty-state {
-    flex: 1;
+/* Breadcrumb bar */
+.sb-breadcrumb {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    font-size: 12px;
+    overflow: hidden;
+    min-height: 32px;
 }
 
+.sb-breadcrumb-back {
+    border: none; background: transparent; cursor: pointer;
+    color: var(--color-accent); font-size: 12px; font-weight: 600; padding: 0;
+    white-space: nowrap;
+    transition: opacity 0.1s;
+}
+.sb-breadcrumb-back:hover { opacity: 0.75; }
+
+.sb-breadcrumb-sep { color: var(--color-text-faint); }
+
+.sb-breadcrumb-ns {
+    color: var(--color-text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 120px;
+}
+
+.sb-breadcrumb-entity {
+    font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 280px;
+}
+
+.sb-breadcrumb-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.sb-breadcrumb-btn {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.4;
+    transition: border-color 0.1s, color 0.1s, background 0.1s;
+}
+.sb-breadcrumb-btn:hover { border-color: var(--color-accent); color: var(--color-text); background: var(--color-accent-subtle); }
+
+/* Tab bar */
+.sb-tab-bar {
+    flex-shrink: 0;
+}
+
+.sb-tab-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-tab-ns {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    margin-right: 2px;
+}
+
+.sb-tab-new {
+    padding: 0 12px;
+    height: 100%;
+    border: none;
+    border-left: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.1s, background 0.1s;
+}
+.sb-tab-new:hover { color: var(--color-text); background: var(--color-surface-2); }
+
+/* Workspace content area */
+.sb-workspace-content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.sb-active-workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+}
+
+.sb-message-list-shell {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* ── Shared status / detail pane ─────────────────────────── */
 .sb-status-error {
     color: var(--color-error);
     display: inline-flex;
     align-items: center;
+}
+
+.sb-detail-pane-content {
+    flex: 1;
+    overflow: hidden;
 }

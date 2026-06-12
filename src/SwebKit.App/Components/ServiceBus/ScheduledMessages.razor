@@ -1,48 +1,42 @@
 @inject ScheduledMessageRepository ScheduledRepo
 
-<div style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
-    <!-- Header -->
-    <div
-        style="padding:10px 14px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; gap:8px; flex-shrink:0;">
-        <span style="font-size:12px; font-weight:600;">Scheduled Messages</span>
+<div class="sched-host">
+    <div class="sched-header">
+        <span class="sched-title">Scheduled Messages</span>
         @if (NamespaceId.HasValue)
         {
-            <span style="font-size:11px; color:var(--color-text-muted);">— @(EntityPath ?? "all entities")</span>
+            <span class="sched-subtitle">— @(EntityPath ?? "all entities")</span>
         }
-        <span style="margin-left:auto; font-size:11px; color:var(--color-text-muted);">@_entries.Count scheduled</span>
-        <FluentButton Appearance="Appearance.Stealth" style="font-size:11px;" @onclick="Refresh">Refresh</FluentButton>
+        <span class="sched-count">@_entries.Count scheduled</span>
+        <button type="button" class="sched-refresh-btn" @onclick="Refresh">Refresh</button>
     </div>
 
     @if (_entries.Count == 0)
     {
-        <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:40px;">
-            <div style="text-align:center; color:var(--color-text-muted);">
-                <div style="font-size:28px; margin-bottom:12px; opacity:0.4;">🕐</div>
-                <div style="font-size:14px; font-weight:500;">No scheduled messages</div>
-                <div style="font-size:12px; margin-top:4px;">Use the Schedule action in the message detail pane to schedule
-                    a message for future delivery.</div>
-                </div>
+        <div class="sched-empty">
+            <div class="sched-empty-icon">🕐</div>
+            <div class="sched-empty-title">No scheduled messages</div>
+            <div class="sched-empty-subtitle">Use the Schedule action in the message detail pane to schedule a message for
+                future delivery.</div>
             </div>
         }
     else
         {
-            <div style="flex:1; overflow-y:auto;">
+            <div class="sched-grid-shell">
                 <FluentDataGrid Items="@(_entries.AsQueryable())" TGridItem="ScheduledMessageEntry"
                                 RowClass="@(e => e.ScheduledEnqueueTime < DateTimeOffset.Now ? "past-entry" : "")">
                     <TemplateColumn Title="Enqueue At"
                                     SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.ScheduledEnqueueTime))">
-                        <span
-                        style="font-family:monospace; white-space:nowrap;">@context.ScheduledEnqueueTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                        <span class="sched-mono sched-nowrap">@context.ScheduledEnqueueTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
                     </TemplateColumn>
                     <TemplateColumn Title="Entity" SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.EntityPath))">
-                        <span
-                        style="font-family:monospace; overflow:hidden; text-overflow:ellipsis; max-width:160px; white-space:nowrap; display:block;"
-                        title="@context.EntityPath">@context.EntityPath</span>
+                        <span class="sched-mono sched-ellipsis sched-entity"
+                              title="@context.EntityPath">@context.EntityPath</span>
                     </TemplateColumn>
                     <TemplateColumn Title="Message ID"
                                     SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.MessageId ?? ""))">
-                        <span style="font-family:monospace;" title="@context.MessageId">@(context.MessageId is { Length: > 0 }
-                                                                            mid ? (mid.Length > 16 ? mid[..16] + "…" : mid) : "—")</span>
+                        <span class="sched-mono" title="@context.MessageId">@(context.MessageId is { Length: > 0 } mid ?
+                                                (mid.Length > 16 ? mid[..16] + "…" : mid) : "—")</span>
                         </TemplateColumn>
                         <TemplateColumn Title="Subject"
                                         SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.Subject ?? ""))">
@@ -50,16 +44,16 @@
                         </TemplateColumn>
                         <TemplateColumn Title="Seq #" SortBy="@(GridSort<ScheduledMessageEntry>.ByAscending(e => e.SequenceNumber))"
                                         Width="80px">
-                            <span style="font-family:monospace;">@context.SequenceNumber</span>
+                            <span class="sched-mono">@context.SequenceNumber</span>
                         </TemplateColumn>
                         <TemplateColumn Title="Status" Width="80px">
                             @if (context.ScheduledEnqueueTime < DateTimeOffset.Now)
                             {
-                                <span style="font-size:11px; color:var(--color-text-muted);">Enqueued</span>
+                                <span class="sched-status sched-status-past">Enqueued</span>
                             }
                             else
                             {
-                                <span style="font-size:11px; color:var(--color-success);">Pending</span>
+                                <span class="sched-status sched-status-pending">Pending</span>
                             }
                         </TemplateColumn>
                         <TemplateColumn Title="" Width="140px">
@@ -70,12 +64,12 @@
                             @if (!isPast)
                             {
                                 <button @onclick="() => CancelAsync(context)" disabled="@isCancelling"
-                                        style="padding:2px 8px; font-size:11px; cursor:pointer; background:var(--color-surface-2); border:1px solid var(--color-border); border-radius:3px; color:@(isCancelling ? "var(--color-text-muted)" : "var(--color-error)");">
+                                        class="sched-btn @(isCancelling ? "sched-btn-muted" : "sched-btn-danger")">
                                     @(isCancelling ? "Cancelling…" : "Cancel")
                                 </button>
                             }
                             <button @onclick="() => RemoveLocalEntry(context)" title="Remove from local list"
-                                    style="padding:2px 8px; font-size:11px; cursor:pointer; background:transparent; border:1px solid var(--color-border); border-radius:3px; color:var(--color-text-muted); margin-left:4px;">
+                                    class="sched-btn sched-btn-ghost sched-btn-remove">
                                 Remove
                             </button>
                         </TemplateColumn>
@@ -86,11 +80,9 @@
 
         @if (_cancelError is not null)
         {
-            <div
-                style="position:fixed; bottom:20px; right:20px; z-index:500; background:var(--color-surface-2); border:1px solid var(--color-error); border-radius:6px; padding:10px 14px; font-size:12px; color:var(--color-error); max-width:360px;">
+            <div class="sched-error-toast">
                 @_cancelError
-                <button @onclick="() => _cancelError = null"
-                        style="margin-left:8px; background:transparent; border:none; cursor:pointer; color:var(--color-text-muted);">✕</button>
+                <button @onclick="() => _cancelError = null" class="sched-error-close">✕</button>
             </div>
         }
 
