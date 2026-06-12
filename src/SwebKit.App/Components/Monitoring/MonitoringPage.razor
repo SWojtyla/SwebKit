@@ -1,0 +1,156 @@
+@page "/monitoring"
+@inject IAlertMonitorService Monitor
+@inject IAlertRuleRepository RuleRepository
+@inject INotificationService Notifications
+@implements IDisposable
+
+<div class="monitoring-page">
+    <RoutePageHeader Area="monitoring">
+        <Actions>
+            <button
+                class="page-header-action-btn monitoring-toggle-btn @(Monitor.IsMonitoring ? "monitoring-toggle-btn--active" : string.Empty)"
+                @onclick="ToggleMonitoringAsync"
+                title="@(Monitor.IsMonitoring ? "Pause monitoring" : "Start monitoring")">
+                <span
+                class="monitoring-toggle-dot @(Monitor.IsMonitoring ? "monitoring-toggle-dot--active" : string.Empty)"></span>
+                @(Monitor.IsMonitoring ? "Monitoring active" : "Monitoring paused")
+            </button>
+        </Actions>
+    </RoutePageHeader>
+
+    <div class="page-toolbar">
+        <span class="monitoring-rule-summary">
+            @_rules.Count rule@(_rules.Count == 1 ? "" : "s")
+            @if (_firingCount > 0)
+            {
+                <span class="monitoring-badge monitoring-badge--firing">@_firingCount firing</span>
+            }
+        </span>
+        <div class="page-toolbar__spacer"></div>
+        <button class="page-toolbar-btn page-toolbar-btn--primary" @onclick="OpenCreateDrawer">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+            Add rule
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="monitoring-page__content">
+            <SkeletonRows Count="4" />
+        </div>
+    }
+    else
+    {
+        <div class="monitoring-page__body">
+            <div class="monitoring-page__rules">
+                <AlertRuleGroups Rules="_rules" UiStates="_uiStates" OnEdit="OpenEditDrawer" OnDelete="HandleDeleteAsync"
+                                 OnToggle="HandleToggleAsync" />
+            </div>
+
+            <div class="monitoring-page__history">
+                <MonitoringAlertHistoryPanel Events="_history" OnClear="ClearHistory" OnMuteRule="HandleMuteRuleAsync" />
+            </div>
+        </div>
+        @if (_drawerOpen)
+        {
+            <AlertRuleDrawer IsOpen="_drawerOpen" Rule="_editingRule" OnSave="HandleSaveRuleAsync" OnClose="CloseDrawer" />
+        }
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _drawerOpen;
+    private MonitoringAlertRule? _editingRule;
+    private List<MonitoringAlertRule> _rules = [];
+    private List<AlertFiredEvent> _history = [];
+    private Dictionary<string, AlertRuleUiState> _uiStates = [];
+    private int _firingCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Monitor.AlertFired += OnAlertFired;
+        _rules = [.. await RuleRepository.GetAllAsync()];
+        _history = [.. Monitor.RecentAlerts];
+        _isLoading = false;
+    }
+
+    private async void OnAlertFired(AlertFiredEvent evt)
+    {
+        _history.Insert(0, evt);
+        if (_history.Count > 200)
+            _history.RemoveAt(_history.Count - 1);
+
+        _uiStates[evt.RuleId] = new AlertRuleUiState(AlertRuleUiStateKind.Firing, evt.FiredAt, DateTimeOffset.UtcNow);
+        _firingCount = _uiStates.Values.Count(s => s.Kind == AlertRuleUiStateKind.Firing);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleMonitoringAsync()
+    {
+        if (Monitor.IsMonitoring)
+            await Monitor.StopAsync();
+        else
+            await Monitor.StartAsync();
+    }
+
+    private void OpenCreateDrawer()
+    {
+        _editingRule = null;
+        _drawerOpen = true;
+    }
+
+    private void OpenEditDrawer(MonitoringAlertRule rule)
+    {
+        _editingRule = rule;
+        _drawerOpen = true;
+    }
+
+    private void CloseDrawer()
+    {
+        _drawerOpen = false;
+        _editingRule = null;
+    }
+
+    private async Task HandleSaveRuleAsync(MonitoringAlertRule rule)
+    {
+        await RuleRepository.UpsertAsync(rule);
+        _rules = [.. await RuleRepository.GetAllAsync()];
+        if (Monitor is AlertMonitorService engine)
+            await engine.ReloadRulesAsync();
+        CloseDrawer();
+    }
+
+    private async Task HandleDeleteAsync(MonitoringAlertRule rule)
+    {
+        await RuleRepository.DeleteAsync(rule.Id);
+        _rules = [.. await RuleRepository.GetAllAsync()];
+        _uiStates.Remove(rule.Id);
+    }
+
+    private async Task HandleToggleAsync(MonitoringAlertRule rule)
+    {
+        rule.Enabled = !rule.Enabled;
+        await RuleRepository.UpsertAsync(rule);
+        if (Monitor is AlertMonitorService engine)
+            await engine.ReloadRulesAsync();
+    }
+
+    private async Task HandleMuteRuleAsync(string ruleId)
+    {
+        // Snooze: set cooldown state for 30 minutes
+        _uiStates[ruleId] = new AlertRuleUiState(AlertRuleUiStateKind.Cooldown, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ClearHistory()
+    {
+        _history.Clear();
+    }
+
+    public void Dispose()
+    {
+        Monitor.AlertFired -= OnAlertFired;
+    }
+}

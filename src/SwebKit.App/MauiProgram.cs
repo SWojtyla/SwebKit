@@ -79,7 +79,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOperatorResourceSearchProvider, IncidentTimelineSearchProvider>();
         builder.Services.AddSingleton<TrayLifecycleState>();
 
-        // Pod Health Monitor
 #if WINDOWS
         builder.Services.AddSingleton<IWindowsNotificationService, WindowsToastNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, WindowsTrayLifecycleService>();
@@ -87,7 +86,22 @@ public static class MauiProgram
         builder.Services.AddSingleton<IWindowsNotificationService, NullWindowsNotificationService>();
         builder.Services.AddSingleton<ITrayLifecycleService, NullTrayLifecycleService>();
 #endif
-        builder.Services.AddSingleton<IPodHealthMonitorService, PodHealthMonitorService>();
+
+        // Alert Monitor (replaces PodHealthMonitorService)
+        builder.Services.AddSingleton<IMonitoringConnectionPool, MonitoringConnectionPool>();
+        builder.Services.AddSingleton<IAlertRuleRepository, AlertRuleRepository>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksPodHealthSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksPodRestartRateSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, AksNamespaceHealthScoreSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDlqSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusActiveDepthSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, ServiceBusDeadSubscriptionSignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, RedisMemorySignalSource>();
+        builder.Services.AddSingleton<IAlertSignalSource, RedisConnectedClientsSignalSource>();
+        builder.Services.AddSingleton<IAlertMonitorService, AlertMonitorService>();
+        builder.Services.AddSingleton<MonitoringMigrationService>();
+        // Null stub retains DashboardPage + legacy AKS sub-component DI compatibility
+        builder.Services.AddSingleton<IPodHealthMonitorService, NullPodHealthMonitorService>();
 
         // Demo clients (singletons; pages select real vs. demo based on AppStateService.UseDemoData)
         builder.Services.AddSingleton<DemoAksClient>();

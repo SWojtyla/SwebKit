@@ -26,6 +26,7 @@ public static class AppDataPaths
     public static string UserSettingsJson => Path.Combine(Root, "user-settings.json");
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
     public static string ReleasesJson => Path.Combine(Root, "releases.json");
+    public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string PerformanceBaselineLog => Path.Combine(Root, "logs", "performance-baseline.log");
 
     public static void EnsureDirectoryExists()

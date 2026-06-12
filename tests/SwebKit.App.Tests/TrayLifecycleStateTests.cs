@@ -55,6 +55,39 @@ public class TrayLifecycleStateTests
         Assert.False(state.ShouldInterceptClose);
     }
 
+    [Fact]
+    public void TryIncrementUnreadForAlertFired_Increments_WhenWindowIsHiddenToTray()
+    {
+        var state = new TrayLifecycleState();
+        state.MarkHiddenToTray();
+
+        var evt = new SwebKit.Core.Models.AlertFiredEvent(
+            "r1", "Test", SwebKit.Core.Models.AlertRuleSource.AksPodHealth,
+            SwebKit.Core.Models.AlertSeverity.Warning,
+            "fired", string.Empty, DateTimeOffset.UtcNow, "Default");
+
+        var incremented = state.TryIncrementUnreadForAlertFired(evt);
+
+        Assert.True(incremented);
+        Assert.Equal(1, state.UnreadAlerts);
+    }
+
+    [Fact]
+    public void TryIncrementUnreadForAlertFired_DoesNotIncrement_WhenWindowIsVisible()
+    {
+        var state = new TrayLifecycleState();
+
+        var evt = new SwebKit.Core.Models.AlertFiredEvent(
+            "r1", "Test", SwebKit.Core.Models.AlertRuleSource.AksPodHealth,
+            SwebKit.Core.Models.AlertSeverity.Warning,
+            "fired", string.Empty, DateTimeOffset.UtcNow, "Default");
+
+        var incremented = state.TryIncrementUnreadForAlertFired(evt);
+
+        Assert.False(incremented);
+        Assert.Equal(0, state.UnreadAlerts);
+    }
+
     private static PodHealthEvent CreateEvent(string podName = "api-pod")
         => new(
             podName,

@@ -231,7 +231,7 @@ public interface IVariableSubstitutionService
   3. Environment KV type via `IKeyVaultSecretResolver.ResolveAsync`
   4. Collection variable (plain value) from `Collection.CollectionVariables`
   5. Collection secret via `ICredentialStore`
-  > Environment variables override collection variables on the same key.
+     > Environment variables override collection variables on the same key.
 - When KV resolver returns `null` → substitutes `[KV_UNAVAILABLE:key]`
 - When no environment active → only collection variables are resolved; unmatched tokens preserved
 - Registered as `Scoped`
@@ -565,8 +565,8 @@ builder.Services.AddHttpClient("ApiClient");
 
 ## New NuGet Packages Required
 
-| Package                                                                               | Project           | Phase |
-| ------------------------------------------------------------------------------------- | ----------------- | ----- |
-| `Azure.Security.KeyVault.Secrets`                                                     | `SwebKit.Azure`   | 3     |
-| `JsonPath.Net` (json-everything suite)                                                | `SwebKit.Core`    | 3     |
-| _(no new packages for OAuth2 — uses `Microsoft.Maui.Authentication` already in MAUI)_ | —                 | 4     |
+| Package                                                                               | Project         | Phase |
+| ------------------------------------------------------------------------------------- | --------------- | ----- |
+| `Azure.Security.KeyVault.Secrets`                                                     | `SwebKit.Azure` | 3     |
+| `JsonPath.Net` (json-everything suite)                                                | `SwebKit.Core`  | 3     |
+| _(no new packages for OAuth2 — uses `Microsoft.Maui.Authentication` already in MAUI)_ | —               | 4     |

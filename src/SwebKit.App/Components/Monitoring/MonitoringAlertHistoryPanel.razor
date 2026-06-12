@@ -1,0 +1,98 @@
+@using SwebKit.Core.Models
+
+<div class="alert-history-panel">
+    <div class="alert-history-panel__header">
+        <span class="alert-history-panel__title">Alert History</span>
+        @if (Events.Count > 0)
+        {
+            <span class="alert-history-panel__count">@Events.Count</span>
+        }
+        <div class="alert-history-panel__spacer"></div>
+        @if (Events.Count > 0)
+        {
+            <button class="alert-history-panel__clear-btn" @onclick="OnClear" aria-label="Clear alert history">
+                Clear ✕
+            </button>
+        }
+    </div>
+
+    <div class="alert-history-panel__list">
+        @if (Events.Count == 0)
+        {
+            <EmptyState Icon="checkmark-circle-outline" Title="No alerts this session" />
+        }
+        else
+        {
+            @foreach (var evt in Events)
+            {
+                <div class="alert-history-event @(evt.Severity == AlertSeverity.Critical ? "alert-history-event--critical" : "alert-history-event--warning")">
+                    <div class="alert-history-event__top">
+                        <span class="alert-history-event__source-icon">@SourceIcon(evt.Source)</span>
+                        <span class="alert-history-event__rule-name">@evt.RuleName</span>
+                        <span class="alert-history-event__source-badge alert-history-event__source-badge--@SourceGroup(evt.Source)">
+                            @SourceGroupLabel(evt.Source)
+                        </span>
+                        <span class="alert-history-event__time" title="@evt.FiredAt.ToString("yyyy-MM-dd HH:mm:ss zzz")">
+                            @FormatRelative(evt.FiredAt)
+                        </span>
+                    </div>
+                    <div class="alert-history-event__message" title="@evt.Message">
+                        @TruncateMessage(evt.Message, 80)
+                    </div>
+                    <div class="alert-history-event__actions">
+                        <button class="alert-history-event__snooze-btn"
+                                @onclick="() => OnMuteRule.InvokeAsync(evt.RuleId)"
+                                title="Snooze this rule for 30 minutes"
+                                aria-label="Snooze @evt.RuleName for 30 minutes">
+                            Snooze 30m
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<AlertFiredEvent> Events { get; set; } = [];
+    [Parameter] public EventCallback OnClear { get; set; }
+    [Parameter] public EventCallback<string> OnMuteRule { get; set; }
+
+    private static string SourceIcon(AlertRuleSource source) => source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "☸",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "⇄",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "⬡",
+        AlertRuleSource.StorageBlobCount => "🗄",
+        _ => "●"
+    };
+
+    private static string SourceGroup(AlertRuleSource source) => source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "aks",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "servicebus",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "redis",
+        AlertRuleSource.StorageBlobCount => "storage",
+        _ => "unknown"
+    };
+
+    private static string SourceGroupLabel(AlertRuleSource source) => source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "AKS",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or AlertRuleSource.ServiceBusDeadSubscription => "Service Bus",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "Redis",
+        AlertRuleSource.StorageBlobCount => "Storage",
+        _ => source.ToString()
+    };
+
+    private static string FormatRelative(DateTimeOffset time)
+    {
+        var diff = DateTimeOffset.UtcNow - time;
+        if (diff.TotalSeconds < 60) return $"{(int)diff.TotalSeconds}s ago";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        return $"{(int)diff.TotalHours}h ago";
+    }
+
+    private static string TruncateMessage(string message, int maxLength) =>
+        message.Length <= maxLength ? message : message[..maxLength] + "…";
+}

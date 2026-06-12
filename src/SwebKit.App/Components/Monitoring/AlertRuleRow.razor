@@ -1,0 +1,136 @@
+@using SwebKit.Core.Models
+
+<div class="alert-rule-row @(Rule.Enabled ? string.Empty : "alert-rule-row--disabled")" role="row">
+    <span class="alert-rule-row__dot alert-rule-row__dot--@DotClass" title="@DotTooltip"></span>
+
+    <label class="alert-rule-row__toggle-label" title="@(Rule.Enabled ? "Disable rule" : "Enable rule")">
+        <input type="checkbox" role="switch" checked="@Rule.Enabled" @onchange="() => OnToggle.InvokeAsync(Rule)"
+               aria-label="@(Rule.Enabled ? "Disable" : "Enable") @Rule.Name" />
+    </label>
+
+    <div class="alert-rule-row__body">
+        <div class="alert-rule-row__top">
+            <span class="alert-rule-row__name" title="@Rule.Name">@Rule.Name</span>
+            <span class="alert-rule-row__source-badge alert-rule-row__source-badge--@SourceGroup">
+                @SourceIcon @SourceGroupLabel
+            </span>
+            <span
+                class="alert-rule-row__severity @(Rule.Severity == AlertSeverity.Critical ? "alert-rule-row__severity--critical" : "alert-rule-row__severity--warning")">
+                @(Rule.Severity == AlertSeverity.Critical ? "🔴 Critical" : "⚠ Warning")
+            </span>
+            <span class="alert-rule-row__interval">@Rule.IntervalSeconds s</span>
+        </div>
+        <div class="alert-rule-row__meta">@MetaText</div>
+    </div>
+
+    <div class="alert-rule-row__actions">
+        <button class="alert-rule-row__action-btn" @onclick="() => OnEdit.InvokeAsync(Rule)" title="Edit rule"
+                aria-label="Edit @Rule.Name">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Width="14px" />
+        </button>
+        @if (!_confirmingDelete)
+        {
+            <button class="alert-rule-row__action-btn alert-rule-row__action-btn--danger"
+                    @onclick="() => _confirmingDelete = true" title="Delete rule" aria-label="Delete @Rule.Name">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Width="14px" />
+            </button>
+        }
+        else
+        {
+            <span class="alert-rule-row__confirm-delete">
+                Delete?
+                <button class="alert-rule-row__action-btn alert-rule-row__action-btn--danger" @onclick="ConfirmDeleteAsync"
+                        aria-label="Confirm delete @Rule.Name">Yes</button>
+                <button class="alert-rule-row__action-btn" @onclick="() => _confirmingDelete = false"
+                        aria-label="Cancel delete">No</button>
+            </span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MonitoringAlertRule Rule { get; set; } = default!;
+    [Parameter] public AlertRuleUiState UiState { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnEdit { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnDelete { get; set; }
+    [Parameter] public EventCallback<MonitoringAlertRule> OnToggle { get; set; }
+
+    private bool _confirmingDelete;
+
+    private string DotClass => UiState.Kind switch
+    {
+        AlertRuleUiStateKind.Ok => "ok",
+        AlertRuleUiStateKind.Cooldown => "cooldown",
+        AlertRuleUiStateKind.Firing => "firing",
+        AlertRuleUiStateKind.Skipped => "skipped",
+        AlertRuleUiStateKind.Error => "error",
+        _ => "unknown"
+    };
+
+    private string DotTooltip => UiState.Kind switch
+    {
+        AlertRuleUiStateKind.Ok => "OK — no alerts",
+        AlertRuleUiStateKind.Cooldown => "Cooldown active",
+        AlertRuleUiStateKind.Firing => "Firing",
+        AlertRuleUiStateKind.Skipped => "Skipped — source not connected",
+        AlertRuleUiStateKind.Error => "Evaluation error",
+        _ => Rule.Enabled ? "Not yet evaluated" : "Disabled"
+    };
+
+    private string MetaText => Rule.Enabled
+        ? UiState.Kind switch
+        {
+            AlertRuleUiStateKind.Firing => "Firing",
+            AlertRuleUiStateKind.Cooldown => "Cooldown active",
+            AlertRuleUiStateKind.Skipped => "Skipped — source not connected",
+            AlertRuleUiStateKind.Error => "Evaluation error — see app notifications",
+            AlertRuleUiStateKind.Ok when UiState.LastEvaluatedAt is not null =>
+                $"Last checked {FormatRelative(UiState.LastEvaluatedAt.Value)}",
+            _ => "Not yet evaluated"
+        }
+        : "Disabled";
+
+    private string SourceGroup => Rule.Source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "aks",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "servicebus",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "redis",
+        AlertRuleSource.StorageBlobCount => "storage",
+        _ => "unknown"
+    };
+
+    private string SourceGroupLabel => Rule.Source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "AKS",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "Service Bus",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "Redis",
+        AlertRuleSource.StorageBlobCount => "Storage",
+        _ => Rule.Source.ToString()
+    };
+
+    private string SourceIcon => Rule.Source switch
+    {
+        AlertRuleSource.AksPodHealth or AlertRuleSource.AksPodRestartRate or AlertRuleSource.AksNamespaceHealthScore => "☸",
+        AlertRuleSource.ServiceBusDlqDepth or AlertRuleSource.ServiceBusActiveDepth or
+AlertRuleSource.ServiceBusDeadSubscription => "⇄",
+        AlertRuleSource.RedisMemoryUsage or AlertRuleSource.RedisConnectedClients => "⬡",
+        AlertRuleSource.StorageBlobCount => "🗄",
+        _ => "●"
+    };
+
+    private static string FormatRelative(DateTimeOffset time)
+    {
+        var diff = DateTimeOffset.UtcNow - time;
+        if (diff.TotalSeconds < 60) return $"{(int)diff.TotalSeconds}s ago";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        return $"{(int)diff.TotalHours}h ago";
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        _confirmingDelete = false;
+        await OnDelete.InvokeAsync(Rule);
+    }
+}

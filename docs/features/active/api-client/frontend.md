@@ -35,6 +35,7 @@ across all collections for fast keyboard navigation — it does not take up perm
 │                  │  [Monaco read-only]                                     │
 └──────────────────┴────────────────────────────────────────────────────────┘
 ```
+
 ◆ dirty indicator (asterisk) when unsaved and auto-save is off
 
 Pane widths persisted in `UiStateRepository` (same pattern as other page pane splits).
@@ -110,12 +111,12 @@ It supports: add row, delete row, enable/disable toggle per row, drag-reorder (P
 
 #### Auth sub-components
 
-| Sub-component          | Auth type                                                                   |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `BearerAuthForm.razor` | Bearer — token input (masked), credential-store backed                      |
-| `ApiKeyAuthForm.razor` | API Key — key name, value, placement radio (Header / Query Param)           |
-| `BasicAuthForm.razor`  | Basic — username + password (password masked)                               |
-| `OAuth2AuthForm.razor` | OAuth 2 — flow selector, token URL, client ID, scopes, [Get Token]          |
+| Sub-component          | Auth type                                                          |
+| ---------------------- | ------------------------------------------------------------------ |
+| `BearerAuthForm.razor` | Bearer — token input (masked), credential-store backed             |
+| `ApiKeyAuthForm.razor` | API Key — key name, value, placement radio (Header / Query Param)  |
+| `BasicAuthForm.razor`  | Basic — username + password (password masked)                      |
+| `OAuth2AuthForm.razor` | OAuth 2 — flow selector, token URL, client ID, scopes, [Get Token] |
 
 When a request has `Auth = null`, the Auth tab renders the resolved inherited auth in a greyed
 "Inherited from [folder/collection name]" banner above the form, with a [Override for this
@@ -202,6 +203,7 @@ Accessible via toolbar environment switcher dropdown → [Manage Environments].
 Rendered below the `ResponseViewerPanel` when the active request has (or is being given) capture rules.
 
 Layout per rule row:
+
 ```
 [Source: Response Body (JSONPath) ▼] [$.access_token   ] → [token     ] in [Environment ▼] [🗑]
 [Source: Response Header          ▼] [Authorization    ] → [auth      ] in [Collection  ▼] [🗑]

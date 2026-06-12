@@ -28,6 +28,7 @@ For any non-trivial implementation, read:
 | Pipelines, releases, approvals, deployment assurance                                  | `functionalities/releases.md`, `codebase-guide.md` Pipelines and releases entries                       | `docs/pitfalls/dotnet-csharp.md`                                                | Verify DevOps client snapshots, approval counts, tree/detail state, and status badges.             |
 | Observability, App Insights discovery, KQL, failures, performance, logs, availability | `functionalities/observability.md`, `design.md` Observability Resource and Query Flow                   | `docs/pitfalls/blazor-maui.md`, `docs/pitfalls/azure-sdk.md`                    | Verify resource selection, KQL query flow, Logs first-use JS interop, and tab state.               |
 | Incident Timeline evidence, mappings, snapshot export, proposal generation            | `functionalities/incident-timeline.md`, `design.md` Incident Timeline flows                             | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`                | Verify source coverage, cancellation/version guards, and evidence-first wording.                   |
+| Monitoring alert rules, alert engine, signal sources, Windows toast notifications     | `functionalities/monitoring.md`, `design.md` Alert Engine flow                                          | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`                | Verify rule persistence, cooldown, signal source skipped/firing, and toast notification.           |
 | Settings, configuration health, profile persistence, bundle import/export, appearance | `functionalities/settings-and-configuration.md`, `design.md` Settings Save and Config Propagation Flow  | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/azure-sdk.md`                  | Verify atomic persistence, backup recovery, credential references, and readiness checks.           |
 | Tests, build plumbing, or validation strategy                                         | `codebase-guide.md`, relevant functionality deep dive                                                   | Relevant `docs/pitfalls/` files                                                 | Prefer focused tests for touched areas before broader builds.                                      |
 
@@ -43,6 +44,7 @@ Existing functionality deep dives:
 - `functionalities/releases.md`
 - `functionalities/observability.md`
 - `functionalities/incident-timeline.md`
+- `functionalities/monitoring.md`
 - `functionalities/settings-and-configuration.md`
 
 Current pitfall docs:

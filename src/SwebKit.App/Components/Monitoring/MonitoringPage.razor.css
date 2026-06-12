@@ -1,0 +1,196 @@
+.monitoring-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.monitoring-page__body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+    position: relative;
+}
+
+.monitoring-page__rules {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 0 1rem 1rem;
+}
+
+.monitoring-page__history {
+    width: 300px;
+    min-width: 220px;
+    max-width: 420px;
+    border-left: 1px solid var(--neutral-stroke-rest);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+/* ── Toolbar ── */
+.page-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--neutral-stroke-rest);
+    flex-shrink: 0;
+}
+
+.page-toolbar__spacer {
+    flex: 1;
+}
+
+.page-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid var(--neutral-stroke-rest);
+    background: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.page-toolbar-btn:hover {
+    background: var(--neutral-fill-hover);
+    border-color: var(--neutral-stroke-hover);
+}
+
+.page-toolbar-btn--primary {
+    background: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+    border-color: var(--accent-stroke-control-rest);
+}
+
+.page-toolbar-btn--primary:hover {
+    background: var(--accent-fill-hover);
+}
+
+/* ── Monitoring status toggle ── */
+.monitoring-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--neutral-stroke-rest);
+    background: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.monitoring-toggle-btn--active {
+    border-color: var(--accent-stroke-control-rest);
+    background: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+}
+
+.monitoring-toggle-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--neutral-stroke-rest);
+}
+
+.monitoring-toggle-dot--active {
+    background: #22c55e;
+    animation: monitoring-pulse 2s infinite;
+}
+
+@keyframes monitoring-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.monitoring-rule-summary {
+    font-size: 0.8125rem;
+    color: var(--neutral-foreground-hint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.monitoring-badge--firing {
+    background: var(--error-background);
+    color: var(--error-foreground, #dc2626);
+}
+
+.monitoring-page__content {
+    padding: 1rem;
+}
+
+
+.monitoring-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--neutral-stroke-rest);
+    background: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.monitoring-toggle-btn--active {
+    border-color: var(--accent-stroke-control-rest);
+    background: var(--accent-fill-rest);
+    color: var(--foreground-on-accent-rest);
+}
+
+.monitoring-toggle-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--neutral-stroke-rest);
+}
+
+.monitoring-toggle-dot--active {
+    background: #22c55e;
+    animation: monitoring-pulse 2s infinite;
+}
+
+@keyframes monitoring-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.monitoring-rule-summary {
+    font-size: 0.8125rem;
+    color: var(--neutral-foreground-hint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.monitoring-badge--firing {
+    background: var(--error-background);
+    color: var(--error-foreground, #dc2626);
+}
+
+.monitoring-page__content {
+    padding: 1rem;
+}

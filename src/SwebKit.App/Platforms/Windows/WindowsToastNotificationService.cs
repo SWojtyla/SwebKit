@@ -50,4 +50,36 @@ public class WindowsToastNotificationService : IWindowsNotificationService
             _logger.LogWarning(ex, "Windows toast notification failed for pod {PodName}", evt.PodName);
         }
     }
+
+    public void ShowAlert(AlertFiredEvent evt)
+    {
+        try
+        {
+            var title = SecurityElement.Escape($"{evt.Severity}: {evt.RuleName}");
+            var body = SecurityElement.Escape(evt.Message);
+            var attribution = SecurityElement.Escape($"{evt.Source} \u00b7 {evt.FiredAt:HH:mm:ss} \u00b7 {evt.ProfileName}");
+
+            var xml = $"""
+                <toast>
+                  <visual>
+                    <binding template="ToastGeneric">
+                      <text>{title}</text>
+                      <text>{body}</text>
+                      <text hint-style="captionSubtle">{attribution}</text>
+                    </binding>
+                  </visual>
+                </toast>
+                """;
+
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+
+            ToastNotificationManager.CreateToastNotifier("SwebKit.App").Show(new ToastNotification(doc));
+            _logger.LogDebug("Windows toast shown for alert rule {RuleName}", evt.RuleName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Windows toast notification failed for alert rule {RuleName}", evt.RuleName);
+        }
+    }
 }

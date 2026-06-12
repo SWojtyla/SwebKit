@@ -61,6 +61,7 @@ Phase 1 — Foundation (not yet started)
 ### Phase 3 — Environments and Secrets
 
 **Variable scope:**
+
 - [ ] `Collection.CollectionVariables: List<CollectionVariable>` — always-active key/value pairs,
       no environment required; plain values or `ICredentialStore` references
 - [ ] `VariableSubstitutionService` updated: resolve collection vars first, then env vars;
@@ -68,6 +69,7 @@ Phase 1 — Foundation (not yet started)
 - [ ] `IVariablePreviewService` updated to reflect the same resolution chain
 
 **Environment manager:**
+
 - [ ] `EnvironmentManagerPanel.razor` — list environments, add/edit/delete
 - [ ] `EnvironmentEditor.razor` — variable grid: key | type (Plain / SecretStore / KeyVault) | value
 - [ ] Secret type: value masked; stored in `ICredentialStore`
@@ -81,10 +83,12 @@ Phase 1 — Foundation (not yet started)
 - [ ] [Test resolution] button in `EnvironmentEditor`
 
 **Collection variable editor:**
+
 - [ ] `CollectionVariableEditor.razor` — accessible from right-click menu on collection node;
       grid of key/value pairs; separate from environment variables
 
 **Post-request capture rules:**
+
 - [ ] `CaptureRule` model: `CaptureSourceType` (JsonPath, Header, StatusCode), `SourceExpression`,
       `TargetVariableName`, `TargetScope` (Collection or Environment)
 - [ ] `IPostRequestCaptureExecutor` contract in `SwebKit.Core/Abstractions/`
@@ -134,13 +138,9 @@ Phase 1 — Foundation (not yet started)
 - [ ] GraphQL error rendering in `ResponseViewerPanel` (distinct from HTTP errors;
       `errors` array surfaced as a separate tab)
 - [ ] **Subscriptions:** detect `subscription` keyword as the selected operation;
-      switch to `graphql-ws` WebSocket connection automatically:
-      - `IGraphQlSubscriptionService` contract in `SwebKit.Core/Abstractions/`
-      - `GraphQlSubscriptionService` in `SwebKit.Core/Services/` — wraps `IWebSocketClientService`
-        with `graphql-ws` framing (`connection_init` / `subscribe` / `next` / `complete`)
-      - Subscription messages stream into a virtualized `ResponseViewerPanel`
-        (same `WebSocketMessage` direction model as Phase 6)
-      - [Stop subscription] button visible while subscription is active
+      switch to `graphql-ws` WebSocket connection automatically: - `IGraphQlSubscriptionService` contract in `SwebKit.Core/Abstractions/` - `GraphQlSubscriptionService` in `SwebKit.Core/Services/` — wraps `IWebSocketClientService`
+      with `graphql-ws` framing (`connection_init` / `subscribe` / `next` / `complete`) - Subscription messages stream into a virtualized `ResponseViewerPanel`
+      (same `WebSocketMessage` direction model as Phase 6) - [Stop subscription] button visible while subscription is active
 
 ### Phase 6 — WebSocket
 

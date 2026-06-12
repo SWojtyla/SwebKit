@@ -86,6 +86,9 @@
         <Compile Include="..\..\src\SwebKit.App\Services\PerformanceBaselineRecorder.cs" Link="Services\PerformanceBaselineRecorder.cs" />
         <Compile Include="..\..\src\SwebKit.App\Components\Aks\CronNextRun.cs" Link="Components\Aks\CronNextRun.cs" />
         <Compile Include="..\..\src\SwebKit.App\Services\IncidentInvestigationLauncher.cs" Link="Services\IncidentInvestigationLauncher.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\AlertMonitorService.cs" Link="Services\AlertMonitorService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\MonitoringMigrationService.cs" Link="Services\MonitoringMigrationService.cs" />
+        <Compile Include="..\..\src\SwebKit.App\Services\NullPodHealthMonitorService.cs" Link="Services\NullPodHealthMonitorService.cs" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityTree.razor" Link="Components\ServiceBus\EntityTree.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\ServiceBusGrid.razor" Link="Components\ServiceBus\ServiceBusGrid.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\ServiceBus\EntityCommandPalette.razor" Link="Components\ServiceBus\EntityCommandPalette.razor" />
@@ -139,5 +142,11 @@
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobMetadataEditor.razor" Link="Components\Storage\BlobMetadataEditor.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobVersionDiffPane.razor" Link="Components\Storage\BlobVersionDiffPane.razor" />
         <RazorComponent Include="..\..\src\SwebKit.App\Components\Storage\BlobRecoveryPanel.razor" Link="Components\Storage\BlobRecoveryPanel.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\MonitoringPage.razor" Link="Components\Monitoring\MonitoringPage.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleGroups.razor" Link="Components\Monitoring\AlertRuleGroups.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleRow.razor" Link="Components\Monitoring\AlertRuleRow.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleDrawer.razor" Link="Components\Monitoring\AlertRuleDrawer.razor" />
+        <RazorComponent Include="..\..\src\SwebKit.App\Components\Monitoring\MonitoringAlertHistoryPanel.razor" Link="Components\Monitoring\MonitoringAlertHistoryPanel.razor" />
+        <Compile Include="..\..\src\SwebKit.App\Components\Monitoring\AlertRuleUiStateModels.cs" Link="Components\Monitoring\AlertRuleUiStateModels.cs" />
     </ItemGroup>
 </Project>

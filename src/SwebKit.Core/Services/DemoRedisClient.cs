@@ -346,6 +346,7 @@ public sealed class DemoRedisClient : IRedisClient
             UptimeSeconds = 86_400,
             ConnectedClients = 3,
             UsedMemoryBytes = totalBytes,
+            MaxMemoryBytes = 0,
             UsedMemoryHuman = ToHumanBytes(totalBytes),
             TotalCommandsProcessed = 1_024,
             KeyspaceHitRatio = 0.93,

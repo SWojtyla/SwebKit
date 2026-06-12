@@ -175,12 +175,14 @@ the user to save or discard changes.
 ## DEC-12: Two-level variable scope — collection vars and environment vars
 
 **Decision:** Variables are resolved in this order (first match wins):
+
 1. Active environment variables (if an environment is selected)
 2. Collection-level variables (always active, no environment needed)
 
 Environment variables override collection variables on the same key.
 
 **Rationale:** This mirrors Bruno's approach and covers the common pattern of:
+
 - Collection vars: base URL, API version, feature flags that apply to all requests regardless of environment
 - Environment vars: environment-specific overrides (dev/staging/prod tokens, URLs)
 
@@ -255,11 +257,11 @@ serialisation-transparent — a request with no auth simply omits the `Auth` pro
 
 **Options:**
 
-| Option | URI example | Notes |
-|---|---|---|
-| Custom MAUI scheme | `swebikit://oauth-callback` | Registered in Windows registry; survives browser redirects |
-| Localhost + random port | `http://localhost:49152/callback` | Works everywhere; port binding race condition on some machines |
-| Out-of-band (manual paste) | n/a | User copies token from browser; simpler but poor UX |
+| Option                     | URI example                       | Notes                                                          |
+| -------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| Custom MAUI scheme         | `swebikit://oauth-callback`       | Registered in Windows registry; survives browser redirects     |
+| Localhost + random port    | `http://localhost:49152/callback` | Works everywhere; port binding race condition on some machines |
+| Out-of-band (manual paste) | n/a                               | User copies token from browser; simpler but poor UX            |
 
 **Recommendation:** Custom MAUI scheme (`swebikit://oauth-callback`) registered via `AppxManifest`
 and MAUI `WebAuthenticator` protocol activation. This is the standard pattern for MAUI OAuth.

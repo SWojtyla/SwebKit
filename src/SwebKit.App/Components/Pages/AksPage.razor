@@ -10,7 +10,6 @@
 @inject ISelectionContext Selection
 @inject PageDataCache Cache
 @inject ILogger<AksPage> Logger
-@inject IPodHealthMonitorService Monitor
 @inject IAksClientBootstrapper AksBootstrapper
 @inject IAksWarmupCache AksWarmupCache
 @inject OperatorWorkspaceService Workspaces
@@ -34,19 +33,6 @@
                       OnNamespaceChanged="HandleNamespaceChangedAsync" OnResourceTypeChanged="SwitchResourceType"
                       OnRefresh="LoadAsync" OnToggleEvents="HandleToggleEvents"
                       OnTogglePortForwardSessions="HandleTogglePortForwardSessions" />
-
-    @* ── Monitor bar ── *@
-    <div class="aks-monitor-bar">
-        <button class="aks-monitor-btn @(Monitor.IsMonitoring ? "active" : "")" @onclick="ToggleMonitorPanel"
-                title="Pod health monitoring">
-            <FluentIcon Value="@_iconAlert" Width="14px" style="vertical-align:middle;" />
-            @(Monitor.IsMonitoring ? $" Monitor ({Monitor.MonitoredNamespaces.Count})" : " Monitor")
-            @if (_recentAlertCount > 0)
-            {
-                <span class="aks-alert-badge">@_recentAlertCount</span>
-            }
-        </button>
-    </div>
 
     @* ── Error ── *@
     @if (ErrorMessage is not null)
@@ -73,15 +59,6 @@
     }
     else
     {
-        @* ── Monitor panel ── *@
-        @if (_showMonitorPanel)
-        {
-            <div class="aks-monitor-panel">
-                <NamespaceMonitorSelector AksClient="Client" CurrentClusterContext="@ActiveContext" />
-                <AlertHistoryPanel />
-            </div>
-        }
-
         <div class="aks-content @(HasAnyPanel ? "side-open" : "")">
             @* ── Main resource panel ── *@
             <div class="aks-resource-panel">
@@ -493,8 +470,6 @@
 
 @code {
 
-    private static readonly Icon _iconAlert = new Icons.Regular.Size16.Alert();
-
     private IAksClient? Client;
     private List<DeploymentInfo> Deployments = [];
     private List<StatefulSetInfo> StatefulSets = [];
@@ -718,12 +693,6 @@ false)
     private PodInfo? _pfDialogPod;
     private int _pfDialogRemotePort;
 
-    // Pod health monitor panel state
-    private bool _showMonitorPanel;
-    private int _recentAlertCount;
-
-
-
     // Context menu refs and targets
     private ContextMenu DeploymentMenu = default!;
     private ContextMenu PodMenu = default!;
@@ -802,22 +771,8 @@ false)
     {
         EventBus.Subscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Subscribe<RefreshRequestedEvent>(OnRefreshRequested);
-        Monitor.PodHealthDetected += OnMonitorPodHealthDetected;
         Workspaces.RegisterRestoreHandler("aks", RestoreWorkspaceAsync);
         RegisterAksCommands();
-    }
-
-    private void OnMonitorPodHealthDetected(PodHealthEvent evt)
-    {
-        _recentAlertCount++;
-        _ = InvokeAsync(StateHasChanged); // BL-2
-    }
-
-    private void ToggleMonitorPanel()
-    {
-        _showMonitorPanel = !_showMonitorPanel;
-        if (_showMonitorPanel)
-            _recentAlertCount = 0; // reset badge when user opens the panel
     }
 
     private void RegisterAksCommands()
@@ -2756,7 +2711,6 @@ SelectedIngress.Namespace); break;
         cts?.Dispose();
         EventBus.Unsubscribe<OpenPortForwardPanelEvent>(OnOpenPortForwardPanel);
         EventBus.Unsubscribe<RefreshRequestedEvent>(OnRefreshRequested);
-        Monitor.PodHealthDetected -= OnMonitorPodHealthDetected;
         Workspaces.UnregisterRestoreHandler("aks");
         foreach (var id in new[] { "aks-refresh", "aks-restart-deployment", "aks-scale-deployment",
                                    "aks-view-logs", "aks-open-pod-shell", "aks-port-forward" })

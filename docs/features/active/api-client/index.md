@@ -89,17 +89,17 @@ workflows.
 
 ## Risks
 
-| Risk                                          | Mitigation                                                                                          |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Monaco bundle size impacts boot time          | Lazy `import()` inside `apiClientEditor.js`; load only on first `/api-client` visit                 |
-| OAuth 2 redirect URI scheme unresolved        | OPEN QUESTION — see `decisions.md` PENDING-1; defer to Phase 4 implementation start                |
-| Postman v2.1 format complexity                | Import a focused subset (folders, requests, headers, body, basic auth); document gaps               |
-| Bruno `.bru` format is partially documented   | Export-only Phase 7; import deferred to follow-up after format is confirmed stable                  |
-| GraphQL introspection adds latency            | Cache schema per endpoint in page-scoped service; invalidate on URL change                          |
-| GraphQL subscriptions need `graphql-ws`       | `graphql-ws` framing implemented on top of `IWebSocketClientService`; no extra NuGet needed        |
-| Key Vault unavailable at variable resolution  | Graceful degradation: return `[KV_UNAVAILABLE]` placeholder, never throw                            |
-| Large collections degrade UI                  | `<Virtualize>` in collection tree from Phase 1; flattened-list rendering model                      |
-| Response body size                            | Cap display at 500 KB; [Load full response] for larger payloads                                     |
+| Risk                                                | Mitigation                                                                                         |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Monaco bundle size impacts boot time                | Lazy `import()` inside `apiClientEditor.js`; load only on first `/api-client` visit                |
+| OAuth 2 redirect URI scheme unresolved              | OPEN QUESTION — see `decisions.md` PENDING-1; defer to Phase 4 implementation start                |
+| Postman v2.1 format complexity                      | Import a focused subset (folders, requests, headers, body, basic auth); document gaps              |
+| Bruno `.bru` format is partially documented         | Export-only Phase 7; import deferred to follow-up after format is confirmed stable                 |
+| GraphQL introspection adds latency                  | Cache schema per endpoint in page-scoped service; invalidate on URL change                         |
+| GraphQL subscriptions need `graphql-ws`             | `graphql-ws` framing implemented on top of `IWebSocketClientService`; no extra NuGet needed        |
+| Key Vault unavailable at variable resolution        | Graceful degradation: return `[KV_UNAVAILABLE]` placeholder, never throw                           |
+| Large collections degrade UI                        | `<Virtualize>` in collection tree from Phase 1; flattened-list rendering model                     |
+| Response body size                                  | Cap display at 500 KB; [Load full response] for larger payloads                                    |
 | Post-request JSONPath capture on malformed response | `PostRequestCaptureExecutor` wraps each rule in try/catch; failed rules log a warning, never throw |
 
 ## Quick Links
