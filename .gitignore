@@ -30,3 +30,6 @@ Thumbs.db
 # Copilot local validation output
 artifacts/copilot-build/
 artifacts/copilot-obj/
+
+# MSIX build output
+src/SwebKit.App/AppPackages/
