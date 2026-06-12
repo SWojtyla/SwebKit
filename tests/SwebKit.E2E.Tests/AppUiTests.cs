@@ -117,7 +117,7 @@ public sealed class AppUiTests : IClassFixture<AppFixture>, IAsyncLifetime
 
         await NavigateToAsync("service-bus");
 
-        await Assertions.Expect(_fixture.Page.Locator(".service-bus-page-shell"))
+        await Assertions.Expect(_fixture.Page.Locator(".service-bus-page"))
             .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
     }
 

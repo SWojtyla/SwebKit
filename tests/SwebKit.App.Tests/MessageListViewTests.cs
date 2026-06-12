@@ -48,7 +48,7 @@ public sealed class MessageListViewTests : TestContext
             .Add(p => p.EntityPath, "orders")
             .Add(p => p.ShowCompose, true));
 
-        cut.Find("[title='Open message composer']").Click();
+        cut.Find("[title='Compose and send a new message']").Click();
 
         cut.WaitForAssertion(() =>
         {

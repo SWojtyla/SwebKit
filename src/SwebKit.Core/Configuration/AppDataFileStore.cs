@@ -92,7 +92,7 @@ internal static class AppDataFileStore
             }
             else
             {
-                File.Move(tempPath, filePath);
+                File.Move(tempPath, filePath, overwrite: true);
             }
         }
         catch

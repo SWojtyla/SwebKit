@@ -7,7 +7,7 @@
                 <input class="cache-rename-input" type="text" @bind="_renameDraft" @bind:event="oninput"
                        @onkeydown="HandleRenameKeyDown" @onblur="CommitRenameAsync" aria-label="Redis cache display name" />
             }
-            else
+            else if (CacheEntries.Count > 1)
             {
                 <select class="cache-selector" @bind="_selectedCacheId" @bind:after="HandleCacheChangedAsync"
                         aria-label="Select active Redis cache">
@@ -16,6 +16,12 @@
                         <option value="@cache.Id">@cache.DisplayName</option>
                     }
                 </select>
+                <button class="cache-rename-btn" type="button" @onclick="StartRename" title="Rename">&#9998;</button>
+            }
+            else
+            {
+                <input class="cache-name-input" type="text" readonly value="@ActiveCacheEntry.DisplayName"
+                       aria-label="Active Redis cache" />
                 <button class="cache-rename-btn" type="button" @onclick="StartRename" title="Rename">&#9998;</button>
             }
         </div>
