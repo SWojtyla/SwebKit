@@ -152,3 +152,115 @@ holds the instance and calls `DisposeAsync` on navigation away.
 tied to one panel's lifetime. Sharing a WebSocket service across the page's DI scope would
 prevent connecting to multiple endpoints in sequence without restart. Transient lifetime keeps
 the contract simple: create → connect → disconnect → dispose.
+
+---
+
+## DEC-11: Single-request focus model — one request open at a time
+
+**Decision:** `ApiClientPage` holds one active request at a time. Navigation between requests
+is via the collection tree (click) or the `RequestQuickNavPanel` overlay (`Ctrl+P`). No multi-tab
+request model.
+
+**Rationale:** A tab model requires per-tab state management (in-flight cancellation, dirty tracking,
+editor instance lifecycle) that adds significant complexity for Phase 1. The design is intentionally
+clean so tabs can be added later without structural changes. The quick-nav panel provides fast
+request switching without the overhead of a tab strip. Keeping state simple also eliminates
+concurrent-request race conditions at launch.
+
+**Implication:** If a request is dirty and auto-save is off, switching to another request prompts
+the user to save or discard changes.
+
+---
+
+## DEC-12: Two-level variable scope — collection vars and environment vars
+
+**Decision:** Variables are resolved in this order (first match wins):
+1. Active environment variables (if an environment is selected)
+2. Collection-level variables (always active, no environment needed)
+
+Environment variables override collection variables on the same key.
+
+**Rationale:** This mirrors Bruno's approach and covers the common pattern of:
+- Collection vars: base URL, API version, feature flags that apply to all requests regardless of environment
+- Environment vars: environment-specific overrides (dev/staging/prod tokens, URLs)
+
+No global scope (app-wide), no per-request local scope, no nested scope chains. Keeping it to
+two levels makes the resolution model predictable and auditable in the preview UI.
+
+---
+
+## DEC-13: Post-request capture uses JSONPath building blocks — no code execution
+
+**Decision:** `HttpRequestEntry.CaptureRules` holds a list of `CaptureRule` records. Each rule
+specifies: source type (JsonPath / Header / StatusCode), source expression, target variable name,
+and target scope (Collection or Environment). `PostRequestCaptureExecutor` applies the rules
+sequentially after a successful response. No scripting engine, no JavaScript, no C# expression
+evaluation.
+
+**Rationale:** A no-code approach keeps the surface safe (no arbitrary code execution risk),
+makes rules portable across users and exports, and is sufficient for the primary use case of
+capturing auth tokens from OAuth responses. JSONPath via `JsonPath.Net` covers all practical
+response extraction patterns.
+
+**Scope guards:** No conditional rules, no chained rules, no loop constructs. Rules are flat
+and independent. A rule that fails logs a warning and does not block other rules.
+
+---
+
+## DEC-14: GraphQL subscriptions implemented over `graphql-ws` protocol
+
+**Decision:** When the selected operation is a `subscription`, the executor switches to
+`IGraphQlSubscriptionService`, which wraps `IWebSocketClientService` with `graphql-ws` protocol
+framing (`graphql-transport-ws` subprotocol). No separate NuGet package is needed — the protocol
+framing is thin JSON message construction on top of the existing WebSocket service.
+
+**Rationale:** `graphql-ws` is the current standard (`graphql-transport-ws` subprotocol).
+The legacy `subscriptions-transport-ws` protocol is excluded from scope. Reusing
+`IWebSocketClientService` means subscriptions get the same lifecycle (cancellation, dispose on
+navigate away) as Phase 6 WebSocket connections for free.
+
+---
+
+## DEC-15: Auto-save is an opt-in user setting, default off
+
+**Decision:** `UserSettings.AutoSaveRequests: bool` (default: `false`). When enabled, any
+change to the active request triggers a debounced 500 ms save to `CollectionRepository`. When
+disabled, a dirty indicator (asterisk) appears in the panel header and the user saves explicitly.
+
+**Rationale:** Auto-save is the right default for power users who iterate quickly, but some users
+prefer explicit control when exploring or experimenting. Making it a user setting respects both
+workflows without requiring a complex undo/history system at Phase 1.
+
+---
+
+## DEC-16: Auth inheritance by null-propagation up the tree
+
+**Decision:** `HttpRequestEntry.Auth = null` means "inherit". `RequestFolder.DefaultAuth` and
+`Collection.DefaultAuth` are the two ancestor levels. `IAuthInheritanceResolver.Resolve` walks:
+request → direct parent folder → collection. The first non-null value is used.
+
+**Rationale:** Mirrors the common pattern in Postman and Bruno where a collection-level auth
+(e.g., Bearer token) applies to all requests unless overridden. The null sentinel is clean and
+serialisation-transparent — a request with no auth simply omits the `Auth` property in JSON.
+
+**Implication:** Setting a request's auth to `AuthType.None` explicitly opts out of inheritance
+(the auth tab shows [None] and inheritance is suppressed). This is distinct from `Auth = null`
+(which inherits). The UI makes the difference visible.
+
+---
+
+## PENDING-1: OAuth 2 redirect URI scheme — OPEN QUESTION
+
+**Status:** Unresolved. Must be decided before Phase 4 implementation starts.
+
+**Options:**
+
+| Option | URI example | Notes |
+|---|---|---|
+| Custom MAUI scheme | `swebikit://oauth-callback` | Registered in Windows registry; survives browser redirects |
+| Localhost + random port | `http://localhost:49152/callback` | Works everywhere; port binding race condition on some machines |
+| Out-of-band (manual paste) | n/a | User copies token from browser; simpler but poor UX |
+
+**Recommendation:** Custom MAUI scheme (`swebikit://oauth-callback`) registered via `AppxManifest`
+and MAUI `WebAuthenticator` protocol activation. This is the standard pattern for MAUI OAuth.
+**Confirm before Phase 4 starts.**
