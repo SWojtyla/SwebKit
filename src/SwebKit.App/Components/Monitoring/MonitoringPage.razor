@@ -15,6 +15,10 @@
                 class="monitoring-toggle-dot @(Monitor.IsMonitoring ? "monitoring-toggle-dot--active" : string.Empty)"></span>
                 @(Monitor.IsMonitoring ? "Monitoring active" : "Monitoring paused")
             </button>
+            <button class="page-header-action-btn page-header-action-btn--accent" @onclick="OpenCreateDrawer">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
+                Add rule
+            </button>
         </Actions>
     </RoutePageHeader>
 
@@ -26,11 +30,6 @@
                 <span class="monitoring-badge monitoring-badge--firing">@_firingCount firing</span>
             }
         </span>
-        <div class="page-toolbar__spacer"></div>
-        <button class="page-toolbar-btn page-toolbar-btn--primary" @onclick="OpenCreateDrawer">
-            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
-            Add rule
-        </button>
     </div>
 
     @if (_isLoading)

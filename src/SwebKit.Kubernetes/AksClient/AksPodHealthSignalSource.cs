@@ -22,7 +22,7 @@ public sealed class AksPodHealthSignalSource : IAlertSignalSource
 
     public async Task<AlertSignalResult> EvaluateAsync(MonitoringAlertRule rule, CancellationToken ct)
     {
-        var client = _pool.GetAksClient();
+        var client = _pool.GetAksClient(rule.AksPodParams?.KubeconfigContext);
         if (client is null)
             return new AlertSignalResult(AlertSignalStatus.Skipped, "AKS not configured");
 
@@ -59,6 +59,6 @@ public sealed class AksPodHealthSignalSource : IAlertSignalSource
             _logger.LogWarning(ex, "AksPodHealthSignalSource error for rule {RuleId}", rule.Id);
             return new AlertSignalResult(AlertSignalStatus.Error, ex.Message);
         }
-        // Note: do NOT dispose client — the pool owns its lifetime.
+        // Note: do NOT dispose client - the pool owns its lifetime.
     }
 }

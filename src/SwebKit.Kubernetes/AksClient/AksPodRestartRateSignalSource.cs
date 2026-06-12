@@ -19,7 +19,7 @@ public sealed class AksPodRestartRateSignalSource : IAlertSignalSource
 
     public async Task<AlertSignalResult> EvaluateAsync(MonitoringAlertRule rule, CancellationToken ct)
     {
-        var client = _pool.GetAksClient();
+        var client = _pool.GetAksClient(rule.AksPodParams?.KubeconfigContext);
         if (client is null)
             return new AlertSignalResult(AlertSignalStatus.Skipped, "AKS not configured");
 

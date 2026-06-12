@@ -35,6 +35,7 @@ public sealed class MonitoringAlertRule
 public sealed class AksPodAlertParams
 {
     public string Namespace { get; set; } = string.Empty;
+    public string KubeconfigContext { get; set; } = string.Empty; // empty = use global configured context
     public int RestartThreshold { get; set; } = 5;
     public double HealthScoreThreshold { get; set; } = 0.25;
 }

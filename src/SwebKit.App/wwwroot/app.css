@@ -3102,6 +3102,19 @@ fluent-button[appearance="stealth"][disabled]::part(control) {
     background: var(--color-accent-subtle);
 }
 
+.page-header-action-btn--accent {
+    background: var(--color-accent);
+    color: var(--color-on-accent, #fff);
+    border-color: var(--color-accent);
+    font-weight: 500;
+}
+
+.page-header-action-btn--accent:hover {
+    background: color-mix(in srgb, var(--color-accent) 85%, black);
+    border-color: color-mix(in srgb, var(--color-accent) 85%, black);
+    color: var(--color-on-accent, #fff);
+}
+
 /* ── Release selector ── */
 .release-selector-wrap { display: flex; align-items: center; }
 

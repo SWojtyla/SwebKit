@@ -35,6 +35,10 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
     private string? _aksKubeconfigPath;
     private bool _aksIsDemo;
 
+    // Per-rule context overrides (rare — only when a rule targets a non-default context)
+    private readonly Dictionary<string, IAksClient> _overrideClients
+        = new(StringComparer.Ordinal);
+
     // ── Service Bus ──────────────────────────────────────────────────────────
     // Key = alias (case-insensitive). Value = (client, credentialKey last used).
     private readonly Dictionary<string, (IServiceBusClient Client, string CredentialKey)> _sbClients
@@ -69,6 +73,37 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
     }
 
     // ── IAksClient ───────────────────────────────────────────────────────────
+
+    public IAksClient? GetAksClient(string? context)
+    {
+        if (string.IsNullOrWhiteSpace(context))
+            return GetAksClient();
+
+        // Demo mode — DemoAksClient handles all contexts.
+        if (_appState.UseDemoData)
+            return GetAksClient();
+
+        var cfg = _appState.Config.AksConfig;
+        if (cfg is null)
+            return null;
+
+        // If the requested context matches the global configured context, reuse the shared client.
+        if (string.Equals(context, cfg.KubeconfigContext, StringComparison.Ordinal))
+            return GetAksClient();
+
+        // Per-rule context override — create a lightweight client without caching
+        // (overrides are rare, typically just a handful of distinct contexts).
+        lock (_lock)
+        {
+            if (_overrideClients.TryGetValue(context, out var existing))
+                return existing;
+
+            var client = _aksFactory.Create(context, cfg.KubeconfigPath);
+            _overrideClients[context] = client;
+            _logger.LogDebug("MonitoringConnectionPool: AKS override client created for context '{Context}'", context);
+            return client;
+        }
+    }
 
     public IAksClient? GetAksClient()
     {
@@ -202,6 +237,14 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
                 _logger.LogDebug("MonitoringConnectionPool: AKS client invalidated.");
             }
 
+            // Invalidate per-rule context overrides (kubeconfig path may have changed)
+            if (aksCfg is null || _overrideClients.Count > 0)
+            {
+                foreach (var (_, oc) in _overrideClients)
+                    if (oc is IAsyncDisposable od) _ = od.DisposeAsync();
+                _overrideClients.Clear();
+            }
+
             // Service Bus: remove aliases no longer in config.
             var configuredAliases = _appState.ServiceBusNamespaces
                 .Select(n => n.Alias)
@@ -251,6 +294,10 @@ public sealed class MonitoringConnectionPool : IMonitoringConnectionPool
 
         foreach (var r in redisToDispose)
             (r as IDisposable)?.Dispose();
+
+        // Dispose context-override AKS clients
+        foreach (var (_, oc) in _overrideClients)
+            if (oc is IAsyncDisposable od) await od.DisposeAsync();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

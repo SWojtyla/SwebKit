@@ -17,6 +17,12 @@ public interface IMonitoringConnectionPool : IAsyncDisposable
     IAksClient? GetAksClient();
 
     /// <summary>
+    /// Returns the cached <see cref="IAksClient"/> for an explicit <paramref name="context"/>.
+    /// Falls back to <see cref="GetAksClient"/> when <paramref name="context"/> is null or empty.
+    /// </summary>
+    IAksClient? GetAksClient(string? context);
+
+    /// <summary>
     /// Returns the cached <see cref="IServiceBusClient"/> for <paramref name="alias"/>,
     /// or <see langword="null"/> if the alias is not found or not credentialed.
     /// Connection is established lazily on first call and reused thereafter.
