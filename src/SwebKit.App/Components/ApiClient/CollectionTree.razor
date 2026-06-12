@@ -1,4 +1,5 @@
 @* Flattened + virtualized collection tree (BL-5 guard on ShouldRender) *@
+@inject IJSRuntime JS
 
 <div class="collection-tree">
 
@@ -11,10 +12,9 @@
     @* Virtualized flat list *@
     <div class="collection-tree__rows" role="tree">
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
-            <div @key="node.Id"
-                 class="collection-tree__row @(node.Node.Id == SelectedRequestId ? "collection-tree__row--selected" : "")"
+            <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
                  style="padding-left: @(8 + node.Depth * 16)px" role="treeitem"
-                 aria-selected="@(node.Node.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
+                 aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
                  @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
 
                 @* Expand/collapse chevron for folders *@
@@ -45,8 +45,17 @@
                     </span>
                 }
 
-                @* Label *@
-                <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
+                @* Label or inline rename input *@
+                @if (node.Id == _renamingNodeId)
+                {
+                    <input class="collection-tree__rename-input" value="@_renameValue"
+                           @oninput="e => _renameValue = e.Value as string ?? _renameValue" @onkeydown="OnRenameKeyDownAsync"
+                           @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
+                }
+                else
+                {
+                    <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
+                }
 
                 @* Child count badge when folder is collapsed *@
                 @if (node.Node.Type == ApiCollectionNodeType.Folder && !node.IsExpanded && node.HasChildren)
@@ -60,16 +69,50 @@
         </Virtualize>
     </div>
 
+    @* Context menu (right-click) *@
+    @if (_ctxNode is not null)
+    {
+        <div class="ctx-backdrop" @onclick="() => _ctxNode = null"></div>
+        <div class="ctx-menu"
+             style="top:@(_ctxY.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px; left:@(_ctxX.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))px;">
+            @{
+                var isCollRoot = _ctxNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal);
+                var isFolder = _ctxNode.Node.Type == ApiCollectionNodeType.Folder;
+            }
+            @if (isFolder)
+            {
+                <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
+                    <span class="ctx-item-icon">📁</span>New sub-folder
+                </button>
+                <button class="ctx-item" @onclick="AddRequestCtxAsync">
+                    <span class="ctx-item-icon">＋</span>New request here
+                </button>
+                <div class="ctx-separator"></div>
+            }
+            <button class="ctx-item" @onclick="BeginRenameCtx">
+                <span class="ctx-item-icon">✏️</span>@(isCollRoot ? "Rename collection" : "Rename")
+            </button>
+            <div class="ctx-separator"></div>
+            <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
+                <span class="ctx-item-icon">🗑</span>@(isCollRoot ? "Delete collection" : "Delete")
+            </button>
+        </div>
+    }
+
 </div>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
     [Parameter] public string? SelectedRequestId { get; set; }
+    [Parameter] public string? ActiveCollectionId { get; set; }
     [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
+    [Parameter] public EventCallback<string> OnCollectionSelected { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnAddFolder { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnAddRequest { get; set; }
     [Parameter] public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
 
     // ── Flattened tree state ──────────────────────────────────────────────────
 
@@ -199,21 +242,123 @@
     {
         if (flatNode.Node.Type == ApiCollectionNodeType.Folder)
         {
+            // For collection root nodes also fire the selection event so the page
+            // can set _activeCollection and enable the New Request button.
+            if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+                await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
+
             ToggleExpand(flatNode);
             return;
         }
 
         if (flatNode.Node.Request is not null)
+        {
+            // Ensure the owning collection is active before the request is opened.
+            await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
             await OnRequestSelected.InvokeAsync(flatNode.Node.Request);
+        }
     }
 
     private void ShowContextMenu(MouseEventArgs e, FlatTreeNode node)
     {
-        // Context menu is deferred to a future iteration
-        // (right-click: Rename, Duplicate, Delete, Add Folder, Add Request)
+        _ctxNode = node;
+        _ctxX = e.ClientX;
+        _ctxY = e.ClientY;
+    }
+
+    // ── Context menu state ────────────────────────────────────────────────────
+
+    private FlatTreeNode? _ctxNode;
+    private double _ctxX;
+    private double _ctxY;
+
+    // ── Inline rename state ───────────────────────────────────────────────────
+
+    private string? _renamingNodeId;
+    private string _renameValue = "";
+    private ElementReference _renameInput;
+    private bool _shouldFocusRename;
+
+    private void BeginRenameCtx()
+    {
+        if (_ctxNode is null) return;
+        _renamingNodeId = _ctxNode.Id;
+        _renameValue = _ctxNode.Node.Name;
+        _ctxNode = null;
+        _shouldFocusRename = true;
+    }
+
+    private async Task AddSubFolderCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null) await OnAddFolder.InvokeAsync(node.Node);
+    }
+
+    private async Task AddRequestCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is not null) await OnAddRequest.InvokeAsync(node.Node);
+    }
+
+    private async Task DeleteNodeCtxAsync()
+    {
+        var node = _ctxNode;
+        _ctxNode = null;
+        if (node is null) return;
+        if (node.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+            await OnDeleteCollection.InvokeAsync(node.CollectionId);
+        else
+            await OnDeleteNode.InvokeAsync(node.Node);
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (_renamingNodeId is null) return;
+        var flatNode = _flatNodes.FirstOrDefault(n => n.Id == _renamingNodeId);
+        _renamingNodeId = null;
+        if (flatNode is null || string.IsNullOrWhiteSpace(_renameValue)) return;
+
+        if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+        {
+            if (_renameValue != flatNode.Node.Name)
+                await OnRenameCollection.InvokeAsync((flatNode.CollectionId, _renameValue));
+        }
+        else if (_renameValue != flatNode.Node.Name)
+        {
+            await OnRenameNode.InvokeAsync((flatNode.Node, _renameValue));
+        }
+    }
+
+    private async Task OnRenameKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRenameAsync();
+        else if (e.Key == "Escape") _renamingNodeId = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusRename)
+        {
+            _shouldFocusRename = false;
+            try { await _renameInput.FocusAsync(); }
+            catch { /* input may not be in viewport */ }
+        }
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────────
+
+    private string GetRowClass(FlatTreeNode node)
+    {
+        // Selected request takes highest priority
+        if (node.Node.Request?.Id == SelectedRequestId && SelectedRequestId is not null)
+            return "collection-tree__row--selected";
+        // Active collection root gets a softer accent
+        if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)
+            return "collection-tree__row--active-collection";
+        return string.Empty;
+    }
 
     private static string GetMethodLabel(ApiRequestMethod method) => method switch
     {

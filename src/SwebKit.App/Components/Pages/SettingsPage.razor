@@ -206,6 +206,31 @@
                     Verify SSL certificates
                 </FluentCheckbox>
             </div>
+
+            <div class="settings-field-group">
+                <label class="settings-label">Azure Key Vaults</label>
+                <p class="settings-hint">
+                    Named Key Vault endpoints used by environment variables of type "Key Vault".
+                    Add one entry per vault. Authentication uses your Azure CLI identity (DefaultAzureCredential).
+                </p>
+
+                @foreach (var kv in AppState.Config.KeyVaults)
+                {
+                    <div class="settings-kv-row">
+                        <input type="text" class="settings-input settings-kv-row__name" placeholder="Name (e.g. Production KV)"
+                               value="@kv.Name" @onchange="async e => { kv.Name = e.Value?.ToString() ?? string.Empty; await SaveAsync(); }" />
+                        <input type="text" class="settings-input settings-kv-row__url" placeholder="https://my-vault.vault.azure.net/"
+                               value="@kv.Url" @onchange="async e => { kv.Url = e.Value?.ToString() ?? string.Empty; await SaveAsync(); }" />
+                        <button type="button" class="settings-kv-row__remove" title="Remove vault"
+                                @onclick="async () => { AppState.Config.KeyVaults.Remove(kv); await SaveAsync(); }">×</button>
+                    </div>
+                }
+
+                <button type="button" class="settings-kv-add-btn"
+                        @onclick="async () => { AppState.Config.KeyVaults.Add(new SwebKit.Core.Domain.KeyVaultEntry()); await SaveAsync(); }">
+                    + Add Key Vault
+                </button>
+            </div>
             break;
 
         case ObservabilitySection:

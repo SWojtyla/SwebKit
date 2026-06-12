@@ -18,7 +18,7 @@ public sealed class AzureKeyVaultSecretResolver(string vaultUrl, ILogger<AzureKe
     public bool IsAvailable => true;
 
     /// <inheritdoc />
-    public async Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
+    public async Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(secretName))
             return $"[KV_ERROR:empty-name]";

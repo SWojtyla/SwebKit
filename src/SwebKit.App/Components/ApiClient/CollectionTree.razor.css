@@ -74,6 +74,15 @@
     background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
+.collection-tree__row--active-collection {
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+    font-weight: 600;
+}
+
+.collection-tree__row--active-collection:hover {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
 /* ── Chevron ────────────────────────────────────────────── */
 
 .collection-tree__chevron {
@@ -157,4 +166,19 @@
     color: var(--color-text-faint);
     border-radius: 8px;
     padding: 1px 5px;
+}
+
+/* ── Inline rename input ────────────────────────────────── */
+
+.collection-tree__rename-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-accent);
+    border-radius: 3px;
+    color: var(--color-text);
+    font-size: 12px;
+    padding: 1px 4px;
+    outline: none;
+    font-family: inherit;
 }

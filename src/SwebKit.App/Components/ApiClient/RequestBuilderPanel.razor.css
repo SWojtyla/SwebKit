@@ -57,17 +57,20 @@
     flex-shrink: 0;
 }
 
-.req-builder__method-select {
+.req-builder__method-picker {
+    position: relative;
     flex-shrink: 0;
+}
+
+.req-builder__method-btn {
     height: 32px;
-    padding: 0 6px;
+    padding: 0 8px;
     font-size: 11px;
     font-weight: 700;
     border: 1px solid var(--color-border);
     border-radius: 4px;
     background: var(--color-surface-raised);
     color: var(--color-text);
-    color-scheme: var(--control-color-scheme);
     cursor: pointer;
     min-width: 58px;
     letter-spacing: 0.03em;
@@ -75,15 +78,58 @@
 }
 
 /* Method colour coding */
-.req-builder__method-select--get    { color: #a8f0bd; background: #1a6b2f; border-color: #2a8a3f; }
-.req-builder__method-select--post   { color: #a8d0f0; background: #1a4d8f; border-color: #2a6abf; }
-.req-builder__method-select--put    { color: #f0e0a8; background: #6b5c1a; border-color: #8a7a2a; }
-.req-builder__method-select--patch  { color: #d8a8f0; background: #4a1a6b; border-color: #6a2a8a; }
-.req-builder__method-select--delete { color: #f0a8a8; background: #6b1a1a; border-color: #8a2a2a; }
-.req-builder__method-select--head   { color: #aaa;    background: #2a2a2a; border-color: #444; }
-.req-builder__method-select--options { color: #aaa;   background: #2a2a2a; border-color: #444; }
-.req-builder__method-select--graphql { color: #e2a8f0; background: #4a0d6b; border-color: #6a1a8a; }
-.req-builder__method-select--websocket { color: #a8e8f0; background: #0d4a4a; border-color: #1a6a6a; }
+.req-builder__method-btn--get    { color: #a8f0bd; background: #1a6b2f; border-color: #2a8a3f; }
+.req-builder__method-btn--post   { color: #a8d0f0; background: #1a4d8f; border-color: #2a6abf; }
+.req-builder__method-btn--put    { color: #f0e0a8; background: #6b5c1a; border-color: #8a7a2a; }
+.req-builder__method-btn--patch  { color: #d8a8f0; background: #4a1a6b; border-color: #6a2a8a; }
+.req-builder__method-btn--delete { color: #f0a8a8; background: #6b1a1a; border-color: #8a2a2a; }
+.req-builder__method-btn--head   { color: #aaa;    background: #2a2a2a; border-color: #444; }
+.req-builder__method-btn--options { color: #aaa;   background: #2a2a2a; border-color: #444; }
+.req-builder__method-btn--graphql { color: #e2a8f0; background: #4a0d6b; border-color: #6a1a8a; }
+.req-builder__method-btn--websocket { color: #a8e8f0; background: #0d4a4a; border-color: #1a6a6a; }
+
+.req-builder__method-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: var(--z-overlay);
+    min-width: 90px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.req-builder__method-option {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+
+.req-builder__method-option:hover { opacity: 0.85; }
+
+.req-builder__method-option--get    { color: #a8f0bd; background: #1a6b2f; }
+.req-builder__method-option--post   { color: #a8d0f0; background: #1a4d8f; }
+.req-builder__method-option--put    { color: #f0e0a8; background: #6b5c1a; }
+.req-builder__method-option--patch  { color: #d8a8f0; background: #4a1a6b; }
+.req-builder__method-option--delete { color: #f0a8a8; background: #6b1a1a; }
+.req-builder__method-option--head   { color: #aaa;    background: #2a2a2a; }
+.req-builder__method-option--options { color: #aaa;   background: #2a2a2a; }
+.req-builder__method-option--graphql { color: #e2a8f0; background: #4a0d6b; }
+.req-builder__method-option--websocket { color: #a8e8f0; background: #0d4a4a; }
 
 .req-builder__url-wrap {
     flex: 1;

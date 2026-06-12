@@ -131,6 +131,11 @@ public sealed class EnvironmentVariable
     public EnvironmentVariableSecretSource SecretSource { get; set; } = EnvironmentVariableSecretSource.Plain;
     /// <summary>Key used to look up the secret in the Windows Credential Store or Azure Key Vault.</summary>
     public string? CredentialKey { get; set; }
+    /// <summary>
+    /// The <see cref="KeyVaultEntry.Name"/> of the vault to use when <see cref="SecretSource"/> is
+    /// <see cref="EnvironmentVariableSecretSource.AzureKeyVault"/>.
+    /// </summary>
+    public string? KeyVaultName { get; set; }
     public bool IsEnabled { get; set; } = true;
 }
 

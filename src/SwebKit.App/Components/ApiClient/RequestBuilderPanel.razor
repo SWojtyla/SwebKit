@@ -24,14 +24,27 @@
 
     @* ── URL bar ─────────────────────────────────────────────────────────────── *@
     <div class="req-builder__url-bar">
-        <select class="req-builder__method-select
-            req-builder__method-select--@Request.Method.ToString().ToLowerInvariant()"
-                value="@Request.Method.ToString()" @onchange="OnMethodChangedAsync">
-            @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+        <div class="req-builder__method-picker">
+            <button type="button"
+                    class="req-builder__method-btn req-builder__method-btn--@Request.Method.ToString().ToLowerInvariant()"
+                    @onclick="() => _showMethodPicker = !_showMethodPicker">
+                @MethodLabel(Request.Method)
+            </button>
+            @if (_showMethodPicker)
             {
-                <option value="@m.ToString()">@MethodLabel(m)</option>
+                <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
+                <div class="req-builder__method-dropdown">
+                    @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+                    {
+                        <button type="button"
+                                class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
+                                @onclick="() => SelectMethodAsync(m)">
+                            @MethodLabel(m)
+                        </button>
+                    }
+                </div>
             }
-        </select>
+        </div>
 
         <div class="req-builder__url-wrap">
             <input class="req-builder__url-input" type="text" value="@Request.Url"
@@ -249,10 +262,12 @@
         await MarkDirtyAsync();
     }
 
-    private async Task OnMethodChangedAsync(ChangeEventArgs e)
+    private bool _showMethodPicker;
+
+    private async Task SelectMethodAsync(ApiRequestMethod method)
     {
-        if (Enum.TryParse<ApiRequestMethod>(e.Value?.ToString(), out var method))
-            Request.Method = method;
+        _showMethodPicker = false;
+        Request.Method = method;
         await MarkDirtyAsync();
     }
 

@@ -6,6 +6,82 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    position: relative; /* needed for dialog overlay */
+}
+
+/* ── New collection dialog ───────────────────────────────── */
+
+.api-client-dialog-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--z-overlay) - 1);
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.api-client-dialog {
+    position: absolute;
+    top: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-overlay);
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 16px 20px;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.api-client-dialog__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.api-client-dialog__input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+.api-client-dialog__input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+.api-client-dialog__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.api-client-dialog__btn {
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+}
+
+.api-client-dialog__btn--primary {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground, #fff);
+    border-color: transparent;
+}
+
+.api-client-dialog__btn--primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* ── Toolbar ─────────────────────────────────────────────── */
@@ -93,15 +169,44 @@
     color: var(--color-text-muted);
 }
 
-.api-client-toolbar__env-select {
+/* ── Env picker (custom dropdown, replaces native select) ── */
+
+.api-client-env-picker {
+    position: relative;
+}
+
+.api-client-env-picker__btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     color: var(--color-text);
-    color-scheme: var(--control-color-scheme);
     font-size: 12px;
     padding: 3px 6px;
     min-width: 140px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.api-client-env-picker__chevron {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.api-client-env-picker__dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: var(--z-overlay);
+    min-width: 160px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
 }
 
 /* ── Body split ─────────────────────────────────────────── */

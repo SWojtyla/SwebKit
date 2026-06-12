@@ -3771,6 +3771,13 @@ fluent-button[appearance="stealth"][disabled]::part(control) {
     color-scheme: var(--control-color-scheme);
 }
 
+/* Prevent app theme text/bg colours from bleeding into the OS-native select popup.
+   CanvasText / Canvas are system colours that match the native popup background. */
+select option {
+    background-color: Canvas;
+    color: CanvasText;
+}
+
 #blazor-error-ui { display: none; }
 
 /* ── Context menu ── */
@@ -3812,6 +3819,9 @@ fluent-button[appearance="stealth"][disabled]::part(control) {
 
 .ctx-item:hover,
 .ctx-item:focus-visible { background: color-mix(in srgb, var(--color-accent-subtle) 72%, transparent); }
+
+.ctx-item--active { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.ctx-item--active:hover { background: color-mix(in srgb, var(--color-accent) 20%, transparent); }
 
 .ctx-item.destructive { color: var(--color-error); }
 .ctx-item.destructive:hover { background: rgba(244, 67, 54, 0.08); }

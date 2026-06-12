@@ -12,6 +12,6 @@ public sealed class NoopKeyVaultSecretResolver : IKeyVaultSecretResolver
     public bool IsAvailable => false;
 
     /// <inheritdoc />
-    public Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
+    public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
         => Task.FromResult($"[KV_UNAVAILABLE:{secretName}]");
 }

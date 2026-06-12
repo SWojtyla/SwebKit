@@ -12,8 +12,8 @@
     @* ── Toolbar ── *@
     <div class="api-client-toolbar">
         <div class="api-client-toolbar__left">
-            <button type="button" class="api-client-toolbar-btn"
-                    title="New collection (Ctrl+Shift+N)" @onclick="AddCollectionAsync">
+            <button type="button" class="api-client-toolbar-btn" title="New collection (Ctrl+Shift+N)"
+                    @onclick="OpenNewCollectionDialog">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
             </button>
@@ -54,14 +54,26 @@
                     title="Manage environments"
                     @onclick="@(() => _worksheetMode = _worksheetMode == "envs" ? null : "envs")">🌍 Envs</button>
             <span class="api-client-toolbar__env-label">Env:</span>
-            <select class="api-client-toolbar__env-select" value="@_activeEnvironmentId"
-                    @onchange="OnEnvironmentChangedAsync">
-                <option value="">— None —</option>
-                @foreach (var env in _environments)
+            <div class="api-client-env-picker">
+                <button type="button" class="api-client-env-picker__btn"
+                        @onclick="() => _showEnvPicker = !_showEnvPicker">
+                    <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
+                    <span class="api-client-env-picker__chevron">▾</span>
+                </button>
+                @if (_showEnvPicker)
                 {
-                    <option value="@env.Id">@env.Name</option>
+                    <div class="ctx-backdrop" @onclick="() => _showEnvPicker = false"></div>
+                    <div class="api-client-env-picker__dropdown">
+                        <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
+                                @onclick="() => SelectEnvAsync(null)">— None —</button>
+                        @foreach (var env in _environments)
+                        {
+                            <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
+                                    @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
+                        }
+                    </div>
                 }
-            </select>
+            </div>
         </div>
     </div>
 
@@ -92,9 +104,11 @@
             else
             {
                 <CollectionTree Collections="@_collections" SelectedRequestId="@_selectedRequestId"
-                                OnRequestSelected="OnRequestSelectedAsync" OnAddFolder="OnAddFolderAsync"
-                                OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
-                                OnDeleteNode="OnDeleteNodeAsync" />
+                                ActiveCollectionId="@_activeCollection?.Id" OnRequestSelected="OnRequestSelectedAsync"
+                                OnCollectionSelected="OnCollectionSelectedAsync"
+                                OnAddFolder="OnAddFolderAsync" OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
+                                OnDeleteNode="OnDeleteNodeAsync" OnRenameCollection="OnRenameCollectionAsync"
+                                OnDeleteCollection="OnDeleteCollectionAsync" />
             }
         </div>
 
@@ -117,47 +131,70 @@
                     <div class="api-client-management-screen__header">
                         <button type="button" class="api-client-management-screen__back"
                                 @onclick="() => _worksheetMode = null">← Back to requests</button>
-                        <span class="api-client-management-screen__title">Collection Variables — @_activeCollection.Name</span>
+                        <span class="api-client-management-screen__title">Collection Variables —
+                            @_activeCollection.Name</span>
+                        </div>
+                        <CollectionVariableEditor Collection="@_activeCollection" OnSaved="@OnCollVarEditorSavedAsync"
+                                                  OnCancelled="@(() => _worksheetMode = null)" />
                     </div>
-                    <CollectionVariableEditor Collection="@_activeCollection"
-                                              OnSaved="@OnCollVarEditorSavedAsync"
-                                              OnCancelled="@(() => _worksheetMode = null)" />
-                </div>
-            }
+                }
             else if (_selectedRequest is null)
-            {
-                <div class="api-client-workspace__empty">
-                    <EmptyState Icon="🌐" Title="No request selected"
-                                Subtitle="Select a request from the collection tree, or create a new one.">
-                        <Actions>
-                            <button type="button" class="api-client-empty-action-btn"
-                                    disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
-                                + New Request
-                            </button>
-                        </Actions>
-                    </EmptyState>
-                </div>
-            }
-            else
-            {
-                <div class="api-client-workspace__panels">
-                    <div class="api-client-workspace__builder" @ref="_builderPanelEl">
-                        <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
-                                             ActiveEnvironment="@ActiveEnvironment"
-                                             AllEnvironments="@_environments"
-                                             ScopeVersion="@_scopeVersion"
-                                             IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
-                                             OnResult="@OnRequestResultAsync" />
+                {
+                    <div class="api-client-workspace__empty">
+                        <EmptyState Icon="🌐" Title="No request selected"
+                                    Subtitle="Select a request from the collection tree, or create a new one.">
+                            <Actions>
+                                <button type="button" class="api-client-empty-action-btn"
+                                        disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
+                                    + New Request
+                                </button>
+                            </Actions>
+                        </EmptyState>
                     </div>
-                    <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
-                    <div class="api-client-workspace__response">
-                        <ResponseViewerPanel Result="@_lastResult" />
+                }
+                else
+                {
+                    <div class="api-client-workspace__panels">
+                        <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+                            <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
+                                                 ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
+                                                 ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
+                                                 OnResult="@OnRequestResultAsync" />
+                        </div>
+                        <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
+                        <div class="api-client-workspace__response">
+                            <ResponseViewerPanel Result="@_lastResult" />
+                        </div>
                     </div>
-                </div>
-            }
+                }
+            </div>
         </div>
     </div>
-</div>
+
+    @* ── New collection dialog ── *@
+    @if (_showNewCollectionDialog)
+    {
+        <div class="api-client-dialog-backdrop" @onclick="() => _showNewCollectionDialog = false"></div>
+        <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="New Collection">
+            <div class="api-client-dialog__title">New Collection</div>
+            <input type="text" class="api-client-dialog__input" placeholder="Collection name…" value="@_newCollectionName"
+                   @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
+            <div class="api-client-dialog__actions">
+                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                        disabled="@string.IsNullOrWhiteSpace(_newCollectionName)"
+                        @onclick="ConfirmNewCollectionAsync">Create</button>
+                <button type="button" class="api-client-dialog__btn"
+                        @onclick="() => _showNewCollectionDialog = false">Cancel</button>
+            </div>
+        </div>
+    }
+
+@* ── Delete collection confirm ── *@
+<ConfirmDialog Visible="@(_pendingDeleteCollectionId is not null)" Title="Delete collection?"
+               Message="@($"Delete \"{_pendingDeleteCollectionName}\" and all its requests? This cannot be undone.")"
+               ConfirmLabel="Delete" OnConfirm="ConfirmDeleteCollectionAsync"
+               OnCancel="@(() => { _pendingDeleteCollectionId = null; _pendingDeleteCollectionName = null; })" />
 
 @code {
     // ── State ─────────────────────────────────────────────────────────────────
@@ -178,6 +215,16 @@
     private string? _worksheetMode;
     // Scope version: incremented when collection variables are saved so RequestBuilderPanel rebuilds its resolved scope
     private int _scopeVersion;
+
+    // New-collection dialog state
+    private bool _showNewCollectionDialog;
+    private string _newCollectionName = string.Empty;
+    private ElementReference _newCollectionInput;
+    private bool _shouldFocusNewCollectionInput;
+
+    // Delete-collection confirm state
+    private string? _pendingDeleteCollectionId;
+    private string? _pendingDeleteCollectionName;
 
     // Splitter drag
     private ElementReference _splitterEl;
@@ -258,6 +305,29 @@
 
     // ── Toolbar actions ───────────────────────────────────────────────────────
 
+    private void OpenNewCollectionDialog()
+    {
+        _newCollectionName = string.Empty;
+        _showNewCollectionDialog = true;
+        _shouldFocusNewCollectionInput = true;
+    }
+
+    private async Task ConfirmNewCollectionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
+        var collection = await CollectionRepo.AddCollectionAsync(_newCollectionName.Trim());
+        _collections = CollectionRepo.Collections.ToList();
+        _activeCollection = collection;
+        _showNewCollectionDialog = false;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnNewCollectionKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmNewCollectionAsync();
+        else if (e.Key == "Escape") _showNewCollectionDialog = false;
+    }
+
     private async Task AddCollectionAsync()
     {
         var collection = await CollectionRepo.AddCollectionAsync("New Collection");
@@ -296,6 +366,16 @@
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
+    private bool _showEnvPicker;
+
+    private async Task SelectEnvAsync(string? envId)
+    {
+        _showEnvPicker = false;
+        _activeEnvironmentId = envId;
+        await EnvironmentRepo.SetActiveEnvironmentAsync(envId);
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
     private async Task OnEnvironmentChangedAsync(ChangeEventArgs e)
     {
         var selected = e.Value as string;
@@ -326,6 +406,17 @@
     }
 
     // ── Tree callbacks ─────────────────────────────────────────────────────────
+
+    private Task OnCollectionSelectedAsync(string collectionId)
+    {
+        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
+        if (collection is not null && !ReferenceEquals(collection, _activeCollection))
+        {
+            _activeCollection = collection;
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
 
     private async Task OnRequestSelectedAsync(HttpRequestEntry request)
     {
@@ -358,7 +449,10 @@
         };
 
         if (_activeCollection is null) return;
-        AddNodeToParent(_activeCollection.Nodes, parentNode.Id, folder);
+        if (parentNode.Id.StartsWith("__col__", StringComparison.Ordinal))
+            _activeCollection.Nodes.Add(folder);
+        else
+            AddNodeToParent(_activeCollection.Nodes, parentNode.Id, folder);
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
         _collections = CollectionRepo.Collections.ToList();
         await InvokeAsync(StateHasChanged); // BL-2
@@ -386,7 +480,10 @@
             Request = request,
         };
 
-        AddNodeToParent(_activeCollection.Nodes, parentNode.Id, node);
+        if (parentNode.Id.StartsWith("__col__", StringComparison.Ordinal))
+            _activeCollection.Nodes.Add(node);
+        else
+            AddNodeToParent(_activeCollection.Nodes, parentNode.Id, node);
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
         _collections = CollectionRepo.Collections.ToList();
         _selectedRequestId = request.Id;
@@ -424,7 +521,52 @@
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
+    private async Task OnRenameCollectionAsync((string CollectionId, string NewName) args)
+    {
+        var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
+        if (collection is null) return;
+        collection.Name = args.NewName;
+        await CollectionRepo.UpdateCollectionAsync(collection);
+        _collections = CollectionRepo.Collections.ToList();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private Task OnDeleteCollectionAsync(string collectionId)
+    {
+        var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
+        _pendingDeleteCollectionId = collectionId;
+        _pendingDeleteCollectionName = collection?.Name ?? "this collection";
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmDeleteCollectionAsync()
+    {
+        if (_pendingDeleteCollectionId is null) return;
+        var id = _pendingDeleteCollectionId;
+        _pendingDeleteCollectionId = null;
+        _pendingDeleteCollectionName = null;
+        await CollectionRepo.DeleteCollectionAsync(id);
+        _collections = CollectionRepo.Collections.ToList();
+        if (_activeCollection?.Id == id)
+        {
+            _activeCollection = _collections.FirstOrDefault();
+            _selectedRequest = null;
+            _selectedRequestId = null;
+            _isDirty = false;
+        }
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
     // ── Tree helpers ───────────────────────────────────────────────────────────
+
+    private static void SyncNodeName(List<ApiCollectionNode> nodes, string requestId, string name)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Request?.Id == requestId) { node.Name = name; return; }
+            if (node.Type == ApiCollectionNodeType.Folder) SyncNodeName(node.Children, requestId, name);
+        }
+    }
 
     private static bool AddNodeToParent(List<ApiCollectionNode> nodes, string parentId, ApiCollectionNode newNode)
     {
@@ -495,6 +637,10 @@
     {
         _isDirty = true;
 
+        // Sync ApiCollectionNode.Name from the live request name so the tree view reflects renames
+        if (_selectedRequest is not null && _activeCollection is not null)
+            SyncNodeName(_activeCollection.Nodes, _selectedRequest.Id, _selectedRequest.Name);
+
         if (_autoSave)
         {
             _autoSaveTimer?.Stop();
@@ -534,6 +680,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Focus the new-collection dialog input when it opens
+        if (_shouldFocusNewCollectionInput)
+        {
+            _shouldFocusNewCollectionInput = false;
+            try { await _newCollectionInput.FocusAsync(); } catch { }
+        }
+
         // Init the splitter whenever the panels become visible for a new request.
         // _lastSplitterRequestId tracks which request the current JS handle was set up for.
         if (_selectedRequest is not null && _lastSplitterRequestId != _selectedRequestId)

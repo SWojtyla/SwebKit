@@ -68,15 +68,43 @@
     color: var(--color-warning, #f59e0b);
 }
 
-.env-editor__var-type {
+.env-editor__type-picker {
+    position: relative;
+    width: 100%;
+}
+
+.env-editor__type-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: 4px;
     color: var(--color-text);
-    color-scheme: var(--control-color-scheme);
     font-size: 12px;
-    padding: 4px 4px;
-    width: 100%;
+    padding: 4px 6px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.env-editor__type-chevron {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.env-editor__type-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    z-index: var(--z-overlay);
+    min-width: 130px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
 }
 
 .env-editor__var-delete {
@@ -139,3 +167,27 @@
 }
 
 .env-editor__btn--primary:hover { opacity: 0.88; }
+
+/* ── Key Vault variable fields ─────────────────────────────────────────────── */
+
+.env-editor__kv-fields {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    min-width: 0;
+}
+
+.env-editor__kv-vault-picker {
+    position: relative;
+    flex: 0 0 130px;
+    min-width: 0;
+}
+
+.env-editor__kv-no-vaults {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

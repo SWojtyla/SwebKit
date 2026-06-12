@@ -153,11 +153,21 @@ public static class MauiProgram
         builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>
         {
             var config = sp.GetRequiredService<AppStateService>().Config;
-            return string.IsNullOrWhiteSpace(config.KeyVaultUrl)
-                ? new NoopKeyVaultSecretResolver()
-                : new AzureKeyVaultSecretResolver(
+
+            // Multi-vault takes precedence; fall back to legacy single KeyVaultUrl for existing configs.
+            if (config.KeyVaults.Count > 0)
+                return new MultiVaultKeyVaultSecretResolver(
+                    config.KeyVaults,
+                    sp.GetRequiredService<ILogger<MultiVaultKeyVaultSecretResolver>>());
+
+#pragma warning disable CS0618 // KeyVaultUrl obsolete — backward-compat path
+            if (!string.IsNullOrWhiteSpace(config.KeyVaultUrl))
+                return new AzureKeyVaultSecretResolver(
                     config.KeyVaultUrl,
                     sp.GetRequiredService<ILogger<AzureKeyVaultSecretResolver>>());
+#pragma warning restore CS0618
+
+            return new NoopKeyVaultSecretResolver();
         });
         builder.Services.AddTransient<IHttpRequestExecutor, HttpRequestExecutor>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
