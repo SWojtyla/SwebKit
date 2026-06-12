@@ -67,6 +67,7 @@
     border-radius: 4px;
     background: var(--color-surface-raised);
     color: var(--color-text);
+    color-scheme: var(--control-color-scheme);
     cursor: pointer;
     min-width: 58px;
     letter-spacing: 0.03em;

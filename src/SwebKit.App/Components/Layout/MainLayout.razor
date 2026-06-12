@@ -314,7 +314,10 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
 
         _pendingNavigationArea = _currentRoute.Area;
         _pendingNavigationStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        RequestCoalescedRender();
+        // Use eager render for route changes so the TopBar context updates immediately,
+        // bypassing the coalescing gate that would defer the update until any pending render fires.
+        RequestRender();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnCommandPaletteRequested(CommandPaletteRequestedEvent _) =>

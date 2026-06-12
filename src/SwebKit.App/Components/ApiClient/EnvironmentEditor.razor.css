@@ -73,6 +73,7 @@
     border: 1px solid var(--color-border);
     border-radius: 4px;
     color: var(--color-text);
+    color-scheme: var(--control-color-scheme);
     font-size: 12px;
     padding: 4px 4px;
     width: 100%;

@@ -56,6 +56,10 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.DataTrending())" Width="18px" />
             Observability
         </button>
+        <button class="@GetNavItemClass(ApiClientSection)" @onclick="@(() => SelectSection(ApiClientSection))">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Globe())" Width="18px" />
+            API Client
+        </button>
     </nav>
 
     @* ── Right content well ── *@
@@ -179,6 +183,31 @@
             <StorageConfigForm Environment="AppState.Config" CredentialStore="CredentialStore" OnSaved="SaveAsync" />
             break;
 
+        case ApiClientSection:
+            <div class="settings-field-group">
+                <p class="settings-hint">
+                    When enabled, requests are saved automatically 500 ms after each change.
+                    Disable this to save manually with the Save button or Ctrl+S.
+                </p>
+                <FluentCheckbox Value="@UserSettings.Settings.AutoSaveRequests"
+                                ValueChanged="@(async (bool v) => { UserSettings.Settings.AutoSaveRequests = v; await UserSettings.SaveAsync(); })">
+                    Auto-save requests
+                </FluentCheckbox>
+            </div>
+
+            <div class="settings-field-group">
+                <p class="settings-hint">
+                    Disable SSL certificate verification for outgoing HTTP requests.
+                    Useful for local development with self-signed certificates.
+                    Do not disable in production.
+                </p>
+                <FluentCheckbox Value="@UserSettings.Settings.VerifyApiClientSsl"
+                                ValueChanged="@(async (bool v) => { UserSettings.Settings.VerifyApiClientSsl = v; await UserSettings.SaveAsync(); })">
+                    Verify SSL certificates
+                </FluentCheckbox>
+            </div>
+            break;
+
         case ObservabilitySection:
             <div class="settings-info-card">
                 <div class="settings-info-icon">🔑</div>
@@ -268,6 +297,7 @@
     private const string IncidentTimelineSection = "incident-timeline";
     private const string StorageSection = "storage";
     private const string ObservabilitySection = "observability";
+    private const string ApiClientSection = "api-client";
 
     [CascadingParameter(Name = "Layout")] private MainLayout? _layout { get; set; }
     [SupplyParameterFromQuery(Name = "section")] private string? RequestedSection { get; set; }
@@ -306,6 +336,7 @@
         IncidentTimelineSection => "Incident Timeline",
         StorageSection => "Storage (Azure Blob)",
         ObservabilitySection => "Observability",
+        ApiClientSection => "API Client",
         _ => "Settings"
     };
 
@@ -320,6 +351,7 @@
         IncidentTimelineSection => "Point timeline analysis at the namespace and workload metadata it should inspect.",
         StorageSection => "Configure Azure Blob access for storage inspection and related workflows.",
         ObservabilitySection => "Review query limits and the Azure CLI identity model used for Application Insights access.",
+        ApiClientSection => "Configure auto-save behavior and SSL verification for outgoing HTTP requests.",
         _ => "Manage workspace-specific configuration for the app."
     };
 

@@ -12,7 +12,7 @@
     @* ── Toolbar ── *@
     <div class="api-client-toolbar">
         <div class="api-client-toolbar__left">
-            <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--primary"
+            <button type="button" class="api-client-toolbar-btn"
                     title="New collection (Ctrl+Shift+N)" @onclick="AddCollectionAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
@@ -22,6 +22,14 @@
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 <span>New Request</span>
             </button>
+            @if (_isDirty && !_autoSave)
+            {
+                <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--save"
+                        title="Save request (Ctrl+S)" @onclick="SaveRequestAsync">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
+                    <span>Save</span>
+                </button>
+            }
         </div>
 
         <div class="api-client-toolbar__center">
@@ -36,15 +44,15 @@
         <div class="api-client-toolbar__right">
             @if (_activeCollection is not null)
             {
-                <button type="button" class="api-client-toolbar-btn" title="Edit collection variables"
-                        @onclick="() => _showCollVarEditor = !_showCollVarEditor">
-                    ⚙ Vars
-                </button>
+                <button type="button"
+                        class="api-client-toolbar-btn @(_worksheetMode == "vars" ? "api-client-toolbar-btn--active" : "")"
+                        title="Edit collection variables"
+                        @onclick="@(() => _worksheetMode = _worksheetMode == "vars" ? null : "vars")">⚙ Vars</button>
             }
-            <button type="button" class="api-client-toolbar-btn" title="Manage environments"
-                    @onclick="() => _showEnvManager = !_showEnvManager">
-                🌍 Envs
-            </button>
+            <button type="button"
+                    class="api-client-toolbar-btn @(_worksheetMode == "envs" ? "api-client-toolbar-btn--active" : "")"
+                    title="Manage environments"
+                    @onclick="@(() => _worksheetMode = _worksheetMode == "envs" ? null : "envs")">🌍 Envs</button>
             <span class="api-client-toolbar__env-label">Env:</span>
             <select class="api-client-toolbar__env-select" value="@_activeEnvironmentId"
                     @onchange="OnEnvironmentChangedAsync">
@@ -90,9 +98,33 @@
             }
         </div>
 
-        @* Right: request builder + response viewer *@
+        @* Right: request builder + response viewer OR management screens *@
         <div class="api-client-workspace">
-            @if (_selectedRequest is null)
+            @if (_worksheetMode == "envs")
+            {
+                <div class="api-client-management-screen">
+                    <div class="api-client-management-screen__header">
+                        <button type="button" class="api-client-management-screen__back"
+                                @onclick="() => _worksheetMode = null">← Back to requests</button>
+                        <span class="api-client-management-screen__title">Environments</span>
+                    </div>
+                    <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
+                </div>
+            }
+            else if (_worksheetMode == "vars" && _activeCollection is not null)
+            {
+                <div class="api-client-management-screen">
+                    <div class="api-client-management-screen__header">
+                        <button type="button" class="api-client-management-screen__back"
+                                @onclick="() => _worksheetMode = null">← Back to requests</button>
+                        <span class="api-client-management-screen__title">Collection Variables — @_activeCollection.Name</span>
+                    </div>
+                    <CollectionVariableEditor Collection="@_activeCollection"
+                                              OnSaved="@OnCollVarEditorSavedAsync"
+                                              OnCancelled="@(() => _worksheetMode = null)" />
+                </div>
+            }
+            else if (_selectedRequest is null)
             {
                 <div class="api-client-workspace__empty">
                     <EmptyState Icon="🌐" Title="No request selected"
@@ -113,6 +145,7 @@
                         <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
                                              ActiveEnvironment="@ActiveEnvironment"
                                              AllEnvironments="@_environments"
+                                             ScopeVersion="@_scopeVersion"
                                              IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
                                              OnResult="@OnRequestResultAsync" />
                     </div>
@@ -124,26 +157,6 @@
             }
         </div>
     </div>
-
-    @* ── Overlay: Environment Manager ── *@
-    @if (_showEnvManager)
-    {
-        <div class="api-client-overlay api-client-overlay--right" @onclick:stopPropagation>
-            <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
-        </div>
-        <div class="api-client-overlay-backdrop" @onclick="() => _showEnvManager = false"></div>
-    }
-
-    @* ── Overlay: Collection Variable Editor ── *@
-    @if (_showCollVarEditor && _activeCollection is not null)
-    {
-        <div class="api-client-overlay api-client-overlay--right" @onclick:stopPropagation>
-            <CollectionVariableEditor Collection="@_activeCollection"
-                                      OnSaved="@OnCollVarEditorSavedAsync"
-                                      OnCancelled="@(() => _showCollVarEditor = false)" />
-        </div>
-        <div class="api-client-overlay-backdrop" @onclick="() => _showCollVarEditor = false"></div>
-    }
 </div>
 
 @code {
@@ -161,9 +174,10 @@
     // Phase 2 — execution state
     private HttpRequestResult? _lastResult;
 
-    // Phase 3 — overlay panels
-    private bool _showEnvManager;
-    private bool _showCollVarEditor;
+    // Worksheet mode: null = request, "vars" = collection variable editor, "envs" = environment manager
+    private string? _worksheetMode;
+    // Scope version: incremented when collection variables are saved so RequestBuilderPanel rebuilds its resolved scope
+    private int _scopeVersion;
 
     // Splitter drag
     private ElementReference _splitterEl;
@@ -292,13 +306,22 @@
     private async Task OnEnvironmentsChangedAsync()
     {
         _environments = EnvironmentRepo.Environments.ToList();
-        _showEnvManager = false;
+        _worksheetMode = null;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnCollVarEditorSavedAsync()
     {
-        _showCollVarEditor = false;
+        _scopeVersion++; // Force RequestBuilderPanel to rebuild resolved scope
+        _worksheetMode = null;
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task SaveRequestAsync()
+    {
+        if (_activeCollection is null || _selectedRequest is null) return;
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _isDirty = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
 

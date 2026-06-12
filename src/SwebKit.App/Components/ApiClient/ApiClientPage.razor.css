@@ -65,14 +65,21 @@
     cursor: not-allowed;
 }
 
-.api-client-toolbar-btn--primary {
-    background: var(--color-accent);
+.api-client-toolbar-btn--active {
+    background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
     border-color: var(--color-accent);
-    color: var(--color-on-accent, #fff);
+    color: var(--color-accent);
 }
 
-.api-client-toolbar-btn--primary:hover {
-    opacity: 0.88;
+.api-client-toolbar-btn--save {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.api-client-toolbar-btn--save:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
 }
 
 .api-client-toolbar__dirty-badge {
@@ -91,6 +98,7 @@
     border: 1px solid var(--color-border);
     border-radius: 4px;
     color: var(--color-text);
+    color-scheme: var(--control-color-scheme);
     font-size: 12px;
     padding: 3px 6px;
     min-width: 140px;
@@ -263,30 +271,44 @@
     cursor: not-allowed;
 }
 
-/* ── Overlays ────────────────────────────────────────────── */
+/* ── Management screen (Vars / Envs central panel) ───────── */
 
-.api-client-overlay-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: rgba(0, 0, 0, 0.35);
-}
-
-.api-client-overlay {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    z-index: 201;
-    width: 420px;
-    max-width: 90vw;
-    background: var(--color-surface);
-    border-left: 1px solid var(--color-border);
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
+.api-client-management-screen {
     display: flex;
     flex-direction: column;
+    height: 100%;
     overflow: hidden;
+    background: var(--color-surface);
 }
 
-.api-client-overlay--right {
-    right: 0;
+.api-client-management-screen__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+    flex-shrink: 0;
+}
+
+.api-client-management-screen__back {
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.api-client-management-screen__back:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.api-client-management-screen__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
 }

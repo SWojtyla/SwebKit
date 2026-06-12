@@ -7,8 +7,8 @@
     <div class="req-builder__name-row">
         @if (_editingName)
         {
-            <input class="req-builder__name-input" value="@Request.Name" @onblur="CommitNameAsync"
-                   @onkeydown="OnNameKeyDown" @ref="_nameInputRef" />
+            <input class="req-builder__name-input" value="@Request.Name" @oninput="OnNameInputAsync"
+                   @onblur="CommitNameAsync" @onkeydown="OnNameKeyDown" @ref="_nameInputRef" />
         }
         else
         {
@@ -173,10 +173,8 @@
         }
         else if (_activeTab == "Capture")
         {
-            <PostRequestCaptureBuilder Request="@Request"
-                                       AvailableEnvironments="@AllEnvironments"
-                                       CaptureWarnings="@_captureWarnings"
-                                       OnChanged="@MarkDirtyAsync" />
+            <PostRequestCaptureBuilder Request="@Request" AvailableEnvironments="@AllEnvironments"
+                                       CaptureWarnings="@_captureWarnings" OnChanged="@MarkDirtyAsync" />
         }
     </div>
 
@@ -187,6 +185,7 @@
     [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
     [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }
     [Parameter] public IReadOnlyList<ApiEnvironment> AllEnvironments { get; set; } = [];
+    [Parameter] public int ScopeVersion { get; set; }
     [Parameter] public bool IsDirty { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<HttpRequestResult> OnResult { get; set; }
@@ -214,17 +213,20 @@
     private HttpRequestEntry? _lastRequest;
     private ApiCollection? _lastCollection;
     private ApiEnvironment? _lastEnvironment;
+    private int _lastScopeVersion = -1;
 
     protected override void OnParametersSet()
     {
         if (ReferenceEquals(_lastRequest, Request) &&
             ReferenceEquals(_lastCollection, Collection) &&
-            ReferenceEquals(_lastEnvironment, ActiveEnvironment))
+            ReferenceEquals(_lastEnvironment, ActiveEnvironment) &&
+            _lastScopeVersion == ScopeVersion)
             return;
 
         _lastRequest = Request;
         _lastCollection = Collection;
         _lastEnvironment = ActiveEnvironment;
+        _lastScopeVersion = ScopeVersion;
 
         RefreshScope();
         _urlPreview = VariablePreview.Preview(Request.Url, _resolvedScope);
@@ -255,6 +257,12 @@
     }
 
     private void BeginEditName() => _editingName = true;
+
+    private async Task OnNameInputAsync(ChangeEventArgs e)
+    {
+        Request.Name = e.Value?.ToString() ?? string.Empty;
+        await MarkDirtyAsync();
+    }
 
     private async Task CommitNameAsync(FocusEventArgs _)
     {
