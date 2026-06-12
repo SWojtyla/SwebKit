@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 3 (Environments and Secrets) complete. Ready for Phase 4 (Authentication).
+Phase 4 (Authentication) complete — 556 tests passing. Ready for Phase 5 (GraphQL).
 
 ## Progress Checklist
 
@@ -71,68 +71,28 @@ Phase 3 (Environments and Secrets) complete. Ready for Phase 4 (Authentication).
 - [x] Unit tests — `PostRequestCaptureExecutorTests` (10 tests) + `VariableSubstitutionServicePhase3Tests` (4 tests) + `NoopKeyVaultSecretResolverTests` (2 tests) — 16 new tests
 - [x] Total: 540 tests passing, build clean (pre-existing MSIX signing error only)
 
-**Variable scope:**
+### Phase 4 — Authentication ✅
 
-- [ ] `Collection.CollectionVariables: List<CollectionVariable>` — always-active key/value pairs,
-      no environment required; plain values or `ICredentialStore` references
-- [ ] `VariableSubstitutionService` updated: resolve collection vars first, then env vars;
-      env vars override collection vars when an environment is active
-- [ ] `IVariablePreviewService` updated to reflect the same resolution chain
-
-**Environment manager:**
-
-- [ ] `EnvironmentManagerPanel.razor` — list environments, add/edit/delete
-- [ ] `EnvironmentEditor.razor` — variable grid: key | type (Plain / SecretStore / KeyVault) | value
-- [ ] Secret type: value masked; stored in `ICredentialStore`
-- [ ] Key Vault type: KV secret name input; resolved at execution time via `DefaultAzureCredential`
-- [ ] `IKeyVaultSecretResolver` contract in `SwebKit.Core/Abstractions/`
-- [ ] `AzureKeyVaultSecretResolver` in `SwebKit.Azure/` using `Azure.Security.KeyVault.Secrets`
-      with `DefaultAzureCredential`
-- [ ] KV setup prerequisite guard in Settings (new `KeyVaultUrl` in `AppConfig`)
-- [ ] Active environment switcher in `ApiClientPage` toolbar
-- [ ] Variable preview badge updated to show collection-var vs env-var origin (tooltip)
-- [ ] [Test resolution] button in `EnvironmentEditor`
-
-**Collection variable editor:**
-
-- [ ] `CollectionVariableEditor.razor` — accessible from right-click menu on collection node;
-      grid of key/value pairs; separate from environment variables
-
-**Post-request capture rules:**
-
-- [ ] `CaptureRule` model: `CaptureSourceType` (JsonPath, Header, StatusCode), `SourceExpression`,
-      `TargetVariableName`, `TargetScope` (Collection or Environment)
-- [ ] `IPostRequestCaptureExecutor` contract in `SwebKit.Core/Abstractions/`
-- [ ] `PostRequestCaptureExecutor` implementation in `SwebKit.Core/Services/`:
-      applies rules sequentially; per-rule try/catch; failed rules add a capture warning to result;
-      JSONPath evaluated with `JsonPath.Net`; mutates `CollectionRepository` or
-      `EnvironmentRepository` on successful extraction
-- [ ] `HttpRequestExecutor` calls `IPostRequestCaptureExecutor` after receiving the response
-- [ ] `PostRequestCaptureBuilder.razor` — visual block list below the response:
-      [+ Add Capture] opens a row: source type selector | expression input | → variable name |
-      scope selector; [Test capture] re-evaluates the last response with all rules
-- [ ] Capture warnings shown in `ResponseViewerPanel` when one or more rules failed to match
-
-### Phase 4 — Authentication
-
-- [ ] `Collection.DefaultAuth: AuthConfig?` and `RequestFolder.DefaultAuth: AuthConfig?` added
-      to domain model
-- [ ] `IAuthInheritanceResolver` contract + `AuthInheritanceResolver` implementation:
-      walks `HttpRequestEntry.Auth → RequestFolder.DefaultAuth → Collection.DefaultAuth`;
-      returns first non-null auth config
-- [ ] Auth tab wired in `RequestBuilderPanel.razor`; shows resolved/inherited auth with
-      an "Inherited from [folder/collection name]" badge when request auth is null
-- [ ] `BearerAuthForm.razor` — token input (password-masked; `ICredentialStore` backed)
-- [ ] `ApiKeyAuthForm.razor` — key name, value, placement radio (Header / Query Param)
-- [ ] `BasicAuthForm.razor` — username + password (masked)
-- [ ] `OAuth2AuthForm.razor` — flow selector, token URL, client ID, scopes, [Get Token] button
-      (redirect URI scheme: **OPEN QUESTION** — see `decisions.md` PENDING-1)
-- [ ] Client credentials flow: token endpoint POST via `HttpClient`
-- [ ] Auth code flow: `WebAuthenticator.AuthenticateAsync` with PKCE
-- [ ] `OAuth2TokenManager` — in-memory token cache + expiry refresh (re-fetch 60 s before expiry)
-- [ ] Refresh token stored in `ICredentialStore`; auto-used when access token expires (auth code flow)
-- [ ] Auth never serialised to `collections.json` — only `CredentialKey` reference stored
-- [ ] `IAuthInheritanceResolver` registered as `Scoped` in `MauiProgram.cs`
+- [x] `Collection.DefaultAuth: AuthConfig?` and `RequestFolder.DefaultAuth: AuthConfig?` — already in domain model
+- [x] `AuthConfig` extended: `BasicUsername`, `OAuth2ClientId`, `OAuth2AuthUrl` added
+- [x] `IAuthInheritanceResolver` contract in `SwebKit.Core/Abstractions/`
+- [x] `AuthInheritanceResolver` — walks request → nearest folder → collection; registered as `Singleton`
+- [x] `IAuthHeaderBuilder` contract in `SwebKit.Core/Abstractions/`
+- [x] `AuthHeaderBuilder` in `SwebKit.App/Services/` — applies Bearer/ApiKey/Basic/OAuth2 headers
+- [x] `IOAuth2TokenManager` contract in `SwebKit.Core/Abstractions/`
+- [x] `OAuth2TokenManager` in `SwebKit.App/Services/` — client credentials + auth code (PKCE); in-memory cache with 60 s early-refresh window; refresh token persisted to `ICredentialStore`
+- [x] `HttpRequestExecutor` updated — injects `IAuthInheritanceResolver` + `IAuthHeaderBuilder`; applies auth before each request
+- [x] `BearerAuthForm.razor` — token input (password-masked; `ICredentialStore` backed)
+- [x] `ApiKeyAuthForm.razor` — key name, value, placement radio (Header / Query Param)
+- [x] `BasicAuthForm.razor` — username + password (masked)
+- [x] `OAuth2AuthForm.razor` — grant type selector, token/auth URL, client ID, scopes, [Get Token] / [Authorize…] button
+- [x] `AuthPanel.razor` — type selector + inherited-from badge + sub-form dispatch
+- [x] `RequestBuilderPanel.razor` — Auth stub replaced with `<AuthPanel>`
+- [x] `MauiProgram.cs` — registers `IOAuth2TokenManager`, `IAuthHeaderBuilder`, `IAuthInheritanceResolver`
+- [x] `decisions.md` — PENDING-1 resolved as DEC-17 (redirect URI: `sweb://oauth` via MAUI WebAuthenticator)
+- [x] Build clean: 0 errors
+- [x] Unit tests — `AuthInheritanceResolverTests` (11 tests) — 11 new tests
+- [x] Total: 556 tests passing
 
 ### Phase 5 — GraphQL
 

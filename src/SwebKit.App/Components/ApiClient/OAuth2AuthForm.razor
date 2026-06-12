@@ -1,0 +1,229 @@
+@* OAuth2 form: client credentials + authorization code (PKCE) flows *@
+@inject ICredentialStore CredentialStore
+@inject IOAuth2TokenManager OAuth2
+
+<div class="oauth2-form">
+
+    @* Grant type selector *@
+    <div class="oauth2-form__row">
+        <label class="oauth2-form__label">Grant type</label>
+        <div class="oauth2-form__grant-group">
+            <label class="oauth2-form__radio-label">
+                <input type="radio" name="@_radioGroup" value="CC"
+                       checked="@(Auth.OAuth2GrantType == OAuth2GrantType.ClientCredentials)"
+                       @onchange="() => SetGrant(OAuth2GrantType.ClientCredentials)" />
+                Client credentials
+            </label>
+            <label class="oauth2-form__radio-label">
+                <input type="radio" name="@_radioGroup" value="AC"
+                       checked="@(Auth.OAuth2GrantType == OAuth2GrantType.AuthorizationCode)"
+                       @onchange="() => SetGrant(OAuth2GrantType.AuthorizationCode)" />
+                Authorization code (PKCE)
+            </label>
+        </div>
+    </div>
+
+    @* Auth URL (auth code only) *@
+    @if (Auth.OAuth2GrantType == OAuth2GrantType.AuthorizationCode)
+    {
+        <div class="oauth2-form__row">
+            <label class="oauth2-form__label">Authorization URL</label>
+            <input type="url" class="oauth2-form__input" placeholder="https://auth.example.com/authorize"
+                   value="@Auth.OAuth2AuthUrl" @oninput="OnAuthUrlInput" />
+        </div>
+    }
+
+    @* Token URL *@
+    <div class="oauth2-form__row">
+        <label class="oauth2-form__label">Token URL</label>
+        <input type="url" class="oauth2-form__input" placeholder="https://auth.example.com/token"
+               value="@Auth.OAuth2TokenUrl" @oninput="OnTokenUrlInput" />
+    </div>
+
+    @* Client ID *@
+    <div class="oauth2-form__row">
+        <label class="oauth2-form__label">Client ID</label>
+        <input type="text" class="oauth2-form__input" placeholder="client_id" value="@Auth.OAuth2ClientId"
+               @oninput="OnClientIdInput" autocomplete="off" />
+    </div>
+
+    @* Client secret (CC only) *@
+    @if (Auth.OAuth2GrantType == OAuth2GrantType.ClientCredentials)
+    {
+        <div class="oauth2-form__row">
+            <label class="oauth2-form__label">Client secret</label>
+            <div class="oauth2-form__input-row">
+                <input type="@(_showSecret ? "text" : "password")" class="oauth2-form__input" placeholder="client_secret"
+                       value="@_secretDisplay" @oninput="OnSecretInput" autocomplete="new-password" />
+                <button type="button" class="oauth2-form__toggle" title="@(_showSecret ? "Hide" : "Show")"
+                        @onclick="() => _showSecret = !_showSecret">
+                    @(_showSecret ? "🙈" : "👁")
+                </button>
+            </div>
+        </div>
+    }
+
+    @* Scopes *@
+    <div class="oauth2-form__row">
+        <label class="oauth2-form__label">Scopes</label>
+        <input type="text" class="oauth2-form__input" placeholder="openid profile email (space-separated)"
+               value="@Auth.OAuth2Scopes" @oninput="OnScopesInput" />
+    </div>
+
+    @* Action buttons *@
+    <div class="oauth2-form__actions">
+        @if (Auth.OAuth2GrantType == OAuth2GrantType.ClientCredentials)
+        {
+            <button type="button" class="oauth2-form__btn" disabled="@_working" @onclick="GetTokenAsync">
+                @(_working ? "Getting token…" : "Get token")
+            </button>
+        }
+        else
+        {
+            <button type="button" class="oauth2-form__btn" disabled="@_working" @onclick="AuthorizeAsync">
+                @(_working ? "Authorizing…" : "Authorize…")
+            </button>
+        }
+
+        @if (!string.IsNullOrEmpty(_tokenStatus))
+        {
+            <span class="oauth2-form__status @(_tokenOk ? "oauth2-form__status--ok" : "oauth2-form__status--err")">
+                @_tokenStatus
+            </span>
+        }
+    </div>
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AuthConfig Auth { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _showSecret;
+    private string _secretDisplay = string.Empty;
+    private bool _working;
+    private string _tokenStatus = string.Empty;
+    private bool _tokenOk;
+    private string _radioGroup = Guid.NewGuid().ToString("N");
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Auth.CredentialKey))
+            _secretDisplay = CredentialStore.Get(Auth.CredentialKey) ?? string.Empty;
+    }
+
+    private async Task SetGrant(OAuth2GrantType grant)
+    {
+        Auth.OAuth2GrantType = grant;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnAuthUrlInput(ChangeEventArgs e)
+    {
+        Auth.OAuth2AuthUrl = e.Value?.ToString();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnTokenUrlInput(ChangeEventArgs e)
+    {
+        Auth.OAuth2TokenUrl = e.Value?.ToString();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnClientIdInput(ChangeEventArgs e)
+    {
+        Auth.OAuth2ClientId = e.Value?.ToString();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnScopesInput(ChangeEventArgs e)
+    {
+        Auth.OAuth2Scopes = e.Value?.ToString();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnSecretInput(ChangeEventArgs e)
+    {
+        var secret = e.Value?.ToString() ?? string.Empty;
+        _secretDisplay = secret;
+
+        if (string.IsNullOrEmpty(Auth.CredentialKey))
+            Auth.CredentialKey = $"api-client:oauth2:{Guid.NewGuid():N}";
+
+        if (string.IsNullOrEmpty(secret))
+            CredentialStore.Delete(Auth.CredentialKey);
+        else
+            CredentialStore.Save(Auth.CredentialKey, secret);
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task GetTokenAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Auth.OAuth2TokenUrl) || string.IsNullOrWhiteSpace(Auth.CredentialKey))
+        {
+            _tokenStatus = "Token URL and client secret are required.";
+            _tokenOk = false;
+            return;
+        }
+
+        _working = true;
+        _tokenStatus = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var token = await OAuth2.GetAccessTokenAsync(Auth, Auth.CredentialKey);
+            if (string.IsNullOrEmpty(token))
+            {
+                _tokenStatus = "Failed to obtain token. Check token URL, client ID and secret.";
+                _tokenOk = false;
+            }
+            else
+            {
+                _tokenStatus = "✓ Token obtained successfully.";
+                _tokenOk = true;
+            }
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task AuthorizeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Auth.OAuth2AuthUrl))
+        {
+            _tokenStatus = "Authorization URL is required.";
+            _tokenOk = false;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(Auth.CredentialKey))
+            Auth.CredentialKey = $"api-client:oauth2:{Guid.NewGuid():N}";
+
+        _working = true;
+        _tokenStatus = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var ok = await OAuth2.AuthorizeAsync(Auth, Auth.CredentialKey);
+            if (ok)
+            {
+                _tokenStatus = "✓ Authorized successfully.";
+                _tokenOk = true;
+            }
+            else
+            {
+                _tokenStatus = "Authorization cancelled or failed.";
+                _tokenOk = false;
+            }
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+}

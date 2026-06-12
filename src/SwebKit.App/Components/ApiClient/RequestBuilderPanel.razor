@@ -178,11 +178,7 @@
         }
         else if (_activeTab == "Auth")
         {
-            <div class="req-builder__auth-stub">
-                <span class="req-builder__auth-stub-text">
-                    Auth configuration coming in Phase 4.
-                </span>
-            </div>
+            <AuthPanel Request="@Request" Collection="@Collection" OnChanged="@MarkDirtyAsync" />
         }
         else if (_activeTab == "Capture")
         {

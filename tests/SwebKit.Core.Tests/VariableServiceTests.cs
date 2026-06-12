@@ -29,7 +29,7 @@ internal sealed class StubKeyVaultResolver : IKeyVaultSecretResolver
 
     public bool IsAvailable { get; }
 
-    public Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
+    public Task<string> GetSecretAsync(string secretName, string? vaultName = null, CancellationToken cancellationToken = default)
         => Task.FromResult(_secrets.TryGetValue(secretName, out var v) ? v : $"[KV_UNAVAILABLE:{secretName}]");
 }
 

@@ -160,10 +160,16 @@ public sealed class AuthConfig
     /// <summary>Header or query-param name for API key auth.</summary>
     public string? ApiKeyParamName { get; set; }
     public ApiKeyLocation ApiKeyLocation { get; set; } = ApiKeyLocation.Header;
+    /// <summary>Username for Basic auth (non-secret). Password is stored in <see cref="CredentialKey"/>.</summary>
+    public string? BasicUsername { get; set; }
+    /// <summary>OAuth 2 client identifier (non-secret). Client secret is stored in <see cref="CredentialKey"/>.</summary>
+    public string? OAuth2ClientId { get; set; }
     /// <summary>OAuth 2 grant type hint for UI selection.</summary>
     public OAuth2GrantType OAuth2GrantType { get; set; } = OAuth2GrantType.ClientCredentials;
     /// <summary>OAuth 2 token endpoint URL.</summary>
     public string? OAuth2TokenUrl { get; set; }
+    /// <summary>OAuth 2 authorization endpoint URL (auth code flow only).</summary>
+    public string? OAuth2AuthUrl { get; set; }
     /// <summary>OAuth 2 scopes (space-separated).</summary>
     public string? OAuth2Scopes { get; set; }
 }

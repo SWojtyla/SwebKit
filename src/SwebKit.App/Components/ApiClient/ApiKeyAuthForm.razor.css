@@ -1,0 +1,72 @@
+.apikey-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 540px;
+}
+
+.apikey-form__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.apikey-form__label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.apikey-form__input {
+    padding: 5px 8px;
+    background: var(--color-input-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 13px;
+}
+
+    .apikey-form__input:focus {
+        outline: none;
+        border-color: var(--color-accent);
+    }
+
+.apikey-form__input-row {
+    display: flex;
+    gap: 4px;
+}
+
+    .apikey-form__input-row .apikey-form__input {
+        flex: 1;
+        font-family: var(--font-mono);
+        font-size: 12px;
+    }
+
+.apikey-form__toggle {
+    padding: 0 8px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+    .apikey-form__toggle:hover {
+        background: var(--color-surface-hover);
+    }
+
+.apikey-form__placement-group {
+    display: flex;
+    gap: 16px;
+}
+
+.apikey-form__radio-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    cursor: pointer;
+}

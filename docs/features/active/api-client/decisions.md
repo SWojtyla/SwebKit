@@ -272,18 +272,22 @@ serialisation-transparent — a request with no auth simply omits the `Auth` pro
 
 ---
 
-## PENDING-1: OAuth 2 redirect URI scheme — OPEN QUESTION
+## PENDING-1: OAuth 2 redirect URI scheme — RESOLVED → DEC-17
 
-**Status:** Unresolved. Must be decided before Phase 4 implementation starts.
+See DEC-17 below.
 
-**Options:**
+---
 
-| Option                     | URI example                       | Notes                                                          |
-| -------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| Custom MAUI scheme         | `swebikit://oauth-callback`       | Registered in Windows registry; survives browser redirects     |
-| Localhost + random port    | `http://localhost:49152/callback` | Works everywhere; port binding race condition on some machines |
-| Out-of-band (manual paste) | n/a                               | User copies token from browser; simpler but poor UX            |
+## DEC-17: OAuth 2 redirect URI uses custom MAUI scheme `sweb://oauth`
 
-**Recommendation:** Custom MAUI scheme (`swebikit://oauth-callback`) registered via `AppxManifest`
-and MAUI `WebAuthenticator` protocol activation. This is the standard pattern for MAUI OAuth.
-**Confirm before Phase 4 starts.**
+**Decision:** The authorization code (PKCE) flow redirect URI is `sweb://oauth`. MAUI's
+`WebAuthenticator.AuthenticateAsync` registers the scheme automatically via protocol
+activation and handles the callback without manual URI registration in `AppxManifest`.
+
+**Rationale:** Custom scheme via `WebAuthenticator` is the standard MAUI pattern (documented in
+Microsoft docs). It avoids localhost port-binding races and works across Windows App SDK packaging
+modes (packaged and unpackaged). The URI `sweb://oauth` is short and unique to this app.
+
+**Implication:** Client apps registered with the identity provider must have `sweb://oauth` listed
+as an allowed redirect URI. This is a one-time setup step the user performs in their IDP console.
+A tooltip or help link in the `OAuth2AuthForm` surfaces this requirement.

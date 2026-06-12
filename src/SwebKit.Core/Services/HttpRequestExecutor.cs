@@ -10,12 +10,15 @@ namespace SwebKit.Core.Services;
 /// Default implementation of <see cref="IHttpRequestExecutor"/>.
 /// Uses a named <see cref="HttpClient"/> ("ApiClient") resolved from <see cref="IHttpClientFactory"/>.
 /// Variable substitution is applied to the URL, query string, headers, and body before sending.
+/// Auth headers are applied via <see cref="IAuthHeaderBuilder"/> after auth inheritance resolution.
 /// Post-request capture rules are applied after a successful response.
 /// </summary>
 public sealed class HttpRequestExecutor(
     IHttpClientFactory httpClientFactory,
     IVariableSubstitutionService substitution,
-    IPostRequestCaptureExecutor captureExecutor) : IHttpRequestExecutor
+    IPostRequestCaptureExecutor captureExecutor,
+    IAuthInheritanceResolver authResolver,
+    IAuthHeaderBuilder authHeaderBuilder) : IHttpRequestExecutor
 {
     public const string ClientName = "ApiClient";
 
@@ -36,6 +39,10 @@ public sealed class HttpRequestExecutor(
         {
             using var client = httpClientFactory.CreateClient(ClientName);
             using var httpRequest = BuildHttpRequest(request, url, scope);
+
+            // Apply resolved auth (request → folder → collection chain)
+            var (resolvedAuth, _) = authResolver.Resolve(request, collection);
+            await authHeaderBuilder.ApplyAsync(httpRequest, resolvedAuth, cancellationToken);
 
             using var response = await client.SendAsync(
                 httpRequest,
