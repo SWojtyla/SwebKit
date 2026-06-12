@@ -174,6 +174,24 @@
     flex: 1;
 }
 
+/* ── Entity path field with loading spinner ── */
+.alert-rule-drawer__entity-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.alert-rule-drawer__entity-wrap .app-native-control {
+    flex: 1;
+    padding-right: 28px; /* room for spinner */
+}
+
+.alert-rule-drawer__entity-spinner {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+}
+
 .alert-rule-drawer__load-btn {
     border: 1px solid var(--neutral-stroke-rest);
     background: var(--neutral-fill-rest);

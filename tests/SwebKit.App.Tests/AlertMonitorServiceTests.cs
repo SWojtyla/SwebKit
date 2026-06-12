@@ -348,6 +348,7 @@ public class AlertMonitorServiceTests
     private sealed class NullMonitoringConnectionPool : IMonitoringConnectionPool
     {
         public IAksClient? GetAksClient() => null;
+        public IAksClient? GetAksClient(string? context) => null;
         public IServiceBusClient? GetServiceBusClient(string alias) => null;
         public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) => default;
         public void InvalidateStaleConnections() { }

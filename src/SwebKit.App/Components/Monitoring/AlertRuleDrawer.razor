@@ -2,6 +2,7 @@
 @using SwebKit.Core.Domain
 @inject AppStateService AppState
 @inject IAksClientFactory AksClientFactory
+@inject IMonitoringConnectionPool Pool
 
 <div class="alert-rule-modal-backdrop @(IsOpen ? "alert-rule-modal-backdrop--visible" : string.Empty)"
      @onclick="HandleBackdropClick">
@@ -103,8 +104,7 @@
                         else
                         {
                             <div class="alert-rule-drawer__inline-load">
-                                <input id="aks-context" type="text" class="app-native-control"
-                                       @bind="_aksKubeconfigContext"
+                                <input id="aks-context" type="text" class="app-native-control" @bind="_aksKubeconfigContext"
                                        placeholder="Leave blank to use global context" />
                                 @if (!_aksContextsLoaded)
                                 {
@@ -174,7 +174,9 @@
                         <label for="sb-namespace" class="alert-rule-drawer__label">Namespace *</label>
                         @if (sbNamespaces.Count > 0)
                         {
-                            <select id="sb-namespace" class="app-native-control" @bind="_sbNamespaceAlias">
+                            <select id="sb-namespace" class="app-native-control"
+                                    value="@_sbNamespaceAlias"
+                                    @onchange="OnSbNamespaceChangedAsync">
                                 <option value="">— select namespace —</option>
                                 @foreach (var ns in sbNamespaces)
                                 {
@@ -191,8 +193,26 @@
                     </div>
                     <div class="alert-rule-drawer__field">
                         <label for="sb-entity" class="alert-rule-drawer__label">Entity path *</label>
-                        <input id="sb-entity" type="text" class="app-native-control" @bind="_sbEntityPath"
-                               placeholder="queue-name or topic/Subscriptions/sub" />
+                        <div class="alert-rule-drawer__entity-wrap">
+                            <input id="sb-entity" type="text" class="app-native-control"
+                                   list="sb-entity-list"
+                                   @bind="_sbEntityPath"
+                                   placeholder="@(_sbEntitiesLoading ? "Loading entities…" : "queue-name or topic/Subscriptions/sub")" />
+                            @if (_sbEntitiesLoading)
+                            {
+                                <FluentProgressRing Width="14px" class="alert-rule-drawer__entity-spinner" />
+                            }
+                        </div>
+                        <datalist id="sb-entity-list">
+                            @foreach (var path in _sbEntityOptions)
+                            {
+                                <option value="@path" />
+                            }
+                        </datalist>
+                        @if (_sbEntityOptions.Count == 0 && !string.IsNullOrWhiteSpace(_sbNamespaceAlias) && !_sbEntitiesLoading)
+                        {
+                            <span class="alert-rule-drawer__hint">Could not load entities — type path manually.</span>
+                        }
                     </div>
                     <div class="alert-rule-drawer__field alert-rule-drawer__field--inline">
                         <label for="sb-threshold" class="alert-rule-drawer__label">Threshold</label>
@@ -307,6 +327,9 @@
     private string _sbNamespaceAlias = string.Empty;
     private string _sbEntityPath = string.Empty;
     private long _sbMessageCountThreshold = 1;
+    private List<string> _sbEntityOptions = [];
+    private bool _sbEntitiesLoading;
+    private string _sbLastLoadedAlias = string.Empty;
 
     // Redis
     private string _redisConnectionAlias = string.Empty;
@@ -353,6 +376,9 @@
                 _sbNamespaceAlias = sb.NamespaceConnectionAlias;
                 _sbEntityPath = sb.EntityPath;
                 _sbMessageCountThreshold = sb.MessageCountThreshold;
+                // Pre-load entities for the already-configured namespace
+                if (!string.IsNullOrWhiteSpace(_sbNamespaceAlias) && _sbLastLoadedAlias != _sbNamespaceAlias)
+                    _ = LoadSbEntitiesAsync(_sbNamespaceAlias);
             }
             if (Rule.RedisAlertParams is { } redis)
             {
@@ -437,6 +463,9 @@
         _sbNamespaceAlias = string.Empty;
         _sbEntityPath = string.Empty;
         _sbMessageCountThreshold = 1;
+        _sbEntityOptions = [];
+        _sbEntitiesLoading = false;
+        _sbLastLoadedAlias = string.Empty;
         _redisConnectionAlias = string.Empty;
         _redisMemoryThresholdPct = 80.0;
         _redisClientLowerBound = 1;
@@ -542,6 +571,57 @@
         AlertRuleSource.StorageBlobCount => "Storage — Blob count",
         _ => source.ToString()
     };
+
+    private async Task OnSbNamespaceChangedAsync(ChangeEventArgs e)
+    {
+        _sbNamespaceAlias = e.Value?.ToString() ?? string.Empty;
+        _sbEntityPath = string.Empty; // reset path when namespace changes
+        _sbEntityOptions = [];
+        if (!string.IsNullOrWhiteSpace(_sbNamespaceAlias))
+            await LoadSbEntitiesAsync(_sbNamespaceAlias);
+    }
+
+    private async Task LoadSbEntitiesAsync(string alias)
+    {
+        if (_sbEntitiesLoading || alias == _sbLastLoadedAlias) return;
+        _sbEntitiesLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var client = Pool.GetServiceBusClient(alias);
+            if (client is null) return;
+
+            // Load queues and topics in parallel
+            var queuesTask = client.ListQueuesAsync();
+            var topicsTask = client.ListTopicsAsync();
+            await Task.WhenAll(queuesTask, topicsTask);
+
+            var options = new List<string>();
+            options.AddRange((await queuesTask).Select(q => q.EntityPath));
+
+            var topics = (await topicsTask).ToList();
+            options.AddRange(topics.Select(t => t.EntityPath));
+
+            // Load subscriptions for each topic (up to 25 topics to avoid overload)
+            var topicsToExpand = topics.Take(25).ToList();
+            var subTasks = topicsToExpand.Select(t => client.ListSubscriptionsAsync(t.Name)).ToList();
+            var subResults = await Task.WhenAll(subTasks);
+            foreach (var subs in subResults)
+                options.AddRange(subs.Select(s => s.EntityPath));
+
+            _sbEntityOptions = [.. options.OrderBy(p => p)];
+            _sbLastLoadedAlias = alias;
+        }
+        catch
+        {
+            // silent — user can still type the path manually
+        }
+        finally
+        {
+            _sbEntitiesLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private Task HandleBackdropClick() => OnClose.InvokeAsync();
 }

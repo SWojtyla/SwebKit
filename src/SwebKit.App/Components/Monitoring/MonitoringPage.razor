@@ -15,7 +15,7 @@
                 class="monitoring-toggle-dot @(Monitor.IsMonitoring ? "monitoring-toggle-dot--active" : string.Empty)"></span>
                 @(Monitor.IsMonitoring ? "Monitoring active" : "Monitoring paused")
             </button>
-            <button class="page-header-action-btn page-header-action-btn--accent" @onclick="OpenCreateDrawer">
+            <button class="page-header-action-btn" @onclick="OpenCreateDrawer">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 Add rule
             </button>
