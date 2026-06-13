@@ -3,6 +3,21 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    color: var(--color-text);
+    background: var(--color-surface);
+    --surface-card: var(--color-surface);
+    --surface-input: var(--control-surface, var(--color-surface-2));
+    --surface-raised: var(--color-surface-2);
+    --surface-hover: var(--color-surface-3);
+    --border-color: var(--color-border);
+    --border-subtle: color-mix(in srgb, var(--color-border) 45%, transparent);
+    --text-primary: var(--color-text);
+    --text-secondary: var(--color-text);
+    --text-muted: var(--color-text-muted);
+    --accent-border: var(--color-accent);
+    --accent-btn: var(--color-accent);
+    --accent-btn-hover: var(--color-accent-hover);
+    --font-mono: var(--font-family-mono);
 }
 
 /* ── URL bar ──────────────────────────────────────────────────────────────── */
