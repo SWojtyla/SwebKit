@@ -18,9 +18,9 @@ The current model is class-based mutable state optimized for Blazor editing and 
 | `CaptureRule`                              | No-code post-request capture definition                                                             |
 | `ApiEnvironment` / `EnvironmentVariable`   | Environment variable set with plain, Windows Credential Store, Key Vault, or generated variables    |
 | `VariableGeneratorDefinition`              | Safe generated variable definition for primitive, faker, list, and template values                  |
-| `VariableInspectionItem`                    | Source/value metadata for request variable inspector rows                                           |
-| `ResponseExample`                           | Saved response example attached to a request                                                        |
-| `CollectionRunItemResult`                   | Per-request collection runner result                                                               |
+| `VariableInspectionItem`                   | Source/value metadata for request variable inspector rows                                           |
+| `ResponseExample`                          | Saved response example attached to a request                                                        |
+| `CollectionRunItemResult`                  | Per-request collection runner result                                                                |
 | `LinkedCollectionRootConfig`               | User-local linked root registration stored in `api-linked-roots.json`                               |
 | `LinkedGitStatus` / `LinkedGitChangedFile` | Scoped Git status for files under a linked API root                                                 |
 | `LinkedGitFileDiff`                        | Original/current text payload for in-app linked API file review                                     |

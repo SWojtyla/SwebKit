@@ -10,8 +10,8 @@
                 var e = entry;
                 <button type="button"
                         class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
-                        title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
-                        @onclick="() => OnResend.InvokeAsync(e)">
+                    title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
+                    @onclick="() => OnResend.InvokeAsync(e)">
                     <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
                         @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
                     </span>
@@ -27,8 +27,11 @@
             <div class="resp-viewer__history-title">Examples</div>
             @foreach (var example in ResponseExamples)
             {
-                <div class="resp-viewer__history-item resp-viewer__example-item" title="@example.CapturedAt.ToLocalTime().ToString("g")">
-                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(example.StatusCode)">@example.StatusCode</span>
+                <div class="resp-viewer__history-item resp-viewer__example-item"
+                     title="@example.CapturedAt.ToLocalTime().ToString("g")">
+                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(example.StatusCode)">
+                        @example.StatusCode
+                    </span>
                     <span class="resp-viewer__history-method">@example.Name</span>
                 </div>
             }
@@ -44,7 +47,9 @@
             <Virtualize TItem="GraphQlSubscriptionMessage" Items="@SubscriptionMessages" Context="msg">
                 <div class="resp-viewer__sub-msg @(msg.Errors is { Count: > 0 } ? "resp-viewer__sub-msg--error" : "")">
                     <div class="resp-viewer__sub-msg-header">
-                        <span class="resp-viewer__sub-msg-time">@msg.ReceivedAt.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                        <span class="resp-viewer__sub-msg-time">
+                            @msg.ReceivedAt.ToLocalTime().ToString("HH:mm:ss.fff")
+                        </span>
                         @if (msg.Errors is { Count: > 0 })
                         {
                             <span class="resp-viewer__sub-msg-error-badge">Error</span>
@@ -180,7 +185,8 @@
                 {
                     <div class="resp-viewer__body-toolbar">
                         <span class="resp-viewer__content-type">@(Result.ContentType ?? "unknown")</span>
-                        <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)" title="Save response example">
+                        <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)"
+                                title="Save response example">
                             Save example
                         </button>
                         <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
@@ -192,8 +198,7 @@
                     {
                         <div class="resp-viewer__display-truncation">
                             <span>Showing first 500 KB.</span>
-                            <button type="button" class="resp-viewer__load-full-btn"
-                                    @onclick="() => _showFullBody = true">
+                            <button type="button" class="resp-viewer__load-full-btn" @onclick="() => _showFullBody = true">
                                 Load full response (@FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody!)))
                             </button>
                         </div>
@@ -245,6 +250,11 @@
     /// <summary>Display limit for the body viewer (500 KB).</summary>
     private const int DisplayBodyMaxBytes = 500 * 1024;
 
+    private static readonly System.Text.Json.JsonSerializerOptions PrettyJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     // Reset to Body tab when the result changes
     private HttpRequestResult? _lastResult;
 
@@ -294,8 +304,7 @@
             var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
             if (bytes > DisplayBodyMaxBytes)
             {
-                // Truncate to a valid UTF-8 string at the display limit
-                body = new string(body.Take(DisplayBodyMaxBytes).ToArray());
+                body = TruncateUtf8Body(body, DisplayBodyMaxBytes);
             }
         }
 
@@ -305,10 +314,7 @@
             try
             {
                 var doc = System.Text.Json.JsonDocument.Parse(body);
-                return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                });
+                return System.Text.Json.JsonSerializer.Serialize(doc, PrettyJsonOptions);
             }
             catch { /* not valid JSON — return as-is */ }
         }
@@ -358,8 +364,30 @@
         try
         {
             var doc = System.Text.Json.JsonDocument.Parse(json);
-            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            return System.Text.Json.JsonSerializer.Serialize(doc, PrettyJsonOptions);
         }
         catch { return json; }
+    }
+
+    private static string TruncateUtf8Body(string value, int maxBytes)
+    {
+        var low = 0;
+        var high = value.Length;
+
+        while (low < high)
+        {
+            var mid = low + ((high - low + 1) / 2);
+            var byteCount = System.Text.Encoding.UTF8.GetByteCount(value.AsSpan(0, mid));
+            if (byteCount <= maxBytes)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return value[..low];
     }
 }
