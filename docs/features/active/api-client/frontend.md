@@ -83,6 +83,34 @@ public record FlatTreeNode(CollectionNode Node, int Depth, bool IsExpanded,
 - Search bar at top filters the flattened list by `Name.Contains(query, OrdinalIgnoreCase)`
   — no tree re-building required
 
+### Phase 9 linked roots UI
+
+The collection tree gains two persistent groups:
+
+```text
+Local Collections
+  Scratch
+
+Linked Repositories
+  Project A APIs        main  3 modified
+    Orders
+      GET Get Order
+      POST Create Order
+  Project B APIs        feature/auth-cleanup  clean
+```
+
+Linked root headers expose compact actions: Refresh, Open folder, Open terminal, Manage secrets,
+Git panel, and Remove from SwebKit. Removing a linked root only removes the path from SwebKit; it
+does not delete files.
+
+The main toolbar adds [Add linked root]. The dialog supports selecting an existing folder that
+contains `.swebkit-api/swebkit.json` or creating a new SwebKit API root in a chosen repository
+folder after confirmation.
+
+The Git panel starts as status-first: branch name, clean/dirty counts, changed API files, and
+Open terminal. Safe write actions are added after status is reliable: create branch, switch branch,
+commit selected API files, and push current branch.
+
 ### `RequestBuilderPanel.razor`
 
 - **Method selector:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`,

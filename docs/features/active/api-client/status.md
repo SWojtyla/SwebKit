@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 8 (Performance and Polish) complete — 623 tests passing. All phases complete.
+Phase 9 planning — git-linked SwebKit collection roots with an intuitive tree/UI and staged Git actions.
 
 ## Progress Checklist
 
@@ -161,9 +161,21 @@ Phase 8 (Performance and Polish) complete — 623 tests passing. All phases comp
 - [x] Drag-and-drop reordering: **explicitly deferred** (post-Phase-8)
 - [x] Total: 623 tests passing, build clean (pre-existing MSIX signing error only)
 
+### Phase 9 — Git-Linked Collections Planned
+
+- [ ] Define SwebKit-native folder format for linked API roots (`.swebkit-api/swebkit.json`)
+- [ ] Implement compact request files with omitted defaults and optional body/query sidecars
+- [ ] Add linked-root configuration persistence in app-local settings
+- [ ] Load multiple linked roots beside local collections in the collection tree
+- [ ] Add Add Linked Root dialog and Linked Root Manager panel
+- [ ] Add missing-secret detection and configure-secret flow for linked environments
+- [ ] Add Git status provider (branch, clean/dirty, changed API files)
+- [ ] Add safe Git actions: create/switch branch, commit selected API files, push current branch
+- [ ] Add tests for format round-trip, secret non-persistence, linked root load/save, and Git command scoping
+
 ## Completed Work
 
-All 8 phases complete. 623 tests passing.
+All 8 original phases complete. Phase 9 plan added for git-backed SwebKit collection roots.
 
 ## Blockers
 
@@ -171,4 +183,4 @@ _None._
 
 ## Validation Status
 
-Not started.
+Phase 9 validation not started.

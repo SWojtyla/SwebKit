@@ -20,6 +20,8 @@ workflows.
 - **Syntax highlighting and autocomplete:** Monaco Editor for all editors; GraphQL schema
   introspection with schema-aware autocomplete
 - **Collections:** named top-level collections with nested folder/request hierarchy
+- **Git-linked SwebKit roots:** user-configured local repository folders containing SwebKit-owned
+  API collection files; multiple roots can be opened at the same time in the collection tree
 - **Environments and variables:** `{{variable}}` substitution in URL, headers, body; multiple named
   environments; active-environment switcher; **two-level scope hierarchy** — collection-level
   variables (always active, no environment required) override-able by environment-level variables
@@ -42,6 +44,8 @@ workflows.
     variables extracted as a new SwebKit environment on import
   - Bruno `.bru` — export as zip of folder-per-request files (import Phase 7 follow-up)
   - Environments importable standalone (SwebKit format + Postman variable extraction)
+- **Git-friendly collection format:** a SwebKit-native folder format with one request per file,
+  optional body/query sidecar files, root-level schema versioning, and secret references only
 - **Full-bundle integration:** `collections.json` + `environments.json` included in the existing
   `ConfigurationBundleService` bundle export/import
 - **Standalone collection export:** per-collection export independent of the full bundle
@@ -56,6 +60,7 @@ workflows.
   extraction building blocks — no arbitrary code execution
 - No mock server functionality
 - No team collaboration or cloud sync
+- No hosted collaboration or cloud sync beyond user-managed Git repositories
 - No gRPC support
 - No response assertions or test assertions
 - No automatic cookie jar management
@@ -75,6 +80,7 @@ workflows.
 | 6     | WebSocket                | Connect/send/listen terminal, virtualized message log                              |
 | 7     | Export/Import            | SwebKit-native, Postman v2.1, Bruno export, full-bundle + standalone integration   |
 | 8     | Performance and Polish   | Monaco lazy load, virtual scroll, search/filter, keyboard shortcuts, history       |
+| 9     | Git-Linked Collections   | SwebKit-owned folder format, linked repo roots, safe Git status/actions            |
 
 ## Dependencies
 
@@ -86,6 +92,7 @@ workflows.
 | Monaco Editor (JS)                      | Phase 2+ — existing YAML interop extended; lazy-load on `/api-client` only           |
 | `Azure.Security.KeyVault.Secrets` NuGet | Phase 3 — `AzureKeyVaultSecretResolver` in `SwebKit.Azure/`                          |
 | `Microsoft.Maui.Authentication`         | Phase 4 — `WebAuthenticator` for OAuth 2 auth code flow                              |
+| Git CLI                                 | Phase 9 — optional local status/branch/commit/push actions for linked roots          |
 
 ## Risks
 
@@ -101,10 +108,14 @@ workflows.
 | Large collections degrade UI                        | `<Virtualize>` in collection tree from Phase 1; flattened-list rendering model                     |
 | Response body size                                  | Cap display at 500 KB; [Load full response] for larger payloads                                    |
 | Post-request JSONPath capture on malformed response | `PostRequestCaptureExecutor` wraps each rule in try/catch; failed rules log a warning, never throw |
+| Linked root overwrites external edits               | Track file hash/last-write metadata; prompt before overwriting changed files on disk               |
+| Git actions accidentally touch unrelated repo files | Scope status/commit actions to the configured SwebKit API root path only                           |
+| Secret values leak into Git-tracked files           | Store only secret references; resolve values from `ICredentialStore` or Key Vault at send time     |
 
 ## Quick Links
 
 - Architecture: [docs/architecture/architecture.md](../../../architecture/architecture.md)
 - Codebase guide: [docs/architecture/codebase-guide.md](../../../architecture/codebase-guide.md)
 - Settings and bundle: [docs/architecture/functionalities/settings-and-configuration.md](../../../architecture/functionalities/settings-and-configuration.md)
+- Phase 9 module: [git-linked-collections.md](git-linked-collections.md)
 - Jira: not linked

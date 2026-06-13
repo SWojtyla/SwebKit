@@ -149,6 +149,7 @@ public static class MauiProgram
         // API Client — variable substitution and HTTP execution
         builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
         builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
+        builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();
         builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
         builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>
         {

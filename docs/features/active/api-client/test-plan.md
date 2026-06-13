@@ -122,3 +122,22 @@
 | 8.3 | Monaco is NOT initialised on app boot — only on first `/api-client` visit (manual) | Manual | —                   |
 | 8.4 | Collection tree with 500 requests renders without visible lag (manual)             | Manual | —                   |
 | 8.5 | Ctrl+Enter triggers Send in `RequestBuilderPanel`                                  | bUnit  | `SwebKit.App.Tests` |
+
+---
+
+## Phase 9 — Git-Linked Collections
+
+| #    | Scenario                                                                                | Type   | Project              |
+| ---- | --------------------------------------------------------------------------------------- | ------ | -------------------- |
+| 9.1  | Linked root manifest loads from `.swebkit-api/swebkit.json`                             | Unit   | `SwebKit.Core.Tests` |
+| 9.2  | Compact request file infers defaults for name, id, empty headers, empty query, and auth | Unit   | `SwebKit.Core.Tests` |
+| 9.3  | Request with `jsonFile`, `queryFile`, or `variablesFile` loads sibling sidecar content  | Unit   | `SwebKit.Core.Tests` |
+| 9.4  | Writer serializes deterministic JSON and omits default/null fields                      | Unit   | `SwebKit.Core.Tests` |
+| 9.5  | Writer never persists secret values, only secret references                             | Unit   | `SwebKit.Core.Tests` |
+| 9.6  | External file changes are detected before overwriting a linked request                  | Unit   | `SwebKit.Core.Tests` |
+| 9.7  | Invalid manifest/request files produce diagnostics without hiding the whole root        | Unit   | `SwebKit.Core.Tests` |
+| 9.8  | Collection tree renders Local Collections and Linked Repositories as separate groups    | bUnit  | `SwebKit.App.Tests`  |
+| 9.9  | Linked root header shows branch and clean/dirty status when Git metadata is available   | bUnit  | `SwebKit.App.Tests`  |
+| 9.10 | Missing linked secret shows a configure-secret affordance and blocks only affected send | bUnit  | `SwebKit.App.Tests`  |
+| 9.11 | Git command builder scopes status/commit file paths to the configured API root only     | Unit   | `SwebKit.Core.Tests` |
+| 9.12 | Manual: open two Git repos with linked roots, edit one request in each, commit and push | Manual | —                    |

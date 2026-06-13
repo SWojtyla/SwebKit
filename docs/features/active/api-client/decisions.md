@@ -291,3 +291,49 @@ modes (packaged and unpackaged). The URI `sweb://oauth` is short and unique to t
 **Implication:** Client apps registered with the identity provider must have `sweb://oauth` listed
 as an allowed redirect URI. This is a one-time setup step the user performs in their IDP console.
 A tooltip or help link in the `OAuth2AuthForm` surfaces this requirement.
+
+---
+
+## DEC-18: Git-linked collections use a SwebKit-owned folder format
+
+**Decision:** Add a separate SwebKit-native folder format for git-linked collection roots. The
+existing `.sweb.json` bundle remains the portable import/export format. Bruno and Postman remain
+projection formats only.
+
+**Rationale:** The current single-file SwebKit JSON is good for app persistence and backup, but
+not ideal for Git review or merge workflows. A folder format with one request per file and optional
+body/query sidecars gives readable diffs while staying under SwebKit's schema control.
+
+**Implication:** Linked roots are not synchronized copies of local `collections.json`. For linked
+roots, the files on disk are the source of truth and SwebKit edits those files directly.
+
+---
+
+## DEC-19: Linked root files store secret references only
+
+**Decision:** Git-linked environment and request files may store secret names/references, but never
+secret values. Values continue to resolve from `ICredentialStore`, Key Vault, or future local
+machine-only providers at send time.
+
+**Rationale:** Linked roots are expected to live in team Git repositories. Persisting bearer tokens,
+client secrets, passwords, or API keys would create a direct credential leak. This preserves the
+existing API client security model from DEC-4.
+
+**Implication:** The UI must make missing local secrets easy to configure. A linked root can be
+valid even when some secrets are unresolved on the current machine.
+
+---
+
+## DEC-20: Git integration is staged and scoped to linked API roots
+
+**Decision:** Start with Git awareness (branch, clean/dirty, changed linked-root files), then add
+safe actions: create/switch branch, commit selected SwebKit API files, and push the current branch.
+Do not implement pull, rebase, stash, arbitrary commands, or PR creation in the first Git action
+slice.
+
+**Rationale:** Users should not need a separate tool for common collection edits, but Git actions
+can affect unrelated project files if they are too broad. Scoping actions to the configured API root
+keeps the feature useful without becoming a full Git client.
+
+**Implication:** Use fixed command builders and explicit confirmation for branch switch, commit,
+and push. Status and commit file lists are constrained to the linked API root path.

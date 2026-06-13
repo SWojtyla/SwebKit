@@ -1,5 +1,6 @@
 @inject IVariablePreviewService VariablePreview
 @inject IVariableSubstitutionService VariableSubstitution
+@inject IRequestBodyFormatter BodyFormatter
 @implements IAsyncDisposable
 
 <div class="req-builder">
@@ -29,8 +30,7 @@
         @* WebSocket: show only the method picker and a hint; URL is managed inside WebSocketPanel *@
         <div class="req-builder__url-bar req-builder__url-bar--ws-header">
             <div class="req-builder__method-picker">
-                <button type="button"
-                        class="req-builder__method-btn req-builder__method-btn--websocket"
+                <button type="button" class="req-builder__method-btn req-builder__method-btn--websocket"
                         @onclick="() => _showMethodPicker = !_showMethodPicker">
                     WS
                 </button>
@@ -59,181 +59,192 @@
     }
     else
     {
-    <div class="req-builder__url-bar">
-        <div class="req-builder__method-picker">
-            <button type="button"
-                    class="req-builder__method-btn req-builder__method-btn--@Request.Method.ToString().ToLowerInvariant()"
-                    @onclick="() => _showMethodPicker = !_showMethodPicker">
-                @MethodLabel(Request.Method)
-            </button>
-            @if (_showMethodPicker)
-            {
-                <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
-                <div class="req-builder__method-dropdown">
-                    @foreach (var m in Enum.GetValues<ApiRequestMethod>())
-                    {
-                        <button type="button"
-                                class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
-                                @onclick="() => SelectMethodAsync(m)">
-                            @MethodLabel(m)
-                        </button>
-                    }
-                </div>
-            }
-        </div>
-
-        <div class="req-builder__url-wrap">
-            <input class="req-builder__url-input" type="text" value="@Request.Url"
-                   placeholder="https://api.example.com/{{base_path}}/endpoint" @oninput="OnUrlInputAsync"
-                   @ref="_urlInputRef" />
-
-            @if (_urlPreview.Count > 0)
-            {
-                <div class="req-builder__url-preview">
-                    @foreach (var (key, value) in _urlPreview)
-                    {
-                        <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
-                            <span class="req-builder__url-token-key">{{@key}}</span>
-                            @if (value is not null)
-                            {
-                                <span class="req-builder__url-token-arrow"> → </span>
-                                <span class="req-builder__url-token-value">@value</span>
-                            }
-                            else
-                            {
-                                <span class="req-builder__url-token-arrow"> unresolved</span>
-                            }
-                        </span>
-                    }
-                </div>
-            }
-        </div>
-
-        <button type="button"
-                class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
-                @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
-            @if (_executing)
-            {
-                <span class="req-builder__send-spinner" />
-                <span>Cancel</span>
-            }
-            else if (_subscribing)
-            {
-                <span class="req-builder__send-spinner" />
-                <span>Stop</span>
-            }
-            else
-            {
-                <span>Send</span>
-            }
-        </button>
-
-        @if (!UserSettings.Settings.VerifyApiClientSsl)
-        {
-            <span class="req-builder__ssl-badge" title="SSL verification is disabled — do not use in production">
-                ⚠ SSL off
-            </span>
-        }
-    </div>
-
-    @* ── Tab strip ───────────────────────────────────────────────────────────── *@
-    <div class="req-builder__tabs">
-        @foreach (var tab in ActiveTabs)
-        {
-            var t = tab;
-            <button type="button" class="req-builder__tab @(_activeTab == t ? "req-builder__tab--active" : "")"
-                    @onclick="() => _activeTab = t">
-                @t
-                @if (t == "Params" && Request.QueryParams.Any(p => p.IsEnabled))
+        <div class="req-builder__url-bar">
+            <div class="req-builder__method-picker">
+                <button type="button"
+                        class="req-builder__method-btn req-builder__method-btn--@Request.Method.ToString().ToLowerInvariant()"
+                        @onclick="() => _showMethodPicker = !_showMethodPicker">
+                    @MethodLabel(Request.Method)
+                </button>
+                @if (_showMethodPicker)
                 {
-                    <span class="req-builder__tab-count">@Request.QueryParams.Count(p => p.IsEnabled)</span>
-                }
-                else if (t == "Headers" && Request.Headers.Any(h => h.IsEnabled))
-                {
-                    <span class="req-builder__tab-count">@Request.Headers.Count(h => h.IsEnabled)</span>
-                }
-            </button>
-        }
-    </div>
-
-    @* ── Tab content ─────────────────────────────────────────────────────────── *@
-    <div class="req-builder__tab-content">
-
-        @if (_activeTab == "GraphQL")
-        {
-            <GraphQlPanel Request="@Request" Collection="@Collection" ActiveEnvironment="@ActiveEnvironment"
-                          EndpointUrl="@Request.Url" OnChanged="MarkDirtyAsync" />
-        }
-        else if (_activeTab == "Params")
-        {
-            <KeyValueGrid Pairs="@Request.QueryParams" OnChanged="MarkDirtyAsync" />
-        }
-        else if (_activeTab == "Headers")
-        {
-            <KeyValueGrid Pairs="@Request.Headers" OnChanged="MarkDirtyAsync" />
-        }
-        else if (_activeTab == "Body")
-        {
-            <div class="req-builder__body-mode-strip">
-                @foreach (var mode in Enum.GetValues<RequestBodyMode>())
-                {
-                    var m = mode;
-                    <button type="button"
-                            class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
-                            @onclick="() => SetBodyModeAsync(m)">
-                        @mode.ToString()
-                    </button>
+                    <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
+                    <div class="req-builder__method-dropdown">
+                        @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+                        {
+                            <button type="button"
+                                    class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
+                                    @onclick="() => SelectMethodAsync(m)">
+                                @MethodLabel(m)
+                            </button>
+                        }
+                    </div>
                 }
             </div>
 
-            @if (Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml or RequestBodyMode.Text)
+            <div class="req-builder__url-wrap">
+                <input class="req-builder__url-input" type="text" value="@Request.Url"
+                       placeholder="https://api.example.com/{{base_path}}/endpoint" @oninput="OnUrlInputAsync"
+                       @ref="_urlInputRef" />
+
+                @if (_urlPreview.Count > 0)
+                {
+                    <div class="req-builder__url-preview">
+                        @foreach (var (key, value) in _urlPreview)
+                        {
+                            <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
+                                <span class="req-builder__url-token-key">{{@key}}</span>
+                                @if (value is not null)
+                                {
+                                    <span class="req-builder__url-token-arrow"> → </span>
+                                    <span class="req-builder__url-token-value">@value</span>
+                                }
+                                else
+                                {
+                                    <span class="req-builder__url-token-arrow"> unresolved</span>
+                                }
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button type="button"
+                    class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
+                    @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
+                @if (_executing)
+                {
+                    <span class="req-builder__send-spinner" />
+                    <span>Cancel</span>
+                }
+                else if (_subscribing)
+                {
+                    <span class="req-builder__send-spinner" />
+                    <span>Stop</span>
+                }
+                else
+                {
+                    <span>Send</span>
+                }
+            </button>
+
+            @if (!UserSettings.Settings.VerifyApiClientSsl)
             {
-                <div class="req-builder__body-area-wrap">
-                    @if (_bodyPreview.Count > 0)
+                <span class="req-builder__ssl-badge" title="SSL verification is disabled — do not use in production">
+                    ⚠ SSL off
+                </span>
+            }
+        </div>
+
+        @* ── Tab strip ───────────────────────────────────────────────────────────── *@
+        <div class="req-builder__tabs">
+            @foreach (var tab in ActiveTabs)
+            {
+                var t = tab;
+                <button type="button" class="req-builder__tab @(_activeTab == t ? "req-builder__tab--active" : "")"
+                        @onclick="() => _activeTab = t">
+                    @t
+                    @if (t == "Params" && Request.QueryParams.Any(p => p.IsEnabled))
                     {
-                        <div class="req-builder__body-preview-strip">
-                            @foreach (var (key, value) in _bodyPreview)
-                            {
-                                <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
-                                    {{@key}}@(value is not null ? $" → {value}" : " unresolved")
-                                </span>
-                            }
-                        </div>
+                        <span class="req-builder__tab-count">@Request.QueryParams.Count(p => p.IsEnabled)</span>
                     }
-                    <textarea class="req-builder__body-area" value="@Request.Body.RawContent"
-                              placeholder="@BodyPlaceholder(Request.Body.Mode)" @oninput="OnBodyInputAsync"
-                              spellcheck="false"></textarea>
+                    else if (t == "Headers" && Request.Headers.Any(h => h.IsEnabled))
+                    {
+                        <span class="req-builder__tab-count">@Request.Headers.Count(h => h.IsEnabled)</span>
+                    }
+                </button>
+            }
+        </div>
+
+        @* ── Tab content ─────────────────────────────────────────────────────────── *@
+        <div class="req-builder__tab-content">
+
+            @if (_activeTab == "GraphQL")
+            {
+                <GraphQlPanel Request="@Request" Collection="@Collection" ActiveEnvironment="@ActiveEnvironment"
+                              EndpointUrl="@Request.Url" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Params")
+            {
+                <KeyValueGrid Pairs="@Request.QueryParams" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Headers")
+            {
+                <KeyValueGrid Pairs="@Request.Headers" OnChanged="MarkDirtyAsync" />
+            }
+            else if (_activeTab == "Body")
+            {
+                <div class="req-builder__body-mode-strip">
+                    @foreach (var mode in Enum.GetValues<RequestBodyMode>())
+                    {
+                        var m = mode;
+                        <button type="button"
+                                class="req-builder__body-mode-btn @(Request.Body.Mode == m ? "req-builder__body-mode-btn--active" : "")"
+                                @onclick="() => SetBodyModeAsync(m)">
+                            @mode.ToString()
+                        </button>
+                    }
                 </div>
+
+                @if (Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml or RequestBodyMode.Text)
+                {
+                    <div class="req-builder__body-area-wrap">
+                        @if (_bodyPreview.Count > 0)
+                        {
+                            <div class="req-builder__body-preview-strip">
+                                @foreach (var (key, value) in _bodyPreview)
+                                {
+                                    <span class="req-builder__url-token @(value is null ? "req-builder__url-token--unresolved" : "")">
+                                        {{@key}}@(value is not null ? $" → {value}" : " unresolved")
+                                    </span>
+                                }
+                            </div>
+                        }
+                        <div class="req-builder__body-editor-toolbar">
+                            <button type="button" class="req-builder__format-btn" title="Prettify request body"
+                                    disabled="@(!CanPrettifyBody)" @onclick="PrettifyBodyAsync">
+                                Prettify
+                            </button>
+                        </div>
+                        @if (_bodyFormatError is not null)
+                        {
+                            <div class="req-builder__format-error" role="alert">@_bodyFormatError</div>
+                        }
+                        <textarea class="req-builder__body-area" value="@Request.Body.RawContent"
+                                  placeholder="@BodyPlaceholder(Request.Body.Mode)" @oninput="OnBodyInputAsync"
+                                  spellcheck="false"></textarea>
+                    </div>
+                }
+                else if (Request.Body.Mode == RequestBodyMode.FormData)
+                {
+                    <KeyValueGrid Pairs="@Request.Body.FormData" OnChanged="MarkDirtyAsync" />
+                }
+                else if (Request.Body.Mode == RequestBodyMode.Binary)
+                {
+                    <div class="req-builder__binary-row">
+                        <span class="req-builder__binary-path">@(Request.Body.FilePath ?? "No file selected")</span>
+                        <button type="button" class="req-builder__binary-pick-btn" @onclick="PickFileAsync">
+                            Choose File…
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="req-builder__body-none">No body for this request.</div>
+                }
             }
-            else if (Request.Body.Mode == RequestBodyMode.FormData)
+            else if (_activeTab == "Auth")
             {
-                <KeyValueGrid Pairs="@Request.Body.FormData" OnChanged="MarkDirtyAsync" />
+                <AuthPanel Request="@Request" Collection="@Collection" OnChanged="@MarkDirtyAsync" />
             }
-            else if (Request.Body.Mode == RequestBodyMode.Binary)
+            else if (_activeTab == "Capture")
             {
-                <div class="req-builder__binary-row">
-                    <span class="req-builder__binary-path">@(Request.Body.FilePath ?? "No file selected")</span>
-                    <button type="button" class="req-builder__binary-pick-btn" @onclick="PickFileAsync">
-                        Choose File…
-                    </button>
-                </div>
+                <PostRequestCaptureBuilder Request="@Request" AvailableEnvironments="@AllEnvironments"
+                                           CaptureWarnings="@_captureWarnings" OnChanged="@MarkDirtyAsync" />
             }
-            else
-            {
-                <div class="req-builder__body-none">No body for this request.</div>
-            }
-        }
-        else if (_activeTab == "Auth")
-        {
-            <AuthPanel Request="@Request" Collection="@Collection" OnChanged="@MarkDirtyAsync" />
-        }
-        else if (_activeTab == "Capture")
-        {
-            <PostRequestCaptureBuilder Request="@Request" AvailableEnvironments="@AllEnvironments"
-                                       CaptureWarnings="@_captureWarnings" OnChanged="@MarkDirtyAsync" />
-        }
-    </div>
-    } @* end else (not WebSocket) *@
+        </div>
+    }
+    @* end else (not WebSocket) *@
 
 </div>
 
@@ -270,10 +281,15 @@
     private IReadOnlyDictionary<string, string?> _resolvedScope = new Dictionary<string, string?>();
     private IReadOnlyDictionary<string, string?> _urlPreview = new Dictionary<string, string?>();
     private IReadOnlyDictionary<string, string?> _bodyPreview = new Dictionary<string, string?>();
+    private string? _bodyFormatError;
 
     private ElementReference _urlInputRef;
     private ElementReference _nameInputRef;
     private bool _editingName;
+
+    private bool CanPrettifyBody =>
+        Request.Body.Mode is RequestBodyMode.Json or RequestBodyMode.Xml &&
+        !string.IsNullOrWhiteSpace(Request.Body.RawContent);
 
     // ── Parameter sync (BL-5 guard) ────────────────────────────────────────────
 
@@ -363,15 +379,39 @@
 
     private async Task OnBodyInputAsync(ChangeEventArgs e)
     {
+        _bodyFormatError = null;
         Request.Body.RawContent = e.Value?.ToString();
         if (Request.Body.RawContent is not null)
             _bodyPreview = VariablePreview.Preview(Request.Body.RawContent, _resolvedScope);
         await MarkDirtyAsync();
     }
 
+    private async Task PrettifyBodyAsync()
+    {
+        var result = BodyFormatter.FormatRestBody(Request.Body.Mode, Request.Body.RawContent);
+        if (!result.IsSuccess)
+        {
+            _bodyFormatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _bodyFormatError = null;
+        if (Request.Body.RawContent == result.FormattedContent)
+        {
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        Request.Body.RawContent = result.FormattedContent;
+        _bodyPreview = VariablePreview.Preview(Request.Body.RawContent ?? string.Empty, _resolvedScope);
+        await MarkDirtyAsync();
+    }
+
     private async Task SetBodyModeAsync(RequestBodyMode mode)
     {
         if (Request.Body.Mode == mode) return;
+        _bodyFormatError = null;
         Request.Body.Mode = mode;
         await MarkDirtyAsync();
     }

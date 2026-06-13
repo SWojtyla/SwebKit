@@ -3,16 +3,15 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
 @inject IGraphQlSchemaService SchemaService
+@inject IRequestBodyFormatter BodyFormatter
 
 <div class="gql-panel">
 
     @* ── Tab strip ──────────────────────────────────────────────────────────── *@
     <div class="gql-panel__tabstrip">
-        <button type="button"
-                class="gql-panel__tab @(_activeTab == "query" ? "gql-panel__tab--active" : "")"
+        <button type="button" class="gql-panel__tab @(_activeTab == "query" ? "gql-panel__tab--active" : "")"
                 @onclick='() => SwitchTab("query")'>Query</button>
-        <button type="button"
-                class="gql-panel__tab @(_activeTab == "variables" ? "gql-panel__tab--active" : "")"
+        <button type="button" class="gql-panel__tab @(_activeTab == "variables" ? "gql-panel__tab--active" : "")"
                 @onclick='() => SwitchTab("variables")'>
             Variables
             @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
@@ -20,8 +19,7 @@
                 <span class="gql-panel__tab-dot">●</span>
             }
         </button>
-        <button type="button"
-                class="gql-panel__tab @(_activeTab == "schema" ? "gql-panel__tab--active" : "")"
+        <button type="button" class="gql-panel__tab @(_activeTab == "schema" ? "gql-panel__tab--active" : "")"
                 @onclick='() => SwitchTab("schema")'>
             Schema
             @if (_schemaLoaded)
@@ -30,14 +28,14 @@
             }
         </button>
 
+        <div class="gql-panel__tabstrip-spacer"></div>
+
         @if (_operationNames.Count > 1)
         {
-            <div class="gql-panel__tabstrip-spacer"></div>
             <div class="gql-panel__op-wrap">
                 <span class="gql-panel__op-label">Op:</span>
                 <div class="gql-panel__op-dropdown-wrap">
-                    <button type="button" class="gql-panel__op-btn"
-                            @onclick="() => _showOpDropdown = !_showOpDropdown">
+                    <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
                         @(Request.GraphQlSelectedOperation ?? _operationNames[0])
                         <span class="gql-panel__op-chevron">▾</span>
                     </button>
@@ -57,10 +55,23 @@
                 </div>
             </div>
         }
+
+        @if (_activeTab is "query" or "variables")
+        {
+            <button type="button" class="gql-panel__format-btn" title="@FormatButtonTitle"
+                    disabled="@(!CanPrettifyActiveEditor)" @onclick="PrettifyActiveEditorAsync">
+                Prettify
+            </button>
+        }
     </div>
 
     @* ── Tab content ─────────────────────────────────────────────────────────── *@
     <div class="gql-panel__content">
+
+        @if (_formatError is not null)
+        {
+            <div class="gql-panel__format-error" role="alert">@_formatError</div>
+        }
 
         @* ── Query editor ── *@
         @if (_activeTab == "query")
@@ -76,8 +87,7 @@
                 else
                 {
                     <StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
-                                          OnDidChangeModelContent="OnQueryChangedAsync"
-                                          OnDidInit="OnQueryEditorInitAsync" />
+                                          OnDidChangeModelContent="OnQueryChangedAsync" OnDidInit="OnQueryEditorInitAsync" />
                 }
             </div>
         }
@@ -94,8 +104,7 @@
                 else
                 {
                     <StandaloneCodeEditor @ref="_varsEditor" ConstructionOptions="VarsEditorOptions"
-                                          OnDidChangeModelContent="OnVarsChangedAsync"
-                                          OnDidInit="OnVarsEditorInitAsync" />
+                                          OnDidChangeModelContent="OnVarsChangedAsync" OnDidInit="OnVarsEditorInitAsync" />
                 }
             </div>
         }
@@ -105,8 +114,7 @@
                 <div class="gql-panel__schema-toolbar">
                     <button type="button"
                             class="gql-panel__introspect-btn @(_introspecting ? "gql-panel__introspect-btn--busy" : "")"
-                            disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))"
-                            @onclick="IntrospectAsync">
+                            disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))" @onclick="IntrospectAsync">
                         @if (_introspecting)
                         {
                             <span class="gql-panel__loading-spinner"></span>
@@ -120,8 +128,8 @@
                     @if (_schemaLoaded)
                     {
                         <span class="gql-panel__schema-status--ok">✓ Schema loaded — @_schemaTypeCount types</span>
-                        <button type="button" class="gql-panel__schema-clear-btn"
-                                title="Clear cached schema" @onclick="ClearSchemaAsync">✕</button>
+                        <button type="button" class="gql-panel__schema-clear-btn" title="Clear cached schema"
+                                @onclick="ClearSchemaAsync">✕</button>
                     }
                 </div>
 
@@ -160,113 +168,6 @@
 
     </div>
 
-    @* ───────────────────────────────────────────────────────────────────────── *@
-    @if (false)
-    {
-    <div class="gql-panel__toolbar--unused">
-
-        @if (_operationNames.Count > 1)
-        {
-            <div class="gql-panel__op-selector">
-                <label class="gql-panel__op-label">Operation:</label>
-                <div class="gql-panel__op-dropdown-wrap">
-                    <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
-                        @(Request.GraphQlSelectedOperation ?? _operationNames[0])
-                        <span class="gql-panel__op-chevron">▾</span>
-                    </button>
-                    @if (_showOpDropdown)
-                    {
-                        <div class="ctx-backdrop" @onclick="() => _showOpDropdown = false"></div>
-                        <div class="gql-panel__op-dropdown">
-                            @foreach (var name in _operationNames)
-                            {
-                                var n = name;
-                                <button type="button"
-                                        class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
-                                        @onclick="() => SelectOperationAsync(n)">
-                                    @n
-                                </button>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-
-        <div class="gql-panel__toolbar-spacer"></div>
-
-        <button type="button"
-                class="gql-panel__introspect-btn @(_introspecting ? "gql-panel__introspect-btn--busy" : "")"
-                disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))"
-                title="Fetch the schema from the GraphQL endpoint to enable schema-aware validation"
-                @onclick="IntrospectAsync">
-            @if (_introspecting)
-            {
-                <span class="gql-panel__introspect-spinner"></span>
-                <span>Introspecting…</span>
-            }
-            else
-            {
-                <span>⚡ Introspect Schema</span>
-            }
-        </button>
-    </div>
-
-    @* ── Introspection error banner ────────────────────────────────────────── *@
-    @if (_introspectionError is not null)
-    {
-        <div class="gql-panel__introspect-warning" role="alert">
-            <span class="gql-panel__introspect-warning-text">⚠ @_introspectionError</span>
-            <button type="button" class="gql-panel__introspect-dismiss" title="Dismiss"
-                    @onclick="() => _introspectionError = null">✕</button>
-        </div>
-    }
-
-    @* ── Query editor ─────────────────────────────────────────────────────── *@
-    <div class="gql-panel__editor-label">Query</div>
-    <div class="gql-panel__editor-wrap gql-panel__editor-wrap--query">
-        @if (!_monacoLoaded)
-        {
-            <div class="gql-panel__editor-loading">
-                <span class="gql-panel__editor-loading-spinner"></span>
-                Loading editor…
-            </div>
-        }
-        else
-        {
-            <StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
-                                  OnDidChangeModelContent="OnQueryChangedAsync" OnDidInit="OnQueryEditorInitAsync" />
-        }
-    </div>
-
-    @* ── Variables editor (collapsible) ───────────────────────────────────── *@
-    <div class="gql-panel__vars-header" @onclick="ToggleVarsAsync">
-        <span class="gql-panel__vars-toggle-icon">@(_showVars ? "▾" : "▸")</span>
-        <span class="gql-panel__vars-label">Variables</span>
-        @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
-        {
-            <span class="gql-panel__vars-badge">●</span>
-        }
-    </div>
-    @if (_showVars)
-    {
-        <div class="gql-panel__editor-wrap gql-panel__editor-wrap--vars">
-            @if (!_monacoLoaded)
-            {
-                <div class="gql-panel__editor-loading">
-                    <span class="gql-panel__editor-loading-spinner"></span>
-                    Loading editor…
-                </div>
-            }
-            else
-            {
-                <StandaloneCodeEditor @ref="_varsEditor" ConstructionOptions="VarsEditorOptions"
-                                      OnDidChangeModelContent="OnVarsChangedAsync" OnDidInit="OnVarsEditorInitAsync" />
-            }
-        </div>
-    }
-}
-
 </div>
 
 @code {
@@ -288,14 +189,24 @@
     private bool _showOpDropdown;
     private bool _introspecting;
     private string? _introspectionError;
+    private string? _formatError;
     private bool _schemaLoaded;
     private string? _schemaJson;
     private int _schemaTypeCount;
-    // kept for dead-code HTML inside @if(false) to compile:
-    private bool _showVars;
     private IReadOnlyList<string> _operationNames = [];
 
     private HttpRequestEntry? _lastRequest;
+
+    private bool CanPrettifyActiveEditor => _activeTab switch
+    {
+        "query" => !string.IsNullOrWhiteSpace(Request.GraphQlQuery),
+        "variables" => !string.IsNullOrWhiteSpace(Request.GraphQlVariables),
+        _ => false,
+    };
+
+    private string FormatButtonTitle => _activeTab == "variables"
+        ? "Prettify GraphQL variables JSON"
+        : "Prettify GraphQL query";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -369,6 +280,7 @@
         var value = await _queryEditor.GetValue();
         if (Request.GraphQlQuery == value) return;
 
+        _formatError = null;
         Request.GraphQlQuery = value;
 
         // Reparse operation names
@@ -393,6 +305,7 @@
         var value = await _varsEditor.GetValue();
         if (Request.GraphQlVariables == value) return;
 
+        _formatError = null;
         Request.GraphQlVariables = value;
         await OnChanged.InvokeAsync();
     }
@@ -407,15 +320,76 @@
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
-    private void SwitchTab(string tab) => _activeTab = tab;
-
-    // ── Variables toggle ──────────────────────────────────────────────────────
-
-    private async Task ToggleVarsAsync()
+    private void SwitchTab(string tab)
     {
-        _showVars = !_showVars;
-        // Re-trigger OnAfterRender so the vars editor gets initialised after the section becomes visible (BL-6)
-        await InvokeAsync(StateHasChanged); // BL-2
+        _formatError = null;
+        _activeTab = tab;
+    }
+
+    private async Task PrettifyActiveEditorAsync()
+    {
+        if (_activeTab == "variables")
+        {
+            await PrettifyVariablesAsync();
+            return;
+        }
+
+        await PrettifyQueryAsync();
+    }
+
+    private async Task PrettifyQueryAsync()
+    {
+        var value = _queryEditor is not null
+            ? await _queryEditor.GetValue()
+            : Request.GraphQlQuery;
+        var result = BodyFormatter.FormatGraphQlQuery(value);
+        if (!result.IsSuccess)
+        {
+            _formatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _formatError = null;
+        Request.GraphQlQuery = result.FormattedContent;
+        _operationNames = SchemaService.ParseOperationNames(Request.GraphQlQuery ?? string.Empty);
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+
+        if (_queryEditor is not null)
+        {
+            await _queryEditor.SetValue(Request.GraphQlQuery ?? string.Empty);
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PrettifyVariablesAsync()
+    {
+        var value = _varsEditor is not null
+            ? await _varsEditor.GetValue()
+            : Request.GraphQlVariables;
+        var result = BodyFormatter.FormatJson(value);
+        if (!result.IsSuccess)
+        {
+            _formatError = result.ErrorMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _formatError = null;
+        Request.GraphQlVariables = result.FormattedContent;
+        if (_varsEditor is not null)
+        {
+            await _varsEditor.SetValue(Request.GraphQlVariables ?? string.Empty);
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     // ── Introspection ─────────────────────────────────────────────────────────

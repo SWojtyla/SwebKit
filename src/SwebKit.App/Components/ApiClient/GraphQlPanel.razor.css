@@ -79,6 +79,36 @@
 
 .gql-panel__tabstrip-spacer { flex: 1; }
 
+.gql-panel__format-btn {
+    flex-shrink: 0;
+    padding: 3px 9px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.gql-panel__format-btn:hover:not(:disabled) {
+    background: var(--color-surface-3);
+    border-color: var(--color-accent);
+}
+
+.gql-panel__format-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.gql-panel__format-error {
+    padding: 5px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
 /* ── Operation selector ───────────────────────────────────────────────────── */
 
 .gql-panel__op-wrap {
@@ -333,231 +363,4 @@
     color: var(--color-text-secondary, #b0b0c0);
     margin: 0;
     white-space: pre;
-}
-
-
-/* ── Toolbar ──────────────────────────────────────────────────────────────── */
-
-.gql-panel__toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: var(--surface-card, #1e1e2e);
-    border-bottom: 1px solid var(--border-color, #3a3a4a);
-    flex-shrink: 0;
-}
-
-.gql-panel__toolbar-spacer {
-    flex: 1;
-}
-
-/* ── Operation selector ───────────────────────────────────────────────────── */
-
-.gql-panel__op-selector {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.gql-panel__op-label {
-    font-size: 12px;
-    color: var(--text-muted, #8a8a9a);
-}
-
-.gql-panel__op-dropdown-wrap {
-    position: relative;
-}
-
-.gql-panel__op-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    background: var(--surface-raised, #2a2a3a);
-    border: 1px solid var(--border-color, #3a3a4a);
-    border-radius: 4px;
-    color: var(--text-primary, #e0e0ef);
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.gql-panel__op-btn:hover {
-    background: var(--surface-hover, #353545);
-}
-
-.gql-panel__op-chevron {
-    font-size: 10px;
-    color: var(--text-muted, #8a8a9a);
-}
-
-.gql-panel__op-dropdown {
-    position: absolute;
-    top: calc(100% + 2px);
-    left: 0;
-    min-width: 150px;
-    background: var(--surface-raised, #2a2a3a);
-    border: 1px solid var(--border-color, #3a3a4a);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    z-index: 200;
-}
-
-/* ── Introspect button ────────────────────────────────────────────────────── */
-
-.gql-panel__introspect-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: var(--accent-subtle, #2a3a5a);
-    border: 1px solid var(--accent-border, #4a6aaa);
-    border-radius: 4px;
-    color: var(--accent-text, #8ab4f8);
-    font-size: 12px;
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.gql-panel__introspect-btn:hover:not(:disabled) {
-    background: var(--accent-hover, #324470);
-}
-
-.gql-panel__introspect-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.gql-panel__introspect-btn--busy {
-    opacity: 0.8;
-}
-
-.gql-panel__introspect-spinner {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--accent-border, #4a6aaa);
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: gql-spin 0.7s linear infinite;
-}
-
-@keyframes gql-spin {
-    to { transform: rotate(360deg); }
-}
-
-/* ── Introspection error banner ──────────────────────────────────────────── */
-
-.gql-panel__introspect-warning {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 10px;
-    background: var(--warning-surface, #3a2a1a);
-    border-bottom: 1px solid var(--warning-border, #8a5a1a);
-    flex-shrink: 0;
-}
-
-.gql-panel__introspect-warning-text {
-    font-size: 12px;
-    color: var(--warning-text, #f0b060);
-}
-
-.gql-panel__introspect-dismiss {
-    background: none;
-    border: none;
-    color: var(--warning-text, #f0b060);
-    font-size: 12px;
-    cursor: pointer;
-    padding: 0 2px;
-    opacity: 0.7;
-}
-
-.gql-panel__introspect-dismiss:hover {
-    opacity: 1;
-}
-
-/* ── Editor label ─────────────────────────────────────────────────────────── */
-
-.gql-panel__editor-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-muted, #8a8a9a);
-    padding: 6px 10px 2px;
-    flex-shrink: 0;
-}
-
-/* ── Editor wrapper ───────────────────────────────────────────────────────── */
-
-.gql-panel__editor-wrap {
-    flex-shrink: 0;
-    margin: 0 0 4px;
-}
-
-.gql-panel__editor-wrap--query {
-    min-height: 160px;
-    height: 30vh;
-    max-height: 400px;
-}
-
-.gql-panel__editor-wrap--vars {
-    height: 120px;
-}
-
-.gql-panel__editor-loading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 20px 12px;
-    font-size: 13px;
-    color: var(--text-muted, #8a8a9a);
-}
-
-.gql-panel__editor-loading-spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border-color, #3a3a4a);
-    border-top-color: var(--text-primary, #e0e0ef);
-    border-radius: 50%;
-    animation: gql-spin 0.7s linear infinite;
-}
-
-/* ── Variables collapsible header ────────────────────────────────────────── */
-
-.gql-panel__vars-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-top: 1px solid var(--border-color, #3a3a4a);
-    border-bottom: 1px solid var(--border-color, #3a3a4a);
-    background: var(--surface-card, #1e1e2e);
-    user-select: none;
-    flex-shrink: 0;
-}
-
-.gql-panel__vars-header:hover {
-    background: var(--surface-hover, #28283a);
-}
-
-.gql-panel__vars-toggle-icon {
-    font-size: 10px;
-    color: var(--text-muted, #8a8a9a);
-    width: 12px;
-}
-
-.gql-panel__vars-label {
-    font-size: 12px;
-    color: var(--text-secondary, #b0b0c0);
-    font-weight: 500;
-}
-
-.gql-panel__vars-badge {
-    font-size: 10px;
-    color: var(--accent-text, #8ab4f8);
 }
