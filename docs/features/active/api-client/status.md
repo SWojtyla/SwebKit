@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Post-Phase-10 polish roadmap planned — target clarity, in-app Git review, conflict actions, cURL portability, variable inspection, pinned requests, response examples, and deferred collection runner sequencing.
+Phases 11-14 complete — workflow trust, cURL portability/import, variable inspection, pinned requests, response examples, and collection runner are implemented.
 
 ## Progress Checklist
 
@@ -188,7 +188,7 @@ _None._
 
 ## Validation Status
 
-Phase 9 focused linked-root unit tests passing; MAUI app build passing. Documentation refresh completed for active feature modules and architecture routing; docs whitespace validation is the current check for this pass.
+Focused API Client workflow, runner, and linked-root tests passing (26 total); MAUI app build passing. Build still reports two pre-existing warnings in unrelated areas: `DlqView.ShowConfirm` and OAuth2 `WebAuthenticator` platform support.
 
 ## Planned Follow-Up
 
@@ -204,7 +204,7 @@ Phase 9 focused linked-root unit tests passing; MAUI app build passing. Document
 
 ### Post-Phase-10 Polish Planned
 
-- [ ] Phase 11 — Workflow Trust: target chip, in-app Git diff preview, staged/unstaged review layout, conflict actions
-- [ ] Phase 12 — Request Portability and Variable Clarity: Copy as cURL, Import from cURL, variable inspector
-- [ ] Phase 13 — Workspace Depth and Documentation Value: pinned request tabs, saved response examples
-- [ ] Phase 14 — Collection Runner Later: folder/collection execution after single-request workflows are trustworthy
+- [x] Phase 11 — Workflow Trust: target chip, in-app Git diff preview, staged/unstaged review layout, commit preview, conflict actions
+- [x] Phase 12 — Request Portability and Variable Clarity: Copy as cURL, Import from cURL, variable inspector
+- [x] Phase 13 — Workspace Depth and Documentation Value: pinned request tabs, saved response examples
+- [x] Phase 14 — Collection Runner Later: folder/collection execution after single-request workflows are trustworthy

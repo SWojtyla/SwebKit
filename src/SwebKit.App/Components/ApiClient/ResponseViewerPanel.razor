@@ -21,6 +21,19 @@
             }
         </div>
     }
+    @if (ResponseExamples.Count > 0)
+    {
+        <div class="resp-viewer__history resp-viewer__examples">
+            <div class="resp-viewer__history-title">Examples</div>
+            @foreach (var example in ResponseExamples)
+            {
+                <div class="resp-viewer__history-item resp-viewer__example-item" title="@example.CapturedAt.ToLocalTime().ToString("g")">
+                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(example.StatusCode)">@example.StatusCode</span>
+                    <span class="resp-viewer__history-method">@example.Name</span>
+                </div>
+            }
+        </div>
+    }
     @if (SubscriptionMessages.Count > 0)
     {
         <div class="resp-viewer__subscription-header">
@@ -167,6 +180,9 @@
                 {
                     <div class="resp-viewer__body-toolbar">
                         <span class="resp-viewer__content-type">@(Result.ContentType ?? "unknown")</span>
+                        <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)" title="Save response example">
+                            Save example
+                        </button>
                         <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
                             @(_copied ? "✓ Copied" : "Copy")
                         </button>
@@ -217,7 +233,9 @@
     [Parameter] public HttpRequestResult? Result { get; set; }
     [Parameter] public ICollection<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
     [Parameter] public IReadOnlyList<HttpRequestResult> HistoryEntries { get; set; } = [];
+    [Parameter] public IReadOnlyList<ResponseExample> ResponseExamples { get; set; } = [];
     [Parameter] public EventCallback<HttpRequestResult> OnResend { get; set; }
+    [Parameter] public EventCallback<HttpRequestResult> OnSaveExample { get; set; }
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private string _activeTab = "Body";

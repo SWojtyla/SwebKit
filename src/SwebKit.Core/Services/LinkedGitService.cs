@@ -104,6 +104,45 @@ public sealed class LinkedGitService
             .ToList();
     }
 
+    public async Task<string?> GetOriginRemoteUrlAsync(string configuredPath, CancellationToken cancellationToken = default)
+    {
+        var repoRootResult = await RunGitAsync(configuredPath, ["rev-parse", "--show-toplevel"], cancellationToken);
+        if (repoRootResult.ExitCode != 0)
+        {
+            return null;
+        }
+
+        var remoteResult = await RunGitAsync(repoRootResult.OutputText.Trim(), ["remote", "get-url", "origin"], cancellationToken);
+        return remoteResult.ExitCode == 0 ? remoteResult.OutputText.Trim() : null;
+    }
+
+    public async Task<LinkedGitFileDiff> GetFileDiffAsync(string configuredPath, string apiRootPath, string relativePath, CancellationToken cancellationToken = default)
+    {
+        var (status, changedFile, failure) = await GetScopedChangedFileAsync(configuredPath, apiRootPath, relativePath, cancellationToken);
+        if (failure is not null)
+        {
+            return new LinkedGitFileDiff
+            {
+                Path = NormalizePath(relativePath),
+                ErrorMessage = failure.ErrorMessage ?? "File is not a changed linked API file.",
+            };
+        }
+
+        var repositoryRoot = status!.RepositoryRoot!;
+        var path = changedFile!.Path;
+        var original = changedFile.IsUntracked || changedFile.IndexStatus == 'A'
+            ? string.Empty
+            : await ReadGitBlobAsync(repositoryRoot, $"HEAD:{path}", cancellationToken);
+        var current = await ReadCurrentFileContentAsync(repositoryRoot, path, changedFile, cancellationToken);
+
+        return new LinkedGitFileDiff
+        {
+            Path = path,
+            OriginalContent = original.ReplaceLineEndings("\n"),
+            CurrentContent = current.ReplaceLineEndings("\n"),
+        };
+    }
+
     public async Task<LinkedGitCommandResult> CreateBranchAsync(string configuredPath, string branchName, CancellationToken cancellationToken = default)
     {
         if (!IsSafeBranchName(branchName))
@@ -463,6 +502,31 @@ public sealed class LinkedGitService
         }
 
         return await RunGitAsync(repoRoot, ["restore", "--staged", "--worktree", "--", changedFile.Path], cancellationToken);
+    }
+
+    private static async Task<string> ReadCurrentFileContentAsync(string repositoryRoot, string normalizedPath, LinkedGitChangedFile changedFile, CancellationToken cancellationToken)
+    {
+        var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, normalizedPath));
+        var repositoryFullPath = Path.GetFullPath(repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(repositoryFullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        if (File.Exists(fullPath))
+        {
+            return await File.ReadAllTextAsync(fullPath, cancellationToken);
+        }
+
+        return changedFile.IsStaged
+            ? await ReadGitBlobAsync(repositoryRoot, $":{normalizedPath}", cancellationToken)
+            : string.Empty;
+    }
+
+    private static async Task<string> ReadGitBlobAsync(string repositoryRoot, string objectName, CancellationToken cancellationToken)
+    {
+        var result = await RunGitAsync(repositoryRoot, ["show", objectName], cancellationToken);
+        return result.ExitCode == 0 ? result.OutputText : string.Empty;
     }
 
     private static string GetGitError(GitCommandResult result)

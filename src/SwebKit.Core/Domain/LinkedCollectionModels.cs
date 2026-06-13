@@ -102,6 +102,15 @@ public sealed class LinkedGitBranch
     public bool IsCurrent { get; init; }
 }
 
+public sealed class LinkedGitFileDiff
+{
+    public string Path { get; init; } = string.Empty;
+    public string OriginalContent { get; init; } = string.Empty;
+    public string CurrentContent { get; init; } = string.Empty;
+    public string? ErrorMessage { get; init; }
+    public bool IsSuccess => ErrorMessage is null;
+}
+
 public sealed class LinkedGitStatus
 {
     public bool IsGitRepository { get; init; }

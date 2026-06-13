@@ -54,11 +54,14 @@ workflows.
 - **Auto-save:** opt-in user setting (default: off); debounced 500 ms after last edit
 - **Performance:** `Virtualize` component on collection tree and message log from Phase 1; response
   body cap at 500 KB (load-more on demand)
+- **Request portability:** Copy as cURL with secret masking and import from cURL into the active collection
+- **Variable inspector:** active-request token source/value view with unresolved markers
+- **Pinned workspace:** session-local pinned request tabs with isolated dirty/response/subscription state
+- **Response examples:** scrubbed saved examples attached to requests and persisted with collections/linked request files
+- **Collection runner:** sequential collection execution through the existing request execution path with cancellation and per-request results
 
 ## Current Deferrals and Non-Goals
 
-- Collection runner is deferred to the post-Phase-10 polish roadmap after single-request, variable,
-  and Git workflows are trustworthy
 - No pre-request scripts. Post-request capture rules are limited to JSONPath-based variable
   extraction building blocks — no arbitrary code execution
 - No mock server functionality
@@ -87,21 +90,21 @@ workflows.
 | 11    | Workflow Trust            | Target clarity, in-app Git diff review, and conflict actions                       |
 | 12    | Portability and Variables | Copy/import cURL and inspect resolved variable sources                             |
 | 13    | Workspace Depth           | Pinned requests and saved response examples                                        |
-| 14    | Collection Runner         | Deferred batch execution after single-request workflows are trustworthy            |
+| 14    | Collection Runner         | Sequential batch execution after single-request workflows are trustworthy          |
 
 ## Dependencies
 
-| Dependency                              | Usage                                                                                |
-| --------------------------------------- | ------------------------------------------------------------------------------------ |
-| `ConfigurationBundleService`            | Phase 7 — extend to include `collections.json` + `environments.json`                 |
-| `AppDataFileStore`                      | Phase 1 — `CollectionRepository` and `EnvironmentRepository` use it for file I/O     |
+| Dependency                              | Usage                                                                                                      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ConfigurationBundleService`            | Phase 7 — extend to include `collections.json` + `environments.json`                                       |
+| `AppDataFileStore`                      | Phase 1 — `CollectionRepository` and `EnvironmentRepository` use it for file I/O                           |
 | `ICredentialStore`                      | Phases 3–4 and linked secrets — auth tokens and local secret values; never stored in plain collection JSON |
-| Monaco Editor (JS)                      | Phase 2+ — existing YAML interop extended; lazy-load on `/api-client` only           |
-| `Azure.Security.KeyVault.Secrets` NuGet | Phase 3 — `AzureKeyVaultSecretResolver` in `SwebKit.Azure/`                          |
-| `JsonPath.Net`                          | Phase 3 — no-code post-request capture rules                                         |
-| `Bogus`                                 | Phase 10 — realistic fake names, emails, phone numbers, and company names            |
-| `Microsoft.Maui.Authentication`         | Phase 4 — `WebAuthenticator` for OAuth 2 auth code flow                              |
-| Git CLI                                 | Phase 9 — optional local status/branch/commit/push actions for linked roots          |
+| Monaco Editor (JS)                      | Phase 2+ — existing YAML interop extended; lazy-load on `/api-client` only                                 |
+| `Azure.Security.KeyVault.Secrets` NuGet | Phase 3 — `AzureKeyVaultSecretResolver` in `SwebKit.Azure/`                                                |
+| `JsonPath.Net`                          | Phase 3 — no-code post-request capture rules                                                               |
+| `Bogus`                                 | Phase 10 — realistic fake names, emails, phone numbers, and company names                                  |
+| `Microsoft.Maui.Authentication`         | Phase 4 — `WebAuthenticator` for OAuth 2 auth code flow                                                    |
+| Git CLI                                 | Phase 9 — optional local status/branch/commit/push actions for linked roots                                |
 
 ## Risks
 

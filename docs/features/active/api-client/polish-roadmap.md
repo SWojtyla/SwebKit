@@ -16,6 +16,8 @@ This roadmap prioritizes workflow trust over breadth: users should always know w
 
 ## Phase 11 — Workflow Trust and Git Review
 
+**Status:** Implemented.
+
 ### Goal
 
 Make linked-root workflows obvious and reviewable inside SwebKit.
@@ -38,6 +40,8 @@ Make linked-root workflows obvious and reviewable inside SwebKit.
 
 ## Phase 12 — Request Portability and Variable Clarity
 
+**Status:** Implemented.
+
 ### Goal
 
 Make requests easy to move between docs, terminals, tickets, and SwebKit while reducing variable-resolution guesswork.
@@ -58,6 +62,8 @@ Make requests easy to move between docs, terminals, tickets, and SwebKit while r
 - Variable inspector explains every token used by the selected request.
 
 ## Phase 13 — Workspace Depth and Documentation Value
+
+**Status:** Implemented.
 
 ### Goal
 
@@ -80,6 +86,8 @@ Make the API Client better for repeated day-to-day work and API documentation.
 
 ## Phase 14 — Collection Runner Later
 
+**Status:** Implemented.
+
 ### Goal
 
 Add batch execution only after individual request, variable, and Git workflows are trustworthy.
@@ -100,13 +108,13 @@ Add batch execution only after individual request, variable, and Git workflows a
 
 ## Recommended Delivery Order
 
-1. Target chip and conflict actions.
-2. In-app Git diff preview and staged/unstaged Git layout.
-3. Copy as cURL and variable inspector.
-4. Import from cURL.
-5. Pinned request tabs.
-6. Saved response examples.
-7. Collection runner.
+1. Target chip and conflict actions. (done)
+2. In-app Git diff preview and staged/unstaged Git layout. (done)
+3. Copy as cURL and variable inspector. (done)
+4. Import from cURL. (done)
+5. Pinned request tabs. (done)
+6. Saved response examples. (done)
+7. Collection runner. (done)
 
 ## Validation Strategy
 

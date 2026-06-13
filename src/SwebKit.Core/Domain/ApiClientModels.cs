@@ -75,8 +75,62 @@ public sealed class HttpRequestEntry
     /// Optional WebSocket subprotocol sent in the <c>Sec-WebSocket-Protocol</c> upgrade header.
     /// </summary>
     public string? WsSubProtocol { get; set; }
+    public List<ResponseExample> ResponseExamples { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class ResponseExample
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int StatusCode { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public string? ContentType { get; set; }
+    public string? Body { get; set; }
+    public List<KeyValuePair<string>> Headers { get; set; } = [];
+    public DateTimeOffset CapturedAt { get; set; }
+    public string? EnvironmentName { get; set; }
+}
+
+public sealed class VariableInspectionItem
+{
+    public string Key { get; init; } = string.Empty;
+    public VariableInspectionSource Source { get; init; } = VariableInspectionSource.Unresolved;
+    public string? DisplayValue { get; init; }
+    public bool IsSecret { get; init; }
+    public bool IsResolved => Source != VariableInspectionSource.Unresolved && DisplayValue is not null;
+}
+
+public enum VariableInspectionSource
+{
+    Collection,
+    Environment,
+    Generated,
+    CredentialStore,
+    KeyVault,
+    Unresolved,
+}
+
+public sealed class CurlImportResult
+{
+    public bool IsSuccess { get; init; }
+    public HttpRequestEntry? Request { get; init; }
+    public string? ErrorMessage { get; init; }
+
+    public static CurlImportResult Success(HttpRequestEntry request) => new() { IsSuccess = true, Request = request };
+
+    public static CurlImportResult Failure(string errorMessage) => new() { ErrorMessage = errorMessage };
+}
+
+public sealed class CollectionRunItemResult
+{
+    public string RequestId { get; init; } = string.Empty;
+    public string RequestName { get; init; } = string.Empty;
+    public ApiRequestMethod Method { get; init; }
+    public HttpRequestResult? Result { get; init; }
+    public string? ErrorMessage { get; init; }
+    public TimeSpan Elapsed => Result?.Elapsed ?? TimeSpan.Zero;
 }
 
 public enum ApiRequestMethod

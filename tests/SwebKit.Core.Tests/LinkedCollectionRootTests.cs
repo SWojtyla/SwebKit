@@ -104,6 +104,38 @@ public sealed class LinkedCollectionRootTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveRequestAsync_WritesResponseExamples()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var collectionPath = Path.Combine(apiRoot, "collections", "orders");
+        Directory.CreateDirectory(collectionPath);
+        await File.WriteAllTextAsync(Path.Combine(collectionPath, "get-order.swebreq.json"), """
+            {
+              "method": "Get",
+              "url": "/orders/1"
+            }
+            """);
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var collection = Assert.Single(result.Collections);
+        var request = Assert.Single(collection.Nodes).Request!;
+        request.ResponseExamples.Add(new ResponseExample
+        {
+            Id = "example-1",
+            Name = "200 example",
+            StatusCode = 200,
+            StatusText = "200 OK",
+            Body = "{\"ok\":true}",
+        });
+
+        await _fileService.SaveRequestAsync(result.ApiRootPath, collection, request);
+        var json = await File.ReadAllTextAsync(Path.Combine(collectionPath, "get-order.swebreq.json"));
+
+        Assert.Contains("responseExamples", json);
+        Assert.Contains("200 example", json);
+    }
+
+    [Fact]
     public async Task SaveRequestAsync_WhenFileChangedExternally_ReturnsConflict()
     {
         var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
@@ -334,12 +366,12 @@ public sealed class LinkedCollectionRootTests : IDisposable
         var stageResult = await git.StageFileAsync(_root, apiRoot, relativePath);
         Assert.True(stageResult.IsSuccess, stageResult.ErrorMessage);
         var stagedStatus = await git.GetStatusAsync(_root, apiRoot);
-        Assert.True(Assert.Single(stagedStatus.ChangedFileDetails).IsStaged);
+        Assert.True(stagedStatus.ChangedFileDetails.Single(file => file.Path == relativePath).IsStaged);
 
         var unstageResult = await git.UnstageFileAsync(_root, apiRoot, relativePath);
         Assert.True(unstageResult.IsSuccess, unstageResult.ErrorMessage);
         var unstagedStatus = await git.GetStatusAsync(_root, apiRoot);
-        Assert.False(Assert.Single(unstagedStatus.ChangedFileDetails).IsStaged);
+        Assert.False(unstagedStatus.ChangedFileDetails.Single(file => file.Path == relativePath).IsStaged);
 
         var revertResult = await git.RevertFileAsync(_root, apiRoot, relativePath);
         Assert.True(revertResult.IsSuccess, revertResult.ErrorMessage);
@@ -404,6 +436,59 @@ public sealed class LinkedCollectionRootTests : IDisposable
         var branches = await new LinkedGitService().GetBranchesAsync(_root);
 
         Assert.Contains(branches, branch => branch.Name == "sw/test/ref" && branch.IsCurrent);
+    }
+
+    [Fact]
+    public async Task GetFileDiffAsync_ForModifiedApiFile_ReturnsOriginalAndCurrentContent()
+    {
+        if (!await IsGitAvailableAsync())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_root);
+        await RunGitAsync(_root, "init");
+        await RunGitAsync(_root, "config user.email test@example.com");
+        await RunGitAsync(_root, "config user.name SwebKit Test");
+
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var requestPath = Path.Combine(apiRoot, "collections", "orders", "get-order.swebreq.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(requestPath)!);
+        await File.WriteAllTextAsync(requestPath, "{ \"method\": \"Get\", \"url\": \"/orders/1\" }");
+        await RunGitAsync(_root, "add .swebkit-api/collections/orders/get-order.swebreq.json");
+        await RunGitAsync(_root, "commit -m initial");
+
+        await File.WriteAllTextAsync(requestPath, "{ \"method\": \"Get\", \"url\": \"/orders/2\" }");
+
+        var diff = await new LinkedGitService().GetFileDiffAsync(_root, apiRoot, ".swebkit-api/collections/orders/get-order.swebreq.json");
+
+        Assert.True(diff.IsSuccess, diff.ErrorMessage);
+        Assert.Contains("/orders/1", diff.OriginalContent);
+        Assert.Contains("/orders/2", diff.CurrentContent);
+    }
+
+    [Fact]
+    public async Task GetFileDiffAsync_ForOutsideFile_ReturnsError()
+    {
+        if (!await IsGitAvailableAsync())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_root);
+        await RunGitAsync(_root, "init");
+        await RunGitAsync(_root, "config user.email test@example.com");
+        await RunGitAsync(_root, "config user.name SwebKit Test");
+        await File.WriteAllTextAsync(Path.Combine(_root, "README.md"), "initial");
+        await RunGitAsync(_root, "add README.md");
+        await RunGitAsync(_root, "commit -m initial");
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        await File.WriteAllTextAsync(Path.Combine(_root, "outside.txt"), "outside");
+
+        var diff = await new LinkedGitService().GetFileDiffAsync(_root, apiRoot, "outside.txt");
+
+        Assert.False(diff.IsSuccess);
+        Assert.Contains("changed linked API file", diff.ErrorMessage);
     }
 
     [Fact]
