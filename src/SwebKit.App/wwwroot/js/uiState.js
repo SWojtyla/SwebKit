@@ -15,3 +15,9 @@ window.SwebKitUi.downloadTextFile = function (fileName, content, mimeType) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+window.SwebKitUi.scrollToBottom = function (element) {
+  if (element) {
+    element.scrollTop = element.scrollHeight;
+  }
+};

@@ -16,7 +16,7 @@ public sealed class GraphQlSubscriptionService(
     private const string SubProtocol = "graphql-ws";
     private const string SubscriptionId = "sub-1";
 
-    private BasicWebSocketClientService? _ws;
+    private WebSocketClientService? _ws;
     private bool _active;
 
     public bool IsActive => _active;
@@ -40,7 +40,7 @@ public sealed class GraphQlSubscriptionService(
         // Dispose any previous WebSocket from a prior run before creating a new one
         if (_ws is not null)
             await _ws.DisposeAsync();
-        _ws = new BasicWebSocketClientService();
+        _ws = new WebSocketClientService();
         _active = true;
 
         try
@@ -59,7 +59,8 @@ public sealed class GraphQlSubscriptionService(
             await _ws.SendTextAsync("""{"type":"connection_init"}""", cancellationToken);
 
             // 2. Wait for connection_ack
-            var ack = await _ws.ReceiveTextAsync(cancellationToken);
+            var ackMsg = await _ws.ReadAsync(cancellationToken);
+            var ack = ackMsg?.Content;
             if (ack is null)
             {
                 await DeliverErrorAsync(onMessage, "Server closed the connection before sending connection_ack.");
@@ -97,8 +98,10 @@ public sealed class GraphQlSubscriptionService(
             // 4. Receive next/error/complete frames
             while (!cancellationToken.IsCancellationRequested)
             {
-                var raw = await _ws.ReceiveTextAsync(cancellationToken);
-                if (raw is null) break; // connection closed
+                var frame = await _ws.ReadAsync(cancellationToken);
+                if (frame is null) break; // connection closed
+
+                var raw = frame.Content;
 
                 var msgType = ParseMessageType(raw);
                 switch (msgType)
@@ -145,10 +148,13 @@ public sealed class GraphQlSubscriptionService(
         if (_ws is null) return;
         try
         {
-            // Send complete frame
-            var completeMsg = JsonSerializer.Serialize(new { id = SubscriptionId, type = "complete" });
-            await _ws.SendTextAsync(completeMsg, cancellationToken);
-            await _ws.CloseAsync(cancellationToken);
+            if (_ws.State == WebSocketConnectionState.Connected)
+            {
+                // Send complete frame
+                var completeMsg = JsonSerializer.Serialize(new { id = SubscriptionId, type = "complete" });
+                await _ws.SendTextAsync(completeMsg, cancellationToken);
+                await _ws.CloseAsync(cancellationToken);
+            }
         }
         catch { /* ignore stop errors */ }
     }

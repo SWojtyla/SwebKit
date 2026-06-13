@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 5 (GraphQL) complete — 572 tests passing. Ready for Phase 6 (WebSocket).
+Phase 6 (WebSocket) complete — 598 tests passing. Ready for Phase 7 (Export/Import).
 
 ## Progress Checklist
 
@@ -115,24 +115,20 @@ Phase 5 (GraphQL) complete — 572 tests passing. Ready for Phase 6 (WebSocket).
 - [x] Unit tests — `GraphQlSchemaServiceTests` (9 tests) + `GraphQlErrorParsingTests` (7 tests) — 16 new tests
 - [x] Total: 572 tests passing, build clean (pre-existing MSIX signing error only)
 
-### Phase 6 — WebSocket
+### Phase 6 — WebSocket ✅
 
-- [ ] `IWebSocketClientService` contract + `WebSocketClientService` (`ClientWebSocket` wrapper)
-- [ ] `ConnectAsync` accepts `IReadOnlyList<HeaderEntry>` for custom upgrade headers including
-      `Sec-WebSocket-Protocol` (subprotocol configurable from the Headers tab)
-- [ ] Receive loop posts to `Channel<WebSocketMessage>`; capped at 10 000 frames
-      (oldest frame dropped silently when cap is reached)
-- [ ] `IAsyncDisposable` cleanup on navigation away
-- [ ] `WebSocketEntry` extended with `List<SavedMessage> SavedMessages`
-      (`SavedMessage`: name, content string)
-- [ ] `WebSocketPanel.razor` — URL input, Headers tab (for `Sec-WebSocket-Protocol` etc.),
-      connect/disconnect, message composer with [Text/Binary] type selector,
-      saved message templates dropdown, live message log
-- [ ] Message log virtualized; messages timestamped with direction indicator (↑/↓)
-- [ ] Binary frame support (hex display)
-- [ ] [Save message] button in composer creates a named template on `WebSocketEntry.SavedMessages`
-- [ ] [Clear log] button
-- [ ] Connection state badge: Disconnected (grey) / Connecting (yellow) / Connected (green) / Faulted (red)
+- [x] `WebSocketMessage`, `WebSocketSavedMessage`, `WebSocketConnectionState`, `WebSocketMessageDirection`, `WebSocketFrameType` types added to `ApiClientModels.cs`
+- [x] `HttpRequestEntry` extended: `SavedMessages: List<WebSocketSavedMessage>`, `WsSubProtocol: string?`
+- [x] `IWebSocketClientService` upgraded — `State`, `SendBinaryAsync`, `ReadAsync`, `FrameCap = 10 000` cap; removed `ReceiveTextAsync`
+- [x] `WebSocketClientService` in `SwebKit.Core/Services/` — `Channel<WebSocketMessage>` bounded with `BoundedChannelFullMode.DropOldest`; background receive loop; binary frame hex display; `IAsyncDisposable`
+- [x] `BasicWebSocketClientService` removed (superseded by `WebSocketClientService`)
+- [x] `GraphQlSubscriptionService` updated to use `WebSocketClientService` and `ReadAsync`
+- [x] `WebSocketPanel.razor` — URL input; subprotocol field; upgrades headers tab; connection state badge (Disconnected/Connecting/Connected/Faulted); virtualized message log with ↑/↓ direction, timestamp, size; [Clear log] button; composer with Text/Binary selector; saved message template dropdown; [Save…] button with dialog; [Connect]/[Disconnect] buttons; full `IAsyncDisposable` cleanup (BL-7)
+- [x] `RequestBuilderPanel.razor` updated: WebSocket method hides the standard URL/Send bar and tab strip; renders `WebSocketPanel` as full content area; WS method picker still accessible
+- [x] `IWebSocketClientService` registered as `Transient` in `MauiProgram.cs`
+- [x] `uiState.js` extended: `SwebKitUi.scrollToBottom` for auto-scroll on send
+- [x] Unit tests — `WebSocketClientServiceTests` (2 tests) + `WebSocketDomainModelTests` (8 tests) + `WebSocketChannelOverflowTests` (1 test) — 12 new tests (verified drop-oldest channel behaviour)
+- [x] Total: 598 tests passing, build clean (pre-existing MSIX signing error only)
 
 ### Phase 7 — Export/Import
 

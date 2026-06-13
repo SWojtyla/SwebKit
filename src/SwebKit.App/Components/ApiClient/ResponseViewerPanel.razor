@@ -8,7 +8,7 @@
             <span class="resp-viewer__subscription-count">@SubscriptionMessages.Count message(s)</span>
         </div>
         <div class="resp-viewer__subscription-messages">
-            <Virtualize TItem="GraphQlSubscriptionMessage" Items="@(SubscriptionMessages.ToList())" Context="msg">
+            <Virtualize TItem="GraphQlSubscriptionMessage" Items="@SubscriptionMessages" Context="msg">
                 <div class="resp-viewer__sub-msg @(msg.Errors is { Count: > 0 } ? "resp-viewer__sub-msg--error" : "")">
                     <div class="resp-viewer__sub-msg-header">
                         <span class="resp-viewer__sub-msg-time">@msg.ReceivedAt.ToLocalTime().ToString("HH:mm:ss.fff")</span>
@@ -185,7 +185,7 @@
 
 @code {
     [Parameter] public HttpRequestResult? Result { get; set; }
-    [Parameter] public IReadOnlyList<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
+    [Parameter] public ICollection<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private string _activeTab = "Body";

@@ -62,8 +62,18 @@
     private string? _inheritedFromName;
     private AuthType _inheritedType;
 
+    // BL-5 guard: skip the O(n) tree walk when nothing that affects auth has changed
+    private HttpRequestEntry? _lastRequest;
+    private ApiCollection? _lastCollection;
+
     protected override void OnParametersSet()
     {
+        if (ReferenceEquals(_lastRequest, Request) && ReferenceEquals(_lastCollection, Collection))
+            return;
+
+        _lastRequest = Request;
+        _lastCollection = Collection;
+
         // Determine what the request currently says
         _selectedType = Request.Auth?.Type ?? AuthType.Inherited;
 

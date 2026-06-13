@@ -23,7 +23,42 @@
         }
     </div>
 
-    @* ── URL bar ─────────────────────────────────────────────────────────────── *@
+    @* ── URL bar / WS header — shared method picker, then mode-specific content ── *@
+    @if (Request.Method == ApiRequestMethod.WebSocket)
+    {
+        @* WebSocket: show only the method picker and a hint; URL is managed inside WebSocketPanel *@
+        <div class="req-builder__url-bar req-builder__url-bar--ws-header">
+            <div class="req-builder__method-picker">
+                <button type="button"
+                        class="req-builder__method-btn req-builder__method-btn--websocket"
+                        @onclick="() => _showMethodPicker = !_showMethodPicker">
+                    WS
+                </button>
+                @if (_showMethodPicker)
+                {
+                    <div class="ctx-backdrop" @onclick="() => _showMethodPicker = false"></div>
+                    <div class="req-builder__method-dropdown">
+                        @foreach (var m in Enum.GetValues<ApiRequestMethod>())
+                        {
+                            <button type="button"
+                                    class="req-builder__method-option req-builder__method-option--@m.ToString().ToLowerInvariant()"
+                                    @onclick="() => SelectMethodAsync(m)">
+                                @MethodLabel(m)
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <span class="req-builder__ws-hint">WebSocket — configure connection in the panel below</span>
+        </div>
+
+        @* Full WebSocket panel replaces the normal tab strip *@
+        <div class="req-builder__tab-content req-builder__tab-content--ws">
+            <WebSocketPanel Request="@Request" OnChanged="MarkDirtyAsync" />
+        </div>
+    }
+    else
+    {
     <div class="req-builder__url-bar">
         <div class="req-builder__method-picker">
             <button type="button"
@@ -198,6 +233,7 @@
                                        CaptureWarnings="@_captureWarnings" OnChanged="@MarkDirtyAsync" />
         }
     </div>
+    } @* end else (not WebSocket) *@
 
 </div>
 

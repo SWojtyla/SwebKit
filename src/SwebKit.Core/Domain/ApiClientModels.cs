@@ -64,6 +64,17 @@ public sealed class HttpRequestEntry
     /// </summary>
     public string? GraphQlSelectedOperation { get; set; }
 
+    // ─── WebSocket fields ─────────────────────────────────────────────────────
+    /// <summary>
+    /// Named message templates the user has saved for this request.
+    /// Displayed in the composer's "Saved Messages" dropdown.
+    /// </summary>
+    public List<WebSocketSavedMessage> SavedMessages { get; set; } = [];
+
+    /// <summary>
+    /// Optional WebSocket subprotocol sent in the <c>Sec-WebSocket-Protocol</c> upgrade header.
+    /// </summary>
+    public string? WsSubProtocol { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -292,4 +303,47 @@ public sealed class GraphQlSubscriptionMessage
     public string Payload { get; init; } = string.Empty;
     /// <summary>Errors embedded in this message, if any.</summary>
     public IReadOnlyList<GraphQlError>? Errors { get; init; }
+}
+
+// ─── WebSocket types ──────────────────────────────────────────────────────────
+
+public enum WebSocketMessageDirection
+{
+    Sent,
+    Received,
+}
+
+public enum WebSocketFrameType
+{
+    Text,
+    Binary,
+}
+
+/// <summary>A single frame in a WebSocket session log.</summary>
+public sealed class WebSocketMessage
+{
+    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public WebSocketMessageDirection Direction { get; init; }
+    public WebSocketFrameType FrameType { get; init; } = WebSocketFrameType.Text;
+    /// <summary>Message content. Binary frames are stored as hex-encoded strings.</summary>
+    public string Content { get; init; } = string.Empty;
+    /// <summary>Byte count of the original frame.</summary>
+    public int ByteCount { get; init; }
+}
+
+/// <summary>A named message template the user has saved for quick resending.</summary>
+public sealed class WebSocketSavedMessage
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public WebSocketFrameType FrameType { get; set; } = WebSocketFrameType.Text;
+}
+
+public enum WebSocketConnectionState
+{
+    Disconnected,
+    Connecting,
+    Connected,
+    Faulted,
 }

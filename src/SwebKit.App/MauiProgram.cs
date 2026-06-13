@@ -175,6 +175,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
         builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
         builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
+        builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
