@@ -1,0 +1,122 @@
+@inject IVariableGeneratorService GeneratorService
+
+<div class="var-gen-editor">
+    <select class="var-gen-editor__select" value="@Definition.Kind" @onchange="OnKindChanged" aria-label="Generator kind">
+        <option value="@VariableGeneratorKind.Integer">Integer range</option>
+        <option value="@VariableGeneratorKind.Decimal">Decimal range</option>
+        <option value="@VariableGeneratorKind.Boolean">Boolean</option>
+        <option value="@VariableGeneratorKind.Guid">GUID</option>
+        <option value="@VariableGeneratorKind.DateTime">Timestamp</option>
+        <option value="@VariableGeneratorKind.List">List pick</option>
+        <option value="@VariableGeneratorKind.Faker">Fake data</option>
+        <option value="@VariableGeneratorKind.Template">Template</option>
+    </select>
+
+    @if (Definition.Kind == VariableGeneratorKind.Integer)
+    {
+        <input class="var-gen-editor__number" type="number" title="Minimum" value="@Definition.MinInt"
+               @oninput="e => Definition.MinInt = ParseInt(e.Value)" />
+        <input class="var-gen-editor__number" type="number" title="Maximum" value="@Definition.MaxInt"
+               @oninput="e => Definition.MaxInt = ParseInt(e.Value)" />
+    }
+    else if (Definition.Kind == VariableGeneratorKind.Decimal)
+    {
+        <input class="var-gen-editor__number" type="number" step="0.01" title="Minimum" value="@Definition.MinDecimal"
+               @oninput="e => Definition.MinDecimal = ParseDecimal(e.Value)" />
+        <input class="var-gen-editor__number" type="number" step="0.01" title="Maximum" value="@Definition.MaxDecimal"
+               @oninput="e => Definition.MaxDecimal = ParseDecimal(e.Value)" />
+        <input class="var-gen-editor__number var-gen-editor__number--small" type="number" min="0" max="8" title="Decimal places" value="@Definition.DecimalPlaces"
+               @oninput="e => Definition.DecimalPlaces = ParseInt(e.Value) ?? 2" />
+    }
+    else if (Definition.Kind == VariableGeneratorKind.Boolean)
+    {
+        <input class="var-gen-editor__number" type="number" min="0" max="100" title="True percentage" value="@(Definition.TrueWeightPercent ?? 50)"
+               @oninput="e => Definition.TrueWeightPercent = ParseInt(e.Value)" />
+        <span class="var-gen-editor__hint">% true</span>
+    }
+    else if (Definition.Kind == VariableGeneratorKind.Faker)
+    {
+        <select class="var-gen-editor__select" value="@Definition.FakerCategory" @onchange="e => Definition.FakerCategory = e.Value?.ToString()">
+            <option value="person.firstName">First name</option>
+            <option value="person.lastName">Last name</option>
+            <option value="person.fullName">Full name</option>
+            <option value="internet.email">Email</option>
+            <option value="phone.number">Phone</option>
+            <option value="company.name">Company</option>
+        </select>
+    }
+    else if (Definition.Kind == VariableGeneratorKind.List)
+    {
+        <input class="var-gen-editor__text" placeholder="one, two, three" value="@ListText"
+               @oninput="e => ListText = e.Value?.ToString() ?? string.Empty" />
+    }
+    else if (Definition.Kind == VariableGeneratorKind.Template)
+    {
+        <input class="var-gen-editor__text" placeholder="@("{{firstName}}.{{lastName}}@example.com")" value="@Definition.Template"
+               @oninput="e => Definition.Template = e.Value?.ToString()" />
+    }
+    else
+    {
+        <span class="var-gen-editor__hint">No setup needed</span>
+    }
+
+    <button type="button" class="var-gen-editor__preview-btn" title="Generate preview" @onclick="Preview">Preview</button>
+    @if (_preview is not null)
+    {
+        <span class="var-gen-editor__preview" title="Preview value">@_preview</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VariableGeneratorDefinition Definition { get; set; } = null!;
+
+    private string? _preview;
+
+    private string ListText
+    {
+        get => string.Join(", ", Definition.Values);
+        set => Definition.Values = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+
+    private void OnKindChanged(ChangeEventArgs args)
+    {
+        if (Enum.TryParse<VariableGeneratorKind>(args.Value?.ToString(), out var kind))
+        {
+            Definition.Kind = kind;
+            ApplyDefaults(kind);
+            _preview = null;
+        }
+    }
+
+    private void ApplyDefaults(VariableGeneratorKind kind)
+    {
+        if (kind == VariableGeneratorKind.Integer)
+        {
+            Definition.MinInt ??= 1;
+            Definition.MaxInt ??= 100;
+        }
+        else if (kind == VariableGeneratorKind.Decimal)
+        {
+            Definition.MinDecimal ??= 0;
+            Definition.MaxDecimal ??= 100;
+            if (Definition.DecimalPlaces < 0)
+                Definition.DecimalPlaces = 2;
+        }
+        else if (kind == VariableGeneratorKind.Faker)
+        {
+            Definition.FakerCategory ??= "person.firstName";
+        }
+    }
+
+    private void Preview()
+    {
+        var result = GeneratorService.Generate(Definition, new Dictionary<string, string?>());
+        _preview = result.IsSuccess ? result.Value : result.Warning;
+    }
+
+    private static int? ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var result) ? result : null;
+
+    private static decimal? ParseDecimal(object? value) =>
+        decimal.TryParse(value?.ToString(), out var result) ? result : null;
+}

@@ -11,6 +11,7 @@
     <div class="collection-var-editor__cols">
         <span class="collection-var-editor__col-label"></span>
         <span class="collection-var-editor__col-label">KEY</span>
+        <span class="collection-var-editor__col-label">TYPE</span>
         <span class="collection-var-editor__col-label">VALUE</span>
         <span></span>
     </div>
@@ -22,8 +23,18 @@
                    @onchange="e => OnVarChanged(v, isEnabled: (bool)(e.Value ?? true))" />
             <input type="text" class="collection-var-editor__key" placeholder="key" value="@v.Key"
                    @oninput="e => OnVarChanged(v, key: e.Value?.ToString() ?? string.Empty)" />
-            <input type="text" class="collection-var-editor__value" placeholder="value" value="@v.Value"
-                   @oninput="e => OnVarChanged(v, value: e.Value?.ToString())" />
+                 <button type="button" class="collection-var-editor__type-btn" @onclick="() => ToggleGenerated(v)">
+                  @(v.Generator is null ? "Plain" : "Generated")
+                 </button>
+                 @if (v.Generator is null)
+                 {
+                  <input type="text" class="collection-var-editor__value" placeholder="value" value="@v.Value"
+                      @oninput="e => OnVarChanged(v, value: e.Value?.ToString())" />
+                 }
+                 else
+                 {
+                  <VariableGeneratorEditor Definition="@v.Generator" />
+                 }
             <button type="button" class="collection-var-editor__delete" title="Remove"
                     @onclick="() => RemoveVar(v)">×</button>
         </div>
@@ -53,7 +64,7 @@
         if (ReferenceEquals(_lastCollection, Collection)) return; // BL-5
         _lastCollection = Collection; // BL-3
         _vars = Collection.Variables
-            .Select(v => new CollectionVariable { Key = v.Key, Value = v.Value, IsEnabled = v.IsEnabled })
+            .Select(v => new CollectionVariable { Key = v.Key, Value = v.Value, Generator = CloneGenerator(v.Generator), IsEnabled = v.IsEnabled })
             .ToList();
     }
 
@@ -70,10 +81,40 @@
         _vars.Add(new CollectionVariable { IsEnabled = true });
     }
 
+    private void ToggleGenerated(CollectionVariable variable)
+    {
+        if (variable.Generator is null)
+        {
+            variable.Generator = new VariableGeneratorDefinition();
+            variable.Value = null;
+        }
+        else
+        {
+            variable.Generator = null;
+        }
+    }
+
     private void RemoveVar(CollectionVariable v)
     {
         _vars.Remove(v);
     }
+
+    private static VariableGeneratorDefinition? CloneGenerator(VariableGeneratorDefinition? generator) =>
+        generator is null
+            ? null
+            : new VariableGeneratorDefinition
+            {
+                Kind = generator.Kind,
+                MinInt = generator.MinInt,
+                MaxInt = generator.MaxInt,
+                MinDecimal = generator.MinDecimal,
+                MaxDecimal = generator.MaxDecimal,
+                DecimalPlaces = generator.DecimalPlaces,
+                TrueWeightPercent = generator.TrueWeightPercent,
+                FakerCategory = generator.FakerCategory,
+                Template = generator.Template,
+                Values = generator.Values.ToList(),
+            };
 
     private async Task SaveAsync()
     {

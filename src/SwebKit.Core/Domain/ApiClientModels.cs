@@ -130,7 +130,34 @@ public sealed class CollectionVariable
 {
     public string Key { get; set; } = string.Empty;
     public string? Value { get; set; }
+    public VariableGeneratorDefinition? Generator { get; set; }
     public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class VariableGeneratorDefinition
+{
+    public VariableGeneratorKind Kind { get; set; } = VariableGeneratorKind.Integer;
+    public int? MinInt { get; set; } = 1;
+    public int? MaxInt { get; set; } = 100;
+    public decimal? MinDecimal { get; set; }
+    public decimal? MaxDecimal { get; set; }
+    public int DecimalPlaces { get; set; } = 2;
+    public int? TrueWeightPercent { get; set; }
+    public string? FakerCategory { get; set; } = "person.firstName";
+    public string? Template { get; set; }
+    public List<string> Values { get; set; } = [];
+}
+
+public enum VariableGeneratorKind
+{
+    Integer,
+    Decimal,
+    Boolean,
+    Guid,
+    DateTime,
+    List,
+    Faker,
+    Template,
 }
 
 // ─── Environments ────────────────────────────────────────────────────────────
@@ -152,6 +179,7 @@ public sealed class EnvironmentVariable
     /// <summary>Plain value when <see cref="SecretSource"/> is <see cref="EnvironmentVariableSecretSource.Plain"/>.</summary>
     public string? Value { get; set; }
     public EnvironmentVariableSecretSource SecretSource { get; set; } = EnvironmentVariableSecretSource.Plain;
+    public VariableGeneratorDefinition? Generator { get; set; }
     /// <summary>Key used to look up the secret in the Windows Credential Store or Azure Key Vault.</summary>
     public string? CredentialKey { get; set; }
     /// <summary>
@@ -167,6 +195,7 @@ public enum EnvironmentVariableSecretSource
     Plain,
     WindowsCredentialStore,
     AzureKeyVault,
+    Generated,
 }
 
 // ─── Authentication ───────────────────────────────────────────────────────────

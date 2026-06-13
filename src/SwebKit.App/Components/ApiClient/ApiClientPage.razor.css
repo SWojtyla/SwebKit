@@ -176,6 +176,16 @@
     background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
 }
 
+.api-client-toolbar-btn--danger {
+    border-color: color-mix(in srgb, var(--color-danger, #dc2626) 48%, var(--color-border));
+    color: var(--color-danger, #dc2626);
+}
+
+.api-client-toolbar-btn--danger:hover:not([disabled]) {
+    background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, var(--color-surface));
+    border-color: var(--color-danger, #dc2626);
+}
+
 .api-client-toolbar__dirty-badge {
     font-size: 11px;
     color: var(--color-text-muted);
@@ -336,6 +346,10 @@
     flex-wrap: wrap;
 }
 
+.api-client-git-panel__branch-select {
+    max-width: 320px;
+}
+
 .api-client-git-panel__message,
 .api-client-secret-warning {
     padding: 6px 10px;
@@ -367,16 +381,54 @@
 .api-client-git-panel__files {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 6px;
     font-family: var(--font-family-mono);
     font-size: 11px;
     color: var(--color-text-muted);
 }
 
 .api-client-git-panel__file {
-    padding: 3px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px;
     border-radius: var(--radius-sm);
     background: var(--color-surface-2);
+}
+
+.api-client-git-panel__file--empty {
+    justify-content: flex-start;
+    font-family: inherit;
+}
+
+.api-client-git-panel__file-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.api-client-git-panel__file-status {
+    flex-shrink: 0;
+    min-width: 76px;
+    color: var(--color-text);
+    font-family: inherit;
+    font-weight: 600;
+}
+
+.api-client-git-panel__file-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.api-client-git-panel__file-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
 }
 
 /* ── Workspace (right) ──────────────────────────────────── */

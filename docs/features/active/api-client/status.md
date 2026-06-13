@@ -172,15 +172,15 @@ Phase 9 complete — linked-root loading, sparse request files, linked environme
 - [x] Add conflict detection before overwriting linked request files changed on disk
 - [x] Add Linked Root Manager panel
 - [x] Add missing-secret detection/hint for linked requests that reference `{{secret:name}}`
-- [x] Add safe Git actions: create/switch branch, commit selected API files, push current branch
+- [x] Add safe Git actions: create branch, switch via branch dropdown, stage/unstage/revert API files, commit staged API files, push current branch
 - [x] Load linked environment files and merge them into the environment picker
 - [x] Add configure-secret flow for linked environments; secret values are stored locally in `ICredentialStore`
 - [x] Add remote compare/open helper for GitHub and Azure DevOps remotes
-- [x] Add tests for linked-root creation, sparse request defaults, sidecar load/save, environment load/save, conflict detection, non-repo Git status, branch validation, scoped API-file commits, and compare URL inference
+- [x] Add tests for linked-root creation, linked collection creation, sparse request defaults, sidecar load/save, environment load/save, conflict detection, non-repo Git status, branch listing/validation, scoped API-file stage/unstage/revert, scoped staged commits, and compare URL inference
 
 ## Completed Work
 
-All 8 original phases complete. Phase 9 linked-root implementation now covers format/load/save, linked environments, tree UI, root manager, conflict detection, Git status/actions, compare helpers, and secret configuration.
+All 8 original phases complete. Phase 9 linked-root implementation now covers format/load/save, linked environments, tree UI, root manager, linked-root selection, conflict detection, Git status/actions, branch dropdown switching, staged file actions, compare helpers, and secret configuration.
 
 ## Blockers
 
@@ -189,3 +189,15 @@ _None._
 ## Validation Status
 
 Phase 9 focused linked-root unit tests passing; MAUI app build passing.
+
+## Planned Follow-Up
+
+### Phase 10 — Dynamic Variables Complete
+
+- [x] Add generated variable definitions for collection/environment variables
+- [x] Add primitive generators: integer/decimal range, boolean, GUID, date/time, list pick, template
+- [x] Add `Bogus`-backed fake data generators for first name, last name, email, phone, and company
+- [x] Extend variable substitution and preview to resolve generated values per send/preview
+- [x] Add generated-variable editors in environment and collection variable screens
+- [x] Extend linked collection/environment file format with `generatedVariables`
+- [x] Add focused tests for constraints, faker values, template composition, scope resolution, and serialization

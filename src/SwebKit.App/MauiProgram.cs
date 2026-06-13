@@ -148,6 +148,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<DeploymentValidationService>();
 
         // API Client — variable substitution and HTTP execution
+        builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
         builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
         builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
         builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();

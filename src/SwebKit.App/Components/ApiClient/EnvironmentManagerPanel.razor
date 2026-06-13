@@ -82,6 +82,8 @@
                 Value = v.Value,
                 SecretSource = v.SecretSource,
                 CredentialKey = v.CredentialKey,
+                KeyVaultName = v.KeyVaultName,
+                Generator = CloneGenerator(v.Generator),
                 IsEnabled = v.IsEnabled,
             }).ToList(),
             CreatedAt = env.CreatedAt,
@@ -127,4 +129,21 @@
         _editingEnv = null;
         _editingId = null;
     }
+
+    private static VariableGeneratorDefinition? CloneGenerator(VariableGeneratorDefinition? generator) =>
+        generator is null
+            ? null
+            : new VariableGeneratorDefinition
+            {
+                Kind = generator.Kind,
+                MinInt = generator.MinInt,
+                MaxInt = generator.MaxInt,
+                MinDecimal = generator.MinDecimal,
+                MaxDecimal = generator.MaxDecimal,
+                DecimalPlaces = generator.DecimalPlaces,
+                TrueWeightPercent = generator.TrueWeightPercent,
+                FakerCategory = generator.FakerCategory,
+                Template = generator.Template,
+                Values = generator.Values.ToList(),
+            };
 }

@@ -36,17 +36,17 @@
                     <span>Save</span>
                 </button>
             }
-            <button type="button" class="api-client-toolbar-btn" title="Add linked SwebKit API root"
+            <button type="button" class="api-client-toolbar-btn" title="Add a Git-backed SwebKit API collection folder"
                     @onclick="OpenLinkedRootDialog">
-                <span>Link Root</span>
+                <span>Add API Repo</span>
             </button>
             @if (_linkedRootInfos.Count > 0)
             {
                 <button type="button"
                         class="api-client-toolbar-btn @(_worksheetMode == WorksheetLinkedRoots ? "api-client-toolbar-btn--active" : "")"
-                        title="Manage linked roots"
+                        title="Manage Git-backed API repositories"
                         @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots)">
-                    <span>Linked Roots</span>
+                    <span>API Repos</span>
                 </button>
             }
         </div>
@@ -72,287 +72,335 @@
                 <button type="button"
                         class="api-client-toolbar-btn @(_worksheetMode == WorksheetVars ? "api-client-toolbar-btn--active" : "")"
                         title="Edit collection variables"
-                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars)">⚙ Vars</button>
-                <button type="button" class="api-client-toolbar-btn" title="Export / Import"
-                        @onclick="() => _showExportDialog = true">⬆⬇ Export / Import</button>
-            }
-            <button type="button"
-                    class="api-client-toolbar-btn @(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn--active" : "")"
-                    title="Manage environments"
-                    @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs)">🌍 Envs</button>
-            <span class="api-client-toolbar__env-label">Env:</span>
-            <div class="api-client-env-picker">
-                <button type="button" class="api-client-env-picker__btn"
-                        @onclick="() => _showEnvPicker = !_showEnvPicker">
-                    <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
-                    <span class="api-client-env-picker__chevron">▾</span>
-                </button>
-                @if (_showEnvPicker)
-                {
-                    <div class="ctx-backdrop" @onclick="() => _showEnvPicker = false"></div>
-                    <div class="api-client-env-picker__dropdown">
-                        <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
-                                @onclick="() => SelectEnvAsync(null)">— None —</button>
-                        @foreach (var env in _environments)
-                        {
-                            <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
-                                    @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
-                        }
-                    </div>
+                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars)">⚙
+                    Vars</button>
+                    <button type="button" class="api-client-toolbar-btn" title="Export / Import"
+                            @onclick="() => _showExportDialog = true">⬆⬇ Export / Import</button>
                 }
-            </div>
-        </div>
-    </div>
-
-    @* ── Main split: collection tree + request workspace ── *@
-    <div class="api-client-body">
-
-        @* Left: collection tree *@
-        <div class="api-client-tree-panel">
-            @if (_loadingCollections)
-            {
-                <div class="api-client-tree-panel__loading">
-                    <LoadingSpinner Message="Loading collections…" />
-                </div>
-            }
-            else if (_collections.Count == 0)
-            {
-                <div class="api-client-tree-panel__empty">
-                    <EmptyState Icon="📦" Title="No collections yet"
-                                Subtitle="Create a collection or link a SwebKit API root from a repository.">
-                        <Actions>
-                            <button type="button" class="api-client-empty-action-btn" @onclick="AddCollectionAsync">
-                                + New Collection
-                            </button>
-                            <button type="button" class="api-client-empty-action-btn" @onclick="OpenLinkedRootDialog">
-                                Link Root
-                            </button>
-                        </Actions>
-                    </EmptyState>
-                </div>
-            }
-            else
-            {
-                <CollectionTree Collections="@_collections" LinkedRoots="@_linkedRootInfos" SelectedRequestId="@_selectedRequestId"
-                                ActiveCollectionId="@_activeCollection?.Id" OnRequestSelected="OnRequestSelectedAsync"
-                                OnCollectionSelected="OnCollectionSelectedAsync" OnAddFolder="OnAddFolderAsync"
-                                OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
-                                OnDeleteNode="OnDeleteNodeAsync" OnRenameCollection="OnRenameCollectionAsync"
-                                OnDeleteCollection="OnDeleteCollectionAsync" />
-            }
-        </div>
-
-        @* Right: request builder + response viewer OR management screens *@
-        <div class="api-client-workspace">
-            @if (_worksheetMode == WorksheetEnvs)
-            {
-                <div class="api-client-management-screen">
-                    <div class="api-client-management-screen__header">
-                        <button type="button" class="api-client-management-screen__back"
-                                @onclick="() => _worksheetMode = null">← Back to requests</button>
-                        <span class="api-client-management-screen__title">Environments</span>
-                    </div>
-                    <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
-                </div>
-            }
-            else if (_worksheetMode == WorksheetVars && _activeCollection is not null)
-            {
-                <div class="api-client-management-screen">
-                    <div class="api-client-management-screen__header">
-                        <button type="button" class="api-client-management-screen__back"
-                                @onclick="() => _worksheetMode = null">← Back to requests</button>
-                        <span class="api-client-management-screen__title">Collection Variables —
-                            @_activeCollection.Name</span>
-                        </div>
-                        <CollectionVariableEditor Collection="@_activeCollection" OnSaved="@OnCollVarEditorSavedAsync"
-                                                  OnCancelled="@(() => _worksheetMode = null)" />
-                    </div>
-                }
-            else if (_worksheetMode == WorksheetLinkedRoots)
-            {
-                <div class="api-client-management-screen">
-                    <div class="api-client-management-screen__header">
-                        <button type="button" class="api-client-management-screen__back"
-                                @onclick="() => _worksheetMode = null">← Back to requests</button>
-                        <span class="api-client-management-screen__title">Linked Roots</span>
-                    </div>
-                    <div class="api-client-linked-roots">
-                        @if (_linkedRootResults.Count == 0)
+                <button type="button"
+                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn--active" : "")"
+                        title="Manage environments"
+                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs)">🌍
+                    Envs</button>
+                    <span class="api-client-toolbar__env-label">Env:</span>
+                    <div class="api-client-env-picker">
+                        <button type="button" class="api-client-env-picker__btn"
+                                @onclick="() => _showEnvPicker = !_showEnvPicker">
+                            <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
+                            <span class="api-client-env-picker__chevron">▾</span>
+                        </button>
+                        @if (_showEnvPicker)
                         {
-                            <div class="api-client-linked-roots__empty">No linked roots configured.</div>
-                        }
-                        @foreach (var root in _linkedRootResults)
-                        {
-                            <div class="api-client-linked-root-card">
-                                <div class="api-client-linked-root-card__main">
-                                    <div class="api-client-linked-root-card__name">@root.DisplayName</div>
-                                    <div class="api-client-linked-root-card__path">@root.ApiRootPath</div>
-                                    <div class="api-client-linked-root-card__meta">
-                                        <span>@(root.GitStatus.IsGitRepository ? root.GitStatus.Branch ?? "detached" : "not a Git repo")</span>
-                                        <span>@(root.GitStatus.ChangedFileCount > 0 ? $"{root.GitStatus.ChangedFileCount} changed" : "clean")</span>
-                                        @if (root.Diagnostics.Count > 0)
-                                        {
-                                            <span>@root.Diagnostics.Count diagnostic(s)</span>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="api-client-linked-root-card__actions">
-                                    <button type="button" class="api-client-toolbar-btn" @onclick="LoadLinkedRootsAsync">Refresh</button>
-                                    <button type="button" class="api-client-toolbar-btn" @onclick="() => OpenGitPanel(root.Config.Id)">Git</button>
-                                    <button type="button" class="api-client-toolbar-btn" @onclick="() => RemoveLinkedRootAsync(root.Config.Id)">Remove</button>
-                                </div>
+                            <div class="ctx-backdrop" @onclick="() => _showEnvPicker = false"></div>
+                            <div class="api-client-env-picker__dropdown">
+                                <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
+                                        @onclick="() => SelectEnvAsync(null)">— None —</button>
+                                @foreach (var env in _environments)
+                                {
+                                    <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
+                                            @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
+                                }
                             </div>
                         }
                     </div>
                 </div>
-            }
-            else if (_worksheetMode == WorksheetGit && ActiveGitRoot is not null)
-            {
-                <div class="api-client-management-screen">
-                    <div class="api-client-management-screen__header">
-                        <button type="button" class="api-client-management-screen__back"
-                                @onclick="() => _worksheetMode = WorksheetLinkedRoots">← Back to linked roots</button>
-                        <span class="api-client-management-screen__title">Git — @ActiveGitRoot.DisplayName</span>
-                    </div>
-                    <div class="api-client-git-panel">
-                        <div class="api-client-git-panel__summary">
-                            <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
-                            <span>Changed API files: @ActiveGitRoot.GitStatus.ChangedFileCount</span>
+            </div>
+
+            @* ── Main split: collection tree + request workspace ── *@
+            <div class="api-client-body">
+
+                @* Left: collection tree *@
+                <div class="api-client-tree-panel">
+                    @if (_loadingCollections)
+                    {
+                        <div class="api-client-tree-panel__loading">
+                            <LoadingSpinner Message="Loading collections…" />
                         </div>
-                        @if (_gitMessage is not null)
-                        {
-                            <div class="api-client-git-panel__message @(_gitMessageIsError ? "api-client-git-panel__message--error" : "")">@_gitMessage</div>
-                        }
-                        <div class="api-client-git-panel__row">
-                            <input class="api-client-dialog__input" placeholder="branch name" value="@_gitBranchName"
-                                   @oninput="e => _gitBranchName = e.Value?.ToString() ?? string.Empty" />
-                            <button type="button" class="api-client-toolbar-btn" @onclick="CreateGitBranchAsync">Create branch</button>
-                            <button type="button" class="api-client-toolbar-btn" @onclick="SwitchGitBranchAsync">Switch branch</button>
+                    }
+                    else if (_collections.Count == 0 && _linkedRootInfos.Count == 0)
+                    {
+                        <div class="api-client-tree-panel__empty">
+                            <EmptyState Icon="📦" Title="No collections yet"
+                                        Subtitle="Create a local collection or add a Git-backed API repository.">
+                                <Actions>
+                                    <button type="button" class="api-client-empty-action-btn" @onclick="AddCollectionAsync">
+                                        + New Collection
+                                    </button>
+                                    <button type="button" class="api-client-empty-action-btn" @onclick="OpenLinkedRootDialog">
+                                        Add API Repo
+                                    </button>
+                                </Actions>
+                            </EmptyState>
                         </div>
-                        <div class="api-client-git-panel__row">
-                            <input class="api-client-dialog__input" placeholder="commit message" value="@_gitCommitMessage"
-                                   @oninput="e => _gitCommitMessage = e.Value?.ToString() ?? string.Empty" />
-                            <button type="button" class="api-client-toolbar-btn" @onclick="CommitGitChangesAsync">Commit API files</button>
-                            <button type="button" class="api-client-toolbar-btn" @onclick="PushGitBranchAsync">Push</button>
-                            <button type="button" class="api-client-toolbar-btn" @onclick="OpenRemoteCompareAsync">Open Compare</button>
-                        </div>
-                        <div class="api-client-git-panel__files">
-                            @foreach (var file in ActiveGitRoot.GitStatus.ChangedFiles)
-                            {
-                                <div class="api-client-git-panel__file">@file</div>
-                            }
-                        </div>
-                    </div>
+                    }
+                    else
+                    {
+                        <CollectionTree Collections="@_collections" LinkedRoots="@_linkedRootInfos"
+                                        SelectedRequestId="@_selectedRequestId" ActiveCollectionId="@_activeCollection?.Id" ActiveLinkedRootId="@_activeLinkedRootId"
+                                        OnRequestSelected="OnRequestSelectedAsync" OnCollectionSelected="OnCollectionSelectedAsync"
+                                        OnAddFolder="OnAddFolderAsync" OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
+                                        OnDeleteNode="OnDeleteNodeAsync" OnLinkedRootSelected="OnLinkedRootSelectedAsync" OnRenameCollection="OnRenameCollectionAsync"
+                                        OnDeleteCollection="OnDeleteCollectionAsync" />
+                    }
                 </div>
-            }
-            else if (_selectedRequest is null)
-                {
-                    <div class="api-client-workspace__empty">
-                        <EmptyState Icon="🌐" Title="No request selected"
-                                    Subtitle="Select a request from the collection tree, or create a new one.">
-                            <Actions>
-                                <button type="button" class="api-client-empty-action-btn"
-                                        disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
-                                    + New Request
-                                </button>
-                            </Actions>
-                        </EmptyState>
-                    </div>
-                }
-                else
-                {
-                    <div class="api-client-workspace__panels">
-                        <div class="api-client-workspace__builder" @ref="_builderPanelEl">
-                            @if (MissingSecretNames.Count > 0)
-                            {
-                                <div class="api-client-secret-warning">
-                                    Missing secret reference(s): @string.Join(", ", MissingSecretNames).
-                                    <button type="button" class="api-client-secret-warning__btn" @onclick="OpenConfigureSecretDialog">Configure</button>
+
+                @* Right: request builder + response viewer OR management screens *@
+                <div class="api-client-workspace">
+                    @if (_worksheetMode == WorksheetEnvs)
+                    {
+                        <div class="api-client-management-screen">
+                            <div class="api-client-management-screen__header">
+                                <button type="button" class="api-client-management-screen__back"
+                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
+                                <span class="api-client-management-screen__title">Environments</span>
+                            </div>
+                            <EnvironmentManagerPanel OnChanged="@OnEnvironmentsChangedAsync" />
+                        </div>
+                    }
+                    else if (_worksheetMode == WorksheetVars && _activeCollection is not null)
+                    {
+                        <div class="api-client-management-screen">
+                            <div class="api-client-management-screen__header">
+                                <button type="button" class="api-client-management-screen__back"
+                                        @onclick="() => _worksheetMode = null">← Back to requests</button>
+                                <span class="api-client-management-screen__title">Collection Variables —
+                                    @_activeCollection.Name</span>
                                 </div>
-                            }
-                            <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
-                                                 ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
-                                                 ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
-                                                 OnResult="@OnRequestResultAsync"
-                                                 OnSubscriptionMessage="@OnSubscriptionMessageAsync"
-                                                 OnSubscriptionStopped="@OnSubscriptionStoppedAsync" />
-                        </div>
-                        <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
-                        <div class="api-client-workspace__response">
-                            <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages"
-                                                 HistoryEntries="@GetHistoryForSelected()"
-                                                 OnResend="@OnResendHistoryEntryAsync" />
-                        </div>
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
+                                <CollectionVariableEditor Collection="@_activeCollection" OnSaved="@OnCollVarEditorSavedAsync"
+                                                          OnCancelled="@(() => _worksheetMode = null)" />
+                            </div>
+                        }
+            else if (_worksheetMode == WorksheetLinkedRoots)
+                        {
+                            <div class="api-client-management-screen">
+                                <div class="api-client-management-screen__header">
+                                    <button type="button" class="api-client-management-screen__back"
+                                            @onclick="() => _worksheetMode = null">← Back to requests</button>
+                                    <span class="api-client-management-screen__title">API Repositories</span>
+                                </div>
+                                <div class="api-client-linked-roots">
+                                    @if (_linkedRootResults.Count == 0)
+                                    {
+                                        <div class="api-client-linked-roots__empty">No API repositories configured.</div>
+                                    }
+                                    @foreach (var root in _linkedRootResults)
+                                    {
+                                        <div class="api-client-linked-root-card">
+                                            <div class="api-client-linked-root-card__main">
+                                                <div class="api-client-linked-root-card__name">@root.DisplayName</div>
+                                                <div class="api-client-linked-root-card__path">@root.ApiRootPath</div>
+                                                <div class="api-client-linked-root-card__meta">
+                                                    <span>@(root.GitStatus.IsGitRepository ? root.GitStatus.Branch ?? "detached" : "not a Git repo")</span>
+                                                    <span>@(root.GitStatus.ChangedFileCount > 0 ? $"{root.GitStatus.ChangedFileCount} changed" : "clean")</span>
+                                                    @if (root.Diagnostics.Count > 0)
+                                                    {
+                                                        <span>@root.Diagnostics.Count diagnostic(s)</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="api-client-linked-root-card__actions">
+                                                <button type="button" class="api-client-toolbar-btn"
+                                                        @onclick="LoadLinkedRootsAsync">Refresh</button>
+                                                <button type="button" class="api-client-toolbar-btn"
+                                                        @onclick="() => OpenGitPanelAsync(root.Config.Id)">Git</button>
+                                                <button type="button" class="api-client-toolbar-btn"
+                                                        @onclick="() => RemoveLinkedRootAsync(root.Config.Id)">Remove</button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else if (_worksheetMode == WorksheetGit && ActiveGitRoot is not null)
+                        {
+                            <div class="api-client-management-screen">
+                                <div class="api-client-management-screen__header">
+                                    <button type="button" class="api-client-management-screen__back"
+                                            @onclick="() => _worksheetMode = WorksheetLinkedRoots">← Back to API repos</button>
+                                    <span class="api-client-management-screen__title">Git — @ActiveGitRoot.DisplayName</span>
+                                </div>
+                                <div class="api-client-git-panel">
+                                    <div class="api-client-git-panel__summary">
+                                        <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
+                                        <span>Changed API files: @ActiveGitRoot.GitStatus.ChangedFileCount</span>
+                                        @if (ActiveGitRoot.GitStatus.HasStagedChanges)
+                                        {
+                                            <span>staged changes ready</span>
+                                        }
+                                    </div>
+                                    @if (_gitMessage is not null)
+                                    {
+                                        <div
+                                            class="api-client-git-panel__message @(_gitMessageIsError ? "api-client-git-panel__message--error" : "")">
+                                            @_gitMessage</div>
+                                        }
+                                        <div class="api-client-git-panel__row">
+                                            <input class="api-client-dialog__input" placeholder="branch name" value="@_gitBranchName"
+                                                   @oninput="e => _gitBranchName = e.Value?.ToString() ?? string.Empty" />
+                                            <button type="button" class="api-client-toolbar-btn" @onclick="CreateGitBranchAsync">Create
+                                                branch</button>
+                                                </div>
+                                                <div class="api-client-git-panel__row">
+                                                    <select class="api-client-dialog__input api-client-git-panel__branch-select" value="@_gitBranchToSwitch"
+                                                            @onchange="e => _gitBranchToSwitch = e.Value?.ToString() ?? string.Empty">
+                                                        @foreach (var branch in _gitBranches)
+                                                        {
+                                                            <option value="@branch.Name">@(branch.IsCurrent ? $"{branch.Name} (current)" : branch.Name)</option>
+                                                        }
+                                                    </select>
+                                                    <button type="button" class="api-client-toolbar-btn" disabled="@string.IsNullOrWhiteSpace(_gitBranchToSwitch)"
+                                                            @onclick="SwitchGitBranchAsync">Switch branch</button>
+                                                </div>
+                                                <div class="api-client-git-panel__row">
+                                                    <button type="button" class="api-client-toolbar-btn" disabled="@(ActiveGitRoot.GitStatus.ChangedFileDetails.All(static file => !file.HasUnstagedChanges))"
+                                                            @onclick="StageAllGitFilesAsync">Stage all</button>
+                                                    <button type="button" class="api-client-toolbar-btn" disabled="@(!ActiveGitRoot.GitStatus.HasStagedChanges)"
+                                                            @onclick="UnstageAllGitFilesAsync">Unstage all</button>
+                                                    <input class="api-client-dialog__input" placeholder="commit message" value="@_gitCommitMessage"
+                                                           @oninput="e => _gitCommitMessage = e.Value?.ToString() ?? string.Empty" />
+                                                    <button type="button" class="api-client-toolbar-btn" disabled="@(!ActiveGitRoot.GitStatus.HasStagedChanges)"
+                                                            @onclick="CommitGitChangesAsync">Commit staged</button>
+                                                        <button type="button" class="api-client-toolbar-btn" @onclick="PushGitBranchAsync">Push</button>
+                                                        <button type="button" class="api-client-toolbar-btn" @onclick="OpenRemoteCompareAsync">Open remote
+                                                            compare</button>
+                                                        </div>
+                                                        <div class="api-client-git-panel__files">
+                                                            @if (ActiveGitRoot.GitStatus.ChangedFileDetails.Count == 0)
+                                                            {
+                                                                <div class="api-client-git-panel__file api-client-git-panel__file--empty">No changed API files.</div>
+                                                            }
+                                                            @foreach (var file in ActiveGitRoot.GitStatus.ChangedFileDetails)
+                                                            {
+                                                                <div class="api-client-git-panel__file">
+                                                                    <div class="api-client-git-panel__file-main">
+                                                                        <span class="api-client-git-panel__file-status">@file.StatusLabel</span>
+                                                                        <span class="api-client-git-panel__file-path">@file.Path</span>
+                                                                    </div>
+                                                                    <div class="api-client-git-panel__file-actions">
+                                                                        <button type="button" class="api-client-toolbar-btn" disabled="@(!file.HasUnstagedChanges)"
+                                                                                @onclick="() => StageGitFileAsync(file.Path)">Stage</button>
+                                                                        <button type="button" class="api-client-toolbar-btn" disabled="@(!file.IsStaged)"
+                                                                                @onclick="() => UnstageGitFileAsync(file.Path)">Unstage</button>
+                                                                        <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                                                                @onclick="() => QueueRevertGitFile(file.Path)">Revert</button>
+                                                                    </div>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+            else if (_selectedRequest is null)
+                                            {
+                                                <div class="api-client-workspace__empty">
+                                                    <EmptyState Icon="🌐" Title="No request selected"
+                                                                Subtitle="Select a request from the collection tree, or create a new one.">
+                                                        <Actions>
+                                                            <button type="button" class="api-client-empty-action-btn"
+                                                                    disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
+                                                                + New Request
+                                                            </button>
+                                                        </Actions>
+                                                    </EmptyState>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="api-client-workspace__panels">
+                                                    <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+                                                        @if (MissingSecretNames.Count > 0)
+                                                        {
+                                                            <div class="api-client-secret-warning">
+                                                                Missing secret reference(s): @string.Join(", ", MissingSecretNames).
+                                                                <button type="button" class="api-client-secret-warning__btn"
+                                                                        @onclick="OpenConfigureSecretDialog">Configure</button>
+                                                            </div>
+                                                        }
+                                                        <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
+                                                                             ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
+                                                                             ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
+                                                                             OnResult="@OnRequestResultAsync" OnSubscriptionMessage="@OnSubscriptionMessageAsync"
+                                                                             OnSubscriptionStopped="@OnSubscriptionStoppedAsync" />
+                                                    </div>
+                                                    <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
+                                                    <div class="api-client-workspace__response">
+                                                        <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages"
+                                                                             HistoryEntries="@GetHistoryForSelected()" OnResend="@OnResendHistoryEntryAsync" />
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
 
-    @* ── New collection dialog ── *@
-    @if (_showNewCollectionDialog)
-    {
-        <div class="api-client-dialog-backdrop" @onclick="() => _showNewCollectionDialog = false"></div>
-        <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="New Collection">
-            <div class="api-client-dialog__title">New Collection</div>
-            <input type="text" class="api-client-dialog__input" placeholder="Collection name…" value="@_newCollectionName"
-                   @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
-                   @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
-            <div class="api-client-dialog__actions">
-                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                        disabled="@string.IsNullOrWhiteSpace(_newCollectionName)"
-                        @onclick="ConfirmNewCollectionAsync">Create</button>
-                <button type="button" class="api-client-dialog__btn"
-                        @onclick="() => _showNewCollectionDialog = false">Cancel</button>
-            </div>
-        </div>
-    }
+                                @* ── New collection dialog ── *@
+                                @if (_showNewCollectionDialog)
+                                {
+                                    <div class="api-client-dialog-backdrop" @onclick="() => _showNewCollectionDialog = false"></div>
+                                    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="New Collection">
+                                        <div class="api-client-dialog__title">New Collection</div>
+                                        <input type="text" class="api-client-dialog__input" placeholder="Collection name…" value="@_newCollectionName"
+                                               @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
+                                               @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
+                                        <div class="api-client-dialog__actions">
+                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    disabled="@string.IsNullOrWhiteSpace(_newCollectionName)"
+                                                    @onclick="ConfirmNewCollectionAsync">Create</button>
+                                            <button type="button" class="api-client-dialog__btn"
+                                                    @onclick="() => _showNewCollectionDialog = false">Cancel</button>
+                                        </div>
+                                    </div>
+                                }
 
-    @* ── Add linked root dialog ── *@
-    @if (_showLinkedRootDialog)
-    {
-        <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
-        <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add Linked Root">
-            <div class="api-client-dialog__title">Add Linked SwebKit Root</div>
-            <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)" value="@_newLinkedRootName"
-                   @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
-            <input type="text" class="api-client-dialog__input" placeholder="Path to repository or .swebkit-api folder" value="@_newLinkedRootPath"
-                   @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty" @ref="_newLinkedRootInput" />
-            @if (_linkedRootError is not null)
-            {
-                <div class="api-client-dialog__error">@_linkedRootError</div>
-            }
-            <div class="api-client-dialog__actions">
-                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                        disabled="@string.IsNullOrWhiteSpace(_newLinkedRootPath)"
-                        @onclick="ConfirmLinkedRootAsync">Add</button>
-                <button type="button" class="api-client-dialog__btn"
-                        @onclick="() => _showLinkedRootDialog = false">Cancel</button>
-            </div>
-        </div>
-    }
+                                @* ── Add API repo dialog ── *@
+                                @if (_showLinkedRootDialog)
+                                {
+                                    <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
+                                    <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add API Repository">
+                                        <div class="api-client-dialog__title">Add API Repository</div>
+                                        <div class="api-client-dialog__hint">
+                                            Choose a Git repository folder, or an existing .swebkit-api folder. SwebKit keeps API request files there so they can be committed with that repo.
+                                        </div>
+                                        <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)"
+                                               value="@_newLinkedRootName" @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
+                                        <input type="text" class="api-client-dialog__input" placeholder="Path to Git repo or .swebkit-api folder"
+                                               value="@_newLinkedRootPath" @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty"
+                                               @ref="_newLinkedRootInput" />
+                                        @if (_linkedRootError is not null)
+                                        {
+                                            <div class="api-client-dialog__error">@_linkedRootError</div>
+                                        }
+                                        <div class="api-client-dialog__actions">
+                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    disabled="@string.IsNullOrWhiteSpace(_newLinkedRootPath)" @onclick="ConfirmLinkedRootAsync">Add repo</button>
+                                            <button type="button" class="api-client-dialog__btn"
+                                                    @onclick="() => _showLinkedRootDialog = false">Cancel</button>
+                                        </div>
+                                    </div>
+                                }
 
-    @if (_showConfigureSecretDialog)
-    {
-        <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
-        <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
-            <div class="api-client-dialog__title">Configure Secret</div>
-            <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
-            <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally" value="@_secretValueToConfigure"
-                   @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
-            @if (_secretConfigError is not null)
-            {
-                <div class="api-client-dialog__error">@_secretConfigError</div>
-            }
-            <div class="api-client-dialog__actions">
-                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                        disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
-                        @onclick="SaveConfiguredSecretAsync">Save Secret</button>
-                <button type="button" class="api-client-dialog__btn"
-                        @onclick="() => _showConfigureSecretDialog = false">Cancel</button>
-            </div>
-        </div>
-    }
+                                @if (_showConfigureSecretDialog)
+                                {
+                                    <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
+                                    <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
+                                        <div class="api-client-dialog__title">Configure Secret</div>
+                                        <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
+                                        <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally"
+                                               value="@_secretValueToConfigure"
+                                               @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
+                                        @if (_secretConfigError is not null)
+                                        {
+                                            <div class="api-client-dialog__error">@_secretConfigError</div>
+                                        }
+                                        <div class="api-client-dialog__actions">
+                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
+                                                    @onclick="SaveConfiguredSecretAsync">Save Secret</button>
+                                            <button type="button" class="api-client-dialog__btn"
+                                                    @onclick="() => _showConfigureSecretDialog = false">Cancel</button>
+                                        </div>
+                                    </div>
+                                }
 
 @* ── Delete collection confirm ── *@
 <ConfirmDialog Visible="@(_pendingDeleteCollectionId is not null)" Title="Delete collection?"
@@ -360,11 +408,14 @@
                ConfirmLabel="Delete" OnConfirm="ConfirmDeleteCollectionAsync"
                OnCancel="@(() => { _pendingDeleteCollectionId = null; _pendingDeleteCollectionName = null; })" />
 
-@* ── Export / Import dialog ── *@
-<CollectionExportDialog Visible="@_showExportDialog" Collection="@_activeCollection"
-                        Environments="@_environments"
-                        OnClose="@(() => _showExportDialog = false)"
-                        OnImported="@OnCollectionImportedAsync" />
+<ConfirmDialog Visible="@(_pendingRevertGitFilePath is not null)" Title="Revert API file?"
+               Message="@($"Discard changes in {_pendingRevertGitFilePath}? This cannot be undone.")"
+               ConfirmLabel="Revert" OnConfirm="ConfirmRevertGitFileAsync"
+               OnCancel="@(() => _pendingRevertGitFilePath = null)" />
+
+                                @* ── Export / Import dialog ── *@
+                                <CollectionExportDialog Visible="@_showExportDialog" Collection="@_activeCollection" Environments="@_environments"
+                                                        OnClose="@(() => _showExportDialog = false)" OnImported="@OnCollectionImportedAsync" />
 
 @code {
     // ── State ─────────────────────────────────────────────────────────────────
@@ -380,11 +431,15 @@
     private bool _isDirty;
     private bool _autoSave;
     private string? _linkedSaveError;
+    private string? _activeLinkedRootId;
     private string? _activeGitRootId;
+    private IReadOnlyList<LinkedGitBranch> _gitBranches = [];
+    private string _gitBranchToSwitch = string.Empty;
     private string _gitBranchName = string.Empty;
     private string _gitCommitMessage = string.Empty;
     private string? _gitMessage;
     private bool _gitMessageIsError;
+    private string? _pendingRevertGitFilePath;
     private bool _showConfigureSecretDialog;
     private string? _secretNameToConfigure;
     private string _secretValueToConfigure = string.Empty;
@@ -449,6 +504,9 @@
 
     private LinkedCollectionRootLoadResult? ActiveGitRoot =>
         _linkedRootResults.FirstOrDefault(root => root.Config.Id == _activeGitRootId);
+
+    private LinkedCollectionRootLoadResult? ActiveLinkedRoot =>
+        _linkedRootResults.FirstOrDefault(root => root.Config.Id == _activeLinkedRootId);
 
     private IReadOnlyList<string> MissingSecretNames =>
         _selectedRequest is not null && _activeCollection is not null && IsLinkedCollection(_activeCollection.Id)
@@ -518,7 +576,8 @@
             }
 
             _collections = CollectionRepo.Collections.Concat(linkedCollections).ToList();
-            _environments = EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(result => result.Environments)).ToList();
+            _environments = EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(result =>
+result.Environments)).ToList();
             _linkedRootInfos = _linkedRootResults.Select(result => new LinkedCollectionTreeInfo
             {
                 Id = result.Config.Id,
@@ -616,30 +675,78 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void OpenGitPanel(string rootId)
+    private async Task OpenGitPanelAsync(string rootId)
     {
         _activeGitRootId = rootId;
         _gitMessage = null;
         _gitMessageIsError = false;
         _worksheetMode = WorksheetGit;
+        await RefreshGitBranchesAsync();
     }
 
     private async Task CreateGitBranchAsync()
     {
         if (ActiveGitRoot is null) return;
         await ApplyGitResultAsync(await LinkedGit.CreateBranchAsync(ActiveGitRoot.ApiRootPath, _gitBranchName));
+        if (!_gitMessageIsError)
+        {
+            _gitBranchName = string.Empty;
+        }
     }
 
     private async Task SwitchGitBranchAsync()
     {
         if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.SwitchBranchAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, _gitBranchName));
+        await ApplyGitResultAsync(await LinkedGit.SwitchBranchAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath,
+_gitBranchToSwitch));
     }
 
     private async Task CommitGitChangesAsync()
     {
         if (ActiveGitRoot is null) return;
-        await ApplyGitResultAsync(await LinkedGit.CommitApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, _gitCommitMessage));
+        await ApplyGitResultAsync(await LinkedGit.CommitStagedApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath,
+_gitCommitMessage));
+        if (!_gitMessageIsError)
+        {
+            _gitCommitMessage = string.Empty;
+        }
+    }
+
+    private async Task StageAllGitFilesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.StageAllApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task UnstageAllGitFilesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.UnstageAllApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task StageGitFileAsync(string path)
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.StageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
+    }
+
+    private async Task UnstageGitFileAsync(string path)
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.UnstageFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
+    }
+
+    private void QueueRevertGitFile(string path)
+    {
+        _pendingRevertGitFilePath = path;
+    }
+
+    private async Task ConfirmRevertGitFileAsync()
+    {
+        if (ActiveGitRoot is null || _pendingRevertGitFilePath is null) return;
+        var path = _pendingRevertGitFilePath;
+        _pendingRevertGitFilePath = null;
+        await ApplyGitResultAsync(await LinkedGit.RevertFileAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, path));
     }
 
     private async Task PushGitBranchAsync()
@@ -669,14 +776,31 @@
         _gitMessage = result.IsSuccess ? result.Message : result.ErrorMessage;
         _gitMessageIsError = !result.IsSuccess;
         await LoadLinkedRootsAsync();
+        await RefreshGitBranchesAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshGitBranchesAsync()
+    {
+        if (ActiveGitRoot is null)
+        {
+            _gitBranches = [];
+            _gitBranchToSwitch = string.Empty;
+            return;
+        }
+
+        _gitBranches = await LinkedGit.GetBranchesAsync(ActiveGitRoot.ApiRootPath);
+        var current = _gitBranches.FirstOrDefault(static branch => branch.IsCurrent)?.Name ?? ActiveGitRoot.GitStatus.Branch;
+        if (string.IsNullOrWhiteSpace(_gitBranchToSwitch) || !_gitBranches.Any(branch => branch.Name.Equals(_gitBranchToSwitch, StringComparison.OrdinalIgnoreCase)))
+        {
+            _gitBranchToSwitch = current ?? _gitBranches.FirstOrDefault()?.Name ?? string.Empty;
+        }
     }
 
     private async Task ConfirmNewCollectionAsync()
     {
         if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
-        var collection = await CollectionRepo.AddCollectionAsync(_newCollectionName.Trim());
-        _collections = BuildCombinedCollections();
+        var collection = await CreateCollectionForCurrentTargetAsync(_newCollectionName.Trim());
         _activeCollection = collection;
         _showNewCollectionDialog = false;
         await InvokeAsync(StateHasChanged); // BL-2
@@ -690,10 +814,26 @@
 
     private async Task AddCollectionAsync()
     {
-        var collection = await CollectionRepo.AddCollectionAsync("New Collection");
-        _collections = BuildCombinedCollections();
+        var collection = await CreateCollectionForCurrentTargetAsync("New Collection");
         _activeCollection = collection;
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task<ApiCollection> CreateCollectionForCurrentTargetAsync(string name)
+    {
+        if (ActiveLinkedRoot is not null)
+        {
+            var rootId = ActiveLinkedRoot.Config.Id;
+            var collectionId = await LinkedFileService.CreateCollectionAsync(ActiveLinkedRoot.ApiRootPath, name);
+            await LoadLinkedRootsAsync();
+            _activeLinkedRootId = rootId;
+            return _collections.First(collection => collection.Id == collectionId);
+        }
+
+        var collection = await CollectionRepo.AddCollectionAsync(name);
+        _collections = BuildCombinedCollections();
+        _activeLinkedRootId = null;
+        return collection;
     }
 
     private async Task AddRequestAsync()
@@ -771,7 +911,8 @@
         var (linkedRoot, linkedEnvironmentFile) = linkedEnv.Value;
 
         var variableKey = $"secret:{_secretNameToConfigure}";
-        var variable = ActiveEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, variableKey, StringComparison.OrdinalIgnoreCase));
+        var variable = ActiveEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, variableKey,
+StringComparison.OrdinalIgnoreCase));
         if (variable is null)
         {
             variable = new EnvironmentVariable
@@ -823,7 +964,8 @@
         {
             var savedRequestId = _selectedRequest.Id;
             var expectedStamp = FindLinkedRequestFileState(savedRequestId)?.ContentStamp;
-            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _activeCollection, _selectedRequest, expectedStamp);
+            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _activeCollection, _selectedRequest,
+expectedStamp);
             if (!saveResult.IsSuccess)
             {
                 _linkedSaveError = saveResult.ErrorMessage;
@@ -852,8 +994,22 @@
         if (collection is not null && !ReferenceEquals(collection, _activeCollection))
         {
             _activeCollection = collection;
+            _activeLinkedRootId = FindLinkedRootForCollection(collection.Id)?.Config.Id;
             StateHasChanged();
         }
+        return Task.CompletedTask;
+    }
+
+    private Task OnLinkedRootSelectedAsync(string rootId)
+    {
+        _activeLinkedRootId = rootId;
+        _activeCollection = null;
+        _selectedRequest = null;
+        _selectedRequestId = null;
+        _lastResult = null;
+        _isDirty = false;
+        _linkedSaveError = null;
+        StateHasChanged();
         return Task.CompletedTask;
     }
 
@@ -1110,7 +1266,8 @@
 
     private bool IsSecretConfigured(ApiEnvironment activeEnvironment, string secretName)
     {
-        var variable = activeEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, $"secret:{secretName}", StringComparison.OrdinalIgnoreCase));
+        var variable = activeEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, $"secret:{secretName}",
+StringComparison.OrdinalIgnoreCase));
         if (variable is null || !variable.IsEnabled)
             return false;
 
@@ -1134,7 +1291,8 @@
 
         return values
             .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .SelectMany(static value => System.Text.RegularExpressions.Regex.Matches(value!, "\\{\\{secret:([^}]+)\\}\\}").Select(match => match.Groups[1].Value.Trim()))
+            .SelectMany(static value => System.Text.RegularExpressions.Regex.Matches(value!,
+"\\{\\{secret:([^}]+)\\}\\}").Select(match => match.Groups[1].Value.Trim()))
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
@@ -1397,7 +1555,8 @@
     private LinkedCollectionRootLoadResult? FindLinkedRootForCollection(string collectionId) =>
         _linkedRootResults.FirstOrDefault(root => root.Collections.Any(collection => collection.Id == collectionId));
 
-    private (LinkedCollectionRootLoadResult Root, LinkedEnvironmentFileState EnvironmentFile)? FindLinkedRootForEnvironment(string environmentId)
+    private (LinkedCollectionRootLoadResult Root, LinkedEnvironmentFileState EnvironmentFile)?
+FindLinkedRootForEnvironment(string environmentId)
     {
         foreach (var root in _linkedRootResults)
         {

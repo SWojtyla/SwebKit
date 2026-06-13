@@ -68,8 +68,9 @@
                         {
                             <span class="collection-tree__git-badge" title="Current branch">@node.LinkedRoot.Branch</span>
                         }
-                        <span class="collection-tree__git-badge @(node.LinkedRoot.ChangedFileCount > 0 ? "collection-tree__git-badge--dirty" : "")"
-                              title="SwebKit API file changes">
+                        <span
+                            class="collection-tree__git-badge @(node.LinkedRoot.ChangedFileCount > 0 ? "collection-tree__git-badge--dirty" : "")"
+                            title="SwebKit API file changes">
                             @(node.LinkedRoot.ChangedFileCount > 0 ? $"{node.LinkedRoot.ChangedFileCount} changed" : "clean")
                         </span>
                     }
@@ -97,19 +98,23 @@
             @if (isFolder)
             {
                 <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
-                    <span class="ctx-item-icon">dir</span>New sub-folder
+                    <span class="ctx-item-icon" aria-hidden="true">▸</span>
+                    <span>New sub-folder</span>
                 </button>
                 <button class="ctx-item" @onclick="AddRequestCtxAsync">
-                    <span class="ctx-item-icon">+</span>New request here
+                    <span class="ctx-item-icon" aria-hidden="true">+</span>
+                    <span>New request here</span>
                 </button>
                 <div class="ctx-separator"></div>
             }
             <button class="ctx-item" @onclick="BeginRenameCtx">
-                <span class="ctx-item-icon">edit</span>@(isCollRoot ? "Rename collection" : "Rename")
+                <span class="ctx-item-icon" aria-hidden="true">✎</span>
+                <span>@(isCollRoot ? "Rename collection" : "Rename")</span>
             </button>
             <div class="ctx-separator"></div>
             <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
-                <span class="ctx-item-icon">del</span>@(isCollRoot ? "Delete collection" : "Delete")
+                <span class="ctx-item-icon" aria-hidden="true">×</span>
+                <span>@(isCollRoot ? "Delete collection" : "Delete")</span>
             </button>
         </div>
     }
@@ -121,8 +126,10 @@
     [Parameter] public IReadOnlyList<LinkedCollectionTreeInfo> LinkedRoots { get; set; } = [];
     [Parameter] public string? SelectedRequestId { get; set; }
     [Parameter] public string? ActiveCollectionId { get; set; }
+    [Parameter] public string? ActiveLinkedRootId { get; set; }
     [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
     [Parameter] public EventCallback<string> OnCollectionSelected { get; set; }
+    [Parameter] public EventCallback<string> OnLinkedRootSelected { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnAddFolder { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnAddRequest { get; set; }
     [Parameter] public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
@@ -328,6 +335,11 @@
 
         if (flatNode.Kind == FlatTreeNodeKind.LinkedRoot)
         {
+            if (flatNode.LinkedRoot is not null)
+            {
+                await OnLinkedRootSelected.InvokeAsync(flatNode.LinkedRoot.Id);
+            }
+
             ToggleExpand(flatNode);
             return;
         }
@@ -444,7 +456,9 @@
         if (node.Kind == FlatTreeNodeKind.Group)
             return "collection-tree__row--group";
         if (node.Kind == FlatTreeNodeKind.LinkedRoot)
-            return "collection-tree__row--linked-root";
+            return node.LinkedRoot?.Id == ActiveLinkedRootId
+                ? "collection-tree__row--linked-root collection-tree__row--active-linked-root"
+                : "collection-tree__row--linked-root";
         if (node.Node.Request?.Id == SelectedRequestId && SelectedRequestId is not null)
             return "collection-tree__row--selected";
         if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)

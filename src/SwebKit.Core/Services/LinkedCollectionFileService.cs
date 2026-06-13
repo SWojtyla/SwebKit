@@ -110,6 +110,24 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken);
     }
 
+    public async Task<string> CreateCollectionAsync(string apiRootPath, string collectionName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(collectionName))
+        {
+            throw new ArgumentException("Collection name is required.", nameof(collectionName));
+        }
+
+        var collectionsPath = Path.Combine(apiRootPath, "collections");
+        Directory.CreateDirectory(collectionsPath);
+
+        var collectionDirectory = GetUniqueCollectionDirectory(collectionsPath, Slugify(collectionName));
+        Directory.CreateDirectory(collectionDirectory);
+
+        var manifest = new SwebKitCollectionManifest { Name = collectionName.Trim() };
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken);
+        return StableId(collectionDirectory);
+    }
+
     public async Task<LinkedRequestSaveResult> SaveRequestAsync(
         string apiRootPath,
         ApiCollection collection,
@@ -214,6 +232,16 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+
+        if (manifest?.GeneratedVariables is not null)
+        {
+            collection.Variables.AddRange(manifest.GeneratedVariables.Select(pair => new CollectionVariable
+            {
+                Key = pair.Key,
+                Generator = pair.Value,
+                IsEnabled = true,
+            }));
+        }
 
         collection.Nodes.AddRange(await ReadNodesAsync(collectionDirectory, requestFiles, diagnostics, cancellationToken));
         return collection;
@@ -451,6 +479,24 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         return string.IsNullOrWhiteSpace(slug) ? "item" : slug;
     }
 
+    private static string GetUniqueCollectionDirectory(string collectionsPath, string slug)
+    {
+        var candidate = Path.Combine(collectionsPath, slug);
+        if (!Directory.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        for (var index = 2; ; index++)
+        {
+            candidate = Path.Combine(collectionsPath, $"{slug}-{index}");
+            if (!Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
     [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]
     private static partial Regex NonSlugCharacterRegex();
 
@@ -600,6 +646,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     {
         public string? Name { get; set; }
         public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.Ordinal);
+        public Dictionary<string, VariableGeneratorDefinition> GeneratedVariables { get; set; } = new(StringComparer.Ordinal);
         public Dictionary<string, LinkedSecretReference> Secrets { get; set; } = new(StringComparer.Ordinal);
 
         public ApiEnvironment ToEnvironment(string path)
@@ -637,6 +684,17 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 });
             }
 
+            foreach (var generated in GeneratedVariables.Where(static pair => !string.IsNullOrWhiteSpace(pair.Key)))
+            {
+                environment.Variables.Add(new EnvironmentVariable
+                {
+                    Key = generated.Key,
+                    SecretSource = EnvironmentVariableSecretSource.Generated,
+                    Generator = generated.Value,
+                    IsEnabled = true,
+                });
+            }
+
             return environment;
         }
 
@@ -659,6 +717,10 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 else if (variable.SecretSource == EnvironmentVariableSecretSource.Plain)
                 {
                     file.Variables[variable.Key] = variable.Value;
+                }
+                else if (variable.SecretSource == EnvironmentVariableSecretSource.Generated && variable.Generator is not null)
+                {
+                    file.GeneratedVariables[variable.Key] = variable.Generator;
                 }
             }
 

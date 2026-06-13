@@ -102,6 +102,15 @@
     font-weight: 600;
 }
 
+.collection-tree__row--active-linked-root {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-text);
+}
+
+.collection-tree__row--active-linked-root:hover {
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
 /* ── Chevron ────────────────────────────────────────────── */
 
 .collection-tree__chevron {

@@ -137,12 +137,12 @@ public sealed class LinkedCollectionRootTests : IDisposable
         Assert.Contains("orders/2", await File.ReadAllTextAsync(requestPath));
     }
 
-        [Fact]
-        public async Task LoadRootAsync_EnvironmentFile_LoadsPlainVariablesAndSecretReferences()
-        {
-                var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
-                var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
-                await File.WriteAllTextAsync(envPath, """
+    [Fact]
+    public async Task LoadRootAsync_EnvironmentFile_LoadsPlainVariablesAndSecretReferences()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
+        await File.WriteAllTextAsync(envPath, """
                         {
                             "name": "dev",
                             "variables": {
@@ -157,27 +157,27 @@ public sealed class LinkedCollectionRootTests : IDisposable
                         }
                         """);
 
-                var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
 
-                var environment = Assert.Single(result.Environments);
-                Assert.Equal("dev", environment.Name);
-                Assert.Contains(environment.Variables, variable => variable.Key == "baseUrl" && variable.Value == "https://dev.example.com");
-                Assert.Contains(environment.Variables, variable => variable.Key == "secret:apiToken" && variable.CredentialKey == "project/dev/api-token");
-                Assert.Equal(environment.Id, Assert.Single(result.EnvironmentFiles).EnvironmentId);
-        }
+        var environment = Assert.Single(result.Environments);
+        Assert.Equal("dev", environment.Name);
+        Assert.Contains(environment.Variables, variable => variable.Key == "baseUrl" && variable.Value == "https://dev.example.com");
+        Assert.Contains(environment.Variables, variable => variable.Key == "secret:apiToken" && variable.CredentialKey == "project/dev/api-token");
+        Assert.Equal(environment.Id, Assert.Single(result.EnvironmentFiles).EnvironmentId);
+    }
 
-        [Fact]
-        public async Task SaveEnvironmentAsync_WritesSecretReferencesWithoutSecretValues()
+    [Fact]
+    public async Task SaveEnvironmentAsync_WritesSecretReferencesWithoutSecretValues()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
+        var environment = new ApiEnvironment
         {
-                var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
-                var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
-                var environment = new ApiEnvironment
-                {
-                        Id = "dev",
-                        Name = "dev",
-                        Variables =
-                        [
-                                new EnvironmentVariable { Key = "baseUrl", Value = "https://dev.example.com", IsEnabled = true },
+            Id = "dev",
+            Name = "dev",
+            Variables =
+                [
+                        new EnvironmentVariable { Key = "baseUrl", Value = "https://dev.example.com", IsEnabled = true },
                                 new EnvironmentVariable
                                 {
                                         Key = "secret:apiToken",
@@ -186,15 +186,89 @@ public sealed class LinkedCollectionRootTests : IDisposable
                                         IsEnabled = true,
                                 },
                         ],
-                };
+        };
 
-                await _fileService.SaveEnvironmentAsync(envPath, environment);
-                var json = await File.ReadAllTextAsync(envPath);
+        await _fileService.SaveEnvironmentAsync(envPath, environment);
+        var json = await File.ReadAllTextAsync(envPath);
 
-                Assert.Contains("project/dev/api-token", json);
-                Assert.DoesNotContain("super-secret-value", json);
-                Assert.Contains("apiToken", json);
-        }
+        Assert.Contains("project/dev/api-token", json);
+        Assert.DoesNotContain("super-secret-value", json);
+        Assert.Contains("apiToken", json);
+    }
+
+    [Fact]
+    public async Task CreateCollectionAsync_CreatesLinkedCollectionManifest()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+
+        var collectionId = await _fileService.CreateCollectionAsync(apiRoot, "Second collection");
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+
+        var collection = Assert.Single(result.Collections, collection => collection.Id == collectionId);
+        Assert.Equal("Second collection", collection.Name);
+        Assert.True(File.Exists(Path.Combine(apiRoot, "collections", "second-collection", "collection.json")));
+    }
+
+    [Fact]
+    public async Task LoadRootAsync_EnvironmentFile_LoadsGeneratedVariables()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
+        await File.WriteAllTextAsync(envPath, """
+            {
+              "name": "dev",
+              "generatedVariables": {
+                "age": {
+                  "kind": "Integer",
+                  "minInt": 10,
+                  "maxInt": 20
+                }
+              }
+            }
+            """);
+
+        var result = await _fileService.LoadRootAsync(new LinkedCollectionRootConfig { Id = "r1", Name = "Project APIs", Path = _root });
+
+        var variable = Assert.Single(Assert.Single(result.Environments).Variables);
+        Assert.Equal("age", variable.Key);
+        Assert.Equal(EnvironmentVariableSecretSource.Generated, variable.SecretSource);
+        Assert.Equal(VariableGeneratorKind.Integer, variable.Generator?.Kind);
+        Assert.Equal(10, variable.Generator?.MinInt);
+        Assert.Equal(20, variable.Generator?.MaxInt);
+    }
+
+    [Fact]
+    public async Task SaveEnvironmentAsync_WritesGeneratedDefinitionWithoutSampleValue()
+    {
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var envPath = Path.Combine(apiRoot, "environments", "dev.swebenv.json");
+        var environment = new ApiEnvironment
+        {
+            Id = "dev",
+            Name = "dev",
+            Variables =
+            [
+                new EnvironmentVariable
+                {
+                    Key = "firstName",
+                    SecretSource = EnvironmentVariableSecretSource.Generated,
+                    Generator = new VariableGeneratorDefinition
+                    {
+                        Kind = VariableGeneratorKind.Faker,
+                        FakerCategory = "person.firstName",
+                    },
+                    IsEnabled = true,
+                },
+            ],
+        };
+
+        await _fileService.SaveEnvironmentAsync(envPath, environment);
+        var json = await File.ReadAllTextAsync(envPath);
+
+        Assert.Contains("generatedVariables", json);
+        Assert.Contains("person.firstName", json);
+        Assert.DoesNotContain("variables\": {\n    \"firstName", json);
+    }
 
     [Fact]
     public async Task LinkedGitService_NonRepository_ReturnsNotGitRepository()
@@ -234,12 +308,102 @@ public sealed class LinkedCollectionRootTests : IDisposable
     }
 
     [Fact]
+    public async Task StageUnstageAndRevertFileAsync_AffectOnlyLinkedApiFile()
+    {
+        if (!await IsGitAvailableAsync())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_root);
+        await RunGitAsync(_root, "init");
+        await RunGitAsync(_root, "config user.email test@example.com");
+        await RunGitAsync(_root, "config user.name SwebKit Test");
+        await File.WriteAllTextAsync(Path.Combine(_root, "README.md"), "initial");
+        await RunGitAsync(_root, "add README.md");
+        await RunGitAsync(_root, "commit -m initial");
+
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var requestPath = Path.Combine(apiRoot, "collections", "orders", "get-order.swebreq.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(requestPath)!);
+        await File.WriteAllTextAsync(requestPath, "{ \"method\": \"Get\", \"url\": \"/orders/1\" }");
+
+        var git = new LinkedGitService();
+        var relativePath = ".swebkit-api/collections/orders/get-order.swebreq.json";
+
+        var stageResult = await git.StageFileAsync(_root, apiRoot, relativePath);
+        Assert.True(stageResult.IsSuccess, stageResult.ErrorMessage);
+        var stagedStatus = await git.GetStatusAsync(_root, apiRoot);
+        Assert.True(Assert.Single(stagedStatus.ChangedFileDetails).IsStaged);
+
+        var unstageResult = await git.UnstageFileAsync(_root, apiRoot, relativePath);
+        Assert.True(unstageResult.IsSuccess, unstageResult.ErrorMessage);
+        var unstagedStatus = await git.GetStatusAsync(_root, apiRoot);
+        Assert.False(Assert.Single(unstagedStatus.ChangedFileDetails).IsStaged);
+
+        var revertResult = await git.RevertFileAsync(_root, apiRoot, relativePath);
+        Assert.True(revertResult.IsSuccess, revertResult.ErrorMessage);
+        Assert.False(File.Exists(requestPath));
+    }
+
+    [Fact]
+    public async Task CommitStagedApiFilesAsync_RejectsExternalStagedFiles()
+    {
+        if (!await IsGitAvailableAsync())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_root);
+        await RunGitAsync(_root, "init");
+        await RunGitAsync(_root, "config user.email test@example.com");
+        await RunGitAsync(_root, "config user.name SwebKit Test");
+        await File.WriteAllTextAsync(Path.Combine(_root, "README.md"), "initial");
+        await RunGitAsync(_root, "add README.md");
+        await RunGitAsync(_root, "commit -m initial");
+
+        var apiRoot = await _fileService.EnsureRootAsync(_root, "Project APIs");
+        var requestPath = Path.Combine(apiRoot, "collections", "orders", "get-order.swebreq.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(requestPath)!);
+        await File.WriteAllTextAsync(requestPath, "{ \"method\": \"Get\", \"url\": \"/orders/1\" }");
+        await File.WriteAllTextAsync(Path.Combine(_root, "outside.txt"), "outside");
+        await RunGitAsync(_root, "add .swebkit-api/collections/orders/get-order.swebreq.json outside.txt");
+
+        var result = await new LinkedGitService().CommitStagedApiFilesAsync(_root, apiRoot, "api changes");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("non-API", result.ErrorMessage);
+    }
+
+    [Fact]
     public async Task CreateBranchAsync_RejectsUnsafeBranchName()
     {
         var result = await new LinkedGitService().CreateBranchAsync(_root, "bad branch;name");
 
         Assert.False(result.IsSuccess);
         Assert.Contains("unsupported", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetBranchesAsync_ReturnsCurrentBranch()
+    {
+        if (!await IsGitAvailableAsync())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_root);
+        await RunGitAsync(_root, "init");
+        await RunGitAsync(_root, "config user.email test@example.com");
+        await RunGitAsync(_root, "config user.name SwebKit Test");
+        await File.WriteAllTextAsync(Path.Combine(_root, "README.md"), "initial");
+        await RunGitAsync(_root, "add README.md");
+        await RunGitAsync(_root, "commit -m initial");
+        await RunGitAsync(_root, "checkout -b sw/test/ref");
+
+        var branches = await new LinkedGitService().GetBranchesAsync(_root);
+
+        Assert.Contains(branches, branch => branch.Name == "sw/test/ref" && branch.IsCurrent);
     }
 
     [Fact]

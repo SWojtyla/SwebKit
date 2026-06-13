@@ -35,23 +35,25 @@ public sealed class LinkedGitService
         var modified = 0;
         var untracked = 0;
         var changedFiles = new List<string>();
+        var changedFileDetails = new List<LinkedGitChangedFile>();
 
         foreach (var line in statusResult.OutputText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
-            if (line.Length < 4)
+            var changedFile = ParseStatusLine(line);
+            if (changedFile is null)
             {
                 continue;
             }
 
-            var path = NormalizePath(line[3..].Trim().Trim('"'));
-            if (!IsUnderApiRoot(path, relativeApiRoot))
+            if (!IsUnderApiRoot(changedFile.Path, relativeApiRoot))
             {
                 continue;
             }
 
-            changedFiles.Add(path);
+            changedFiles.Add(changedFile.Path);
+            changedFileDetails.Add(changedFile);
 
-            if (line.StartsWith("??", StringComparison.Ordinal))
+            if (changedFile.IsUntracked)
             {
                 untracked++;
             }
@@ -69,7 +71,37 @@ public sealed class LinkedGitService
             ModifiedCount = modified,
             UntrackedCount = untracked,
             ChangedFiles = changedFiles,
+            ChangedFileDetails = changedFileDetails,
         };
+    }
+
+    public async Task<IReadOnlyList<LinkedGitBranch>> GetBranchesAsync(string configuredPath, CancellationToken cancellationToken = default)
+    {
+        var repoRootResult = await RunGitAsync(configuredPath, ["rev-parse", "--show-toplevel"], cancellationToken);
+        if (repoRootResult.ExitCode != 0)
+        {
+            return [];
+        }
+
+        var repoRoot = repoRootResult.OutputText.Trim();
+        var currentResult = await RunGitAsync(repoRoot, ["branch", "--show-current"], cancellationToken);
+        var branchResult = await RunGitAsync(repoRoot, ["branch", "--format=%(refname:short)"], cancellationToken);
+        if (branchResult.ExitCode != 0)
+        {
+            return [];
+        }
+
+        var currentBranch = currentResult.OutputText.Trim();
+        return branchResult.OutputText
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static branch => branch, StringComparer.OrdinalIgnoreCase)
+            .Select(branch => new LinkedGitBranch
+            {
+                Name = branch,
+                IsCurrent = string.Equals(branch, currentBranch, StringComparison.OrdinalIgnoreCase),
+            })
+            .ToList();
     }
 
     public async Task<LinkedGitCommandResult> CreateBranchAsync(string configuredPath, string branchName, CancellationToken cancellationToken = default)
@@ -139,6 +171,149 @@ public sealed class LinkedGitService
         return commitResult.ExitCode == 0
             ? LinkedGitCommandResult.Success("Committed linked API root changes.")
             : LinkedGitCommandResult.Failure(commitResult.ErrorText.Trim());
+    }
+
+    public async Task<LinkedGitCommandResult> CommitStagedApiFilesAsync(string configuredPath, string apiRootPath, string message, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return LinkedGitCommandResult.Failure("Commit message is required.");
+        }
+
+        var status = await GetStatusAsync(configuredPath, apiRootPath, cancellationToken);
+        if (!status.IsGitRepository || string.IsNullOrWhiteSpace(status.RepositoryRoot))
+        {
+            return LinkedGitCommandResult.Failure("Linked root is not inside a Git repository.");
+        }
+
+        var stagedFiles = status.ChangedFileDetails
+            .Where(static file => file.IsStaged)
+            .Select(static file => file.Path)
+            .ToList();
+        if (stagedFiles.Count == 0)
+        {
+            return LinkedGitCommandResult.Failure("Stage one or more API files before committing.");
+        }
+
+        var allStagedResult = await RunGitAsync(status.RepositoryRoot, ["diff", "--cached", "--name-only"], cancellationToken);
+        if (allStagedResult.ExitCode != 0)
+        {
+            return LinkedGitCommandResult.Failure(GetGitError(allStagedResult));
+        }
+
+        var relativeApiRoot = NormalizePath(Path.GetRelativePath(status.RepositoryRoot, apiRootPath));
+        var allStagedFiles = allStagedResult.OutputText
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(NormalizePath)
+            .ToList();
+        if (allStagedFiles.Any(path => !IsUnderApiRoot(path, relativeApiRoot)))
+        {
+            return LinkedGitCommandResult.Failure("Unstage non-API files before committing from SwebKit.");
+        }
+
+        var commitResult = await RunGitAsync(status.RepositoryRoot, ["commit", "-m", message.Trim()], cancellationToken);
+        return commitResult.ExitCode == 0
+            ? LinkedGitCommandResult.Success("Committed staged API root changes.")
+            : LinkedGitCommandResult.Failure(GetGitError(commitResult));
+    }
+
+    public async Task<LinkedGitCommandResult> StageFileAsync(string configuredPath, string apiRootPath, string relativePath, CancellationToken cancellationToken = default)
+    {
+        var (status, changedFile, failure) = await GetScopedChangedFileAsync(configuredPath, apiRootPath, relativePath, cancellationToken);
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        if (!changedFile!.HasUnstagedChanges)
+        {
+            return LinkedGitCommandResult.Failure("File has no unstaged changes to stage.");
+        }
+
+        var result = await RunGitAsync(status!.RepositoryRoot!, ["add", "--", changedFile.Path], cancellationToken);
+        return result.ExitCode == 0
+            ? LinkedGitCommandResult.Success($"Staged {changedFile.Path}.")
+            : LinkedGitCommandResult.Failure(GetGitError(result));
+    }
+
+    public async Task<LinkedGitCommandResult> StageAllApiFilesAsync(string configuredPath, string apiRootPath, CancellationToken cancellationToken = default)
+    {
+        var status = await GetStatusAsync(configuredPath, apiRootPath, cancellationToken);
+        if (!status.IsGitRepository || string.IsNullOrWhiteSpace(status.RepositoryRoot))
+        {
+            return LinkedGitCommandResult.Failure("Linked root is not inside a Git repository.");
+        }
+
+        var files = status.ChangedFileDetails.Where(static file => file.HasUnstagedChanges).Select(static file => file.Path).ToList();
+        if (files.Count == 0)
+        {
+            return LinkedGitCommandResult.Failure("No unstaged API files to stage.");
+        }
+
+        var args = new List<string> { "add", "--" };
+        args.AddRange(files);
+        var result = await RunGitAsync(status.RepositoryRoot, args, cancellationToken);
+        return result.ExitCode == 0
+            ? LinkedGitCommandResult.Success("Staged all changed API files.")
+            : LinkedGitCommandResult.Failure(GetGitError(result));
+    }
+
+    public async Task<LinkedGitCommandResult> UnstageFileAsync(string configuredPath, string apiRootPath, string relativePath, CancellationToken cancellationToken = default)
+    {
+        var (status, changedFile, failure) = await GetScopedChangedFileAsync(configuredPath, apiRootPath, relativePath, cancellationToken);
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        if (!changedFile!.IsStaged)
+        {
+            return LinkedGitCommandResult.Failure("File has no staged changes to unstage.");
+        }
+
+        var result = await RunGitAsync(status!.RepositoryRoot!, ["restore", "--staged", "--", changedFile.Path], cancellationToken);
+        return result.ExitCode == 0
+            ? LinkedGitCommandResult.Success($"Unstaged {changedFile.Path}.")
+            : LinkedGitCommandResult.Failure(GetGitError(result));
+    }
+
+    public async Task<LinkedGitCommandResult> UnstageAllApiFilesAsync(string configuredPath, string apiRootPath, CancellationToken cancellationToken = default)
+    {
+        var status = await GetStatusAsync(configuredPath, apiRootPath, cancellationToken);
+        if (!status.IsGitRepository || string.IsNullOrWhiteSpace(status.RepositoryRoot))
+        {
+            return LinkedGitCommandResult.Failure("Linked root is not inside a Git repository.");
+        }
+
+        var files = status.ChangedFileDetails.Where(static file => file.IsStaged).Select(static file => file.Path).ToList();
+        if (files.Count == 0)
+        {
+            return LinkedGitCommandResult.Failure("No staged API files to unstage.");
+        }
+
+        var args = new List<string> { "restore", "--staged", "--" };
+        args.AddRange(files);
+        var result = await RunGitAsync(status.RepositoryRoot, args, cancellationToken);
+        return result.ExitCode == 0
+            ? LinkedGitCommandResult.Success("Unstaged all API files.")
+            : LinkedGitCommandResult.Failure(GetGitError(result));
+    }
+
+    public async Task<LinkedGitCommandResult> RevertFileAsync(string configuredPath, string apiRootPath, string relativePath, CancellationToken cancellationToken = default)
+    {
+        var (status, changedFile, failure) = await GetScopedChangedFileAsync(configuredPath, apiRootPath, relativePath, cancellationToken);
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        var result = changedFile!.IsUntracked
+            ? await RunGitAsync(status!.RepositoryRoot!, ["clean", "-f", "--", changedFile.Path], cancellationToken)
+            : await RevertTrackedFileAsync(status!.RepositoryRoot!, changedFile, cancellationToken);
+
+        return result.ExitCode == 0
+            ? LinkedGitCommandResult.Success($"Reverted {changedFile.Path}.")
+            : LinkedGitCommandResult.Failure(GetGitError(result));
     }
 
     public async Task<LinkedGitCommandResult> PushCurrentBranchAsync(string configuredPath, CancellationToken cancellationToken = default)
@@ -228,6 +403,73 @@ public sealed class LinkedGitService
         path.StartsWith(relativeApiRoot.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePath(string path) => path.Replace('\\', '/').Trim('/');
+
+    private static LinkedGitChangedFile? ParseStatusLine(string line)
+    {
+        if (line.Length < 4)
+        {
+            return null;
+        }
+
+        var pathText = line[3..].Trim().Trim('"');
+        var renameSeparator = pathText.LastIndexOf(" -> ", StringComparison.Ordinal);
+        var path = NormalizePath(renameSeparator >= 0 ? pathText[(renameSeparator + 4)..].Trim().Trim('"') : pathText);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        return new LinkedGitChangedFile
+        {
+            IndexStatus = line[0],
+            WorkTreeStatus = line[1],
+            Path = path,
+        };
+    }
+
+    private async Task<(LinkedGitStatus? Status, LinkedGitChangedFile? File, LinkedGitCommandResult? Failure)> GetScopedChangedFileAsync(
+        string configuredPath,
+        string apiRootPath,
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPath = NormalizePath(relativePath);
+        var status = await GetStatusAsync(configuredPath, apiRootPath, cancellationToken);
+        if (!status.IsGitRepository || string.IsNullOrWhiteSpace(status.RepositoryRoot))
+        {
+            return (null, null, LinkedGitCommandResult.Failure("Linked root is not inside a Git repository."));
+        }
+
+        var changedFile = status.ChangedFileDetails.FirstOrDefault(file => string.Equals(file.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
+        if (changedFile is null)
+        {
+            return (status, null, LinkedGitCommandResult.Failure("File is not a changed linked API file."));
+        }
+
+        return (status, changedFile, null);
+    }
+
+    private async Task<GitCommandResult> RevertTrackedFileAsync(string repoRoot, LinkedGitChangedFile changedFile, CancellationToken cancellationToken)
+    {
+        if (changedFile.IndexStatus == 'A')
+        {
+            var unstageResult = await RunGitAsync(repoRoot, ["restore", "--staged", "--", changedFile.Path], cancellationToken);
+            if (unstageResult.ExitCode != 0)
+            {
+                return unstageResult;
+            }
+
+            return await RunGitAsync(repoRoot, ["clean", "-f", "--", changedFile.Path], cancellationToken);
+        }
+
+        return await RunGitAsync(repoRoot, ["restore", "--staged", "--worktree", "--", changedFile.Path], cancellationToken);
+    }
+
+    private static string GetGitError(GitCommandResult result)
+    {
+        var error = string.IsNullOrWhiteSpace(result.ErrorText) ? result.OutputText : result.ErrorText;
+        return string.IsNullOrWhiteSpace(error) ? "Git command failed." : error.Trim();
+    }
 
     private static async Task<GitCommandResult> RunGitAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {

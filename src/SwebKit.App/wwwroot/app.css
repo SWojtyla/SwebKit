@@ -3833,10 +3833,12 @@ select option {
 }
 
 .ctx-item-icon {
-    width: 16px;
+    width: 20px;
+    min-width: 20px;
     text-align: center;
     flex-shrink: 0;
     font-size: var(--font-size-md);
+    line-height: 1;
 }
 
 /* ── Form inputs ── */

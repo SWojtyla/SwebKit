@@ -81,6 +81,10 @@
                            value="@v.CredentialKey" @oninput="e => v.CredentialKey = e.Value?.ToString()" />
                 </div>
             }
+            else if (v.SecretSource == EnvironmentVariableSecretSource.Generated)
+            {
+                <VariableGeneratorEditor Definition="@(EnsureGenerator(v))" />
+            }
             else
             {
                 <input type="text" class="env-editor__var-value env-editor__var-value--secret" placeholder="Credential key"
@@ -113,6 +117,17 @@
     private void SelectType(EnvironmentVariable v, EnvironmentVariableSecretSource src)
     {
         v.SecretSource = src;
+        if (src == EnvironmentVariableSecretSource.Generated)
+        {
+            v.Generator ??= new VariableGeneratorDefinition();
+            v.Value = null;
+            v.CredentialKey = null;
+            v.KeyVaultName = null;
+        }
+        else
+        {
+            v.Generator = null;
+        }
         _openTypePickerVar = null;
     }
 
@@ -130,8 +145,12 @@
         EnvironmentVariableSecretSource.Plain => "Plain",
         EnvironmentVariableSecretSource.WindowsCredentialStore => "Secret Store",
         EnvironmentVariableSecretSource.AzureKeyVault => "Key Vault",
+        EnvironmentVariableSecretSource.Generated => "Generated",
         _ => src.ToString(),
     };
+
+    private static VariableGeneratorDefinition EnsureGenerator(EnvironmentVariable variable) =>
+        variable.Generator ??= new VariableGeneratorDefinition();
 
     private void AddVariable()
     {

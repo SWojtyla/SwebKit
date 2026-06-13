@@ -337,3 +337,19 @@ keeps the feature useful without becoming a full Git client.
 
 **Implication:** Use fixed command builders and explicit confirmation for branch switch, commit,
 and push. Status and commit file lists are constrained to the linked API root path.
+
+---
+
+## DEC-21: Dynamic variables use safe building blocks, not scripts
+
+**Decision:** Dynamic variables will be defined with explicit generator definitions such as integer
+range, GUID, date/time, list pick, fake person fields, and templates. No arbitrary JavaScript, C#,
+or shell execution is allowed.
+
+**Rationale:** The API client already intentionally avoids script execution for post-request capture.
+Generated variables should follow the same safety model: useful test data, predictable constraints,
+and no code execution attack surface.
+
+**Implication:** Use SwebKit-owned primitive generators for constraints and add `Bogus` only for
+realistic fake data categories such as names and email addresses. Generated sample values are never
+persisted; only generator definitions are stored.

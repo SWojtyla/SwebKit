@@ -26,6 +26,8 @@ workflows.
   environments; active-environment switcher; **two-level scope hierarchy** — collection-level
   variables (always active, no environment required) override-able by environment-level variables
   when an environment is selected
+- **Dynamic variables:** planned building-block generators for non-secret values such as integer ranges,
+  fake names, GUIDs, dates, list picks, and templates
 - **Post-request capture rules:** JSONPath-based building blocks that extract values from a
   response (body, header, status code) and store them in a collection or environment variable
   automatically — no scripting, no code writing
@@ -81,6 +83,7 @@ workflows.
 | 7     | Export/Import            | SwebKit-native, Postman v2.1, Bruno export, full-bundle + standalone integration   |
 | 8     | Performance and Polish   | Monaco lazy load, virtual scroll, search/filter, keyboard shortcuts, history       |
 | 9     | Git-Linked Collections   | SwebKit-owned folder format, linked repo roots, safe Git status/actions            |
+| 10    | Dynamic Variables        | Building-block generated variables for test data and request variation             |
 
 ## Dependencies
 
@@ -118,4 +121,5 @@ workflows.
 - Codebase guide: [docs/architecture/codebase-guide.md](../../../architecture/codebase-guide.md)
 - Settings and bundle: [docs/architecture/functionalities/settings-and-configuration.md](../../../architecture/functionalities/settings-and-configuration.md)
 - Phase 9 module: [git-linked-collections.md](git-linked-collections.md)
+- Phase 10 module: [dynamic-variables.md](dynamic-variables.md)
 - Jira: not linked

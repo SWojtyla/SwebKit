@@ -79,6 +79,29 @@ public sealed class LinkedCollectionTreeInfo
     public IReadOnlyList<string> CollectionIds { get; init; } = [];
 }
 
+public sealed class LinkedGitChangedFile
+{
+    public string Path { get; init; } = string.Empty;
+    public char IndexStatus { get; init; }
+    public char WorkTreeStatus { get; init; }
+    public bool IsUntracked => IndexStatus == '?' && WorkTreeStatus == '?';
+    public bool IsStaged => !IsUntracked && IndexStatus != ' ';
+    public bool HasUnstagedChanges => IsUntracked || WorkTreeStatus != ' ';
+    public string StatusLabel => IsUntracked
+        ? "Untracked"
+        : string.Join(" + ", new[]
+        {
+            IsStaged ? "Staged" : null,
+            WorkTreeStatus != ' ' ? "Modified" : null,
+        }.Where(static value => value is not null))!;
+}
+
+public sealed class LinkedGitBranch
+{
+    public string Name { get; init; } = string.Empty;
+    public bool IsCurrent { get; init; }
+}
+
 public sealed class LinkedGitStatus
 {
     public bool IsGitRepository { get; init; }
@@ -87,9 +110,11 @@ public sealed class LinkedGitStatus
     public int ModifiedCount { get; init; }
     public int UntrackedCount { get; init; }
     public IReadOnlyList<string> ChangedFiles { get; init; } = [];
+    public IReadOnlyList<LinkedGitChangedFile> ChangedFileDetails { get; init; } = [];
     public string? ErrorMessage { get; init; }
     public bool HasChanges => ModifiedCount > 0 || UntrackedCount > 0;
     public int ChangedFileCount => ModifiedCount + UntrackedCount;
+    public bool HasStagedChanges => ChangedFileDetails.Any(static file => file.IsStaged);
 }
 
 public sealed class LinkedGitCommandResult
@@ -114,5 +139,6 @@ public sealed class SwebKitCollectionManifest
 {
     public string? Name { get; set; }
     public List<CollectionVariable> Variables { get; set; } = [];
+    public Dictionary<string, VariableGeneratorDefinition> GeneratedVariables { get; set; } = new(StringComparer.Ordinal);
     public AuthConfig? DefaultAuth { get; set; }
 }

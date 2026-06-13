@@ -260,8 +260,9 @@ Yes, SwebKit should eventually include Git actions, but they should be staged an
 ### Phase 9B — Safe Basic Actions
 
 - Create branch.
-- Switch branch only when the linked API root is clean, or after explicit confirmation when dirty.
-- Commit selected SwebKit API files with a message.
+- Switch branch from the available local branch list only when the linked API root is clean, or after explicit confirmation when dirty.
+- Stage, unstage, and revert changed SwebKit API files under the linked root.
+- Commit staged SwebKit API files with a message.
 - Push current branch when an upstream exists.
 
 ### Phase 9C — Review/PR Helpers
@@ -315,8 +316,8 @@ Guardrails:
 
 - [x] Implement Git status provider for branch and changed files.
 - [x] Add Git panel with status and changed-file list.
-- [x] Add safe branch create/switch actions.
-- [x] Add commit selected API files action.
+- [x] Add safe branch create/switch actions with branch dropdown selection.
+- [x] Add staged commit plus scoped API-file stage/unstage/revert actions.
 - [x] Add push current branch action.
 - [x] Add provider-inferred remote compare/open helper for GitHub and Azure DevOps remotes.
 

@@ -25,7 +25,7 @@
 
 .collection-var-editor__cols {
     display: grid;
-    grid-template-columns: 20px 1fr 1fr 24px;
+    grid-template-columns: 20px 1fr 110px 1.8fr 24px;
     gap: 4px;
     padding: 0 2px 4px 2px;
 }
@@ -41,7 +41,7 @@
 
 .collection-var-editor__row {
     display: grid;
-    grid-template-columns: 20px 1fr 1fr 24px;
+    grid-template-columns: 20px 1fr 110px 1.8fr 24px;
     gap: 4px;
     align-items: center;
     margin-bottom: 4px;
@@ -50,7 +50,8 @@
 .collection-var-editor__enabled { cursor: pointer; }
 
 .collection-var-editor__key,
-.collection-var-editor__value {
+.collection-var-editor__value,
+.collection-var-editor__type-btn {
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: 4px;
@@ -59,6 +60,15 @@
     padding: 4px 6px;
     width: 100%;
     min-width: 0;
+}
+
+.collection-var-editor__type-btn {
+    cursor: pointer;
+    text-align: left;
+}
+
+.collection-var-editor__type-btn:hover {
+    border-color: var(--color-accent);
 }
 
 .collection-var-editor__delete {

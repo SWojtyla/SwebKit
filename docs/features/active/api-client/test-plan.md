@@ -141,6 +141,24 @@
 | 9.10 | Missing linked secret shows a configure-secret affordance and blocks only affected send | bUnit  | `SwebKit.App.Tests`  |
 | 9.11 | Git command builder scopes status/commit file paths to the configured API root only     | Unit   | `SwebKit.Core.Tests` |
 | 9.12 | Manual: open two Git repos with linked roots, edit one request in each, commit and push | Manual | —                    |
-| 9.13 | Linked environment file loads plain variables and secret references                      | Unit   | `SwebKit.Core.Tests` |
-| 9.14 | Linked environment save writes secret references, not secret values                      | Unit   | `SwebKit.Core.Tests` |
-| 9.15 | Remote compare helper infers a GitHub compare URL from origin + current branch           | Unit   | `SwebKit.Core.Tests` |
+| 9.13 | Linked environment file loads plain variables and secret references                     | Unit   | `SwebKit.Core.Tests` |
+| 9.14 | Linked environment save writes secret references, not secret values                     | Unit   | `SwebKit.Core.Tests` |
+| 9.15 | Remote compare helper infers a GitHub compare URL from origin + current branch          | Unit   | `SwebKit.Core.Tests` |
+| 9.16 | Selecting a linked root targets new collection creation to that `.swebkit-api` root     | Unit   | `SwebKit.Core.Tests` |
+| 9.17 | Git branch list includes the current branch for dropdown switching                      | Unit   | `SwebKit.Core.Tests` |
+| 9.18 | Stage, unstage, and revert operations affect only changed files under the API root      | Unit   | `SwebKit.Core.Tests` |
+| 9.19 | Staged commit rejects unrelated staged files outside the API root                       | Unit   | `SwebKit.Core.Tests` |
+
+---
+
+## Phase 10 — Dynamic Variables
+
+| #    | Scenario                                                                   | Type  | Project              |
+| ---- | -------------------------------------------------------------------------- | ----- | -------------------- |
+| 10.1 | Integer generator produces values inside inclusive min/max constraints     | Unit  | `SwebKit.Core.Tests` |
+| 10.2 | Invalid generator constraints return warnings and leave token unresolved   | Unit  | `SwebKit.Core.Tests` |
+| 10.3 | Faker first/last name generators produce non-empty values                  | Unit  | `SwebKit.Core.Tests` |
+| 10.4 | Template generator composes generated and plain variables                  | Unit  | `SwebKit.Core.Tests` |
+| 10.5 | Generated variable definitions serialize without storing generated samples | Unit  | `SwebKit.Core.Tests` |
+| 10.6 | Variable preview shows generated sample values and supports refresh        | bUnit | `SwebKit.App.Tests`  |
+| 10.7 | Environment/collection variable editor shows building-block fields by kind | bUnit | `SwebKit.App.Tests`  |
