@@ -176,6 +176,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
         builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
         builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
+
+        // API Client — export/import
+        builder.Services.AddSingleton<SwebKitCollectionExporter>();
+        builder.Services.AddSingleton<SwebKitCollectionImporter>();
+        builder.Services.AddSingleton<SwebKitEnvironmentImporter>();
+        builder.Services.AddSingleton<PostmanCollectionExporter>();
+        builder.Services.AddSingleton<PostmanCollectionImporter>();
+        builder.Services.AddSingleton<BrunoCollectionExporter>();
+        builder.Services.AddSingleton<CollectionImportService>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {

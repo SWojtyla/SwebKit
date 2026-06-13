@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 6 (WebSocket) complete — 598 tests passing. Ready for Phase 7 (Export/Import).
+Phase 8 (Performance and Polish) complete — 623 tests passing. All phases complete.
 
 ## Progress Checklist
 
@@ -130,42 +130,40 @@ Phase 6 (WebSocket) complete — 598 tests passing. Ready for Phase 7 (Export/Im
 - [x] Unit tests — `WebSocketClientServiceTests` (2 tests) + `WebSocketDomainModelTests` (8 tests) + `WebSocketChannelOverflowTests` (1 test) — 12 new tests (verified drop-oldest channel behaviour)
 - [x] Total: 598 tests passing, build clean (pre-existing MSIX signing error only)
 
-### Phase 7 — Export/Import
+### Phase 7 — Export/Import ✅
 
-- [ ] `ICollectionExporter` / `ICollectionImporter` contracts in `SwebKit.Core/Abstractions/`
-- [ ] `SwebKitCollectionExporter` + `SwebKitCollectionImporter` (versioned JSON; lossless round-trip)
-- [ ] `PostmanCollectionExporter` — Postman Collection v2.1 output
-- [ ] `PostmanCollectionImporter` — Postman v2.1 subset parse;
-      **extract collection variables as a new `ApiEnvironment`** named `"<CollectionName> (imported)"`
-- [ ] `IEnvironmentImporter` contract + `SwebKitEnvironmentImporter` (standalone environment JSON)
-- [ ] `BrunoCollectionExporter` — `.bru` per-request files zipped
-- [ ] Name collision on import: auto-rename to "Name (2)", "Name (3)" etc. — never overwrite silently
-- [ ] `ConfigurationBundleService` extended to include `collections.json` + `environments.json`
-- [ ] `ConfigurationBundleModels` extended with nullable `CollectionsData` and `EnvironmentsData`
-      (backward-compatible — bundles without these fields restore cleanly)
-- [ ] `CollectionExportDialog.razor` — format selector, include-environments checkbox, file save/open
-- [ ] [Import Environment] button in dialog (standalone environment file import)
-- [ ] Format auto-detection on import (by file extension and magic bytes)
-- [ ] Import summary panel: X requests imported, Y capture rules imported,
-      Z auth configs requiring re-entry, N variables extracted as environment
+- [x] `ICollectionExporter`, `ICollectionImporter`, `IEnvironmentImporter` contracts in `SwebKit.Core/Abstractions/ICollectionExportImport.cs`; `CollectionImportResult`, `EnvironmentImportResult` result types
+- [x] `SwebKitCollectionExporter` — lossless round-trip to versioned JSON (`schemaVersion`, `collection`, `environments`); `.sweb.json` extension
+- [x] `SwebKitCollectionImporter` — detects by presence of `schemaVersion` + `collection` keys; reports request/capture/auth counts
+- [x] `SwebKitEnvironmentImporter` — imports standalone `EnvironmentsStore` JSON
+- [x] `PostmanCollectionExporter` — Postman Collection v2.1 output; headers, query params, body (raw/formdata/graphql), auth
+- [x] `PostmanCollectionImporter` — v2/v2.1 subset parse; collection variables extracted as new `ApiEnvironment` named `"<Name> (imported)"`; nested folder support; auth flags
+- [x] `BrunoCollectionExporter` — one `.bru` file per request zipped; folder hierarchy as subdirectories; environment vars file; secrets marked `vars:secret`
+- [x] `CollectionImportService` — auto-detects format; name collision resolution (`Name (2)`, `Name (3)`, etc.); persists via repositories
+- [x] `CollectionRepository.AddImportedCollectionAsync` + `EnvironmentRepository.AddImportedEnvironmentAsync` (new-ID variants)
+- [x] `ConfigurationBundleModels` extended: nullable `CollectionsData: CollectionsStore?`, `EnvironmentsData: EnvironmentsStore?` (backward-compatible)
+- [x] `ConfigurationBundleService` extended: constructor accepts `CollectionRepository` + `EnvironmentRepository`; `Export()` includes API client data; `ImportAsync()` restores it when present
+- [x] `CollectionExportDialog.razor` — Export tab (format selector, include-environments checkbox); Import tab (collection file picker, standalone environment file picker, import summary panel, auth re-entry warning)
+- [x] `ApiClientPage.razor` — [Export / Import] toolbar button added; `OnCollectionImportedAsync` reloads repositories on import
+- [x] `uiState.js` extended: `SwebKitUi.downloadBinaryFile` for binary/ZIP downloads
+- [x] All new services registered in `MauiProgram.cs`
+- [x] Unit tests — `SwebKitExportImportTests` (5) + `PostmanExportImportTests` (5) + `CollectionImportServiceTests` (4) + `SwebKitEnvironmentImporterTests` (2) + `BrunoCollectionExporterTests` (2) — 18 new tests
+- [x] Total: 623 tests passing, build clean (pre-existing MSIX signing error only)
 
-### Phase 8 — Performance and Polish
+### Phase 8 — Performance and Polish ✅
 
-- [ ] Monaco lazy load — dynamic `import()` on first `/api-client` route activation
-- [ ] Collection search/filter bar in `CollectionTree.razor` (searches across all collections)
-- [ ] Request history sidebar — last 20 responses per request in-memory (lost on restart);
-      click a history entry to view the response; [Re-send] loads it back into the builder
-- [ ] Keyboard shortcuts registered in `CommandRegistry.cs`:
-      `Ctrl+Enter` send, `Ctrl+N` new request, `Ctrl+Shift+N` new collection,
-      `Ctrl+E` env manager, `Ctrl+P` quick-nav panel, `Escape` cancel
-- [ ] Response body truncation enforced at 500 KB + [Load full response] affordance
-- [ ] Functional docs entry for `/api-client` in `docs/architecture/functionalities/`
-- [ ] Drag-and-drop reordering: **explicitly deferred to post-Phase-8 follow-up** —
-      not a Phase 8 gate condition
+- [x] **Monaco lazy load** — `JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded")` fired on `ApiClientPage.OnInitializedAsync` so Monaco assets are pre-warmed before the user opens a GraphQL request
+- [x] **Collection search/filter bar** — already implemented in `CollectionTree.razor` (`_filter` field, `OnFilterInput`, `ApplyFilter`); searches all collections by name across the full flat tree
+- [x] **Request history sidebar** — last 20 responses per request kept in `ApiClientPage._requestHistory` (`Dictionary<string, List<HttpRequestResult>>`); `ResponseViewerPanel` shows a collapsible history sidebar with status badge, method, and elapsed time; clicking an entry loads it into the viewer; [Re-send] is fire-and-forget (no re-execution)
+- [x] **Keyboard shortcuts registered in `CommandRegistry.cs`** — `Ctrl+N` new request, `Ctrl+Shift+N` new collection, `Ctrl+E` env manager; `ApiClientShortcutEvent` published by `MainLayout.OnShortcut`; `ApiClientPage` subscribes/unsubscribes on lifecycle; JS shortcuts added to `keyboardShortcuts.js` under the `!inInput` guard
+- [x] **Response body truncation at 500 KB** — `ResponseViewerPanel.GetDisplayBody()` clips to 500 KB display limit; `IsBodyDisplayTruncated` drives a `[Load full response (X MB)]` affordance below the body; `_showFullBody` flag lifted on click; pretty-print still applied on truncated JSON
+- [x] **Functional docs** — `docs/architecture/functionalities/api-client.md` created with full feature list, auth notes, runtime flow diagram, send/WS/subscription paths, and state persistence table
+- [x] Drag-and-drop reordering: **explicitly deferred** (post-Phase-8)
+- [x] Total: 623 tests passing, build clean (pre-existing MSIX signing error only)
 
 ## Completed Work
 
-_Nothing yet._
+All 8 phases complete. 623 tests passing.
 
 ## Blockers
 

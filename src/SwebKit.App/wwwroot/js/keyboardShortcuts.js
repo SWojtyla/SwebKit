@@ -128,8 +128,21 @@ window.SwebKit.registerKeyboardShortcuts = function (dotNetRef) {
 
     // Service Bus quick actions (only when not in text input)
     if (!inInput) {
+      // ── API Client shortcuts ─────────────────────────────────────────────
+      if (ctrl && key === 'n' && !shift) {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiNewRequest');
+        return;
+      }
+      if (ctrl && shift && key === 'N') {
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiNewCollection');
+        return;
+      }
       if (ctrl && key === 'e') {
         e.preventDefault();
+        // ApiEnvManager fires when on /api-client; SbEditResubmit fires when on SB page
+        dotNetRef.invokeMethodAsync('OnShortcut', 'ApiEnvManager');
         dotNetRef.invokeMethodAsync('OnShortcut', 'SbEditResubmit');
         return;
       }

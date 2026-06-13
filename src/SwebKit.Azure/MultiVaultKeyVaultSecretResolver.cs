@@ -31,7 +31,13 @@ public sealed class MultiVaultKeyVaultSecretResolver : IKeyVaultSecretResolver
             if (string.IsNullOrWhiteSpace(entry.Name) || string.IsNullOrWhiteSpace(entry.Url))
                 continue;
 
-            var client = new SecretClient(new Uri(entry.Url), credential);
+            if (!Uri.TryCreate(entry.Url, UriKind.Absolute, out var vaultUri))
+            {
+                _logger.LogWarning("Skipping KeyVault entry '{Name}': URL '{Url}' is not a valid absolute URI.", entry.Name, entry.Url);
+                continue;
+            }
+
+            var client = new SecretClient(vaultUri, credential);
             dict[entry.Name] = client;
             first ??= client;
         }

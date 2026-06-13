@@ -1,6 +1,26 @@
 <div class="resp-viewer">
 
-    @* ── Subscription message stream ─────────────────────────────────────────── *@
+    @* ── History sidebar ──────────────────────────────────────────────────────── *@
+    @if (HistoryEntries.Count > 0)
+    {
+        <div class="resp-viewer__history">
+            <div class="resp-viewer__history-title">History</div>
+            @foreach (var entry in HistoryEntries)
+            {
+                var e = entry;
+                <button type="button"
+                        class="resp-viewer__history-item @(ReferenceEquals(Result, e) ? "resp-viewer__history-item--active" : "") @(StatusClass(e.StatusCode))"
+                        title="@e.Method @e.ResolvedUrl — @FormatElapsed(e.Elapsed)"
+                        @onclick="() => OnResend.InvokeAsync(e)">
+                    <span class="resp-viewer__history-badge resp-viewer__status-badge--@StatusClass(e.StatusCode)">
+                        @(e.ErrorMessage is not null ? "ERR" : e.StatusCode.ToString())
+                    </span>
+                    <span class="resp-viewer__history-method">@e.Method</span>
+                    <span class="resp-viewer__history-elapsed">@FormatElapsed(e.Elapsed)</span>
+                </button>
+            }
+        </div>
+    }
     @if (SubscriptionMessages.Count > 0)
     {
         <div class="resp-viewer__subscription-header">
@@ -152,6 +172,16 @@
                         </button>
                     </div>
                     <pre class="resp-viewer__body-pre">@GetDisplayBody()</pre>
+                    @if (IsBodyDisplayTruncated)
+                    {
+                        <div class="resp-viewer__display-truncation">
+                            <span>Showing first 500 KB.</span>
+                            <button type="button" class="resp-viewer__load-full-btn"
+                                    @onclick="() => _showFullBody = true">
+                                Load full response (@FormatSize(System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody!)))
+                            </button>
+                        </div>
+                    }
                 }
             }
             else if (_activeTab == "Headers")
@@ -186,10 +216,16 @@
 @code {
     [Parameter] public HttpRequestResult? Result { get; set; }
     [Parameter] public ICollection<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
+    [Parameter] public IReadOnlyList<HttpRequestResult> HistoryEntries { get; set; } = [];
+    [Parameter] public EventCallback<HttpRequestResult> OnResend { get; set; }
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private string _activeTab = "Body";
     private bool _copied;
+    private bool _showFullBody;
+
+    /// <summary>Display limit for the body viewer (500 KB).</summary>
+    private const int DisplayBodyMaxBytes = 500 * 1024;
 
     // Reset to Body tab when the result changes
     private HttpRequestResult? _lastResult;
@@ -202,8 +238,14 @@
             // Auto-switch to GraphQL Errors tab when the response contains errors
             _activeTab = Result?.GraphQlErrors is { Count: > 0 } ? "GraphQL Errors" : "Body";
             _copied = false;
+            _showFullBody = false;
         }
     }
+
+    private bool IsBodyDisplayTruncated =>
+        !_showFullBody &&
+        Result?.ResponseBody is not null &&
+        System.Text.Encoding.UTF8.GetByteCount(Result.ResponseBody) > DisplayBodyMaxBytes;
 
     private async Task CopyBodyAsync()
     {
@@ -226,12 +268,25 @@
     {
         if (Result?.ResponseBody is null) return null;
 
+        var body = Result.ResponseBody;
+
+        // Apply 500 KB display cap unless the user has requested the full body
+        if (!_showFullBody)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
+            if (bytes > DisplayBodyMaxBytes)
+            {
+                // Truncate to a valid UTF-8 string at the display limit
+                body = new string(body.Take(DisplayBodyMaxBytes).ToArray());
+            }
+        }
+
         // Pretty-print JSON if applicable
         if (Result.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
         {
             try
             {
-                var doc = System.Text.Json.JsonDocument.Parse(Result.ResponseBody);
+                var doc = System.Text.Json.JsonDocument.Parse(body);
                 return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions
                 {
                     WriteIndented = true,
@@ -240,7 +295,7 @@
             catch { /* not valid JSON — return as-is */ }
         }
 
-        return Result.ResponseBody;
+        return body;
     }
 
     private string BuildRaw()

@@ -63,6 +63,16 @@ public sealed class EnvironmentRepository
         return env;
     }
 
+    /// <summary>Adds a fully-constructed environment (e.g. from an import). A new ID is always assigned.</summary>
+    public async Task AddImportedEnvironmentAsync(ApiEnvironment env)
+    {
+        env.Id = Guid.NewGuid().ToString("N");
+        env.CreatedAt = env.CreatedAt == default ? DateTimeOffset.UtcNow : env.CreatedAt;
+        env.UpdatedAt = DateTimeOffset.UtcNow;
+        _store.Environments.Add(env);
+        await SaveAsync();
+    }
+
     public async Task<bool> UpdateEnvironmentAsync(ApiEnvironment updated)
     {
         var idx = _store.Environments.FindIndex(e => e.Id == updated.Id);

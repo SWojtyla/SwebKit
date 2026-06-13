@@ -5,6 +5,8 @@
 @inject NavigationManager Nav
 @inject ILogger<ApiClientPage> Logger
 @inject IJSRuntime JS
+@inject IAppEventBus Events
+@inject CommandRegistry Commands
 @implements IAsyncDisposable
 
 <div class="api-client-page">
@@ -48,6 +50,8 @@
                         class="api-client-toolbar-btn @(_worksheetMode == WorksheetVars ? "api-client-toolbar-btn--active" : "")"
                         title="Edit collection variables"
                         @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars)">⚙ Vars</button>
+                <button type="button" class="api-client-toolbar-btn" title="Export / Import"
+                        @onclick="() => _showExportDialog = true">⬆⬇ Export / Import</button>
             }
             <button type="button"
                     class="api-client-toolbar-btn @(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn--active" : "")"
@@ -165,7 +169,9 @@
                         </div>
                         <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
                         <div class="api-client-workspace__response">
-                            <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages" />
+                            <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages"
+                                                 HistoryEntries="@GetHistoryForSelected()"
+                                                 OnResend="@OnResendHistoryEntryAsync" />
                         </div>
                     </div>
                 }
@@ -198,6 +204,12 @@
                ConfirmLabel="Delete" OnConfirm="ConfirmDeleteCollectionAsync"
                OnCancel="@(() => { _pendingDeleteCollectionId = null; _pendingDeleteCollectionName = null; })" />
 
+@* ── Export / Import dialog ── *@
+<CollectionExportDialog Visible="@_showExportDialog" Collection="@_activeCollection"
+                        Environments="@_environments"
+                        OnClose="@(() => _showExportDialog = false)"
+                        OnImported="@OnCollectionImportedAsync" />
+
 @code {
     // ── State ─────────────────────────────────────────────────────────────────
     private bool _loadingCollections = true;
@@ -212,6 +224,10 @@
 
     // Phase 2 — execution state
     private HttpRequestResult? _lastResult;
+
+    // Phase 8 — request history (last 20 per request, in-memory only)
+    private readonly Dictionary<string, List<HttpRequestResult>> _requestHistory = new(StringComparer.Ordinal);
+    private const int HistoryCap = 20;
 
     // Phase 5 — subscription state (capped at 1 000; oldest entry dropped when full)
     private readonly List<GraphQlSubscriptionMessage> _subscriptionMessages = [];
@@ -236,6 +252,9 @@
     private string? _pendingDeleteCollectionId;
     private string? _pendingDeleteCollectionName;
 
+    // Export / import dialog
+    private bool _showExportDialog;
+
     // Splitter drag
     private ElementReference _splitterEl;
     private ElementReference _builderPanelEl;
@@ -255,6 +274,16 @@
     protected override async Task OnInitializedAsync()
     {
         _autoSave = UserSettings.Settings.AutoSaveRequests;
+
+        // Kick Monaco asset load in the background so it is ready before the user opens a GQL request.
+        // Fire-and-forget: failures are handled inside monacoLoader.js.
+        _ = JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded").AsTask();
+
+        // Register keyboard shortcuts in the command palette
+        RegisterApiClientCommands();
+
+        // Subscribe to keyboard shortcut events published by MainLayout
+        Events.Subscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
 
         // Load both repositories concurrently — they are independent files
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
@@ -678,6 +707,21 @@
         // Clear any previous subscription messages when a normal request completes
         _subscriptionMessages.Clear();
         _lastResult = result;
+
+        // Record in history for the active request
+        if (_selectedRequest is not null)
+        {
+            if (!_requestHistory.TryGetValue(_selectedRequest.Id, out var hist))
+            {
+                hist = [];
+                _requestHistory[_selectedRequest.Id] = hist;
+            }
+            // Prepend so newest is first; cap at HistoryCap
+            hist.Insert(0, result);
+            if (hist.Count > HistoryCap)
+                hist.RemoveAt(hist.Count - 1);
+        }
+
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -701,6 +745,29 @@
     {
         // Nothing extra; the subscription message list persists until the next send
         return Task.CompletedTask;
+    }
+
+    private IReadOnlyList<HttpRequestResult> GetHistoryForSelected() =>
+        _selectedRequest is not null && _requestHistory.TryGetValue(_selectedRequest.Id, out var hist)
+            ? hist
+            : [];
+
+    private Task OnResendHistoryEntryAsync(HttpRequestResult entry)
+    {
+        // Load the historical result back into the viewer — does not re-execute the request
+        _lastResult = entry;
+        _subscriptionMessages.Clear();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // ── Export / Import ────────────────────────────────────────────────────────
+
+    private async Task OnCollectionImportedAsync()
+    {
+        // Reload collections and environments from disk after a successful import
+        await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+        _loadingCollections = false;
+        await InvokeAsync(StateHasChanged); // BL-2
     }
 
     // ── Splitter (JS drag) ─────────────────────────────────────────────────────
@@ -741,10 +808,86 @@
         _splitterHandle = null;
     }
 
+    // ── Keyboard shortcut event handler ─────────────────────────────────────────
+
+    private void OnApiClientShortcut(ApiClientShortcutEvent e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            switch (e.Action)
+            {
+                case "NewRequest":
+                    if (_activeCollection is not null)
+                        await AddRequestAsync();
+                    break;
+                case "NewCollection":
+                    OpenNewCollectionDialog();
+                    break;
+                case "EnvManager":
+                    _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
+                    break;
+            }
+            await InvokeAsync(StateHasChanged); // BL-2
+        });
+    }
+
+    private void RegisterApiClientCommands()
+    {
+        Commands.Register(new AppCommand
+        {
+            Id = "api-new-request",
+            Label = "API Client: New Request",
+            Category = "API Client",
+            Icon = "＋",
+            Shortcut = "Ctrl+N",
+            AreaScope = "api-client",
+            Execute = async () => { if (_activeCollection is not null) await AddRequestAsync(); },
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "api-new-collection",
+            Label = "API Client: New Collection",
+            Category = "API Client",
+            Icon = "📦",
+            Shortcut = "Ctrl+Shift+N",
+            AreaScope = "api-client",
+            Execute = () => { OpenNewCollectionDialog(); return Task.CompletedTask; },
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "api-env-manager",
+            Label = "API Client: Manage Environments",
+            Category = "API Client",
+            Icon = "🌍",
+            Shortcut = "Ctrl+E",
+            AreaScope = "api-client",
+            Execute = () =>
+            {
+                _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs;
+                return InvokeAsync(StateHasChanged);
+            },
+        });
+        Commands.Register(new AppCommand
+        {
+            Id = "api-quick-nav",
+            Label = "API Client: Quick Nav (Request Picker)",
+            Category = "API Client",
+            Icon = "⌕",
+            Shortcut = "Ctrl+P",
+            AreaScope = "api-client",
+            Execute = () => Task.CompletedTask, // handled by global Ctrl+P → CommandPalette
+        });
+    }
+
     // ── IAsyncDisposable ───────────────────────────────────────────────────────
 
     public async ValueTask DisposeAsync()
     {
+        Events.Unsubscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
+        Commands.Unregister("api-new-request");
+        Commands.Unregister("api-new-collection");
+        Commands.Unregister("api-env-manager");
+        Commands.Unregister("api-quick-nav");
         _autoSaveTimer?.Stop();
         _autoSaveTimer?.Dispose();
         await DisposeSplitterAsync();

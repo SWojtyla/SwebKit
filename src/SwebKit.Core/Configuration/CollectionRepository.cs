@@ -61,6 +61,16 @@ public sealed class CollectionRepository
         return collection;
     }
 
+    /// <summary>Adds a fully-constructed collection (e.g. from an import). A new ID is always assigned.</summary>
+    public async Task AddImportedCollectionAsync(ApiCollection collection)
+    {
+        collection.Id = Guid.NewGuid().ToString("N");
+        collection.CreatedAt = collection.CreatedAt == default ? DateTimeOffset.UtcNow : collection.CreatedAt;
+        collection.UpdatedAt = DateTimeOffset.UtcNow;
+        _store.Collections.Add(collection);
+        await SaveAsync();
+    }
+
     public async Task<bool> UpdateCollectionAsync(ApiCollection updated)
     {
         var idx = _store.Collections.FindIndex(c => c.Id == updated.Id);

@@ -6,10 +6,165 @@
 
 <div class="gql-panel">
 
-    @* ── Introspection toolbar ─────────────────────────────────────────────── *@
-    <div class="gql-panel__toolbar">
+    @* ── Tab strip ──────────────────────────────────────────────────────────── *@
+    <div class="gql-panel__tabstrip">
+        <button type="button"
+                class="gql-panel__tab @(_activeTab == "query" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("query")'>Query</button>
+        <button type="button"
+                class="gql-panel__tab @(_activeTab == "variables" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("variables")'>
+            Variables
+            @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
+            {
+                <span class="gql-panel__tab-dot">●</span>
+            }
+        </button>
+        <button type="button"
+                class="gql-panel__tab @(_activeTab == "schema" ? "gql-panel__tab--active" : "")"
+                @onclick='() => SwitchTab("schema")'>
+            Schema
+            @if (_schemaLoaded)
+            {
+                <span class="gql-panel__tab-ok">✓</span>
+            }
+        </button>
 
-        @* Operation selector — only visible when >1 operation *@
+        @if (_operationNames.Count > 1)
+        {
+            <div class="gql-panel__tabstrip-spacer"></div>
+            <div class="gql-panel__op-wrap">
+                <span class="gql-panel__op-label">Op:</span>
+                <div class="gql-panel__op-dropdown-wrap">
+                    <button type="button" class="gql-panel__op-btn"
+                            @onclick="() => _showOpDropdown = !_showOpDropdown">
+                        @(Request.GraphQlSelectedOperation ?? _operationNames[0])
+                        <span class="gql-panel__op-chevron">▾</span>
+                    </button>
+                    @if (_showOpDropdown)
+                    {
+                        <div class="ctx-backdrop" @onclick="() => _showOpDropdown = false"></div>
+                        <div class="gql-panel__op-dropdown">
+                            @foreach (var name in _operationNames)
+                            {
+                                var n = name;
+                                <button type="button"
+                                        class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
+                                        @onclick="() => SelectOperationAsync(n)">@n</button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── Tab content ─────────────────────────────────────────────────────────── *@
+    <div class="gql-panel__content">
+
+        @* ── Query editor ── *@
+        @if (_activeTab == "query")
+        {
+            <div class="gql-panel__editor-container">
+                @if (!_monacoLoaded)
+                {
+                    <div class="gql-panel__loading">
+                        <span class="gql-panel__loading-spinner"></span>
+                        Loading editor…
+                    </div>
+                }
+                else
+                {
+                    <StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
+                                          OnDidChangeModelContent="OnQueryChangedAsync"
+                                          OnDidInit="OnQueryEditorInitAsync" />
+                }
+            </div>
+        }
+        else if (_activeTab == "variables")
+        {
+            <div class="gql-panel__editor-container">
+                @if (!_monacoLoaded)
+                {
+                    <div class="gql-panel__loading">
+                        <span class="gql-panel__loading-spinner"></span>
+                        Loading editor…
+                    </div>
+                }
+                else
+                {
+                    <StandaloneCodeEditor @ref="_varsEditor" ConstructionOptions="VarsEditorOptions"
+                                          OnDidChangeModelContent="OnVarsChangedAsync"
+                                          OnDidInit="OnVarsEditorInitAsync" />
+                }
+            </div>
+        }
+        else if (_activeTab == "schema")
+        {
+            <div class="gql-panel__schema-pane">
+                <div class="gql-panel__schema-toolbar">
+                    <button type="button"
+                            class="gql-panel__introspect-btn @(_introspecting ? "gql-panel__introspect-btn--busy" : "")"
+                            disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))"
+                            @onclick="IntrospectAsync">
+                        @if (_introspecting)
+                        {
+                            <span class="gql-panel__loading-spinner"></span>
+                            <span>Introspecting…</span>
+                        }
+                        else
+                        {
+                            <span>⚡ Introspect Schema</span>
+                        }
+                    </button>
+                    @if (_schemaLoaded)
+                    {
+                        <span class="gql-panel__schema-status--ok">✓ Schema loaded — @_schemaTypeCount types</span>
+                        <button type="button" class="gql-panel__schema-clear-btn"
+                                title="Clear cached schema" @onclick="ClearSchemaAsync">✕</button>
+                    }
+                </div>
+
+                @if (_introspectionError is not null)
+                {
+                    <div class="gql-panel__schema-error" role="alert">
+                        <span>⚠ @_introspectionError</span>
+                        <button type="button" class="gql-panel__schema-dismiss"
+                                @onclick="() => _introspectionError = null">✕</button>
+                    </div>
+                }
+
+                @if (_schemaLoaded && _schemaJson is not null)
+                {
+                    <div class="gql-panel__schema-viewer">
+                        <div class="gql-panel__schema-viewer-header">Raw schema (JSON)</div>
+                        <pre class="gql-panel__schema-raw">@_schemaJson</pre>
+                    </div>
+                }
+                else if (!_introspecting && !_schemaLoaded)
+                {
+                    <div class="gql-panel__schema-empty">
+                        <div class="gql-panel__schema-empty-icon">⚡</div>
+                        <div class="gql-panel__schema-empty-title">No schema loaded</div>
+                        <div class="gql-panel__schema-empty-hint">
+                            Click <strong>Introspect Schema</strong> to fetch type information from the endpoint.
+                            @if (string.IsNullOrWhiteSpace(EndpointUrl))
+                            {
+                                <br /><em>Enter an endpoint URL in the URL bar first.</em>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+
+    @* ───────────────────────────────────────────────────────────────────────── *@
+    @if (false)
+    {
+    <div class="gql-panel__toolbar--unused">
+
         @if (_operationNames.Count > 1)
         {
             <div class="gql-panel__op-selector">
@@ -110,6 +265,7 @@
             }
         </div>
     }
+}
 
 </div>
 
@@ -126,21 +282,25 @@
     private StandaloneCodeEditor? _queryEditor;
     private StandaloneCodeEditor? _varsEditor;
 
+    private string _activeTab = "query";
     private bool _monacoLoaded;
     private bool _monacoLoading;
-    private bool _showVars;
     private bool _showOpDropdown;
     private bool _introspecting;
     private string? _introspectionError;
+    private bool _schemaLoaded;
+    private string? _schemaJson;
+    private int _schemaTypeCount;
+    // kept for dead-code HTML inside @if(false) to compile:
+    private bool _showVars;
     private IReadOnlyList<string> _operationNames = [];
 
-    // Guards against OnParametersSet re-triggering editor sync (BL-3, BL-5)
     private HttpRequestEntry? _lastRequest;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-            await EnsureMonacoAsync();
+        // Idempotent — safe to call on every render; guards internally
+        await EnsureMonacoAsync();
     }
 
     protected override void OnParametersSet()
@@ -247,6 +407,8 @@
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
+    private void SwitchTab(string tab) => _activeTab = tab;
+
     // ── Variables toggle ──────────────────────────────────────────────────────
 
     private async Task ToggleVarsAsync()
@@ -268,17 +430,52 @@
 
         try
         {
-            var result = await SchemaService.IntrospectAsync(
-                EndpointUrl, Collection, ActiveEnvironment);
-
+            var result = await SchemaService.IntrospectAsync(EndpointUrl, Collection, ActiveEnvironment);
             if (!result.IsSuccess)
+            {
                 _introspectionError = result.ErrorMessage;
+                _schemaLoaded = false;
+                _schemaJson = null;
+                _schemaTypeCount = 0;
+            }
+            else
+            {
+                _schemaJson = result.SchemaJson;
+                _schemaLoaded = true;
+                _schemaTypeCount = ParseTypeCount(_schemaJson);
+            }
         }
         finally
         {
             _introspecting = false;
             await InvokeAsync(StateHasChanged); // BL-2
         }
+    }
+
+    private Task ClearSchemaAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(EndpointUrl))
+            SchemaService.ClearCache(EndpointUrl);
+        _schemaLoaded = false;
+        _schemaJson = null;
+        _schemaTypeCount = 0;
+        _introspectionError = null;
+        return Task.CompletedTask;
+    }
+
+    private static int ParseTypeCount(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return 0;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("data", out var data) &&
+                data.TryGetProperty("__schema", out var schema) &&
+                schema.TryGetProperty("types", out var types))
+                return types.GetArrayLength();
+        }
+        catch { }
+        return 0;
     }
 
     // ── Construction options ──────────────────────────────────────────────────
@@ -292,10 +489,8 @@
         Minimap = new EditorMinimapOptions { Enabled = false },
         ScrollBeyondLastLine = false,
         FontSize = 13,
-        LineNumbers = "off",
-        RenderLineHighlight = "none",
+        LineNumbers = "on",
         Folding = true,
-        GlyphMargin = false,
         WordWrap = "on",
     };
 
@@ -308,11 +503,7 @@
         Minimap = new EditorMinimapOptions { Enabled = false },
         ScrollBeyondLastLine = false,
         FontSize = 13,
-        LineNumbers = "off",
-        RenderLineHighlight = "none",
-        Folding = false,
-        GlyphMargin = false,
-        Dimension = new Dimension { Height = 120 },
+        LineNumbers = "on",
+        WordWrap = "on",
     };
-
 }

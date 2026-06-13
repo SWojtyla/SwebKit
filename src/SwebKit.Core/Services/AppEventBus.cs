@@ -173,3 +173,4 @@ public record ActivityEvent(string Description, string Icon, string Area, DateTi
         : this(description, icon, area, DateTimeOffset.Now) { }
 }
 public record FocusFilterRequestedEvent(string Area);
+public record ApiClientShortcutEvent(string Action);

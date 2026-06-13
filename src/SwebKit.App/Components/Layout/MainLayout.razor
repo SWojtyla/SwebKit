@@ -618,6 +618,9 @@ _shellStartupStopwatch.Elapsed.TotalMilliseconds);
             case "SbReplay": Events.Publish(new ServiceBusShortcutEvent("Replay")); break;
             case "SbSchedule": Events.Publish(new ServiceBusShortcutEvent("Schedule")); break;
             case "SbPeek": Events.Publish(new ServiceBusShortcutEvent("Peek")); break;
+            case "ApiNewRequest": Events.Publish(new ApiClientShortcutEvent("NewRequest")); break;
+            case "ApiNewCollection": Events.Publish(new ApiClientShortcutEvent("NewCollection")); break;
+            case "ApiEnvManager": Events.Publish(new ApiClientShortcutEvent("EnvManager")); break;
         }
         RequestRender();
         await InvokeAsync(StateHasChanged);
