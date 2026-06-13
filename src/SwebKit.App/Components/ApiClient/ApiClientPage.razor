@@ -159,11 +159,13 @@
                             <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
                                                  ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
                                                  ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
-                                                 OnResult="@OnRequestResultAsync" />
+                                                 OnResult="@OnRequestResultAsync"
+                                                 OnSubscriptionMessage="@OnSubscriptionMessageAsync"
+                                                 OnSubscriptionStopped="@OnSubscriptionStoppedAsync" />
                         </div>
                         <div class="api-client-workspace__splitter" @ref="_splitterEl"></div>
                         <div class="api-client-workspace__response">
-                            <ResponseViewerPanel Result="@_lastResult" />
+                            <ResponseViewerPanel Result="@_lastResult" SubscriptionMessages="@_subscriptionMessages" />
                         </div>
                     </div>
                 }
@@ -210,6 +212,9 @@
 
     // Phase 2 — execution state
     private HttpRequestResult? _lastResult;
+
+    // Phase 5 — subscription state
+    private readonly List<GraphQlSubscriptionMessage> _subscriptionMessages = [];
 
     // Worksheet mode: null = request, "vars" = collection variable editor, "envs" = environment manager
     private string? _worksheetMode;
@@ -672,8 +677,28 @@
 
     private async Task OnRequestResultAsync(HttpRequestResult result)
     {
+        // Clear any previous subscription messages when a normal request completes
+        _subscriptionMessages.Clear();
         _lastResult = result;
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Subscription callbacks ─────────────────────────────────────────────────
+
+    private async Task OnSubscriptionMessageAsync(GraphQlSubscriptionMessage msg)
+    {
+        // Clear the last HTTP result when subscription starts
+        if (_subscriptionMessages.Count == 0)
+            _lastResult = null;
+
+        _subscriptionMessages.Add(msg);
+        await InvokeAsync(StateHasChanged); // BL-2 (BL-8: consider throttling for very fast subscriptions)
+    }
+
+    private Task OnSubscriptionStoppedAsync()
+    {
+        // Nothing extra; the subscription message list persists until the next send
+        return Task.CompletedTask;
     }
 
     // ── Splitter (JS drag) ─────────────────────────────────────────────────────

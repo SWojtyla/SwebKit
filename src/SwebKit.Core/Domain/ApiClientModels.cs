@@ -52,6 +52,18 @@ public sealed class HttpRequestEntry
     public RequestBody Body { get; set; } = new();
     public AuthConfig? Auth { get; set; }
     public List<CaptureRule> CaptureRules { get; set; } = [];
+
+    // ─── GraphQL fields ──────────────────────────────────────────────────────
+    /// <summary>GraphQL query or mutation document. Used when <see cref="Method"/> is <see cref="ApiRequestMethod.GraphQl"/>.</summary>
+    public string? GraphQlQuery { get; set; }
+    /// <summary>GraphQL variables as a JSON string. May be null or empty when there are no variables.</summary>
+    public string? GraphQlVariables { get; set; }
+    /// <summary>
+    /// Name of the operation to execute when the document contains multiple named operations.
+    /// Null means "execute the only/first operation".
+    /// </summary>
+    public string? GraphQlSelectedOperation { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -253,4 +265,31 @@ public sealed class EnvironmentsStore
     public int SchemaVersion { get; set; } = 1;
     public List<ApiEnvironment> Environments { get; set; } = [];
     public ApiClientUiState UiState { get; set; } = new();
+}
+
+// ─── GraphQL types ────────────────────────────────────────────────────────────
+
+/// <summary>A single error entry from a GraphQL <c>{ "errors": [...] }</c> response.</summary>
+public sealed class GraphQlError
+{
+    public string Message { get; init; } = string.Empty;
+    public IReadOnlyList<GraphQlErrorLocation>? Locations { get; init; }
+    public IReadOnlyList<string>? Path { get; init; }
+}
+
+/// <summary>Source location of a GraphQL error.</summary>
+public sealed class GraphQlErrorLocation
+{
+    public int Line { get; init; }
+    public int Column { get; init; }
+}
+
+/// <summary>A single message received during a GraphQL subscription.</summary>
+public sealed class GraphQlSubscriptionMessage
+{
+    public DateTimeOffset ReceivedAt { get; init; } = DateTimeOffset.UtcNow;
+    /// <summary>The raw JSON payload from the <c>next</c> frame.</summary>
+    public string Payload { get; init; } = string.Empty;
+    /// <summary>Errors embedded in this message, if any.</summary>
+    public IReadOnlyList<GraphQlError>? Errors { get; init; }
 }

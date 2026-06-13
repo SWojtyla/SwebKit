@@ -1,6 +1,35 @@
 <div class="resp-viewer">
 
-    @if (Result is null)
+    @* ── Subscription message stream ─────────────────────────────────────────── *@
+    @if (SubscriptionMessages.Count > 0)
+    {
+        <div class="resp-viewer__subscription-header">
+            <span class="resp-viewer__subscription-badge">⚡ Subscription</span>
+            <span class="resp-viewer__subscription-count">@SubscriptionMessages.Count message(s)</span>
+        </div>
+        <div class="resp-viewer__subscription-messages">
+            <Virtualize TItem="GraphQlSubscriptionMessage" Items="@(SubscriptionMessages.ToList())" Context="msg">
+                <div class="resp-viewer__sub-msg @(msg.Errors is { Count: > 0 } ? "resp-viewer__sub-msg--error" : "")">
+                    <div class="resp-viewer__sub-msg-header">
+                        <span class="resp-viewer__sub-msg-time">@msg.ReceivedAt.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                        @if (msg.Errors is { Count: > 0 })
+                        {
+                            <span class="resp-viewer__sub-msg-error-badge">Error</span>
+                        }
+                    </div>
+                    <pre class="resp-viewer__sub-msg-body">@PrettyPrintJson(msg.Payload)</pre>
+                    @if (msg.Errors is { Count: > 0 })
+                    {
+                        @foreach (var err in msg.Errors)
+                        {
+                            <div class="resp-viewer__sub-msg-error-text">⚠ @err.Message</div>
+                        }
+                    }
+                </div>
+            </Virtualize>
+        </div>
+    }
+    else if (Result is null)
     {
         <div class="resp-viewer__placeholder">
             Send a request to see the response here.
@@ -65,12 +94,50 @@
             </button>
             <button type="button" class="resp-viewer__tab @(_activeTab == "Raw" ? "resp-viewer__tab--active" : "")"
                     @onclick='() => _activeTab = "Raw"'>Raw</button>
+            @if (Result.GraphQlErrors is { Count: > 0 })
+            {
+                <button type="button"
+                        class="resp-viewer__tab resp-viewer__tab--gql-errors @(_activeTab == "GraphQL Errors" ? "resp-viewer__tab--active" : "")"
+                        @onclick='() => _activeTab = "GraphQL Errors"'>
+                    GraphQL Errors
+                    <span class="resp-viewer__tab-count resp-viewer__tab-count--error">@Result.GraphQlErrors.Count</span>
+                </button>
+            }
         </div>
 
         @* ── Tab content ───────────────────────────────────────────────────────── *@
         <div class="resp-viewer__content">
 
-            @if (_activeTab == "Body")
+            @if (_activeTab == "GraphQL Errors")
+            {
+                <div class="resp-viewer__gql-errors">
+                    @if (Result.GraphQlErrors is { Count: > 0 })
+                    {
+                        @foreach (var err in Result.GraphQlErrors)
+                        {
+                            <div class="resp-viewer__gql-error-item">
+                                <div class="resp-viewer__gql-error-msg">@err.Message</div>
+                                @if (err.Path is { Count: > 0 })
+                                {
+                                    <div class="resp-viewer__gql-error-path">
+                                        Path: @string.Join(" → ", err.Path)
+                                    </div>
+                                }
+                                @if (err.Locations is { Count: > 0 })
+                                {
+                                    <div class="resp-viewer__gql-error-locations">
+                                        @foreach (var loc in err.Locations)
+                                        {
+                                            <span class="resp-viewer__gql-error-loc">Line @loc.Line, Column @loc.Column</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+            else if (_activeTab == "Body")
             {
                 @if (Result.ResponseBody is null && Result.ResponseBodyBytes is null)
                 {
@@ -118,6 +185,7 @@
 
 @code {
     [Parameter] public HttpRequestResult? Result { get; set; }
+    [Parameter] public IReadOnlyList<GraphQlSubscriptionMessage> SubscriptionMessages { get; set; } = [];
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private string _activeTab = "Body";
@@ -131,7 +199,8 @@
         if (!ReferenceEquals(_lastResult, Result))
         {
             _lastResult = Result;
-            _activeTab = "Body";
+            // Auto-switch to GraphQL Errors tab when the response contains errors
+            _activeTab = Result?.GraphQlErrors is { Count: > 0 } ? "GraphQL Errors" : "Body";
             _copied = false;
         }
     }
@@ -208,5 +277,16 @@
         if (bytes < 1024) return $"{bytes} B";
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private static string PrettyPrintJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        try
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch { return json; }
     }
 }

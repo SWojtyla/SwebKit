@@ -1,5 +1,6 @@
 @inject IVariablePreviewService VariablePreview
 @inject IVariableSubstitutionService VariableSubstitution
+@implements IAsyncDisposable
 
 <div class="req-builder">
 
@@ -73,12 +74,18 @@
             }
         </div>
 
-        <button type="button" class="req-builder__send-btn @(_executing ? "req-builder__send-btn--busy" : "")"
-                @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) || _executing)">
+        <button type="button"
+                class="req-builder__send-btn @((_executing || _subscribing) ? "req-builder__send-btn--busy" : "")"
+                @onclick="OnSendAsync" disabled="@(string.IsNullOrWhiteSpace(Request.Url) && !_executing && !_subscribing)">
             @if (_executing)
             {
                 <span class="req-builder__send-spinner" />
                 <span>Cancel</span>
+            }
+            else if (_subscribing)
+            {
+                <span class="req-builder__send-spinner" />
+                <span>Stop</span>
             }
             else
             {
@@ -96,7 +103,7 @@
 
     @* ── Tab strip ───────────────────────────────────────────────────────────── *@
     <div class="req-builder__tabs">
-        @foreach (var tab in _tabs)
+        @foreach (var tab in ActiveTabs)
         {
             var t = tab;
             <button type="button" class="req-builder__tab @(_activeTab == t ? "req-builder__tab--active" : "")"
@@ -117,7 +124,12 @@
     @* ── Tab content ─────────────────────────────────────────────────────────── *@
     <div class="req-builder__tab-content">
 
-        @if (_activeTab == "Params")
+        @if (_activeTab == "GraphQL")
+        {
+            <GraphQlPanel Request="@Request" Collection="@Collection" ActiveEnvironment="@ActiveEnvironment"
+                          EndpointUrl="@Request.Url" OnChanged="MarkDirtyAsync" />
+        }
+        else if (_activeTab == "Params")
         {
             <KeyValueGrid Pairs="@Request.QueryParams" OnChanged="MarkDirtyAsync" />
         }
@@ -198,16 +210,26 @@
     [Parameter] public bool IsDirty { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback<HttpRequestResult> OnResult { get; set; }
+    [Parameter] public EventCallback<GraphQlSubscriptionMessage> OnSubscriptionMessage { get; set; }
+    [Parameter] public EventCallback OnSubscriptionStopped { get; set; }
 
     [Inject] private IHttpRequestExecutor Executor { get; set; } = default!;
+    [Inject] private IGraphQlSubscriptionService SubscriptionService { get; set; } = default!;
     [Inject] private UserSettingsRepository UserSettings { get; set; } = default!;
 
     private static readonly string[] _tabs = ["Params", "Headers", "Body", "Auth", "Capture"];
+    private static readonly string[] _graphQlTabs = ["GraphQL", "Headers", "Auth", "Capture"];
     private string _activeTab = "Params";
+
+    private string[] ActiveTabs => Request.Method == ApiRequestMethod.GraphQl ? _graphQlTabs : _tabs;
 
     private IReadOnlyList<string> _captureWarnings = [];
     private bool _executing;
     private CancellationTokenSource? _executionCts;
+
+    // Subscription state
+    private bool _subscribing;
+    private CancellationTokenSource? _subscriptionCts;
 
     private IReadOnlyDictionary<string, string?> _resolvedScope = new Dictionary<string, string?>();
     private IReadOnlyDictionary<string, string?> _urlPreview = new Dictionary<string, string?>();
@@ -237,6 +259,10 @@
         _lastEnvironment = ActiveEnvironment;
         _lastScopeVersion = ScopeVersion;
 
+        // Ensure active tab is valid for the current method (BL-5 guard for tab state)
+        if (!ActiveTabs.Contains(_activeTab))
+            _activeTab = ActiveTabs[0];
+
         RefreshScope();
         _urlPreview = VariablePreview.Preview(Request.Url, _resolvedScope);
         _bodyPreview = Request.Body.RawContent is not null
@@ -264,6 +290,13 @@
     {
         _showMethodPicker = false;
         Request.Method = method;
+
+        // Switch to the appropriate default tab when changing method type
+        if (method == ApiRequestMethod.GraphQl && !_graphQlTabs.Contains(_activeTab))
+            _activeTab = "GraphQL";
+        else if (method != ApiRequestMethod.GraphQl && !_tabs.Contains(_activeTab))
+            _activeTab = "Params";
+
         await MarkDirtyAsync();
     }
 
@@ -328,9 +361,28 @@
 
     private async Task OnSendAsync()
     {
+        // Stop an active subscription
+        if (_subscribing)
+        {
+            _subscriptionCts?.Cancel();
+            await SubscriptionService.StopAsync();
+            return;
+        }
+
+        // Cancel an active HTTP request
         if (_executing)
         {
             _executionCts?.Cancel();
+            return;
+        }
+
+        // Detect GraphQL subscription operation
+        if (Request.Method == ApiRequestMethod.GraphQl && IsSubscriptionOperation())
+        {
+            // Fire-and-forget: the subscription loop runs in the background while the component
+            // stays interactive. RunSubscriptionAsync sets _subscribing = true and calls
+            // InvokeAsync(StateHasChanged) so the "Stop" button appears on the next frame.
+            _ = RunSubscriptionAsync();
             return;
         }
 
@@ -375,6 +427,55 @@
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
+    private async Task RunSubscriptionAsync()
+    {
+        _subscribing = true;
+        _subscriptionCts = new CancellationTokenSource();
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            await SubscriptionService.RunAsync(
+                Request.Url,
+                Request,
+                Collection,
+                ActiveEnvironment,
+                async msg =>
+                {
+                    await OnSubscriptionMessage.InvokeAsync(msg);
+                    await InvokeAsync(StateHasChanged); // BL-2
+                },
+                _subscriptionCts.Token);
+        }
+        finally
+        {
+            _subscribing = false;
+            _subscriptionCts?.Dispose();
+            _subscriptionCts = null;
+            await OnSubscriptionStopped.InvokeAsync();
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    private bool IsSubscriptionOperation()
+    {
+        var query = Request.GraphQlQuery ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(query)) return false;
+
+        // If an operation is selected, check its keyword in the document
+        if (!string.IsNullOrWhiteSpace(Request.GraphQlSelectedOperation))
+        {
+            var pattern = $"subscription\\s+{System.Text.RegularExpressions.Regex.Escape(Request.GraphQlSelectedOperation)}";
+            return System.Text.RegularExpressions.Regex.IsMatch(query, pattern,
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        }
+
+        // Anonymous operation: look for a leading subscription keyword
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            query, @"\bsubscription\b",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+
     // ── Dirty tracking ─────────────────────────────────────────────────────────
 
     private async Task MarkDirtyAsync()
@@ -398,4 +499,16 @@
         RequestBodyMode.Xml => "<root><element>value</element></root>",
         _ => "Request body…",
     };
+
+    // ── Dispose (BL-7: cancel any in-flight subscription on navigation away) ───
+
+    public async ValueTask DisposeAsync()
+    {
+        _executionCts?.Cancel();
+        _subscriptionCts?.Cancel();
+        _executionCts?.Dispose();
+        _subscriptionCts?.Dispose();
+        try { await SubscriptionService.StopAsync(CancellationToken.None); } catch { /* ignore */ }
+        await SubscriptionService.DisposeAsync();
+    }
 }

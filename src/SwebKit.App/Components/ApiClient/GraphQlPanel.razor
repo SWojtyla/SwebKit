@@ -1,0 +1,318 @@
+@using BlazorMonaco
+@using BlazorMonaco.Editor
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject IGraphQlSchemaService SchemaService
+
+<div class="gql-panel">
+
+    @* ── Introspection toolbar ─────────────────────────────────────────────── *@
+    <div class="gql-panel__toolbar">
+
+        @* Operation selector — only visible when >1 operation *@
+        @if (_operationNames.Count > 1)
+        {
+            <div class="gql-panel__op-selector">
+                <label class="gql-panel__op-label">Operation:</label>
+                <div class="gql-panel__op-dropdown-wrap">
+                    <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
+                        @(Request.GraphQlSelectedOperation ?? _operationNames[0])
+                        <span class="gql-panel__op-chevron">▾</span>
+                    </button>
+                    @if (_showOpDropdown)
+                    {
+                        <div class="ctx-backdrop" @onclick="() => _showOpDropdown = false"></div>
+                        <div class="gql-panel__op-dropdown">
+                            @foreach (var name in _operationNames)
+                            {
+                                var n = name;
+                                <button type="button"
+                                        class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
+                                        @onclick="() => SelectOperationAsync(n)">
+                                    @n
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="gql-panel__toolbar-spacer"></div>
+
+        <button type="button"
+                class="gql-panel__introspect-btn @(_introspecting ? "gql-panel__introspect-btn--busy" : "")"
+                disabled="@(_introspecting || string.IsNullOrWhiteSpace(EndpointUrl))"
+                title="Fetch the schema from the GraphQL endpoint to enable schema-aware validation"
+                @onclick="IntrospectAsync">
+            @if (_introspecting)
+            {
+                <span class="gql-panel__introspect-spinner"></span>
+                <span>Introspecting…</span>
+            }
+            else
+            {
+                <span>⚡ Introspect Schema</span>
+            }
+        </button>
+    </div>
+
+    @* ── Introspection error banner ────────────────────────────────────────── *@
+    @if (_introspectionError is not null)
+    {
+        <div class="gql-panel__introspect-warning" role="alert">
+            <span class="gql-panel__introspect-warning-text">⚠ @_introspectionError</span>
+            <button type="button" class="gql-panel__introspect-dismiss" title="Dismiss"
+                    @onclick="() => _introspectionError = null">✕</button>
+        </div>
+    }
+
+    @* ── Query editor ─────────────────────────────────────────────────────── *@
+    <div class="gql-panel__editor-label">Query</div>
+    <div class="gql-panel__editor-wrap gql-panel__editor-wrap--query">
+        @if (!_monacoLoaded)
+        {
+            <div class="gql-panel__editor-loading">
+                <span class="gql-panel__editor-loading-spinner"></span>
+                Loading editor…
+            </div>
+        }
+        else
+        {
+            <StandaloneCodeEditor @ref="_queryEditor" ConstructionOptions="QueryEditorOptions"
+                                  OnDidChangeModelContent="OnQueryChangedAsync" OnDidInit="OnQueryEditorInitAsync" />
+        }
+    </div>
+
+    @* ── Variables editor (collapsible) ───────────────────────────────────── *@
+    <div class="gql-panel__vars-header" @onclick="ToggleVarsAsync">
+        <span class="gql-panel__vars-toggle-icon">@(_showVars ? "▾" : "▸")</span>
+        <span class="gql-panel__vars-label">Variables</span>
+        @if (!string.IsNullOrWhiteSpace(Request.GraphQlVariables))
+        {
+            <span class="gql-panel__vars-badge">●</span>
+        }
+    </div>
+    @if (_showVars)
+    {
+        <div class="gql-panel__editor-wrap gql-panel__editor-wrap--vars">
+            @if (!_monacoLoaded)
+            {
+                <div class="gql-panel__editor-loading">
+                    <span class="gql-panel__editor-loading-spinner"></span>
+                    Loading editor…
+                </div>
+            }
+            else
+            {
+                <StandaloneCodeEditor @ref="_varsEditor" ConstructionOptions="VarsEditorOptions"
+                                      OnDidChangeModelContent="OnVarsChangedAsync" OnDidInit="OnVarsEditorInitAsync" />
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HttpRequestEntry Request { get; set; } = default!;
+    [Parameter, EditorRequired] public ApiCollection Collection { get; set; } = default!;
+    [Parameter] public ApiEnvironment? ActiveEnvironment { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Derived from parent URL bar — injected as a separate parameter so the panel
+    // can pass it to the introspection service without re-executing the full request.
+    [Parameter] public string EndpointUrl { get; set; } = string.Empty;
+
+    private StandaloneCodeEditor? _queryEditor;
+    private StandaloneCodeEditor? _varsEditor;
+
+    private bool _monacoLoaded;
+    private bool _monacoLoading;
+    private bool _showVars;
+    private bool _showOpDropdown;
+    private bool _introspecting;
+    private string? _introspectionError;
+    private IReadOnlyList<string> _operationNames = [];
+
+    // Guards against OnParametersSet re-triggering editor sync (BL-3, BL-5)
+    private HttpRequestEntry? _lastRequest;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await EnsureMonacoAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_lastRequest, Request)) return;
+        _lastRequest = Request;
+
+        // Reparse operation names from the new request's query
+        _operationNames = string.IsNullOrWhiteSpace(Request.GraphQlQuery)
+            ? []
+            : SchemaService.ParseOperationNames(Request.GraphQlQuery);
+
+        // Ensure selected operation is still valid
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+    }
+
+    // ── Monaco lazy load (BL-6) ─────────────────────────────────────────────
+
+    private async Task EnsureMonacoAsync()
+    {
+        if (_monacoLoaded || _monacoLoading) return;
+        _monacoLoading = true;
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKitUi.ensureMonacoLoaded");
+            _monacoLoaded = true;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+        catch (JSException)
+        {
+            // Monaco unavailable — editors won't render; user can still use plain textarea fallback if needed
+        }
+        finally
+        {
+            _monacoLoading = false;
+        }
+    }
+
+    // ── Editor init callbacks (BL-6) ─────────────────────────────────────────
+
+    private async Task OnQueryEditorInitAsync()
+    {
+        if (_queryEditor is not null && !string.IsNullOrEmpty(Request.GraphQlQuery))
+        {
+            await _queryEditor.SetValue(Request.GraphQlQuery);
+        }
+    }
+
+    private async Task OnVarsEditorInitAsync()
+    {
+        if (_varsEditor is not null && !string.IsNullOrEmpty(Request.GraphQlVariables))
+        {
+            await _varsEditor.SetValue(Request.GraphQlVariables);
+        }
+    }
+
+    // ── Editor change handlers ────────────────────────────────────────────────
+
+    private async Task OnQueryChangedAsync(ModelContentChangedEvent _)
+    {
+        if (_queryEditor is null) return;
+        var value = await _queryEditor.GetValue();
+        if (Request.GraphQlQuery == value) return;
+
+        Request.GraphQlQuery = value;
+
+        // Reparse operation names
+        _operationNames = string.IsNullOrWhiteSpace(value)
+            ? []
+            : SchemaService.ParseOperationNames(value);
+
+        // Clear selected operation if it no longer exists in the document
+        if (Request.GraphQlSelectedOperation is not null &&
+            !_operationNames.Contains(Request.GraphQlSelectedOperation))
+        {
+            Request.GraphQlSelectedOperation = null;
+        }
+
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task OnVarsChangedAsync(ModelContentChangedEvent _)
+    {
+        if (_varsEditor is null) return;
+        var value = await _varsEditor.GetValue();
+        if (Request.GraphQlVariables == value) return;
+
+        Request.GraphQlVariables = value;
+        await OnChanged.InvokeAsync();
+    }
+
+    // ── Operation selection ────────────────────────────────────────────────────
+
+    private async Task SelectOperationAsync(string name)
+    {
+        _showOpDropdown = false;
+        Request.GraphQlSelectedOperation = name;
+        await OnChanged.InvokeAsync();
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Variables toggle ──────────────────────────────────────────────────────
+
+    private async Task ToggleVarsAsync()
+    {
+        _showVars = !_showVars;
+        // Re-trigger OnAfterRender so the vars editor gets initialised after the section becomes visible (BL-6)
+        await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    // ── Introspection ─────────────────────────────────────────────────────────
+
+    private async Task IntrospectAsync()
+    {
+        if (_introspecting || string.IsNullOrWhiteSpace(EndpointUrl)) return;
+
+        _introspectionError = null;
+        _introspecting = true;
+        await InvokeAsync(StateHasChanged); // BL-2
+
+        try
+        {
+            var result = await SchemaService.IntrospectAsync(
+                EndpointUrl, Collection, ActiveEnvironment);
+
+            if (!result.IsSuccess)
+                _introspectionError = result.ErrorMessage;
+        }
+        finally
+        {
+            _introspecting = false;
+            await InvokeAsync(StateHasChanged); // BL-2
+        }
+    }
+
+    // ── Construction options ──────────────────────────────────────────────────
+
+    private StandaloneEditorConstructionOptions QueryEditorOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = "graphql",
+        Theme = "vs-dark",
+        Value = Request.GraphQlQuery ?? string.Empty,
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "off",
+        RenderLineHighlight = "none",
+        Folding = true,
+        GlyphMargin = false,
+        WordWrap = "on",
+    };
+
+    private StandaloneEditorConstructionOptions VarsEditorOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = "json",
+        Theme = "vs-dark",
+        Value = Request.GraphQlVariables ?? "{\n  \n}",
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        ScrollBeyondLastLine = false,
+        FontSize = 13,
+        LineNumbers = "off",
+        RenderLineHighlight = "none",
+        Folding = false,
+        GlyphMargin = false,
+        Dimension = new Dimension { Height = 120 },
+    };
+
+}

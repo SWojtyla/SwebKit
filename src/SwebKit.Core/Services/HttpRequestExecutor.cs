@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 
@@ -52,6 +54,10 @@ public sealed class HttpRequestExecutor(
             sw.Stop();
 
             var result = await BuildResultAsync(response, url, request.Method.ToString().ToUpperInvariant(), sw.Elapsed, cancellationToken);
+
+            // Parse GraphQL errors from the response body when the method is GraphQL
+            if (request.Method == ApiRequestMethod.GraphQl && result.ResponseBody is not null)
+                result.GraphQlErrors = ParseGraphQlErrors(result.ResponseBody);
 
             // Apply post-request capture rules (mutates collection/environment in place)
             var captureWarnings = await captureExecutor.ExecuteAsync(result, request, collection, activeEnvironment, cancellationToken);
@@ -120,8 +126,10 @@ public sealed class HttpRequestExecutor(
                 msg.Content?.Headers.TryAddWithoutValidation(h.Key, value);
         }
 
-        // Body
-        msg.Content = BuildContent(request.Body, scope);
+        // Body — for GraphQL, the body is built from the structured fields, not the raw body
+        msg.Content = request.Method == ApiRequestMethod.GraphQl
+            ? BuildGraphQlContent(request, scope)
+            : BuildContent(request.Body, scope);
 
         return msg;
     }
@@ -179,6 +187,84 @@ public sealed class HttpRequestExecutor(
 
             default:
                 return null;
+        }
+    }
+
+    private HttpContent BuildGraphQlContent(HttpRequestEntry request, IReadOnlyDictionary<string, string?> scope)
+    {
+        // Substitute variables inside the query and variables JSON
+        var query = substitution.Substitute(request.GraphQlQuery ?? string.Empty, scope);
+        var variablesRaw = string.IsNullOrWhiteSpace(request.GraphQlVariables)
+            ? null
+            : substitution.Substitute(request.GraphQlVariables, scope);
+
+        object? variables = null;
+        if (!string.IsNullOrWhiteSpace(variablesRaw))
+        {
+            try { variables = JsonNode.Parse(variablesRaw); }
+            catch { /* invalid JSON — omit variables */ }
+        }
+
+        var operationName = string.IsNullOrWhiteSpace(request.GraphQlSelectedOperation)
+            ? null
+            : request.GraphQlSelectedOperation;
+
+        var payload = new Dictionary<string, object?> { ["query"] = query };
+        if (variables is not null) payload["variables"] = variables;
+        if (operationName is not null) payload["operationName"] = operationName;
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, Encoding.UTF8);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+        return content;
+    }
+
+    private static IReadOnlyList<GraphQlError>? ParseGraphQlErrors(string responseBody)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(responseBody);
+            if (!doc.RootElement.TryGetProperty("errors", out var errorsElement) ||
+                errorsElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var errors = new List<GraphQlError>();
+            foreach (var errorEl in errorsElement.EnumerateArray())
+            {
+                var message = errorEl.TryGetProperty("message", out var msgEl)
+                    ? msgEl.GetString() ?? "Unknown GraphQL error"
+                    : "Unknown GraphQL error";
+
+                List<GraphQlErrorLocation>? locations = null;
+                if (errorEl.TryGetProperty("locations", out var locsEl) &&
+                    locsEl.ValueKind == JsonValueKind.Array)
+                {
+                    locations = [];
+                    foreach (var loc in locsEl.EnumerateArray())
+                    {
+                        var line = loc.TryGetProperty("line", out var lineEl) ? lineEl.GetInt32() : 0;
+                        var col = loc.TryGetProperty("column", out var colEl) ? colEl.GetInt32() : 0;
+                        locations.Add(new GraphQlErrorLocation { Line = line, Column = col });
+                    }
+                }
+
+                List<string>? path = null;
+                if (errorEl.TryGetProperty("path", out var pathEl) &&
+                    pathEl.ValueKind == JsonValueKind.Array)
+                {
+                    path = [];
+                    foreach (var seg in pathEl.EnumerateArray())
+                        path.Add(seg.ToString());
+                }
+
+                errors.Add(new GraphQlError { Message = message, Locations = locations, Path = path });
+            }
+
+            return errors.Count > 0 ? errors : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 

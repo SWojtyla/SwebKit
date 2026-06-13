@@ -173,6 +173,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOAuth2TokenManager, OAuth2TokenManager>();
         builder.Services.AddSingleton<IAuthHeaderBuilder, AuthHeaderBuilder>();
         builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
+        builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
+        builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
         builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {

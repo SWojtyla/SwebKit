@@ -78,4 +78,12 @@ public sealed class HttpRequestResult
 
     /// <summary>Maximum response body size buffered and displayed (4 MB).</summary>
     public const int ResponseBodyMaxBytes = 4 * 1024 * 1024;
+
+    // ── GraphQL ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Errors extracted from the <c>{ "errors": [...] }</c> field of a GraphQL response.
+    /// Non-null when the response was a GraphQL reply that contained errors.
+    /// </summary>
+    public IReadOnlyList<GraphQlError>? GraphQlErrors { get; set; }
 }

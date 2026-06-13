@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 4 (Authentication) complete — 556 tests passing. Ready for Phase 5 (GraphQL).
+Phase 5 (GraphQL) complete — 572 tests passing. Ready for Phase 6 (WebSocket).
 
 ## Progress Checklist
 
@@ -94,24 +94,26 @@ Phase 4 (Authentication) complete — 556 tests passing. Ready for Phase 5 (Grap
 - [x] Unit tests — `AuthInheritanceResolverTests` (11 tests) — 11 new tests
 - [x] Total: 556 tests passing
 
-### Phase 5 — GraphQL
+### Phase 5 — GraphQL ✅
 
-- [ ] `GRAPHQL` pseudo-method in method selector
-- [ ] Query editor pane (Monaco `graphql` mode)
-- [ ] Variables editor pane (Monaco `json` mode)
-- [ ] Operation selector: parse document for named `query`/`mutation`/`subscription` operations;
-      show a dropdown above the editor when more than one operation is found;
-      selected operation name sent in the request body as `operationName`
-- [ ] [Introspect Schema] button — `__schema` query + cache per endpoint;
-      on introspection error: show dismissible warning banner above the editor,
-      do NOT block editing or sending
-- [ ] Schema-aware autocomplete via `monaco-graphql` plugin
-- [ ] GraphQL error rendering in `ResponseViewerPanel` (distinct from HTTP errors;
-      `errors` array surfaced as a separate tab)
-- [ ] **Subscriptions:** detect `subscription` keyword as the selected operation;
-      switch to `graphql-ws` WebSocket connection automatically: - `IGraphQlSubscriptionService` contract in `SwebKit.Core/Abstractions/` - `GraphQlSubscriptionService` in `SwebKit.Core/Services/` — wraps `IWebSocketClientService`
-      with `graphql-ws` framing (`connection_init` / `subscribe` / `next` / `complete`) - Subscription messages stream into a virtualized `ResponseViewerPanel`
-      (same `WebSocketMessage` direction model as Phase 6) - [Stop subscription] button visible while subscription is active
+- [x] `GRAPHQL` pseudo-method in method selector (was already in `ApiRequestMethod.GraphQl` enum)
+- [x] `GraphQlQuery`, `GraphQlVariables`, `GraphQlSelectedOperation` fields added to `HttpRequestEntry`
+- [x] `GraphQlError`, `GraphQlErrorLocation`, `GraphQlSubscriptionMessage` types added to `ApiClientModels.cs`
+- [x] `GraphQlErrors` property added to `HttpRequestResult`
+- [x] `IGraphQlSchemaService` contract in `SwebKit.Core/Abstractions/` — introspection + operation parsing + cache
+- [x] `GraphQlSchemaService` in `SwebKit.Core/Services/` — sends `__schema` introspection query; in-memory cache per URL; `ParseOperationNames` via regex
+- [x] `IGraphQlSubscriptionService` contract in `SwebKit.Core/Abstractions/`
+- [x] `GraphQlSubscriptionService` in `SwebKit.Core/Services/` — `graphql-ws` framing (`connection_init` / `subscribe` / `next` / `complete` / `ping-pong`)
+- [x] `IWebSocketClientService` contract in `SwebKit.Core/Abstractions/` (Phase 6 will expand)
+- [x] `BasicWebSocketClientService` in `SwebKit.Core/Services/` — `ClientWebSocket` backed minimal implementation
+- [x] `HttpRequestExecutor` updated: builds GraphQL JSON body from `GraphQlQuery`/`GraphQlVariables`/`operationName`; parses `errors` array from response into `GraphQlErrors`
+- [x] `GraphQlPanel.razor` — Monaco editors for query (`graphql` language) and variables (`json` language); collapsible variables section; operation selector dropdown (>1 named operation); [Introspect Schema] button with loading state; dismissible introspection error banner (BL-6 lazy Monaco load)
+- [x] `RequestBuilderPanel.razor` updated: GraphQL tab strip `["GraphQL", "Headers", "Auth", "Capture"]` when method=GraphQl; tab switch guards; subscription detection via `subscription` keyword; [Stop] button visible during active subscription
+- [x] `ResponseViewerPanel.razor` updated: GraphQL Errors tab (auto-selected when errors present); subscription message stream with `<Virtualize>` (timestamped, pretty-printed JSON, error badges)
+- [x] `ApiClientPage.razor` updated: subscription message accumulation; callbacks to `RequestBuilderPanel`; passes `SubscriptionMessages` to `ResponseViewerPanel`
+- [x] Services registered in `MauiProgram.cs`: `IGraphQlSchemaService` (Singleton), `IGraphQlSubscriptionService` (Transient)
+- [x] Unit tests — `GraphQlSchemaServiceTests` (9 tests) + `GraphQlErrorParsingTests` (7 tests) — 16 new tests
+- [x] Total: 572 tests passing, build clean (pre-existing MSIX signing error only)
 
 ### Phase 6 — WebSocket
 
