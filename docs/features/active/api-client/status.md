@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 9 planning — git-linked SwebKit collection roots with an intuitive tree/UI and staged Git actions.
+Phase 9 complete — linked-root loading, sparse request files, linked environments, conflict-safe save-back, Linked Root Manager, secret configuration, scoped Git actions, and compare helpers are implemented.
 
 ## Progress Checklist
 
@@ -161,21 +161,26 @@ Phase 9 planning — git-linked SwebKit collection roots with an intuitive tree/
 - [x] Drag-and-drop reordering: **explicitly deferred** (post-Phase-8)
 - [x] Total: 623 tests passing, build clean (pre-existing MSIX signing error only)
 
-### Phase 9 — Git-Linked Collections Planned
+### Phase 9 — Git-Linked Collections In Progress
 
-- [ ] Define SwebKit-native folder format for linked API roots (`.swebkit-api/swebkit.json`)
-- [ ] Implement compact request files with omitted defaults and optional body/query sidecars
-- [ ] Add linked-root configuration persistence in app-local settings
-- [ ] Load multiple linked roots beside local collections in the collection tree
-- [ ] Add Add Linked Root dialog and Linked Root Manager panel
-- [ ] Add missing-secret detection and configure-secret flow for linked environments
-- [ ] Add Git status provider (branch, clean/dirty, changed API files)
-- [ ] Add safe Git actions: create/switch branch, commit selected API files, push current branch
-- [ ] Add tests for format round-trip, secret non-persistence, linked root load/save, and Git command scoping
+- [x] Define SwebKit-native folder format for linked API roots (`.swebkit-api/swebkit.json`)
+- [x] Implement compact request files with omitted defaults and optional body/query sidecars
+- [x] Add linked-root configuration persistence in app-local settings (`api-linked-roots.json`)
+- [x] Load multiple linked roots beside local collections in the collection tree
+- [x] Add Add Linked Root dialog with create/use-existing root behavior
+- [x] Add Git status provider (branch, clean/dirty, changed API files)
+- [x] Add conflict detection before overwriting linked request files changed on disk
+- [x] Add Linked Root Manager panel
+- [x] Add missing-secret detection/hint for linked requests that reference `{{secret:name}}`
+- [x] Add safe Git actions: create/switch branch, commit selected API files, push current branch
+- [x] Load linked environment files and merge them into the environment picker
+- [x] Add configure-secret flow for linked environments; secret values are stored locally in `ICredentialStore`
+- [x] Add remote compare/open helper for GitHub and Azure DevOps remotes
+- [x] Add tests for linked-root creation, sparse request defaults, sidecar load/save, environment load/save, conflict detection, non-repo Git status, branch validation, scoped API-file commits, and compare URL inference
 
 ## Completed Work
 
-All 8 original phases complete. Phase 9 plan added for git-backed SwebKit collection roots.
+All 8 original phases complete. Phase 9 linked-root implementation now covers format/load/save, linked environments, tree UI, root manager, conflict detection, Git status/actions, compare helpers, and secret configuration.
 
 ## Blockers
 
@@ -183,4 +188,4 @@ _None._
 
 ## Validation Status
 
-Phase 9 validation not started.
+Phase 9 focused linked-root unit tests passing; MAUI app build passing.

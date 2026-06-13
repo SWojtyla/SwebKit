@@ -294,28 +294,31 @@ Guardrails:
 
 ### Format and Persistence
 
-- [ ] Define linked-root DTOs and serializer options with omitted defaults.
-- [ ] Implement root discovery from user-provided paths.
-- [ ] Implement request/environment file readers with validation diagnostics.
-- [ ] Implement deterministic writers for request metadata and body/query sidecar files.
-- [ ] Add external-change detection before file overwrite.
-- [ ] Store configured linked roots in app-local settings.
+- [x] Define linked-root DTOs and serializer options with omitted defaults.
+- [x] Implement root discovery from user-provided paths.
+- [x] Implement request/environment file readers with validation diagnostics.
+- [x] Implement deterministic writers for request metadata and body/query sidecar files.
+- [x] Add external-change detection before file overwrite.
+- [x] Store configured linked roots in app-local settings.
+- [x] Implement linked environment file reader/writer.
 
 ### UI
 
-- [ ] Add linked roots section to the collection tree.
-- [ ] Add Add Linked Root dialog with create/use-existing modes.
-- [ ] Add Linked Root Manager panel.
-- [ ] Add root header actions and root status badges.
-- [ ] Add missing secret badges and configure-secret flow for linked environments.
+- [x] Add linked roots section to the collection tree.
+- [x] Add Add Linked Root dialog with create/use-existing modes.
+- [x] Add Linked Root Manager panel.
+- [x] Add root header actions and root status badges.
+- [x] Add missing secret hint for linked requests.
+- [x] Add configure-secret flow for linked environments.
 
 ### Git
 
-- [ ] Implement Git status provider for branch and changed files.
-- [ ] Add Git panel with status and changed-file list.
-- [ ] Add safe branch create/switch actions.
-- [ ] Add commit selected API files action.
-- [ ] Add push current branch action.
+- [x] Implement Git status provider for branch and changed files.
+- [x] Add Git panel with status and changed-file list.
+- [x] Add safe branch create/switch actions.
+- [x] Add commit selected API files action.
+- [x] Add push current branch action.
+- [x] Add provider-inferred remote compare/open helper for GitHub and Azure DevOps remotes.
 
 ---
 

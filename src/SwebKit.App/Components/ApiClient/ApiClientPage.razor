@@ -1,6 +1,10 @@
 @page "/api-client"
 @inject CollectionRepository CollectionRepo
 @inject EnvironmentRepository EnvironmentRepo
+@inject LinkedCollectionRootRepository LinkedRootRepo
+@inject LinkedCollectionFileService LinkedFileService
+@inject LinkedGitService LinkedGit
+@inject ICredentialStore CredentialStore
 @inject UserSettingsRepository UserSettings
 @inject NavigationManager Nav
 @inject ILogger<ApiClientPage> Logger
@@ -32,6 +36,19 @@
                     <span>Save</span>
                 </button>
             }
+            <button type="button" class="api-client-toolbar-btn" title="Add linked SwebKit API root"
+                    @onclick="OpenLinkedRootDialog">
+                <span>Link Root</span>
+            </button>
+            @if (_linkedRootInfos.Count > 0)
+            {
+                <button type="button"
+                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetLinkedRoots ? "api-client-toolbar-btn--active" : "")"
+                        title="Manage linked roots"
+                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots)">
+                    <span>Linked Roots</span>
+                </button>
+            }
         </div>
 
         <div class="api-client-toolbar__center">
@@ -39,6 +56,12 @@
             {
                 <span class="api-client-toolbar__dirty-badge" title="Unsaved changes — press Ctrl+S to save">
                     ● Unsaved
+                </span>
+            }
+            @if (_linkedSaveError is not null)
+            {
+                <span class="api-client-toolbar__warning-badge" title="@_linkedSaveError">
+                    @_linkedSaveError
                 </span>
             }
         </div>
@@ -96,10 +119,13 @@
             {
                 <div class="api-client-tree-panel__empty">
                     <EmptyState Icon="📦" Title="No collections yet"
-                                Subtitle="Create a collection to organise your requests.">
+                                Subtitle="Create a collection or link a SwebKit API root from a repository.">
                         <Actions>
                             <button type="button" class="api-client-empty-action-btn" @onclick="AddCollectionAsync">
                                 + New Collection
+                            </button>
+                            <button type="button" class="api-client-empty-action-btn" @onclick="OpenLinkedRootDialog">
+                                Link Root
                             </button>
                         </Actions>
                     </EmptyState>
@@ -107,7 +133,7 @@
             }
             else
             {
-                <CollectionTree Collections="@_collections" SelectedRequestId="@_selectedRequestId"
+                <CollectionTree Collections="@_collections" LinkedRoots="@_linkedRootInfos" SelectedRequestId="@_selectedRequestId"
                                 ActiveCollectionId="@_activeCollection?.Id" OnRequestSelected="OnRequestSelectedAsync"
                                 OnCollectionSelected="OnCollectionSelectedAsync" OnAddFolder="OnAddFolderAsync"
                                 OnAddRequest="OnAddRequestInFolderAsync" OnRenameNode="OnRenameNodeAsync"
@@ -142,6 +168,83 @@
                                                   OnCancelled="@(() => _worksheetMode = null)" />
                     </div>
                 }
+            else if (_worksheetMode == WorksheetLinkedRoots)
+            {
+                <div class="api-client-management-screen">
+                    <div class="api-client-management-screen__header">
+                        <button type="button" class="api-client-management-screen__back"
+                                @onclick="() => _worksheetMode = null">← Back to requests</button>
+                        <span class="api-client-management-screen__title">Linked Roots</span>
+                    </div>
+                    <div class="api-client-linked-roots">
+                        @if (_linkedRootResults.Count == 0)
+                        {
+                            <div class="api-client-linked-roots__empty">No linked roots configured.</div>
+                        }
+                        @foreach (var root in _linkedRootResults)
+                        {
+                            <div class="api-client-linked-root-card">
+                                <div class="api-client-linked-root-card__main">
+                                    <div class="api-client-linked-root-card__name">@root.DisplayName</div>
+                                    <div class="api-client-linked-root-card__path">@root.ApiRootPath</div>
+                                    <div class="api-client-linked-root-card__meta">
+                                        <span>@(root.GitStatus.IsGitRepository ? root.GitStatus.Branch ?? "detached" : "not a Git repo")</span>
+                                        <span>@(root.GitStatus.ChangedFileCount > 0 ? $"{root.GitStatus.ChangedFileCount} changed" : "clean")</span>
+                                        @if (root.Diagnostics.Count > 0)
+                                        {
+                                            <span>@root.Diagnostics.Count diagnostic(s)</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="api-client-linked-root-card__actions">
+                                    <button type="button" class="api-client-toolbar-btn" @onclick="LoadLinkedRootsAsync">Refresh</button>
+                                    <button type="button" class="api-client-toolbar-btn" @onclick="() => OpenGitPanel(root.Config.Id)">Git</button>
+                                    <button type="button" class="api-client-toolbar-btn" @onclick="() => RemoveLinkedRootAsync(root.Config.Id)">Remove</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_worksheetMode == WorksheetGit && ActiveGitRoot is not null)
+            {
+                <div class="api-client-management-screen">
+                    <div class="api-client-management-screen__header">
+                        <button type="button" class="api-client-management-screen__back"
+                                @onclick="() => _worksheetMode = WorksheetLinkedRoots">← Back to linked roots</button>
+                        <span class="api-client-management-screen__title">Git — @ActiveGitRoot.DisplayName</span>
+                    </div>
+                    <div class="api-client-git-panel">
+                        <div class="api-client-git-panel__summary">
+                            <span>Branch: @(ActiveGitRoot.GitStatus.Branch ?? "—")</span>
+                            <span>Changed API files: @ActiveGitRoot.GitStatus.ChangedFileCount</span>
+                        </div>
+                        @if (_gitMessage is not null)
+                        {
+                            <div class="api-client-git-panel__message @(_gitMessageIsError ? "api-client-git-panel__message--error" : "")">@_gitMessage</div>
+                        }
+                        <div class="api-client-git-panel__row">
+                            <input class="api-client-dialog__input" placeholder="branch name" value="@_gitBranchName"
+                                   @oninput="e => _gitBranchName = e.Value?.ToString() ?? string.Empty" />
+                            <button type="button" class="api-client-toolbar-btn" @onclick="CreateGitBranchAsync">Create branch</button>
+                            <button type="button" class="api-client-toolbar-btn" @onclick="SwitchGitBranchAsync">Switch branch</button>
+                        </div>
+                        <div class="api-client-git-panel__row">
+                            <input class="api-client-dialog__input" placeholder="commit message" value="@_gitCommitMessage"
+                                   @oninput="e => _gitCommitMessage = e.Value?.ToString() ?? string.Empty" />
+                            <button type="button" class="api-client-toolbar-btn" @onclick="CommitGitChangesAsync">Commit API files</button>
+                            <button type="button" class="api-client-toolbar-btn" @onclick="PushGitBranchAsync">Push</button>
+                            <button type="button" class="api-client-toolbar-btn" @onclick="OpenRemoteCompareAsync">Open Compare</button>
+                        </div>
+                        <div class="api-client-git-panel__files">
+                            @foreach (var file in ActiveGitRoot.GitStatus.ChangedFiles)
+                            {
+                                <div class="api-client-git-panel__file">@file</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
             else if (_selectedRequest is null)
                 {
                     <div class="api-client-workspace__empty">
@@ -160,6 +263,13 @@
                 {
                     <div class="api-client-workspace__panels">
                         <div class="api-client-workspace__builder" @ref="_builderPanelEl">
+                            @if (MissingSecretNames.Count > 0)
+                            {
+                                <div class="api-client-secret-warning">
+                                    Missing secret reference(s): @string.Join(", ", MissingSecretNames).
+                                    <button type="button" class="api-client-secret-warning__btn" @onclick="OpenConfigureSecretDialog">Configure</button>
+                                </div>
+                            }
                             <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
                                                  ActiveEnvironment="@ActiveEnvironment" AllEnvironments="@_environments"
                                                  ScopeVersion="@_scopeVersion" IsDirty="@_isDirty" OnChanged="@OnRequestChangedAsync"
@@ -198,6 +308,52 @@
         </div>
     }
 
+    @* ── Add linked root dialog ── *@
+    @if (_showLinkedRootDialog)
+    {
+        <div class="api-client-dialog-backdrop" @onclick="() => _showLinkedRootDialog = false"></div>
+        <div class="api-client-dialog api-client-dialog--wide" role="dialog" aria-modal="true" aria-label="Add Linked Root">
+            <div class="api-client-dialog__title">Add Linked SwebKit Root</div>
+            <input type="text" class="api-client-dialog__input" placeholder="Display name (optional)" value="@_newLinkedRootName"
+                   @oninput="e => _newLinkedRootName = e.Value?.ToString() ?? string.Empty" />
+            <input type="text" class="api-client-dialog__input" placeholder="Path to repository or .swebkit-api folder" value="@_newLinkedRootPath"
+                   @oninput="e => _newLinkedRootPath = e.Value?.ToString() ?? string.Empty" @ref="_newLinkedRootInput" />
+            @if (_linkedRootError is not null)
+            {
+                <div class="api-client-dialog__error">@_linkedRootError</div>
+            }
+            <div class="api-client-dialog__actions">
+                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                        disabled="@string.IsNullOrWhiteSpace(_newLinkedRootPath)"
+                        @onclick="ConfirmLinkedRootAsync">Add</button>
+                <button type="button" class="api-client-dialog__btn"
+                        @onclick="() => _showLinkedRootDialog = false">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (_showConfigureSecretDialog)
+    {
+        <div class="api-client-dialog-backdrop" @onclick="() => _showConfigureSecretDialog = false"></div>
+        <div class="api-client-dialog" role="dialog" aria-modal="true" aria-label="Configure linked secret">
+            <div class="api-client-dialog__title">Configure Secret</div>
+            <div class="api-client-dialog__hint">@(_secretNameToConfigure ?? "Select a missing secret")</div>
+            <input type="password" class="api-client-dialog__input" placeholder="Secret value stored locally" value="@_secretValueToConfigure"
+                   @oninput="e => _secretValueToConfigure = e.Value?.ToString() ?? string.Empty" />
+            @if (_secretConfigError is not null)
+            {
+                <div class="api-client-dialog__error">@_secretConfigError</div>
+            }
+            <div class="api-client-dialog__actions">
+                <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
+                        disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
+                        @onclick="SaveConfiguredSecretAsync">Save Secret</button>
+                <button type="button" class="api-client-dialog__btn"
+                        @onclick="() => _showConfigureSecretDialog = false">Cancel</button>
+            </div>
+        </div>
+    }
+
 @* ── Delete collection confirm ── *@
 <ConfirmDialog Visible="@(_pendingDeleteCollectionId is not null)" Title="Delete collection?"
                Message="@($"Delete \"{_pendingDeleteCollectionName}\" and all its requests? This cannot be undone.")"
@@ -214,6 +370,8 @@
     // ── State ─────────────────────────────────────────────────────────────────
     private bool _loadingCollections = true;
     private List<ApiCollection> _collections = [];
+    private readonly List<LinkedCollectionRootLoadResult> _linkedRootResults = [];
+    private IReadOnlyList<LinkedCollectionTreeInfo> _linkedRootInfos = [];
     private List<ApiEnvironment> _environments = [];
     private ApiCollection? _activeCollection;
     private string? _selectedRequestId;
@@ -221,6 +379,16 @@
     private string? _activeEnvironmentId;
     private bool _isDirty;
     private bool _autoSave;
+    private string? _linkedSaveError;
+    private string? _activeGitRootId;
+    private string _gitBranchName = string.Empty;
+    private string _gitCommitMessage = string.Empty;
+    private string? _gitMessage;
+    private bool _gitMessageIsError;
+    private bool _showConfigureSecretDialog;
+    private string? _secretNameToConfigure;
+    private string _secretValueToConfigure = string.Empty;
+    private string? _secretConfigError;
 
     // Phase 2 — execution state
     private HttpRequestResult? _lastResult;
@@ -236,6 +404,8 @@
     // Worksheet mode constants
     private const string WorksheetEnvs = "envs";
     private const string WorksheetVars = "vars";
+    private const string WorksheetLinkedRoots = "linked-roots";
+    private const string WorksheetGit = "git";
 
     // Worksheet mode: null = request, WorksheetVars = collection variable editor, WorksheetEnvs = environment manager
     private string? _worksheetMode;
@@ -247,6 +417,14 @@
     private string _newCollectionName = string.Empty;
     private ElementReference _newCollectionInput;
     private bool _shouldFocusNewCollectionInput;
+
+    // Add linked root dialog state
+    private bool _showLinkedRootDialog;
+    private string _newLinkedRootName = string.Empty;
+    private string _newLinkedRootPath = string.Empty;
+    private string? _linkedRootError;
+    private ElementReference _newLinkedRootInput;
+    private bool _shouldFocusLinkedRootInput;
 
     // Delete-collection confirm state
     private string? _pendingDeleteCollectionId;
@@ -269,6 +447,14 @@
     private ApiEnvironment? ActiveEnvironment =>
         _environments.FirstOrDefault(e => e.Id == _activeEnvironmentId);
 
+    private LinkedCollectionRootLoadResult? ActiveGitRoot =>
+        _linkedRootResults.FirstOrDefault(root => root.Config.Id == _activeGitRootId);
+
+    private IReadOnlyList<string> MissingSecretNames =>
+        _selectedRequest is not null && _activeCollection is not null && IsLinkedCollection(_activeCollection.Id)
+            ? GetMissingSecretNames(_selectedRequest, ActiveEnvironment)
+            : [];
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
@@ -285,8 +471,9 @@
         // Subscribe to keyboard shortcut events published by MainLayout
         Events.Subscribe<ApiClientShortcutEvent>(OnApiClientShortcut);
 
-        // Load both repositories concurrently — they are independent files
+        // Load local collections/environments first, then merge linked roots into the collection list.
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+        await LoadLinkedRootsAsync();
 
         _loadingCollections = false;
     }
@@ -296,7 +483,7 @@
         try
         {
             await CollectionRepo.LoadAsync();
-            _collections = CollectionRepo.Collections.ToList();
+            _collections = BuildCombinedCollections();
             _activeCollection = _collections.FirstOrDefault();
 
             // Restore last selected request for the active collection
@@ -315,12 +502,51 @@
         }
     }
 
+    private async Task LoadLinkedRootsAsync()
+    {
+        try
+        {
+            await LinkedRootRepo.LoadAsync();
+            _linkedRootResults.Clear();
+            var linkedCollections = new List<ApiCollection>();
+
+            foreach (var root in LinkedRootRepo.Roots.Where(static r => r.IsEnabled))
+            {
+                var result = await LinkedFileService.LoadRootAsync(root);
+                _linkedRootResults.Add(result);
+                linkedCollections.AddRange(result.Collections);
+            }
+
+            _collections = CollectionRepo.Collections.Concat(linkedCollections).ToList();
+            _environments = EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(result => result.Environments)).ToList();
+            _linkedRootInfos = _linkedRootResults.Select(result => new LinkedCollectionTreeInfo
+            {
+                Id = result.Config.Id,
+                Name = result.DisplayName,
+                Path = result.ApiRootPath,
+                Branch = result.GitStatus.Branch,
+                ChangedFileCount = result.GitStatus.ChangedFileCount,
+                IsGitRepository = result.GitStatus.IsGitRepository,
+                IsValid = result.IsValid,
+                CollectionIds = result.Collections.Select(c => c.Id).ToList(),
+            }).ToList();
+
+            _activeCollection ??= _collections.FirstOrDefault();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load linked collection roots");
+            _linkedRootInfos = [];
+        }
+    }
+
     private async Task LoadEnvironmentsAsync()
     {
         try
         {
             await EnvironmentRepo.LoadAsync();
-            _environments = EnvironmentRepo.Environments.ToList();
+            _environments = BuildCombinedEnvironments();
             _activeEnvironmentId = EnvironmentRepo.UiState.ActiveEnvironmentId;
         }
         catch (OperationCanceledException) { throw; }
@@ -351,11 +577,106 @@
         _shouldFocusNewCollectionInput = true;
     }
 
+    private void OpenLinkedRootDialog()
+    {
+        _newLinkedRootName = string.Empty;
+        _newLinkedRootPath = string.Empty;
+        _linkedRootError = null;
+        _showLinkedRootDialog = true;
+        _shouldFocusLinkedRootInput = true;
+    }
+
+    private async Task ConfirmLinkedRootAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newLinkedRootPath)) return;
+
+        try
+        {
+            var path = _newLinkedRootPath.Trim();
+            var name = string.IsNullOrWhiteSpace(_newLinkedRootName) ? null : _newLinkedRootName.Trim();
+            await LinkedFileService.EnsureRootAsync(path, name ?? string.Empty);
+            await LinkedRootRepo.AddRootAsync(path, name);
+            await LoadLinkedRootsAsync();
+            _showLinkedRootDialog = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _linkedRootError = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RemoveLinkedRootAsync(string rootId)
+    {
+        await LinkedRootRepo.RemoveRootAsync(rootId);
+        if (_activeGitRootId == rootId)
+            _activeGitRootId = null;
+        await LoadLinkedRootsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenGitPanel(string rootId)
+    {
+        _activeGitRootId = rootId;
+        _gitMessage = null;
+        _gitMessageIsError = false;
+        _worksheetMode = WorksheetGit;
+    }
+
+    private async Task CreateGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.CreateBranchAsync(ActiveGitRoot.ApiRootPath, _gitBranchName));
+    }
+
+    private async Task SwitchGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.SwitchBranchAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, _gitBranchName));
+    }
+
+    private async Task CommitGitChangesAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.CommitApiFilesAsync(ActiveGitRoot.ApiRootPath, ActiveGitRoot.ApiRootPath, _gitCommitMessage));
+    }
+
+    private async Task PushGitBranchAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        await ApplyGitResultAsync(await LinkedGit.PushCurrentBranchAsync(ActiveGitRoot.ApiRootPath));
+    }
+
+    private async Task OpenRemoteCompareAsync()
+    {
+        if (ActiveGitRoot is null) return;
+        var url = await LinkedGit.GetRemoteCompareUrlAsync(ActiveGitRoot.ApiRootPath);
+        if (url is null)
+        {
+            _gitMessage = "Could not infer a GitHub or Azure DevOps compare URL from the origin remote.";
+            _gitMessageIsError = true;
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+        _gitMessage = "Opened compare view in the browser.";
+        _gitMessageIsError = false;
+    }
+
+    private async Task ApplyGitResultAsync(LinkedGitCommandResult result)
+    {
+        _gitMessage = result.IsSuccess ? result.Message : result.ErrorMessage;
+        _gitMessageIsError = !result.IsSuccess;
+        await LoadLinkedRootsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task ConfirmNewCollectionAsync()
     {
         if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
         var collection = await CollectionRepo.AddCollectionAsync(_newCollectionName.Trim());
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         _activeCollection = collection;
         _showNewCollectionDialog = false;
         await InvokeAsync(StateHasChanged); // BL-2
@@ -370,7 +691,7 @@
     private async Task AddCollectionAsync()
     {
         var collection = await CollectionRepo.AddCollectionAsync("New Collection");
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         _activeCollection = collection;
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -397,10 +718,9 @@
             Request = request,
         });
 
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.ToList();
         _selectedRequestId = request.Id;
         _selectedRequest = request;
+        await SaveActiveCollectionAsync();
         _isDirty = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -417,9 +737,66 @@
 
     private async Task OnEnvironmentsChangedAsync()
     {
-        _environments = EnvironmentRepo.Environments.ToList();
+        _environments = BuildCombinedEnvironments();
         _worksheetMode = null;
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private void OpenConfigureSecretDialog()
+    {
+        _secretNameToConfigure = MissingSecretNames.FirstOrDefault();
+        _secretValueToConfigure = string.Empty;
+        _secretConfigError = null;
+        _showConfigureSecretDialog = true;
+    }
+
+    private async Task SaveConfiguredSecretAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))
+            return;
+
+        if (ActiveEnvironment is null)
+        {
+            _secretConfigError = "Select a linked environment before configuring this secret.";
+            return;
+        }
+
+        var linkedEnv = FindLinkedRootForEnvironment(ActiveEnvironment.Id);
+        if (linkedEnv is null)
+        {
+            _secretConfigError = "Select a linked environment before configuring this secret.";
+            return;
+        }
+
+        var (linkedRoot, linkedEnvironmentFile) = linkedEnv.Value;
+
+        var variableKey = $"secret:{_secretNameToConfigure}";
+        var variable = ActiveEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, variableKey, StringComparison.OrdinalIgnoreCase));
+        if (variable is null)
+        {
+            variable = new EnvironmentVariable
+            {
+                Key = variableKey,
+                IsEnabled = true,
+                SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore,
+                CredentialKey = $"swebkit/linked/{linkedRoot.Config.Id}/{ActiveEnvironment.Name}/{_secretNameToConfigure}",
+            };
+            ActiveEnvironment.Variables.Add(variable);
+        }
+
+        if (string.IsNullOrWhiteSpace(variable.CredentialKey))
+        {
+            variable.CredentialKey = $"swebkit/linked/{linkedRoot.Config.Id}/{ActiveEnvironment.Name}/{_secretNameToConfigure}";
+        }
+
+        variable.SecretSource = EnvironmentVariableSecretSource.WindowsCredentialStore;
+        CredentialStore.Save(variable.CredentialKey, _secretValueToConfigure);
+        await LinkedFileService.SaveEnvironmentAsync(linkedEnvironmentFile.EnvironmentFilePath, ActiveEnvironment);
+        await LoadLinkedRootsAsync();
+        _showConfigureSecretDialog = false;
+        _secretValueToConfigure = string.Empty;
+        _secretConfigError = null;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnCollVarEditorSavedAsync()
@@ -432,9 +809,39 @@
     private async Task SaveRequestAsync()
     {
         if (_activeCollection is null || _selectedRequest is null) return;
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        await SaveActiveCollectionAsync();
         _isDirty = false;
         await InvokeAsync(StateHasChanged); // BL-2
+    }
+
+    private async Task SaveActiveCollectionAsync()
+    {
+        if (_activeCollection is null || _selectedRequest is null) return;
+
+        var linkedRoot = FindLinkedRootForCollection(_activeCollection.Id);
+        if (linkedRoot is not null)
+        {
+            var savedRequestId = _selectedRequest.Id;
+            var expectedStamp = FindLinkedRequestFileState(savedRequestId)?.ContentStamp;
+            var saveResult = await LinkedFileService.SaveRequestAsync(linkedRoot.ApiRootPath, _activeCollection, _selectedRequest, expectedStamp);
+            if (!saveResult.IsSuccess)
+            {
+                _linkedSaveError = saveResult.ErrorMessage;
+                return;
+            }
+
+            _linkedSaveError = null;
+            await LoadLinkedRootsAsync();
+            var refreshed = _collections.FirstOrDefault(collection => collection.Id == _activeCollection.Id);
+            _activeCollection = refreshed ?? _activeCollection;
+            _selectedRequest = FindRequestInNodes(_activeCollection.Nodes, savedRequestId);
+            _selectedRequestId = _selectedRequest?.Id;
+            return;
+        }
+
+        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
+        _linkedSaveError = null;
     }
 
     // ── Tree callbacks ─────────────────────────────────────────────────────────
@@ -455,6 +862,7 @@
         _selectedRequest = request;
         _selectedRequestId = request.Id;
         _isDirty = false;
+        _linkedSaveError = null;
 
         if (_activeCollection is not null)
         {
@@ -472,6 +880,9 @@
 
     private async Task OnAddFolderAsync(ApiCollectionNode parentNode)
     {
+        if (_activeCollection is not null && IsLinkedCollection(_activeCollection.Id))
+            return;
+
         var folder = new ApiCollectionNode
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -486,7 +897,7 @@
         else
             AddNodeToParent(_activeCollection.Nodes, parentNode.Id, folder);
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -516,27 +927,36 @@
             _activeCollection.Nodes.Add(node);
         else
             AddNodeToParent(_activeCollection.Nodes, parentNode.Id, node);
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.ToList();
         _selectedRequestId = request.Id;
         _selectedRequest = request;
+        await SaveActiveCollectionAsync();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnRenameNodeAsync((ApiCollectionNode Node, string NewName) args)
     {
         if (_activeCollection is null) return;
+        if (IsLinkedCollection(_activeCollection.Id) && args.Node.Type == ApiCollectionNodeType.Folder)
+            return;
+
         RenameNodeInTree(_activeCollection.Nodes, args.Node.Id, args.NewName);
         if (args.Node.Request is not null)
             args.Node.Request.Name = args.NewName;
-        await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.ToList();
+        _selectedRequest = args.Node.Request ?? _selectedRequest;
+        if (IsLinkedCollection(_activeCollection.Id) && args.Node.Request is not null)
+            await SaveActiveCollectionAsync();
+        else
+            await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+        _collections = CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(r => r.Collections)).ToList();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private async Task OnDeleteNodeAsync(ApiCollectionNode node)
     {
         if (_activeCollection is null) return;
+        if (IsLinkedCollection(_activeCollection.Id))
+            return;
+
         RemoveNodeFromTree(_activeCollection.Nodes, node.Id);
 
         if (_selectedRequestId is not null &&
@@ -549,7 +969,7 @@
         }
 
         await CollectionRepo.UpdateCollectionAsync(_activeCollection);
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
@@ -557,14 +977,20 @@
     {
         var collection = _collections.FirstOrDefault(c => c.Id == args.CollectionId);
         if (collection is null) return;
+        if (IsLinkedCollection(collection.Id))
+            return;
+
         collection.Name = args.NewName;
         await CollectionRepo.UpdateCollectionAsync(collection);
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         await InvokeAsync(StateHasChanged); // BL-2
     }
 
     private Task OnDeleteCollectionAsync(string collectionId)
     {
+        if (IsLinkedCollection(collectionId))
+            return Task.CompletedTask;
+
         var collection = _collections.FirstOrDefault(c => c.Id == collectionId);
         _pendingDeleteCollectionId = collectionId;
         _pendingDeleteCollectionName = collection?.Name ?? "this collection";
@@ -578,7 +1004,7 @@
         _pendingDeleteCollectionId = null;
         _pendingDeleteCollectionName = null;
         await CollectionRepo.DeleteCollectionAsync(id);
-        _collections = CollectionRepo.Collections.ToList();
+        _collections = BuildCombinedCollections();
         if (_activeCollection?.Id == id)
         {
             _activeCollection = _collections.FirstOrDefault();
@@ -649,6 +1075,72 @@
         return false;
     }
 
+    private static HttpRequestEntry? FindRequestInNodes(List<ApiCollectionNode> nodes, string requestId)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request && node.Request?.Id == requestId)
+                return node.Request;
+
+            if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var found = FindRequestInNodes(node.Children, requestId);
+                if (found is not null)
+                    return found;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsLinkedCollection(string collectionId) =>
+        _linkedRootResults.Any(root => root.Collections.Any(collection => collection.Id == collectionId));
+
+    private IReadOnlyList<string> GetMissingSecretNames(HttpRequestEntry request, ApiEnvironment? activeEnvironment)
+    {
+        var allSecretNames = ExtractSecretNames(request);
+        if (allSecretNames.Count == 0)
+            return [];
+
+        if (activeEnvironment is null)
+            return allSecretNames;
+
+        return allSecretNames.Where(name => !IsSecretConfigured(activeEnvironment, name)).ToList();
+    }
+
+    private bool IsSecretConfigured(ApiEnvironment activeEnvironment, string secretName)
+    {
+        var variable = activeEnvironment.Variables.FirstOrDefault(v => string.Equals(v.Key, $"secret:{secretName}", StringComparison.OrdinalIgnoreCase));
+        if (variable is null || !variable.IsEnabled)
+            return false;
+
+        if (variable.SecretSource == EnvironmentVariableSecretSource.AzureKeyVault)
+            return !string.IsNullOrWhiteSpace(variable.CredentialKey);
+
+        return !string.IsNullOrWhiteSpace(variable.CredentialKey) && CredentialStore.Get(variable.CredentialKey) is not null;
+    }
+
+    private static IReadOnlyList<string> ExtractSecretNames(HttpRequestEntry request)
+    {
+        var values = new List<string?>
+        {
+            request.Url,
+            request.Body.RawContent,
+            request.GraphQlQuery,
+            request.GraphQlVariables,
+        };
+        values.AddRange(request.Headers.Select(header => header.Value));
+        values.AddRange(request.QueryParams.Select(param => param.Value));
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .SelectMany(static value => System.Text.RegularExpressions.Regex.Matches(value!, "\\{\\{secret:([^}]+)\\}\\}").Select(match => match.Groups[1].Value.Trim()))
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static string GetMethodLabel(ApiRequestMethod method) => method switch
     {
         ApiRequestMethod.Get => "GET",
@@ -668,6 +1160,7 @@
     private async Task OnRequestChangedAsync()
     {
         _isDirty = true;
+        _linkedSaveError = null;
 
         // Sync ApiCollectionNode.Name from the live request name so the tree view reflects renames
         if (_selectedRequest is not null && _activeCollection is not null)
@@ -690,7 +1183,7 @@
         if (_activeCollection is null || _selectedRequest is null) return;
         try
         {
-            await CollectionRepo.UpdateCollectionAsync(_activeCollection);
+            await SaveActiveCollectionAsync();
             _isDirty = false;
             await InvokeAsync(StateHasChanged); // BL-2
         }
@@ -766,6 +1259,7 @@
     {
         // Reload collections and environments from disk after a successful import
         await Task.WhenAll(LoadCollectionsAsync(), LoadEnvironmentsAsync());
+        await LoadLinkedRootsAsync();
         _loadingCollections = false;
         await InvokeAsync(StateHasChanged); // BL-2
     }
@@ -779,6 +1273,13 @@
         {
             _shouldFocusNewCollectionInput = false;
             try { await _newCollectionInput.FocusAsync(); } catch { }
+        }
+
+        if (_shouldFocusLinkedRootInput)
+        {
+            _shouldFocusLinkedRootInput = false;
+            try { await _newLinkedRootInput.FocusAsync(); }
+            catch { }
         }
 
         // Init the splitter whenever the panels become visible for a new request.
@@ -892,4 +1393,28 @@
         _autoSaveTimer?.Dispose();
         await DisposeSplitterAsync();
     }
+
+    private LinkedCollectionRootLoadResult? FindLinkedRootForCollection(string collectionId) =>
+        _linkedRootResults.FirstOrDefault(root => root.Collections.Any(collection => collection.Id == collectionId));
+
+    private (LinkedCollectionRootLoadResult Root, LinkedEnvironmentFileState EnvironmentFile)? FindLinkedRootForEnvironment(string environmentId)
+    {
+        foreach (var root in _linkedRootResults)
+        {
+            var environmentFile = root.EnvironmentFiles.FirstOrDefault(file => file.EnvironmentId == environmentId);
+            if (environmentFile is not null)
+                return (root, environmentFile);
+        }
+
+        return null;
+    }
+
+    private LinkedRequestFileState? FindLinkedRequestFileState(string requestId) =>
+        _linkedRootResults.SelectMany(root => root.RequestFiles).FirstOrDefault(file => file.RequestId == requestId);
+
+    private List<ApiCollection> BuildCombinedCollections() =>
+        CollectionRepo.Collections.Concat(_linkedRootResults.SelectMany(root => root.Collections)).ToList();
+
+    private List<ApiEnvironment> BuildCombinedEnvironments() =>
+        EnvironmentRepo.Environments.Concat(_linkedRootResults.SelectMany(root => root.Environments)).ToList();
 }

@@ -83,6 +83,25 @@
     background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 
+.collection-tree__row--group {
+    height: 24px;
+    cursor: default;
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.collection-tree__row--group:hover {
+    background: transparent;
+}
+
+.collection-tree__row--linked-root {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
 /* ── Chevron ────────────────────────────────────────────── */
 
 .collection-tree__chevron {
@@ -155,6 +174,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.collection-tree__group-label {
+    padding-left: 4px;
+}
+
+.collection-tree__git-badge {
+    flex-shrink: 0;
+    max-width: 82px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.collection-tree__git-badge--dirty {
+    background: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface));
+    color: var(--color-warning);
 }
 
 /* ── Count badge ────────────────────────────────────────── */

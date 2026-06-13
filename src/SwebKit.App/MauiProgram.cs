@@ -56,6 +56,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ConfigurationBundleService>();
         builder.Services.AddSingleton<CollectionRepository>();
         builder.Services.AddSingleton<EnvironmentRepository>();
+        builder.Services.AddSingleton<LinkedCollectionRootRepository>();
         builder.Services.AddSingleton<IConfigurationHealthService, ConfigurationHealthService>();
         builder.Services.AddSingleton<IConfigurationProbeService, ConfigurationProbeService>();
 
@@ -177,6 +178,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGraphQlSchemaService, GraphQlSchemaService>();
         builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
         builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
+        builder.Services.AddSingleton<LinkedGitService>();
+        builder.Services.AddSingleton<LinkedCollectionFileService>();
 
         // API Client — export/import
         builder.Services.AddSingleton<SwebKitCollectionExporter>();

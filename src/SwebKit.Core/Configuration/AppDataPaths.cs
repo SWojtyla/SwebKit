@@ -29,6 +29,7 @@ public static class AppDataPaths
     public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
+    public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");
     public static string PerformanceBaselineLog => Path.Combine(Root, "logs", "performance-baseline.log");
 
     public static void EnsureDirectoryExists()

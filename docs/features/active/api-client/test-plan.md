@@ -141,3 +141,6 @@
 | 9.10 | Missing linked secret shows a configure-secret affordance and blocks only affected send | bUnit  | `SwebKit.App.Tests`  |
 | 9.11 | Git command builder scopes status/commit file paths to the configured API root only     | Unit   | `SwebKit.Core.Tests` |
 | 9.12 | Manual: open two Git repos with linked roots, edit one request in each, commit and push | Manual | —                    |
+| 9.13 | Linked environment file loads plain variables and secret references                      | Unit   | `SwebKit.Core.Tests` |
+| 9.14 | Linked environment save writes secret references, not secret values                      | Unit   | `SwebKit.Core.Tests` |
+| 9.15 | Remote compare helper infers a GitHub compare URL from origin + current branch           | Unit   | `SwebKit.Core.Tests` |

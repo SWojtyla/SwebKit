@@ -3,13 +3,11 @@
 
 <div class="collection-tree">
 
-    @* Search bar *@
     <div class="collection-tree__search">
-        <input type="text" placeholder="Filter…" class="collection-tree__search-input" value="@_filter"
+        <input type="text" placeholder="Filter..." class="collection-tree__search-input" value="@_filter"
                @oninput="OnFilterInput" aria-label="Filter collection tree" />
     </div>
 
-    @* Virtualized flat list *@
     <div class="collection-tree__rows" role="tree">
         <Virtualize Items="@_visibleNodes" Context="node" ItemSize="28" OverscanCount="8">
             <div @key="node.Id" class="collection-tree__row @GetRowClass(node)"
@@ -17,60 +15,77 @@
                  aria-selected="@(node.Node.Request?.Id == SelectedRequestId)" @onclick="() => OnRowClickAsync(node)"
                  @oncontextmenu="e => ShowContextMenu(e, node)" @oncontextmenu:preventDefault="true">
 
-                @* Expand/collapse chevron for folders *@
-                @if (node.Node.Type == ApiCollectionNodeType.Folder)
+                @if (node.Kind is FlatTreeNodeKind.Group)
                 {
-                    <button type="button" class="collection-tree__chevron"
-                            aria-label="@(node.IsExpanded ? "Collapse" : "Expand")" @onclick:stopPropagation="true"
-                            @onclick="() => ToggleExpand(node)">
-                        @(node.IsExpanded ? "▾" : "▸")
-                    </button>
+                    <span class="collection-tree__group-label">@node.Node.Name</span>
                 }
                 else
                 {
-                    <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true"></span>
-                }
+                    @if (node.Node.Type == ApiCollectionNodeType.Folder)
+                    {
+                        <button type="button" class="collection-tree__chevron"
+                                aria-label="@(node.IsExpanded ? "Collapse" : "Expand")" @onclick:stopPropagation="true"
+                                @onclick="() => ToggleExpand(node)">
+                            @(node.IsExpanded ? "v" : ">")
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="collection-tree__chevron collection-tree__chevron--spacer" aria-hidden="true"></span>
+                    }
 
-                @* Icon *@
-                @if (node.Node.Type == ApiCollectionNodeType.Folder)
-                {
-                    <span class="collection-tree__icon" aria-hidden="true">📁</span>
-                }
-                else if (node.Node.Request is not null)
-                {
-                    <span
-                        class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
-                        aria-hidden="true">
-                        @GetMethodLabel(node.Node.Request.Method)
-                    </span>
-                }
+                    @if (node.Kind == FlatTreeNodeKind.LinkedRoot)
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">repo</span>
+                    }
+                    else if (node.Node.Type == ApiCollectionNodeType.Folder)
+                    {
+                        <span class="collection-tree__icon" aria-hidden="true">dir</span>
+                    }
+                    else if (node.Node.Request is not null)
+                    {
+                        <span
+                            class="collection-tree__method-badge collection-tree__method-badge--@node.Node.Request.Method.ToString().ToLowerInvariant()"
+                            aria-hidden="true">
+                            @GetMethodLabel(node.Node.Request.Method)
+                        </span>
+                    }
 
-                @* Label or inline rename input *@
-                @if (node.Id == _renamingNodeId)
-                {
-                    <input class="collection-tree__rename-input" value="@_renameValue"
-                           @oninput="e => _renameValue = e.Value as string ?? _renameValue" @onkeydown="OnRenameKeyDownAsync"
-                           @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
-                }
-                else
-                {
-                    <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
-                }
+                    @if (node.Id == _renamingNodeId)
+                    {
+                        <input class="collection-tree__rename-input" value="@_renameValue"
+                               @oninput="e => _renameValue = e.Value as string ?? _renameValue" @onkeydown="OnRenameKeyDownAsync"
+                               @onblur="CommitRenameAsync" @onclick:stopPropagation="true" @ref="_renameInput" />
+                    }
+                    else
+                    {
+                        <span class="collection-tree__label" title="@node.Node.Name">@node.Node.Name</span>
+                    }
 
-                @* Child count badge when folder is collapsed *@
-                @if (node.Node.Type == ApiCollectionNodeType.Folder && !node.IsExpanded && node.HasChildren)
-                {
-                    <span class="collection-tree__count-badge" aria-label="@node.Node.Children.Count children">
-                        @node.Node.Children.Count
-                    </span>
+                    @if (node.Kind == FlatTreeNodeKind.LinkedRoot && node.LinkedRoot is not null)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(node.LinkedRoot.Branch))
+                        {
+                            <span class="collection-tree__git-badge" title="Current branch">@node.LinkedRoot.Branch</span>
+                        }
+                        <span class="collection-tree__git-badge @(node.LinkedRoot.ChangedFileCount > 0 ? "collection-tree__git-badge--dirty" : "")"
+                              title="SwebKit API file changes">
+                            @(node.LinkedRoot.ChangedFileCount > 0 ? $"{node.LinkedRoot.ChangedFileCount} changed" : "clean")
+                        </span>
+                    }
+                    else if (node.Node.Type == ApiCollectionNodeType.Folder && !node.IsExpanded && node.HasChildren)
+                    {
+                        <span class="collection-tree__count-badge" aria-label="@node.Node.Children.Count children">
+                            @node.Node.Children.Count
+                        </span>
+                    }
                 }
 
             </div>
         </Virtualize>
     </div>
 
-    @* Context menu (right-click) *@
-    @if (_ctxNode is not null)
+    @if (_ctxNode is not null && _ctxNode.Kind == FlatTreeNodeKind.Node)
     {
         <div class="ctx-backdrop" @onclick="() => _ctxNode = null"></div>
         <div class="ctx-menu"
@@ -82,19 +97,19 @@
             @if (isFolder)
             {
                 <button class="ctx-item" @onclick="AddSubFolderCtxAsync">
-                    <span class="ctx-item-icon">📁</span>New sub-folder
+                    <span class="ctx-item-icon">dir</span>New sub-folder
                 </button>
                 <button class="ctx-item" @onclick="AddRequestCtxAsync">
-                    <span class="ctx-item-icon">＋</span>New request here
+                    <span class="ctx-item-icon">+</span>New request here
                 </button>
                 <div class="ctx-separator"></div>
             }
             <button class="ctx-item" @onclick="BeginRenameCtx">
-                <span class="ctx-item-icon">✏️</span>@(isCollRoot ? "Rename collection" : "Rename")
+                <span class="ctx-item-icon">edit</span>@(isCollRoot ? "Rename collection" : "Rename")
             </button>
             <div class="ctx-separator"></div>
             <button class="ctx-item destructive" @onclick="DeleteNodeCtxAsync">
-                <span class="ctx-item-icon">🗑</span>@(isCollRoot ? "Delete collection" : "Delete")
+                <span class="ctx-item-icon">del</span>@(isCollRoot ? "Delete collection" : "Delete")
             </button>
         </div>
     }
@@ -103,6 +118,7 @@
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<ApiCollection> Collections { get; set; } = [];
+    [Parameter] public IReadOnlyList<LinkedCollectionTreeInfo> LinkedRoots { get; set; } = [];
     [Parameter] public string? SelectedRequestId { get; set; }
     [Parameter] public string? ActiveCollectionId { get; set; }
     [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
@@ -114,14 +130,21 @@
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
     [Parameter] public EventCallback<string> OnDeleteCollection { get; set; }
 
-    // ── Flattened tree state ──────────────────────────────────────────────────
+    private enum FlatTreeNodeKind
+    {
+        Group,
+        Node,
+        LinkedRoot,
+    }
 
     private record FlatTreeNode(
         ApiCollectionNode Node,
         int Depth,
         bool IsExpanded,
         bool HasChildren,
-        string CollectionId)
+        string CollectionId,
+        FlatTreeNodeKind Kind = FlatTreeNodeKind.Node,
+        LinkedCollectionTreeInfo? LinkedRoot = null)
     {
         public string Id => Node.Id;
     }
@@ -130,19 +153,20 @@
     private List<FlatTreeNode> _visibleNodes = [];
     private string _filter = string.Empty;
 
-    // ── BL-5 guard ────────────────────────────────────────────────────────────
-
     private IReadOnlyList<ApiCollection>? _prevCollections;
+    private IReadOnlyList<LinkedCollectionTreeInfo>? _prevLinkedRoots;
     private string? _prevSelectedRequestId;
 
     protected override void OnParametersSet()
     {
         var collectionsChanged = !ReferenceEquals(_prevCollections, Collections);
+        var linkedRootsChanged = !ReferenceEquals(_prevLinkedRoots, LinkedRoots);
         var selectionChanged = _prevSelectedRequestId != SelectedRequestId;
 
-        if (collectionsChanged)
+        if (collectionsChanged || linkedRootsChanged)
         {
             _prevCollections = Collections;
+            _prevLinkedRoots = LinkedRoots;
             RebuildFlatTree();
         }
         else if (selectionChanged)
@@ -151,37 +175,98 @@
         }
     }
 
-    protected override bool ShouldRender() => true; // allow render on all callbacks; heavy work is guarded above
-
-    // ── Tree flattening ───────────────────────────────────────────────────────
+    protected override bool ShouldRender() => true;
 
     private void RebuildFlatTree()
     {
         _flatNodes = [];
-        foreach (var collection in Collections)
+
+        if (Collections.Any(c => !IsLinkedCollection(c.Id)))
         {
-            // Collection root node (treated as a folder)
-            var collectionRootNode = new ApiCollectionNode
+            AddGroup("__group__local", "Local Collections");
+            foreach (var collection in Collections.Where(c => !IsLinkedCollection(c.Id)))
             {
-                Id = $"__col__{collection.Id}",
-                Type = ApiCollectionNodeType.Folder,
-                Name = collection.Name,
-                IsExpanded = _GetExpandedState($"__col__{collection.Id}", true),
-                Children = collection.Nodes,
-            };
+                AddCollection(collection, depth: 1);
+            }
+        }
 
-            _flatNodes.Add(new FlatTreeNode(
-                Node: collectionRootNode,
-                Depth: 0,
-                IsExpanded: collectionRootNode.IsExpanded,
-                HasChildren: collection.Nodes.Count > 0,
-                CollectionId: collection.Id));
-
-            if (collectionRootNode.IsExpanded)
-                FlattenNodes(collection.Nodes, depth: 1, collectionId: collection.Id);
+        if (LinkedRoots.Count > 0)
+        {
+            AddGroup("__group__linked", "Linked Repositories");
+            foreach (var root in LinkedRoots)
+            {
+                AddLinkedRoot(root);
+                if (_GetExpandedState($"__linked__{root.Id}", true))
+                {
+                    foreach (var collectionId in root.CollectionIds)
+                    {
+                        var collection = Collections.FirstOrDefault(c => c.Id == collectionId);
+                        if (collection is not null)
+                        {
+                            AddCollection(collection, depth: 2);
+                        }
+                    }
+                }
+            }
         }
 
         ApplyFilter();
+    }
+
+    private void AddGroup(string id, string name)
+    {
+        var groupNode = new ApiCollectionNode
+        {
+            Id = id,
+            Type = ApiCollectionNodeType.Folder,
+            Name = name,
+            IsExpanded = true,
+        };
+        _flatNodes.Add(new FlatTreeNode(groupNode, 0, true, false, string.Empty, FlatTreeNodeKind.Group));
+    }
+
+    private void AddLinkedRoot(LinkedCollectionTreeInfo root)
+    {
+        var rootNode = new ApiCollectionNode
+        {
+            Id = $"__linked__{root.Id}",
+            Type = ApiCollectionNodeType.Folder,
+            Name = root.Name,
+            IsExpanded = _GetExpandedState($"__linked__{root.Id}", true),
+        };
+
+        _flatNodes.Add(new FlatTreeNode(
+            Node: rootNode,
+            Depth: 1,
+            IsExpanded: rootNode.IsExpanded,
+            HasChildren: root.CollectionIds.Count > 0,
+            CollectionId: string.Empty,
+            Kind: FlatTreeNodeKind.LinkedRoot,
+            LinkedRoot: root));
+    }
+
+    private void AddCollection(ApiCollection collection, int depth)
+    {
+        var collectionRootNode = new ApiCollectionNode
+        {
+            Id = $"__col__{collection.Id}",
+            Type = ApiCollectionNodeType.Folder,
+            Name = collection.Name,
+            IsExpanded = _GetExpandedState($"__col__{collection.Id}", true),
+            Children = collection.Nodes,
+        };
+
+        _flatNodes.Add(new FlatTreeNode(
+            Node: collectionRootNode,
+            Depth: depth,
+            IsExpanded: collectionRootNode.IsExpanded,
+            HasChildren: collection.Nodes.Count > 0,
+            CollectionId: collection.Id));
+
+        if (collectionRootNode.IsExpanded)
+        {
+            FlattenNodes(collection.Nodes, depth + 1, collection.Id);
+        }
     }
 
     private void FlattenNodes(List<ApiCollectionNode> nodes, int depth, string collectionId)
@@ -197,16 +282,16 @@
                 CollectionId: collectionId));
 
             if (node.Type == ApiCollectionNodeType.Folder && isExpanded)
+            {
                 FlattenNodes(node.Children, depth + 1, collectionId);
+            }
         }
     }
 
-    // ── Expand/collapse state (in-memory, not persisted for perf) ─────────────
-
     private readonly Dictionary<string, bool> _expandedOverrides = new(StringComparer.Ordinal);
 
-    private bool _GetExpandedState(string nodeId, bool defaultExpanded)
-        => _expandedOverrides.TryGetValue(nodeId, out var val) ? val : defaultExpanded;
+    private bool _GetExpandedState(string nodeId, bool defaultExpanded) =>
+        _expandedOverrides.TryGetValue(nodeId, out var val) ? val : defaultExpanded;
 
     private void ToggleExpand(FlatTreeNode flatNode)
     {
@@ -214,8 +299,6 @@
         _expandedOverrides[flatNode.Node.Id] = !current;
         RebuildFlatTree();
     }
-
-    // ── Filter ─────────────────────────────────────────────────────────────────
 
     private void OnFilterInput(ChangeEventArgs e)
     {
@@ -232,20 +315,29 @@
         }
 
         _visibleNodes = _flatNodes
-            .Where(n => n.Node.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .Where(n => n.Kind != FlatTreeNodeKind.Group && n.Node.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase))
             .ToList();
     }
 
-    // ── Row interactions ───────────────────────────────────────────────────────
-
     private async Task OnRowClickAsync(FlatTreeNode flatNode)
     {
+        if (flatNode.Kind == FlatTreeNodeKind.Group)
+        {
+            return;
+        }
+
+        if (flatNode.Kind == FlatTreeNodeKind.LinkedRoot)
+        {
+            ToggleExpand(flatNode);
+            return;
+        }
+
         if (flatNode.Node.Type == ApiCollectionNodeType.Folder)
         {
-            // For collection root nodes also fire the selection event so the page
-            // can set _activeCollection and enable the New Request button.
             if (flatNode.Node.Id.StartsWith("__col__", StringComparison.Ordinal))
+            {
                 await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
+            }
 
             ToggleExpand(flatNode);
             return;
@@ -253,7 +345,6 @@
 
         if (flatNode.Node.Request is not null)
         {
-            // Ensure the owning collection is active before the request is opened.
             await OnCollectionSelected.InvokeAsync(flatNode.CollectionId);
             await OnRequestSelected.InvokeAsync(flatNode.Node.Request);
         }
@@ -261,18 +352,19 @@
 
     private void ShowContextMenu(MouseEventArgs e, FlatTreeNode node)
     {
+        if (node.Kind != FlatTreeNodeKind.Node)
+        {
+            return;
+        }
+
         _ctxNode = node;
         _ctxX = e.ClientX;
         _ctxY = e.ClientY;
     }
 
-    // ── Context menu state ────────────────────────────────────────────────────
-
     private FlatTreeNode? _ctxNode;
     private double _ctxX;
     private double _ctxY;
-
-    // ── Inline rename state ───────────────────────────────────────────────────
 
     private string? _renamingNodeId;
     private string _renameValue = "";
@@ -343,18 +435,18 @@
         {
             _shouldFocusRename = false;
             try { await _renameInput.FocusAsync(); }
-            catch { /* input may not be in viewport */ }
+            catch { }
         }
     }
 
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
     private string GetRowClass(FlatTreeNode node)
     {
-        // Selected request takes highest priority
+        if (node.Kind == FlatTreeNodeKind.Group)
+            return "collection-tree__row--group";
+        if (node.Kind == FlatTreeNodeKind.LinkedRoot)
+            return "collection-tree__row--linked-root";
         if (node.Node.Request?.Id == SelectedRequestId && SelectedRequestId is not null)
             return "collection-tree__row--selected";
-        // Active collection root gets a softer accent
         if (node.Node.Id == $"__col__{ActiveCollectionId}" && ActiveCollectionId is not null)
             return "collection-tree__row--active-collection";
         return string.Empty;
@@ -373,4 +465,7 @@
         ApiRequestMethod.WebSocket => "WS",
         _ => "GET",
     };
+
+    private bool IsLinkedCollection(string collectionId) =>
+        LinkedRoots.Any(root => root.CollectionIds.Contains(collectionId));
 }
