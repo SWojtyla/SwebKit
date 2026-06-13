@@ -15,13 +15,14 @@ SwebKit is a .NET MAUI Blazor Hybrid desktop operations tool for Azure-focused d
 - Desktop entry point and DI composition: `src/SwebKit.App/MauiProgram.cs`
 - Blazor shell host: `src/SwebKit.App/MainPage.xaml` and `src/SwebKit.App/Components/Layout/MainLayout.razor`
 - Shared domain and persistence contracts: `src/SwebKit.Core`
-- Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`, `user-settings.json`, `releases.json`, `scheduled-messages.json`, plus sibling `.bak` recovery copies)
+- Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`, `user-settings.json`, `releases.json`, `scheduled-messages.json`, API Client `collections.json`, `environments.json`, `api-linked-roots.json`, plus sibling `.bak` recovery copies where repository-backed)
 - External runtime integrations:
   - Azure Service Bus and Azure Blob Storage
   - AKS Kubernetes API
   - Redis
   - Azure DevOps REST API
   - Azure Monitor Logs API and Azure Resource Manager (Application Insights discovery)
+    - Git CLI for user-configured API Client linked repositories
 
 ## High-Level Flow
 
@@ -37,7 +38,7 @@ flowchart LR
     App --> Obs[SwebKit.Observability\nApp Insights provider and discovery]
     App --> Cred[Windows Credential Store]
 
-    Core --> LocalState[(Local JSON state\nprofiles.json, ui-state.json, user-settings.json, releases.json, scheduled-messages.json)]
+    Core --> LocalState[(Local JSON state\nprofiles.json, ui-state.json, user-settings.json, releases.json, scheduled-messages.json, API client files)]
 
     Azure --> SB[(Azure Service Bus)]
     Azure --> Blob[(Azure Blob Storage)]
@@ -135,6 +136,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 - `docs/architecture/functionalities/observability.md`
 - `docs/architecture/functionalities/incident-timeline.md`
 - `docs/architecture/functionalities/settings-and-configuration.md`
+- `docs/architecture/functionalities/api-client.md`
 
 ## Cross-Cutting Concerns
 
@@ -143,6 +145,7 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | Dependency injection              | `src/SwebKit.App/MauiProgram.cs`                                                                                                                                                                                                                                                                | Registers core services, platform services, and infrastructure clients.                                |
 | Credentials and secrets           | `src/SwebKit.App/Platforms/Windows/WindowsCredentialStore.cs`                                                                                                                                                                                                                                   | Secrets are resolved at runtime and not persisted in JSON config files.                                |
 | App-data persistence              | `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/UiStateRepository.cs`, `src/SwebKit.Core/Configuration/UserSettingsRepository.cs`, `src/SwebKit.Core/Configuration/ReleaseRepository.cs`, `src/SwebKit.Core/Configuration/ScheduledMessageRepository.cs` | Backed by `%APPDATA%/SwebKit` files via `AppDataPaths`, with atomic writes and `.bak` recovery copies. |
+| API Client persistence and linked roots | `src/SwebKit.Core/Configuration/CollectionRepository.cs`, `src/SwebKit.Core/Configuration/EnvironmentRepository.cs`, `src/SwebKit.Core/Configuration/LinkedCollectionRootRepository.cs`, `src/SwebKit.Core/Services/LinkedCollectionFileService.cs` | Local JSON state plus optional `.swebkit-api/` folders inside user repositories. |
 | Eventing and shared app state     | `src/SwebKit.Core/Services/AppEventBus.cs`, `src/SwebKit.Core/Services/AppStateService.cs`                                                                                                                                                                                                      | Coordinates area navigation, refresh events, and shared app state.                                     |
 | Demo mode routing                 | `src/SwebKit.Core/Services/Demo*Client.cs`, `src/SwebKit.Core/Services/DemoObservabilityProvider.cs`                                                                                                                                                                                            | `UseDemoData` toggles between real and synthetic providers.                                            |
 | HTTP resilience                   | `src/SwebKit.App/MauiProgram.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                                                                                                                                                       | Azure DevOps named HttpClient uses standard resilience handler with retries.                           |
@@ -163,3 +166,4 @@ Feature-level behavior notes live in `docs/architecture/functionalities/`:
 | Extend Observability querying or discovery                                  | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs` and `src/SwebKit.Observability/AzureAppInsightsProvider.cs`                                                          |
 | Extend the incident timeline workbench UI                                   | `src/SwebKit.App/Components/Pages/IncidentTimelinePage.razor`, `src/SwebKit.App/Components/IncidentTimeline/`, and `src/SwebKit.Core/Abstractions/IIncidentTimelineService.cs` |
 | Add Azure DevOps Pipelines/Releases workflow behavior                       | `src/SwebKit.Core/Abstractions/IDevOpsClient.cs` and `src/SwebKit.DevOps/DevOpsClient.cs`                                                                                      |
+| Extend API Client requests, variables, linked roots, or Git actions         | `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`, `src/SwebKit.Core/Domain/ApiClientModels.cs`, `src/SwebKit.Core/Services/LinkedCollectionFileService.cs`, and `src/SwebKit.Core/Services/LinkedGitService.cs` |

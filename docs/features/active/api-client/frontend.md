@@ -1,320 +1,117 @@
 # Frontend — API Client
 
-## Route and Page
+## Current State
 
-**Route:** `/api-client`  
-**Page:** `src/SwebKit.App/Components/Pages/ApiClientPage.razor`  
-**Subfolder:** `src/SwebKit.App/Components/ApiClient/`  
-**`_Imports.razor` addition** (BL-1 guard): `@using SwebKit.App.Components.ApiClient`
+The API Client UI is implemented as a routed MAUI Blazor page under `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`. Supporting controls live in the same `Components/ApiClient/` folder, with matching `.razor.css` files for isolated styling.
 
----
+The page uses a single-request focus model: one request is active in the request builder, with response/history state shown alongside it. Post-Phase-10 follow-up work may add pinned request tabs, but that should not happen until per-request dirty, response, subscription, and WebSocket lifecycle state is explicitly isolated.
 
-## Shell Layout
+## Layout
 
-Two-pane resizable layout. The **collection tree** sits on the left. The **right pane** contains
-the request builder (top) and response viewer (bottom), split by a horizontal splitter.
+- Top toolbar: new collection, new request, linked repo actions, save, collection variables, export/import, environment manager, active environment picker.
+- Left pane: `CollectionTree.razor` with flattened/virtualized tree rows.
+- Right pane: request builder and response viewer split by JS-resizable panes.
+- Management screens: environments, collection variables, API repositories, Git panel.
+- Dialogs: new collection, add API repository, configure linked secret, delete confirmation, export/import.
 
-The **request quick-nav panel** is a collapsible overlay (`Ctrl+P`) that lists every request
-across all collections for fast keyboard navigation — it does not take up permanent layout space.
+## Component Map
 
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│  Toolbar: [+ Collection] [+ Request]  [  Env: production ▼ ]  [↓ Export] │
-├──────────────────┬────────────────────────────────────────────────────────┤
-│  Collection Tree │  Request Builder                                        │
-│  ─────────────── │  ──────────────────────────────────────────────────    │
-│  🔍 Search       │  [GET ▼] https://{{base}}/api/v1/users   [Send]◆       │
-│                  │           └─ base = https://api.dev.acme.com            │
-│  ▶ My Collection │  ──────────────────────────────────────────────────    │
-│    ├ 📁 Users    │  Params │ Headers │ Body │ Auth │ Capture               │
-│    │ ├ GET /     │  [editor area]                                          │
-│    │ └ POST /    │  ──────────────────────────────────────────────────    │
-│    └ POST /login │  Response Viewer                                        │
-│                  │  ● 200 OK  142ms  4.2KB                                 │
-│                  │  Headers │ Body │ Raw │ Captures (⚠ 1 warning)          │
-│                  │  [Monaco read-only]                                     │
-└──────────────────┴────────────────────────────────────────────────────────┘
-```
+| Component | Responsibility |
+| --------- | -------------- |
+| `ApiClientPage.razor` | Page orchestration, repositories, linked roots, active request, save flow, Git actions, environment picker, keyboard command subscription |
+| `CollectionTree.razor` | Local and linked collection tree, search/filter, expand/collapse, request/collection/linked-root selection, rename/delete context menu |
+| `RequestBuilderPanel.razor` | Method/URL editor, Params/Headers/Body/Auth/Capture tabs, send routing for REST, GraphQL, and WebSocket/subscription modes |
+| `ResponseViewerPanel.razor` | Status, headers/body/raw views, GraphQL errors, response history, subscription messages, 500 KB display cap |
+| `EnvironmentManagerPanel.razor` / `EnvironmentEditor.razor` | Environment CRUD, plain/credential/KV/generated variable editing |
+| `CollectionVariableEditor.razor` | Collection variable editing, including generated variables |
+| `VariableGeneratorEditor.razor` | Building-block generator editor for integer, decimal, boolean, GUID, date/time, list, faker, and template values |
+| `AuthPanel.razor` and auth forms | None/inherited/Bearer/API key/Basic/OAuth 2 auth editing |
+| `GraphQlPanel.razor` | GraphQL query/variables editors, operation parsing, schema introspection |
+| `WebSocketPanel.razor` | Connect/disconnect, message log, text/binary composer, saved message templates |
+| `CollectionExportDialog.razor` | SwebKit/Postman/Bruno export and collection/environment import |
 
-◆ dirty indicator (asterisk) when unsaved and auto-save is off
+## Collection Tree and Linked Roots
 
-Pane widths persisted in `UiStateRepository` (same pattern as other page pane splits).
+The tree has two durable groups:
 
----
+- Local Collections
+- Linked Repositories
 
-## Component Inventory
+Linked repository rows show branch and clean/dirty status when Git metadata is available. Selecting a linked root makes it the target for new collection creation; selecting a collection/request clears or updates the active target as appropriate.
 
-### `ApiClientPage.razor`
+Linked-root management is surfaced through the API Repos screen and Git panel. The Git panel currently supports:
 
-- Injects `CollectionRepository`, `EnvironmentRepository`, `IHttpRequestExecutor`,
-  `IVariableSubstitutionService`, `IVariablePreviewService`, `IPostRequestCaptureExecutor`,
-  `IAuthInheritanceResolver`, `OAuth2TokenManager`
-- Owns page-level state: active collection, selected request, active environment,
-  last response, last capture result, loading/cancellation state
-- **Single-request focus model:** only one request open at a time; selecting another request
-  from the tree or quick-nav panel loads it into the builder (prompts save if dirty and
-  auto-save is off)
-- Wires the two panels, the toolbar, and the optional quick-nav overlay
-- On navigation away: calls `CancellationTokenSource.Cancel()` and
-  `IAsyncDisposable.DisposeAsync()` on any active `IGraphQlSubscriptionService`
+- branch summary and changed API file count
+- branch create
+- branch switch via dropdown of available local branches
+- stage, unstage, and revert API files under the linked root
+- commit staged API files
+- push current branch
+- open remote compare for GitHub/Azure DevOps remotes when inferable
 
-### `RequestQuickNavPanel.razor`
+Phase 11 should improve this by adding a visible target chip, in-app diff preview, staged/unstaged sections, commit preview, and explicit conflict actions.
 
-- Overlay panel toggled by `Ctrl+P` or the `[≡]` button in the toolbar
-- Lists all requests across all collections in a flat scrollable list (flattened, `<Virtualize>`)
-- Each row: `[Collection / Folder /] Request name`, method badge
-- Keyboard navigation: arrow keys to move, `Enter` to open, `Escape` to close
-- Text filter box at top: filters list by name/collection prefix
-- Does NOT take permanent layout space — shown as an overlay on the left panel
+## Request Builder
 
-### `CollectionTree.razor`
+Supported request modes:
 
-**Performance approach:** the tree is flattened into a `List<FlatTreeNode>` for `<Virtualize>`.
-Expand/collapse operations update the flattened view directly — no recursive Blazor rendering.
+- REST: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
+- GraphQL: query/mutation over HTTP, plus `graphql-ws` subscriptions
+- WebSocket: text/binary send and receive
 
-```csharp
-public record FlatTreeNode(CollectionNode Node, int Depth, bool IsExpanded,
-    bool HasChildren, string CollectionId);
-```
+The builder uses shared key/value grids for headers, query params, and form data. Auth is inheritable from folder or collection. Capture rules are edited as no-code rows and run after request execution.
 
-- Right-click context menu: Rename, Duplicate, Delete, Add Folder, Add Request
-- Double-click / single-click opens request in center panel
-- Folder nodes show child count badge when collapsed
-- Search bar at top filters the flattened list by `Name.Contains(query, OrdinalIgnoreCase)`
-  — no tree re-building required
+## Variables and Secrets UI
 
-### Phase 9 linked roots UI
+Variables can live at collection or environment scope. Environment variables override collection variables with the same key. Supported variable types are:
 
-The collection tree gains two persistent groups:
+- plain value
+- Windows Credential Store reference
+- Azure Key Vault reference
+- generated value
 
-```text
-Local Collections
-  Scratch
+Generated values use safe building blocks, not scripts. The UI stores generator definitions only; generated sample values are not persisted.
 
-Linked Repositories
-  Project A APIs        main  3 modified
-    Orders
-      GET Get Order
-      POST Create Order
-  Project B APIs        feature/auth-cleanup  clean
-```
+Secret-backed values are masked in preview surfaces. Missing linked secrets show a configure-secret prompt that stores local values in `ICredentialStore` and writes only references back to linked files.
 
-Linked root headers expose compact actions: Refresh, Open folder, Open terminal, Manage secrets,
-Git panel, and Remove from SwebKit. Removing a linked root only removes the path from SwebKit; it
-does not delete files.
+## Export and Import UI
 
-The main toolbar adds [Add linked root]. The dialog supports selecting an existing folder that
-contains `.swebkit-api/swebkit.json` or creating a new SwebKit API root in a chosen repository
-folder after confirmation.
+The export/import dialog supports:
 
-The Git panel starts as status-first: branch name, clean/dirty counts, changed API files, and
-Open terminal. Safe write actions are added after status is reliable: create branch, switch branch,
-commit selected API files, and push current branch.
+- SwebKit-native collection JSON
+- Postman Collection v2.1 import/export subset
+- Bruno export as zipped `.bru` files
+- standalone environment import
+- configuration bundle integration through the existing settings bundle flow
 
-### `RequestBuilderPanel.razor`
-
-- **Method selector:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`,
-  `GRAPHQL`, `WS` (last two route to specialised sub-panels)
-- **URL bar:** text input with `{{variable}}` inline preview: below each `{{token}}` a small
-  resolved-value badge appears (`base` → `https://api.dev.acme.com`; secrets show `••••••••`);
-  populated by `IVariablePreviewService` on URL change, debounced 300 ms
-- **Send button:** `Ctrl+Enter`; shows spinner and `[Cancel]` (`Escape`) during execution;
-  dirty indicator (asterisk in title) when request has unsaved changes and auto-save is off
-- **Body editor variable preview strip:** when body content contains `{{token}}` patterns, a
-  small collapsed strip above the Monaco editor shows resolved previews
-- Switches entirely to `WebSocketPanel` when method = WS; shows `GraphQlBodyPanel` when GRAPHQL
-
-#### Body sub-components
-
-| Sub-component            | Body type  | Editor                                             |
-| ------------------------ | ---------- | -------------------------------------------------- |
-| `BodyEditorJson.razor`   | JSON       | Monaco (`json` mode, editable)                     |
-| `BodyEditorXml.razor`    | XML        | Monaco (`xml` mode, editable)                      |
-| `BodyEditorText.razor`   | Plain text | Monaco (`plaintext` mode)                          |
-| `KeyValueGrid.razor`     | Form Data  | Reusable key-value grid (same as Params / Headers) |
-| `BodyEditorBinary.razor` | Binary     | File picker; stores temp path in state             |
-
-`KeyValueGrid.razor` is a reusable shared component used in Params, Headers, and Form Data tabs.
-It supports: add row, delete row, enable/disable toggle per row, drag-reorder (Phase 8).
-
-#### Auth sub-components
-
-| Sub-component          | Auth type                                                          |
-| ---------------------- | ------------------------------------------------------------------ |
-| `BearerAuthForm.razor` | Bearer — token input (masked), credential-store backed             |
-| `ApiKeyAuthForm.razor` | API Key — key name, value, placement radio (Header / Query Param)  |
-| `BasicAuthForm.razor`  | Basic — username + password (password masked)                      |
-| `OAuth2AuthForm.razor` | OAuth 2 — flow selector, token URL, client ID, scopes, [Get Token] |
-
-When a request has `Auth = null`, the Auth tab renders the resolved inherited auth in a greyed
-"Inherited from [folder/collection name]" banner above the form, with a [Override for this
-request] button. Clicking override copies the inherited config into the request's own `AuthConfig`.
-
-### `GraphQlBodyPanel.razor`
-
-Replaces the normal Body tab content when method = GRAPHQL.
-
-- Left: Monaco query editor (`graphql` mode)
-- Right: Monaco variables editor (`json` mode)
-- **Operation selector dropdown:** parses document for named operations on every edit
-  (debounced 500 ms); shows dropdown when ≥2 operations found; selected operation name
-  sent as `operationName` in request body
-- Footer: [Introspect Schema] button — triggers `__schema` introspection and feeds result to
-  `monaco-graphql` for autocomplete; **on introspection error:** shows a dismissible warning
-  banner above the editor, allows continued editing
-- **Subscription detection:** when the selected operation is `subscription`, the Send button
-  label changes to [Subscribe]; execution flows through `IGraphQlSubscriptionService`;
-  streaming `next` messages appear in `ResponseViewerPanel` as they arrive;
-  [Stop subscription] button replaces [Cancel] while subscribed
-
-### `WebSocketPanel.razor`
-
-Standalone panel replacing the right-panel layout when method = WS.
-
-```
-┌── WebSocket ───────────────────────────────────────────────────────────────┐
-│  Headers  │  ● Connect / ■ Disconnect              ● Connected             │
-│  [wss://{{base}}/ws]                                                       │
-├────────────────────────────────────────────────────────────────────────────┤
-│  Message log (virtualized, cap 10 000)                      [Clear log]    │
-│  ↓ 12:41:03  {"event":"connected"}                                         │
-│  ↑ 12:41:05  {"action":"subscribe","channel":"prices"}                     │
-│  ↓ 12:41:05  {"event":"ack"}                                               │
-├────────────────────────────────────────────────────────────────────────────┤
-│  [Text ▼] [Saved: subscribe ▼]  [message...]         [Send] [💾]           │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-- **Headers tab** at the top (for `Sec-WebSocket-Protocol` and other upgrade headers;
-  uses `KeyValueGrid.razor`)
-- Message type selector: Text / Binary (binary shows hex representation)
-- **Saved message templates dropdown:** populated from `WebSocketEntry.SavedMessages`;
-  selecting a template loads its content into the composer
-- **[💾 Save] button** in composer — prompts for a name, adds to `WebSocketEntry.SavedMessages`,
-  saves via `CollectionRepository`
-- `<Virtualize>` on the message log; maximum 10 000 frames retained (oldest dropped silently)
-- Connection state badge: Disconnected (grey) / Connecting (yellow) / Connected (green) / Faulted (red)
-- Consumes `IWebSocketClientService` via `IAsyncEnumerable<WebSocketMessage>` in a background task;
-  posts to UI via `InvokeAsync(StateHasChanged)` (BL-2 guard)
-
-### `ResponseViewerPanel.razor`
-
-- Status badge: colour-coded (2xx green, 3xx blue, 4xx amber, 5xx red)
-- Metadata row: elapsed time, response size, content type
-- Tab strip: **Headers** | **Body** | **Raw** | **Captures** (shown only when request has capture rules)
-- **Captures tab:** shows each rule's result — ✓ matched value or ⚠ warning message
-- Body: Monaco read-only with auto-detected language (JSON, XML, HTML, plaintext)
-- JSON auto-pretty-print on load when content-type is `application/json`
-- Body > 500 KB: shows first 500 KB + `[Load full response (X MB)]` affordance
-- Copy-to-clipboard button on body panel
-- **GraphQL subscriptions:** when streaming `next` messages, the Body tab continuously appends
-  messages (newest at top); a `[Stop subscription]` button replaces the spinner
-
-### `EnvironmentManagerPanel.razor`
-
-Accessible via toolbar environment switcher dropdown → [Manage Environments].
-
-- List of environments with [+ New] [✎ Edit] [🗑 Delete] per row
-- Active environment highlighted; clicking a row sets it as active for the page session
-- `EnvironmentEditor.razor` — inline edit within a dialog:
-  - Variable grid: key | type (Plain / Secret / Key Vault) | value
-  - Secret type: value shown as `••••••`; stored/loaded via `ICredentialStore`
-  - Key Vault type: input = KV secret name; resolved live at send time via `DefaultAzureCredential`
-  - [Test resolution] button resolves the selected variable against the current environment
-    for preview (shows result or `[KV_UNAVAILABLE]`)
-- `CollectionVariableEditor.razor` — accessible from right-click menu on collection node:
-  - Grid of key/value pairs (collection-level, always active)
-  - Separate from environment variables; always shown in variable preview
-
-### `PostRequestCaptureBuilder.razor`
-
-Rendered below the `ResponseViewerPanel` when the active request has (or is being given) capture rules.
-
-Layout per rule row:
-
-```
-[Source: Response Body (JSONPath) ▼] [$.access_token   ] → [token     ] in [Environment ▼] [🗑]
-[Source: Response Header          ▼] [Authorization    ] → [auth      ] in [Collection  ▼] [🗑]
-```
-
-- [+ Add Capture] button appends a new empty rule row
-- [Test capture] button re-evaluates all rules against the last response and shows results inline
-- Rules saved to `HttpRequestEntry.CaptureRules` on every change (auto-save or explicit save)
-- Failed rules shown with a red ⚠ icon and the error message
-
-### `CollectionExportDialog.razor`
-
-Triggered from toolbar [\u2193 Export] button.
-
-- Format selector: SwebKit Native | Postman v2.1 | Bruno
-- "Include environments" checkbox (default: checked for SwebKit, unchecked for others)
-- [Export collection] → file save dialog
-- [Import collection] → file open dialog; format auto-detected via `ICollectionImporter.CanImport`;
-  name collision → auto-renamed to "Name (2)"
-- [Import environment] → file open dialog; accepts SwebKit environment JSON or Postman
-  collection file (extracts variables as environment)
-
----
-
-## Navigation
-
-**`LeftNav.razor` addition:**
-
-```razor
-<NavLink href="/api-client" Match="NavLinkMatch.Prefix">
-    <span class="nav-icon">⚡</span>
-    API Client
-</NavLink>
-```
-
-Placed in the same nav group as Service Bus, Storage, Redis (integration tools section).
-
----
+Postman/Bruno remain projections; SwebKit's app-local model and linked-root folder format are the source schemas.
 
 ## Keyboard Shortcuts
 
-Registered in `CommandRegistry.cs` (same pattern as existing global shortcuts):
-
-| Shortcut       | Action                           | Scope                  |
-| -------------- | -------------------------------- | ---------------------- |
-| `Ctrl+Enter`   | Send current request             | API Client page active |
-| `Ctrl+N`       | New request in active collection | API Client page active |
-| `Ctrl+Shift+N` | New collection                   | API Client page active |
-| `Ctrl+E`       | Open environment manager         | API Client page active |
-| `Ctrl+P`       | Toggle request quick-nav panel   | API Client page active |
-| `Escape`       | Cancel in-flight request         | API Client page active |
-
----
-
-## Monaco Editor Integration
-
-Monaco is already integrated for YAML (AKS) and log viewing (Observability). The existing
-`wwwroot/js/` interop modules are extended:
-
-**New JS module:** `src/SwebKit.App/wwwroot/js/apiClientEditor.js`
-
-Exports:
-
-- `initEditor(containerId, language, readOnly, initialContent)` → returns editor instance ref
-- `setContent(editorRef, content)`
-- `getContent(editorRef)` → `string`
-- `setLanguage(editorRef, language)`
-- `setSchema(editorRef, schemaJson)` → feeds GraphQL schema to `monaco-graphql`
-- `disposeEditor(editorRef)`
-
-**Lazy loading:** Monaco JS is loaded via dynamic `import()` on first invocation of `initEditor`.
-The module is NOT imported at app startup. This keeps the initial WebView load time unaffected.
-
-**Languages registered:** `json`, `xml`, `html`, `graphql` (via `monaco-graphql`), `plaintext`
-
----
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl+N` | New request in active collection |
+| `Ctrl+Shift+N` | New collection |
+| `Ctrl+E` | Toggle environment manager |
+| `Ctrl+Enter` | Send current request |
+| `Escape` | Cancel in-flight request where supported |
 
 ## Performance Guards
 
-| Surface               | Guard                               | Implementation                                                |
-| --------------------- | ----------------------------------- | ------------------------------------------------------------- |
-| Collection tree       | Flattened `<Virtualize>` list       | `FlatTreeNode` list; expand collapses in-place                |
-| WebSocket message log | `<Virtualize>` on message list      | Max 10 000 frames retained in memory                          |
-| Response body         | 500 KB cap                          | Read limited in `HttpRequestExecutor`; [Load full] affordance |
-| Monaco init           | Lazy load                           | Dynamic JS `import()` on first editor mount                   |
-| Collection load       | Repository returns list in one read | No per-request lazy loading from disk                         |
+- `CollectionTree.razor` uses a flattened list with `<Virtualize>`.
+- WebSocket message log is virtualized and capped.
+- GraphQL subscription messages are capped at 1,000 in page state.
+- Response body display is capped at 500 KB until the user loads the full response.
+- Monaco assets are pre-warmed when the API Client page initializes and editor interop waits for DOM availability.
+
+## Planned UI Follow-Up
+
+See `polish-roadmap.md` for the ordered post-Phase-10 plan:
+
+1. Target chip and conflict actions.
+2. In-app Git diff preview.
+3. Copy as cURL and variable inspector.
+4. Import from cURL.
+5. Pinned request tabs.
+6. Saved response examples.
+7. Collection runner.

@@ -1,572 +1,197 @@
 # Backend — API Client
 
+## Current State
+
+The API Client backend lives mostly in `SwebKit.Core`, with UI orchestration and Windows-specific secret storage in `SwebKit.App`, and Key Vault resolution in `SwebKit.Azure`.
+
+The current model is class-based mutable state optimized for Blazor editing and JSON persistence. Earlier record-based proposal shapes are superseded by `src/SwebKit.Core/Domain/ApiClientModels.cs` and `src/SwebKit.Core/Domain/LinkedCollectionModels.cs`.
+
 ## Domain Model
 
-**New file:** `src/SwebKit.Core/Domain/ApiClientModels.cs`
+| Type | Purpose |
+| ---- | ------- |
+| `ApiCollection` | Top-level named collection with nodes, collection variables, and optional default auth |
+| `ApiCollectionNode` | Folder or request tree node; folders can carry child nodes and default auth |
+| `HttpRequestEntry` | REST, GraphQL, or WebSocket request definition |
+| `RequestBody` | Body mode and raw/form/binary content metadata |
+| `AuthConfig` | None/inherited/Bearer/API key/Basic/OAuth 2 auth config; secret values remain in `ICredentialStore` |
+| `CaptureRule` | No-code post-request capture definition |
+| `ApiEnvironment` / `EnvironmentVariable` | Environment variable set with plain, Windows Credential Store, Key Vault, or generated variables |
+| `VariableGeneratorDefinition` | Safe generated variable definition for primitive, faker, list, and template values |
+| `LinkedCollectionRootConfig` | User-local linked root registration stored in `api-linked-roots.json` |
+| `LinkedGitStatus` / `LinkedGitChangedFile` | Scoped Git status for files under a linked API root |
 
-Follows the same record-based immutable design used throughout `SwebKit.Core/Domain/`.
+## App-Local Persistence
 
-```csharp
-// ── Persisted root ──────────────────────────────────────────────────────────
+| Store | File | Repository |
+| ----- | ---- | ---------- |
+| Collections | `%APPDATA%/SwebKit/collections.json` | `CollectionRepository` |
+| Environments and API UI state | `%APPDATA%/SwebKit/environments.json` | `EnvironmentRepository` |
+| Linked root registrations | `%APPDATA%/SwebKit/api-linked-roots.json` | `LinkedCollectionRootRepository` |
 
-public record ApiClientData
-{
-    public List<Collection> Collections { get; init; } = [];
-    public string? ActiveEnvironmentId { get; init; }
-    public string SchemaVersion { get; init; } = "1";
-}
+Repositories use the existing `AppDataFileStore` atomic write and `.bak` recovery pattern. Local collections are separate from linked-root collections; linked files are loaded from disk and treated as their own source of truth.
 
-// ── Collections and nodes ────────────────────────────────────────────────────
+## Linked Root Folder Format
 
-public record Collection(string Id, string Name)
-{
-    public string? Description { get; init; }
-    public List<CollectionNode> Nodes { get; init; } = [];
-    public List<CollectionVariable> CollectionVariables { get; init; } = [];
-    public AuthConfig? DefaultAuth { get; init; }  // inherited by all requests in this collection
-}
+Linked API roots use `.swebkit-api/` under a user-selected repository folder:
 
-// Always-active variables scoped to one collection; no environment needed.
-// Resolution: collection vars first, then env vars (env takes precedence on same key).
-public record CollectionVariable(string Key, CollectionVariableType Type)
-{
-    public string? PlainValue { get; init; }
-    public string? CredentialStoreKey { get; init; }  // SecretStore type
-}
-
-public enum CollectionVariableType { Plain, SecretStore }
-
-// Polymorphic node — folder or request leaf
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "nodeType")]
-[JsonDerivedType(typeof(RequestFolder), "folder")]
-[JsonDerivedType(typeof(HttpRequestEntry), "request")]
-[JsonDerivedType(typeof(WebSocketEntry), "websocket")]
-public abstract record CollectionNode(string Id, string Name);
-
-public record RequestFolder(string Id, string Name) : CollectionNode(Id, Name)
-{
-    public List<CollectionNode> Children { get; init; } = [];
-    public AuthConfig? DefaultAuth { get; init; }  // inherited by requests in this folder
-}
-
-public record HttpRequestEntry(string Id, string Name, string Method, string Url)
-    : CollectionNode(Id, Name)
-{
-    public List<HeaderEntry> Headers { get; init; } = [];
-    public List<QueryParam> QueryParams { get; init; } = [];
-    public RequestBody? Body { get; init; }
-    // null means "inherit auth from parent folder or collection" (see IAuthInheritanceResolver)
-    public AuthConfig? Auth { get; init; }
-    // GraphQL — null for non-GraphQL requests
-    public string? GraphQlVariables { get; init; }
-    // Post-request capture rules — applied after response received
-    public List<CaptureRule> CaptureRules { get; init; } = [];
-}
-
-public record WebSocketEntry(string Id, string Name, string Url)
-    : CollectionNode(Id, Name)
-{
-    public List<HeaderEntry> Headers { get; init; } = [];  // includes Sec-WebSocket-Protocol
-    public List<SavedMessage> SavedMessages { get; init; } = [];
-}
-
-public record SavedMessage(string Name, string Content);
-
-public record HeaderEntry(string Key, string Value, bool Enabled = true);
-public record QueryParam(string Key, string Value, bool Enabled = true);
-
-// ── Request body ─────────────────────────────────────────────────────────────
-
-public record RequestBody(RequestBodyType Type)
-{
-    public string? Content { get; init; }                  // raw JSON/XML/Text
-    public List<FormField>? FormFields { get; init; }      // FormData
-    // Binary path stored as a credential-store reference or temp path — never persisted inline
-}
-
-public enum RequestBodyType { None, Json, Xml, Text, FormData, Binary }
-
-public record FormField(string Key, string Value, bool Enabled = true);
-
-// ── Post-request capture rules ────────────────────────────────────────────────
-// Rules applied after response received; populate collection or environment variables
-// automatically using building blocks — no code writing required.
-
-public record CaptureRule(CaptureSourceType SourceType, string SourceExpression,
-    string TargetVariableName, CaptureTargetScope TargetScope);
-
-public enum CaptureSourceType
-{
-    JsonPath,       // SourceExpression is a JSONPath expression evaluated on response body
-    Header,         // SourceExpression is the response header name
-    StatusCode      // SourceExpression ignored; captures HTTP status code as string
-}
-
-public enum CaptureTargetScope { Collection, Environment }
-
-// ── Authentication ────────────────────────────────────────────────────────────
-
-// SECURITY: AuthConfig stores only a CredentialKey reference into ICredentialStore.
-// Actual tokens, passwords, and client secrets are NEVER written to collections.json.
-public record AuthConfig(AuthType Type)
-{
-    public string? CredentialKey { get; init; }       // bearer, basic, OAuth2 token/secret
-    public string? ApiKeyName { get; init; }
-    public ApiKeyPlacement ApiKeyPlacement { get; init; }
-    public OAuth2Config? OAuth2 { get; init; }
-}
-
-public enum AuthType { None, BearerToken, ApiKey, Basic, OAuth2ClientCredentials, OAuth2AuthCode }
-public enum ApiKeyPlacement { Header, QueryParam }
-
-public record OAuth2Config(string TokenUrl, string ClientId, string Scopes)
-{
-    // ClientSecret itself stored in ICredentialStore via AuthConfig.CredentialKey
-    public string? AuthorizationUrl { get; init; }    // auth code flow only
-    public string? RedirectUri { get; init; }
-}
+```text
+.swebkit-api/
+  swebkit.json
+  collections/
+    orders/
+      collection.json
+      get-order.swebreq.json
+      create-order.body.json
+  environments/
+    dev.swebenv.json
 ```
 
-**New file:** `src/SwebKit.Core/Domain/ApiClientEnvironmentModels.cs`
-
-```csharp
-public record ApiEnvironmentData
-{
-    public List<ApiEnvironment> Environments { get; init; } = [];
-    public string SchemaVersion { get; init; } = "1";
-}
-
-public record ApiEnvironment(string Id, string Name)
-{
-    public List<EnvironmentVariable> Variables { get; init; } = [];
-}
-
-public record EnvironmentVariable(string Key, EnvironmentVariableType Type)
-{
-    public string? PlainValue { get; init; }
-    public string? CredentialStoreKey { get; init; }    // SecretStore type
-    public string? KeyVaultSecretName { get; init; }    // KeyVault type
-}
-
-public enum EnvironmentVariableType { Plain, SecretStore, KeyVault }
-```
-
----
-
-## Repositories (SwebKit.Core/Configuration/)
-
-### `CollectionRepository.cs`
-
-Follows the exact same pattern as `ProfileRepository` and `UiStateRepository`:
-
-- `LoadAsync()` → tries `collections.json`, falls back to `collections.json.bak`, returns
-  default `ApiClientData` if both missing
-- `SaveAsync(ApiClientData data)` → atomic temp-file replace → refresh `.bak`
-- Uses `AppDataFileStore` for path resolution
-- `JsonSerializerContext` extended with `ApiClientData`
-
-### `EnvironmentRepository.cs`
-
-Same pattern; persists `environments.json` / `environments.json.bak`.
-
-Both repositories registered as **singletons** in `MauiProgram.cs` (same as `ProfileRepository`).
-
----
-
-## HTTP Request Executor
-
-**Contract:** `src/SwebKit.Core/Abstractions/IHttpRequestExecutor.cs`
-
-```csharp
-public interface IHttpRequestExecutor
-{
-    Task<HttpRequestResult> ExecuteAsync(
-        HttpRequestEntry request,
-        ApiEnvironment? environment,
-        CancellationToken cancellationToken = default);
-}
-
-public record HttpRequestResult(
-    int StatusCode,
-    string StatusText,
-    List<HeaderEntry> ResponseHeaders,
-    string Body,
-    TimeSpan Elapsed,
-    long ResponseSizeBytes,
-    bool IsSuccess);
-```
-
-**Implementation:** `src/SwebKit.Core/Services/HttpRequestExecutor.cs`
-
-- Receives `IHttpClientFactory` (named client `"ApiClient"` registered in `MauiProgram.cs`)
-- Calls `IVariableSubstitutionService.SubstituteAsync` on URL, header values, and body before send
-- Injects auth via `IAuthHeaderBuilder` helper (per `AuthType`)
-- Caps response body read at 500 KB; sets `ResponseSizeBytes` to actual content-length when known
-- Returns `HttpRequestResult` with `IsSuccess = statusCode < 400`
-- `GraphQL` pseudo-method → serialises as `POST` with `Content-Type: application/json` and
-  body `{ "query": "...", "variables": {...} }`
-
----
-
-## Variable Substitution Service
-
-**Contract:** `src/SwebKit.Core/Abstractions/IVariableSubstitutionService.cs`
-
-```csharp
-public interface IVariableSubstitutionService
-{
-    Task<string> SubstituteAsync(
-        string input,
-        ApiEnvironment? environment,
-        CancellationToken ct = default);
-}
-```
-
-**Implementation:** `src/SwebKit.Core/Services/VariableSubstitutionService.cs`
-
-- Regex: `\{\{([^}]+)\}\}` — matches all `{{key}}` tokens
-- **Resolution order per token** (first match wins):
-  1. Environment variable (plain value) from active `ApiEnvironment.Variables`
-  2. Environment secret via `ICredentialStore` (masked in preview, substituted for execution)
-  3. Environment KV type via `IKeyVaultSecretResolver.ResolveAsync`
-  4. Collection variable (plain value) from `Collection.CollectionVariables`
-  5. Collection secret via `ICredentialStore`
-     > Environment variables override collection variables on the same key.
-- When KV resolver returns `null` → substitutes `[KV_UNAVAILABLE:key]`
-- When no environment active → only collection variables are resolved; unmatched tokens preserved
-- Registered as `Scoped`
-
----
-
-## Variable Preview Service
-
-**Contract:** `src/SwebKit.Core/Abstractions/IVariablePreviewService.cs`
-
-```csharp
-public interface IVariablePreviewService
-{
-    // Returns all {{key}} tokens found in input, mapped to their preview value.
-    // Secrets are returned as "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" (masked).
-    // KV variables show the secret name (not the secret value) for safety.
-    Task<IReadOnlyDictionary<string, string>> PreviewAsync(
-        string input,
-        Collection collection,
-        ApiEnvironment? environment,
-        CancellationToken ct = default);
-}
-```
-
-**Implementation:** `src/SwebKit.Core/Services/VariablePreviewService.cs`
-
-- Same regex as substitution service; does NOT call `IKeyVaultSecretResolver` (preview only)
-- Secrets: returns `"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"` regardless of actual value
-- Unresolved tokens returned as `null` value (UI renders as greyed-out)
-- Registered as `Scoped`
-
----
-
-## Post-Request Capture Executor
-
-**Contract:** `src/SwebKit.Core/Abstractions/IPostRequestCaptureExecutor.cs`
-
-```csharp
-public interface IPostRequestCaptureExecutor
-{
-    Task<CaptureExecutionResult> ExecuteAsync(
-        IReadOnlyList<CaptureRule> rules,
-        HttpRequestResult response,
-        Collection collection,
-        ApiEnvironment? environment,
-        CancellationToken ct = default);
-}
-
-public record CaptureExecutionResult(
-    int SuccessCount,
-    IReadOnlyList<CaptureWarning> Warnings);
-
-public record CaptureWarning(string RuleSummary, string Reason);
-```
-
-**Implementation:** `src/SwebKit.Core/Services/PostRequestCaptureExecutor.cs`
-
-- For each `CaptureRule`:
-  - `JsonPath`: parse `response.Body` as `JsonDocument`, evaluate expression using `JsonPath.Net`;
-    extracted value cast to string; on any exception → adds a `CaptureWarning`, continues
-  - `Header`: look up `response.ResponseHeaders` by key (case-insensitive); missing → `CaptureWarning`
-  - `StatusCode`: captures `response.StatusCode.ToString()`
-- Successful extraction:
-  - `TargetScope.Collection` → calls `CollectionRepository.UpdateCollectionVariableAsync`
-  - `TargetScope.Environment` → calls `EnvironmentRepository.UpdateVariableAsync`
-- Never throws; all errors become `CaptureWarning` entries
-- `HttpRequestExecutor.ExecuteAsync` calls this after receiving the response
-- Registered as `Scoped`
-
-**New NuGet:** `JsonPath.Net` (`json-everything` suite) added to `SwebKit.Core`
-
----
-
-## Auth Inheritance Resolver
-
-**Contract:** `src/SwebKit.Core/Abstractions/IAuthInheritanceResolver.cs`
-
-```csharp
-public interface IAuthInheritanceResolver
-{
-    // Returns the effective AuthConfig for a request, walking up the tree.
-    // Returns null only when no auth is configured anywhere in the hierarchy.
-    AuthConfig? Resolve(
-        HttpRequestEntry request,
-        RequestFolder? parentFolder,
-        Collection collection);
-}
-```
-
-**Implementation:** `src/SwebKit.Core/Services/AuthInheritanceResolver.cs`
-
-- Returns `request.Auth` if non-null
-- Else walks parent `RequestFolder.DefaultAuth` (caller provides direct parent)
-- Else returns `collection.DefaultAuth`
-- `HttpRequestExecutor` resolves auth before injecting headers
-- Registered as `Scoped`
-
----
-
-## GraphQL Subscription Service
-
-**Contract:** `src/SwebKit.Core/Abstractions/IGraphQlSubscriptionService.cs`
-
-```csharp
-public interface IGraphQlSubscriptionService : IAsyncDisposable
-{
-    GraphQlSubscriptionState State { get; }
-    IAsyncEnumerable<string> SubscribeAsync(
-        string url,
-        string query,
-        string? variables,
-        string? operationName,
-        IReadOnlyList<HeaderEntry> headers,
-        CancellationToken ct = default);
-    Task StopAsync();
-}
-
-public enum GraphQlSubscriptionState { Disconnected, Connecting, Subscribed, Faulted }
-```
-
-**Implementation:** `src/SwebKit.Core/Services/GraphQlSubscriptionService.cs`
-
-- Uses `IWebSocketClientService` internally (transient; injected via factory `Func<IWebSocketClientService>`)
-- `graphql-ws` protocol framing:
-  1. `ConnectAsync` with `Sec-WebSocket-Protocol: graphql-transport-ws`
-  2. Send `{"type":"connection_init"}`
-  3. Await `connection_ack`
-  4. Send `{"type":"subscribe","id":"1","payload":{"query":"...","variables":{...}}}`
-  5. Yield each `next` message's `data` payload as a JSON string
-  6. Stop on `complete`, `error`, or cancellation
-- `StopAsync` sends `{"type":"complete","id":"1"}` and disconnects
-- Registered as `Transient`
-
----
-
-## Postman Import — Environment Extraction
-
-`PostmanCollectionImporter` extended:
-
-- Reads `collection.variable[]` array (Postman collection-level variables)
-- Creates a new `ApiEnvironment` named `"<CollectionName> (imported)"` containing those variables
-  as plain-value environment variables
-- Returns both the `Collection` and the extracted `ApiEnvironment` in `ImportResult`
-- `ImportResult` extended: `ApiEnvironment? ExtractedEnvironment`
-- If `ExtractedEnvironment` is non-null, the import dialog offers to activate it automatically
-
----
-
-## Standalone Environment Import
-
-**New contract:** `src/SwebKit.Core/Abstractions/IEnvironmentImporter.cs`
-
-```csharp
-public interface IEnvironmentImporter
-{
-    Task<EnvironmentImportResult> ImportAsync(Stream source, CancellationToken ct = default);
-    bool CanImport(string fileExtension, byte[] header);
-}
-
-public record EnvironmentImportResult(
-    bool Success,
-    ApiEnvironment? Environment,
-    string? ErrorMessage);
-```
-
-**Implementation:** `SwebKitEnvironmentImporter` — reads SwebKit-native environment JSON (same schema as
-`environments.json` `ApiEnvironmentData`); name collision on import renames to "Name (2)"
-
-**Contract:** `src/SwebKit.Core/Abstractions/IKeyVaultSecretResolver.cs`
-
-```csharp
-public interface IKeyVaultSecretResolver
-{
-    Task<string?> ResolveAsync(string secretName, CancellationToken ct = default);
-}
-```
-
-**Implementation:** `src/SwebKit.Azure/KeyVaultSecretResolver.cs`
-
-- Uses `Azure.Security.KeyVault.Secrets.SecretClient` with `DefaultAzureCredential`
-- KV URL sourced from `AppConfig.KeyVault.Url` (new property under `AppConfig`)
-- Returns `null` (never throws) on `RequestFailedException` or `CredentialUnavailableException`
-- Registered as `Scoped`; `NoopKeyVaultSecretResolver` stub registered when KV URL is absent
-
-**`AppConfig` addition:** `src/SwebKit.Core/Domain/AppConfig.cs`
-
-```csharp
-public class AppConfig
-{
-    // ... existing fields ...
-    public KeyVaultConfig? KeyVault { get; set; }
-}
-
-public class KeyVaultConfig
-{
-    public string? Url { get; set; }
-}
-```
-
----
-
-## OAuth 2 Token Manager
-
-**New file:** `src/SwebKit.Core/Services/OAuth2TokenManager.cs`
-
-- **Client credentials flow:** POST to `OAuth2Config.TokenUrl` with `client_id`, `client_secret`
-  (resolved from `ICredentialStore`), `scope`, `grant_type=client_credentials`
-- **Auth code flow:** calls `Microsoft.Maui.Authentication.WebAuthenticator.AuthenticateAsync`
-  with PKCE; exchanges code for token
-- In-memory token cache keyed by `AuthConfig.CredentialKey`; checks `expires_in` and re-fetches
-  within 60 seconds of expiry
-- Never stores the fetched token to disk — only lives in the cache for the session
-
----
-
-## WebSocket Client Service
-
-**Contract:** `src/SwebKit.Core/Abstractions/IWebSocketClientService.cs`
-
-```csharp
-public interface IWebSocketClientService : IAsyncDisposable
-{
-    WebSocketConnectionState State { get; }
-    IAsyncEnumerable<WebSocketMessage> ReceiveAsync(CancellationToken ct = default);
-    // subprotocols: passed as Sec-WebSocket-Protocol header values
-    Task ConnectAsync(string url, IReadOnlyList<HeaderEntry> headers,
-        IReadOnlyList<string>? subprotocols = null, CancellationToken ct = default);
-    Task SendTextAsync(string message, CancellationToken ct = default);
-    Task SendBinaryAsync(byte[] data, CancellationToken ct = default);
-    Task DisconnectAsync();
-}
-
-public record WebSocketMessage(WebSocketMessageDirection Direction, string Content,
-    bool IsBinary, DateTimeOffset Timestamp);
-
-public enum WebSocketMessageDirection { Sent, Received }
-public enum WebSocketConnectionState { Disconnected, Connecting, Connected, Faulted }
-```
-
-**Implementation:** `src/SwebKit.Core/Services/WebSocketClientService.cs`
-
-- Wraps `System.Net.WebSockets.ClientWebSocket` — no third-party dependency
-- Uses `Channel<WebSocketMessage>` for the receive pipe; `ReceiveAsync` exposes
-  `IAsyncEnumerable<WebSocketMessage>` via `channel.Reader.ReadAllAsync`
-- Background receive loop started on `ConnectAsync`; faults the channel on socket error
-- `IAsyncDisposable.DisposeAsync` aborts the socket if still open
-- Registered as **transient** (each WebSocket panel creates its own instance)
-
----
-
-## Export/Import Contracts
-
-`src/SwebKit.Core/Abstractions/`
-
-```csharp
-public interface ICollectionExporter
-{
-    Task<byte[]> ExportAsync(Collection collection, ExportOptions options,
-        CancellationToken ct = default);
-    string DefaultFileExtension { get; }
-    string FormatDisplayName { get; }
-}
-
-public interface ICollectionImporter
-{
-    Task<ImportResult> ImportAsync(Stream source, CancellationToken ct = default);
-    bool CanImport(string fileExtension, byte[] header);  // format auto-detection
-}
-
-public record ExportOptions(bool IncludeEnvironments = true);
-
-public record ImportResult(bool Success, Collection? Collection,
-    ApiEnvironment? Environment, string? ErrorMessage);
-```
-
-**Implementations:** `src/SwebKit.Core/Services/ApiClient/`
-
-| Class                                                     | Format                     | Notes                                               |
-| --------------------------------------------------------- | -------------------------- | --------------------------------------------------- |
-| `SwebKitCollectionExporter` / `SwebKitCollectionImporter` | `SwebKitCollectionV1` JSON | Round-trip lossless                                 |
-| `PostmanCollectionExporter`                               | Postman v2.1 JSON          | Projection; test scripts omitted                    |
-| `PostmanCollectionImporter`                               | Postman v2.1 JSON          | Maps folders/requests/headers/body; ignores `event` |
-| `BrunoCollectionExporter`                                 | `.bru` per-request zip     | Export only in Phase 7                              |
-
-**Bundle integration:** `src/SwebKit.Core/Services/ConfigurationBundleService.cs`
-
-- `ExportAsync` extended to include `ApiClientData` snapshot from `CollectionRepository`
-  and `ApiEnvironmentData` snapshot from `EnvironmentRepository`
-- `ConfigurationBundleModels.cs` extended with nullable `CollectionsData` and `EnvironmentsData`
-  (backward-compatible — existing bundles without these fields restore cleanly)
-
----
-
-## DI Registrations (MauiProgram.cs additions summary)
-
-```csharp
-// Repositories (singleton — shared app state)
-builder.Services.AddSingleton<CollectionRepository>();
-builder.Services.AddSingleton<EnvironmentRepository>();
-
-// Scoped — per Blazor scope
-builder.Services.AddScoped<IHttpRequestExecutor, HttpRequestExecutor>();
-builder.Services.AddScoped<IVariableSubstitutionService, VariableSubstitutionService>();
-builder.Services.AddScoped<IVariablePreviewService, VariablePreviewService>();
-builder.Services.AddScoped<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
-builder.Services.AddScoped<IAuthInheritanceResolver, AuthInheritanceResolver>();
-builder.Services.AddScoped<OAuth2TokenManager>();
-
-// Key Vault (conditional registration)
-if (appConfig.KeyVault?.Url is not null)
-    builder.Services.AddScoped<IKeyVaultSecretResolver, AzureKeyVaultSecretResolver>();
-else
-    builder.Services.AddScoped<IKeyVaultSecretResolver, NoopKeyVaultSecretResolver>();
-
-// WebSocket (transient — one per panel/subscription instance)
-builder.Services.AddTransient<IWebSocketClientService, WebSocketClientService>();
-builder.Services.AddTransient<IGraphQlSubscriptionService, GraphQlSubscriptionService>();
-
-// Export/Import
-builder.Services.AddSingleton<ICollectionExporter, SwebKitCollectionExporter>();
-builder.Services.AddSingleton<ICollectionExporter, PostmanCollectionExporter>();
-builder.Services.AddSingleton<ICollectionExporter, BrunoCollectionExporter>();
-builder.Services.AddSingleton<ICollectionImporter, SwebKitCollectionImporter>();
-builder.Services.AddSingleton<ICollectionImporter, PostmanCollectionImporter>();
-
-// Named HttpClient for request execution
-builder.Services.AddHttpClient("ApiClient");
-```
-
----
-
-## New NuGet Packages Required
-
-| Package                                                                               | Project         | Phase |
-| ------------------------------------------------------------------------------------- | --------------- | ----- |
-| `Azure.Security.KeyVault.Secrets`                                                     | `SwebKit.Azure` | 3     |
-| `JsonPath.Net` (json-everything suite)                                                | `SwebKit.Core`  | 3     |
-| _(no new packages for OAuth2 — uses `Microsoft.Maui.Authentication` already in MAUI)_ | —               | 4     |
+`LinkedCollectionFileService` owns:
+
+- root creation and manifest discovery
+- compact request file read/write with default inference
+- body/query/variables sidecar handling
+- linked environment read/write
+- generated variable sections in collection manifests and environment files
+- request content stamps for external-change conflict detection
+- linked collection folder creation
+
+Linked files store secret references only. Secret values are resolved from Windows Credential Store or Key Vault at send time.
+
+## Git Integration
+
+`LinkedGitService` shells out to the installed Git CLI with fixed argument builders. It never accepts arbitrary Git command text.
+
+Implemented operations:
+
+- detect repository root, current branch, and changed API files
+- list local branches for dropdown switching
+- create branch
+- switch branch when linked API root is clean unless explicitly allowed by caller
+- stage and unstage changed API files under the linked API root
+- revert changed API files under the linked API root
+- commit staged API files while rejecting unrelated staged files outside the API root
+- commit all API-root changes through the legacy scoped commit helper
+- push current branch
+- infer GitHub and Azure DevOps remote compare URLs
+
+Guardrails:
+
+- status and changed file lists are filtered to the configured API root
+- commits from the staged flow reject non-API staged files
+- revert operates only on changed files already reported under the API root
+- pull, rebase, stash, arbitrary command execution, and PR creation are out of scope
+
+## Request Execution
+
+`HttpRequestExecutor` uses the named `HttpClient` `ApiClient` registered in `MauiProgram.cs`.
+
+Execution flow:
+
+1. Build variable scope through `IVariableSubstitutionService.BuildScopeAsync`.
+2. Substitute URL, headers, query params, body, and GraphQL fields.
+3. Resolve and apply inherited or request-level auth through `IAuthInheritanceResolver` and `IAuthHeaderBuilder`.
+4. Send HTTP request with the named client.
+5. Parse GraphQL errors when applicable.
+6. Run post-request capture rules through `IPostRequestCaptureExecutor`.
+7. Return `HttpRequestResult` to the UI.
+
+Response display caps are enforced in the UI at 500 KB. The executor keeps the wire cap/truncation contract for large responses.
+
+## Variables, Secrets, and Generated Values
+
+`VariableSubstitutionService` merges enabled collection variables and active environment variables. Environment values override collection values with the same key.
+
+Supported values:
+
+- plain string values
+- Windows Credential Store values via `ICredentialStore`
+- Azure Key Vault values via `IKeyVaultSecretResolver`
+- generated values through `IVariableGeneratorService`
+
+`VariableGeneratorService` supports:
+
+- integer range
+- decimal range
+- boolean with true-weight percentage
+- GUID
+- UTC date/time
+- list pick
+- Bogus-backed faker categories: first name, last name, full name, email, phone, company
+- template composition using existing scope values
+
+Generated sample values are never persisted; only `VariableGeneratorDefinition` is stored.
+
+`VariablePreviewService` returns masked values for secret-like token names and `null` for unresolved tokens. The post-Phase-10 roadmap adds a richer variable inspector that should expose source and warning metadata, not just preview text.
+
+## Authentication
+
+Auth can be attached at request, folder, or collection level. `null` request auth means inherit. Explicit `AuthType.None` opts out of inheritance.
+
+Supported auth types:
+
+- none
+- inherited
+- bearer token
+- API key in header or query param
+- Basic auth
+- OAuth 2 client credentials
+- OAuth 2 authorization code with PKCE through MAUI `WebAuthenticator`
+
+OAuth redirect uses `sweb://oauth` per DEC-17. Tokens and client secrets are referenced by credential key; values are not persisted in collection JSON or linked files.
+
+## GraphQL and WebSocket Services
+
+| Service | Responsibility |
+| ------- | -------------- |
+| `GraphQlSchemaService` | Schema introspection, operation parsing, and per-endpoint schema cache |
+| `GraphQlSubscriptionService` | `graphql-ws` protocol framing over `IWebSocketClientService` |
+| `WebSocketClientService` | `ClientWebSocket` wrapper with bounded `Channel<WebSocketMessage>` receive pipe |
+
+`IWebSocketClientService` is transient because a WebSocket connection is tied to a panel/request lifetime. `GraphQlSubscriptionService` is transient for the same reason.
+
+## Export and Import
+
+Implemented formats:
+
+| Format | Service | Direction | Notes |
+| ------ | ------- | --------- | ----- |
+| SwebKit JSON | `SwebKitCollectionExporter` / `SwebKitCollectionImporter` | import/export | Lossless app-owned format |
+| SwebKit environment JSON | `SwebKitEnvironmentImporter` | import | Standalone environment import |
+| Postman v2.1 | `PostmanCollectionExporter` / `PostmanCollectionImporter` | import/export | Focused subset; scripts omitted |
+| Bruno | `BrunoCollectionExporter` | export | Zip with one `.bru` per request |
+
+`CollectionImportService` handles format detection, collision-safe naming, and repository persistence. `ConfigurationBundleService` includes collections and environments in full app bundle export/import.
+
+## Dependency Injection Summary
+
+Current API Client registrations in `MauiProgram.cs` include:
+
+- singleton repositories: `CollectionRepository`, `EnvironmentRepository`, `LinkedCollectionRootRepository`
+- singleton variable services: `IVariableGeneratorService`, `IVariableSubstitutionService`, `IVariablePreviewService`
+- singleton auth/capture services: `IPostRequestCaptureExecutor`, `IOAuth2TokenManager`, `IAuthHeaderBuilder`, `IAuthInheritanceResolver`
+- singleton GraphQL schema and linked-file/Git services: `IGraphQlSchemaService`, `LinkedGitService`, `LinkedCollectionFileService`
+- transient runtime connection services: `IHttpRequestExecutor`, `IGraphQlSubscriptionService`, `IWebSocketClientService`
+- export/import singletons for SwebKit, Postman, Bruno, and collection import orchestration
+- `IKeyVaultSecretResolver` selected from multi-vault config, legacy single URL config, or no-op fallback
+
+## Package Dependencies
+
+| Package | Project | Usage |
+| ------- | ------- | ----- |
+| `Azure.Security.KeyVault.Secrets` | `SwebKit.Azure` | Key Vault secret resolution |
+| `JsonPath.Net` | `SwebKit.Core` | Post-request JSONPath capture |
+| `Bogus` | `SwebKit.Core` | Phase 10 faker-backed generated variables |
+
+## Planned Backend Follow-Up
+
+See `polish-roadmap.md` for follow-up implementation slices:
+
+- Git diff source loading and commit preview data
+- conflict action model: reload, keep mine, save as copy
+- cURL export/import parser with secret masking
+- variable inspector result model with source metadata
+- pinned request state ownership
+- response example serialization and secret scrubbing
+- collection runner execution model after the above trust work is complete

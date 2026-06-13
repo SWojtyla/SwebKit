@@ -35,6 +35,8 @@ Update this file when project/folder structure changes, entry points move, or na
 | Pipeline run failure classification                                        | `src/SwebKit.Core/Services/PipelineFailureClassifier.cs` and `src/SwebKit.Core/Models/DeploymentAssuranceModels.cs`                                                            |
 | Observability queries and App Insights discovery                           | `src/SwebKit.Core/Abstractions/IObservabilityProvider.cs`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs` |
 | Global commands and keyboard shortcuts                                     | `src/SwebKit.App/Services/CommandRegistry.cs` and `src/SwebKit.App/wwwroot/js/keyboardShortcuts.js`                                                                            |
+| API Client UI, collections, environments, linked roots, Git panel          | `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`, `src/SwebKit.App/Components/ApiClient/CollectionTree.razor`, and `src/SwebKit.Core/Services/LinkedGitService.cs`   |
+| API Client domain, persistence, variables, export/import                   | `src/SwebKit.Core/Domain/ApiClientModels.cs`, `src/SwebKit.Core/Configuration/CollectionRepository.cs`, `src/SwebKit.Core/Services/VariableSubstitutionService.cs`             |
 
 ## Key Folders and Responsibilities
 
@@ -52,6 +54,7 @@ src/
 │   │   ├── Pipelines/            # Pipelines tree/detail/activity views
 │   │   ├── Releases/             # Release records, approvals, and tagging UI
 │   │   ├── Observability/        # Overview/failures/performance/logs/availability tabs
+│   │   ├── ApiClient/            # API Client page, request builder, tree, envs, Git panel, export/import
 │   │   ├── Notifications/        # Notification toast and history components
 │   │   └── Shared/               # Shared primitives and base components
 │   ├── Services/                 # App-layer orchestration services (commands, tabs, notifications, named favorites)
@@ -139,3 +142,4 @@ tests/
 | Incident timeline backend  | `src/SwebKit.Core/Models/IncidentTimelineModels.cs`, `src/SwebKit.Core/Domain/IncidentTimelineConfig.cs`, `src/SwebKit.Kubernetes/IncidentTimeline/AksTimelineSignalSource.cs`, `src/SwebKit.Observability/IncidentTimeline/AppInsightsTimelineSignalSource.cs`, `src/SwebKit.Azure/ServiceBus/IncidentTimeline/ServiceBusEvidenceSignalSource.cs`, `src/SwebKit.DevOps/IncidentTimeline/DevOpsReleaseTimelineSignalSource.cs` |
 | Observability              | `src/SwebKit.App/Components/Pages/ObservabilityPage.razor`, `src/SwebKit.App/Components/Observability/ObservabilityLogs.razor`, `src/SwebKit.Observability/AzureAppInsightsProvider.cs`, `src/SwebKit.Observability/AppInsightsDiscoveryService.cs`                                                                                                                                                                            |
 | Settings and configuration | `src/SwebKit.App/Components/Pages/SettingsPage.razor`, `src/SwebKit.App/Components/Pages/*ConfigForm.razor`, `src/SwebKit.Core/Configuration/ProfileRepository.cs`, `src/SwebKit.Core/Configuration/AppDataPaths.cs`                                                                                                                                                                                                           |
+| API Client                 | `src/SwebKit.App/Components/ApiClient/ApiClientPage.razor`, `src/SwebKit.App/Components/ApiClient/RequestBuilderPanel.razor`, `src/SwebKit.App/Components/ApiClient/ResponseViewerPanel.razor`, `src/SwebKit.Core/Domain/ApiClientModels.cs`, `src/SwebKit.Core/Services/LinkedCollectionFileService.cs`, `src/SwebKit.Core/Services/LinkedGitService.cs`                                                                        |

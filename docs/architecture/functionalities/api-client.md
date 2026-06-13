@@ -2,82 +2,103 @@
 
 ## What Is Supported
 
-- **Collections and requests** — full tree of named folders and HTTP/GraphQL/WebSocket requests; persisted to `collections.json` via the atomic-write + `.bak` recovery pattern.
-- **Variable substitution** — `{{token}}` syntax in URL, headers, body, and GraphQL variables; collection-level variables (always active) merged with the active environment; secrets resolved from Windows Credential Store or Azure Key Vault at send time.
-- **Environments** — named environment sets with per-variable types: Plain, Windows Credential Store, Azure Key Vault. Active environment toggled from the toolbar. Full CRUD in the environment manager.
-- **REST execution** — all methods (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS); body modes: JSON, XML, Text, Form Data, Binary. 4 MB wire cap; response body displayed up to 500 KB with a [Load full response] affordance. Response: status badge, timing, size, headers, raw view.
-- **Authentication** — Bearer Token, API Key (header or query param), Basic, OAuth 2.0 (Client Credentials + Auth Code with PKCE). Auth inherits from nearest folder or collection ancestor when not set on the request.
-- **Post-request capture** — JSONPath, response header, or status code extraction; writes values into collection or environment variables.
-- **GraphQL** — Monaco editor for query and variables; operation selector when multiple named operations are present; [Introspect Schema] button (cached per endpoint); subscription detection with `graphql-ws` framing; GraphQL Errors tab auto-selected on error responses.
-- **WebSocket** — URL input with upgrade headers and optional subprotocol; connection state badge (Disconnected/Connecting/Connected/Faulted); virtualized message log capped at 10 000 frames (drop-oldest); Text/Binary composer; saved message templates per request.
-- **Request history** — last 20 responses per request (in-memory, lost on restart); click a history entry to view; Re-send loads it back into the viewer.
-- **Search/filter** — filter bar in the collection tree searches request and folder names across all collections.
-- **Export/Import** — SwebKit JSON (lossless round-trip), Postman v2.1 (import + export), Bruno (export as zip of `.bru` files). Standalone environment file import. Name-collision auto-rename to "Name (2)".
-- **Configuration bundle** — collections and environments are included in the SwebKit configuration bundle export/import.
-- **Keyboard shortcuts** — `Ctrl+N` new request, `Ctrl+Shift+N` new collection, `Ctrl+E` env manager, `Ctrl+Enter` send, `Escape` cancel. All registered in `CommandRegistry` with `AreaScope = "api-client"`.
+- **Local collections and requests** — named collections with folder/request hierarchy, persisted through `CollectionRepository` to `collections.json` using atomic write and `.bak` recovery.
+- **Git-linked API repositories** — user-selected repository folders containing `.swebkit-api/` roots. Linked collections and environments load beside local collections, and request saves write back to linked files with conflict detection.
+- **Safe linked Git actions** — branch/status awareness, branch creation, branch dropdown switching, stage/unstage/revert for API-root files, staged commit, push, and provider-inferred remote compare links for GitHub/Azure DevOps.
+- **Variable substitution** — `{{token}}` syntax in URL, headers, body, GraphQL query, and GraphQL variables. Environment variables override collection variables on the same key.
+- **Generated variables** — safe building blocks for integer, decimal, boolean, GUID, date/time, list, Bogus-backed fake data, and templates. Definitions are persisted; generated sample values are not.
+- **Secrets** — Windows Credential Store and Azure Key Vault references. Secret values are resolved at send time and are not persisted to app-local JSON, linked files, or exports.
+- **Environments** — named environment sets with plain, Windows Credential Store, Key Vault, and generated variables. Active environment is persisted in API client UI state.
+- **REST execution** — all common HTTP methods, headers/query/body editing, auth injection, variable substitution, response status/timing/size/header/body display, and response history.
+- **Authentication** — Bearer Token, API Key, Basic, OAuth 2 client credentials, and OAuth 2 authorization code with PKCE through MAUI `WebAuthenticator` using `sweb://oauth`.
+- **Post-request capture** — JSONPath, response header, and status-code capture rules that write into collection or environment variables without scripting.
+- **GraphQL** — query and variables editors, operation parsing, schema introspection cache, GraphQL error rendering, and `graphql-ws` subscriptions.
+- **WebSocket** — URL/headers/subprotocol, connection state, bounded virtualized message log, text/binary composer, and saved message templates.
+- **Export/import** — SwebKit-native JSON, Postman v2.1 subset import/export, Bruno export, standalone environment import, and full configuration bundle integration.
+- **Keyboard shortcuts** — API Client command registrations for new request, new collection, environment manager, send, and cancellation.
 
-## Authentication
+## Current Deferrals
 
-No external authentication is required. The API Client uses the user's own credentials (configured per-request or inherited) to send HTTP requests. Azure Key Vault resolution for environment variables uses `DefaultAzureCredential`.
+- In-app Git diff preview, target chip, staged/unstaged Git review layout, and richer conflict actions are planned in Phase 11.
+- Copy/import cURL and variable source inspector are planned in Phase 12.
+- Pinned request tabs and saved response examples are planned in Phase 13.
+- Collection runner remains deferred to Phase 14 and must reuse the existing request execution path.
+- Pre-request scripts, arbitrary code execution, hosted collaboration, mock servers, gRPC, automatic cookie jar, and pull/rebase/stash remain out of scope.
 
 ## Core Runtime Flow
 
-```
+```text
 ApiClientPage
-  ├── CollectionTree (Virtualize, flatten to List<FlatTreeNode>)
-  │     └── filter bar — filters _visibleNodes on every keystroke
+  ├── CollectionRepository / EnvironmentRepository
+  ├── LinkedCollectionRootRepository / LinkedCollectionFileService / LinkedGitService
+  ├── CollectionTree
+  │     ├── Local Collections
+  │     └── Linked Repositories
   ├── RequestBuilderPanel
-  │     ├── URL bar + method selector
-  │     ├── Tabs: Params | Headers | Body | Auth | Capture
-  │     │     (GraphQL: GraphQL tab + Headers + Auth + Capture)
-  │     │     (WebSocket: replaced entirely by WebSocketPanel)
-  │     ├── GraphQlPanel (Monaco editors, introspection, operation selector)
-  │     ├── WebSocketPanel (connect/disconnect, log, composer)
-  │     └── AuthPanel → BearerAuthForm | ApiKeyAuthForm | BasicAuthForm | OAuth2AuthForm
+  │     ├── Params / Headers / Body / Auth / Capture
+  │     ├── GraphQlPanel
+  │     └── WebSocketPanel
   └── ResponseViewerPanel
-        ├── History sidebar (last 20 per request)
-        ├── Subscription message stream (GraphQL)
-        ├── Status bar + tabs: Body | Headers | Raw | GraphQL Errors
-        └── Body: 500 KB display cap + [Load full response] affordance
+        ├── response history
+        ├── GraphQL errors / subscription messages
+        └── body display cap + load-full affordance
 ```
 
-### Send path (REST)
+## Send Path
 
-1. `ApiClientPage.OnInitializedAsync` — loads `CollectionRepository` and `EnvironmentRepository` concurrently; kicks Monaco asset pre-load in the background.
-2. User clicks Send (or presses `Ctrl+Enter`).
-3. `RequestBuilderPanel.OnSendAsync` detects WebSocket/subscription/HTTP and routes accordingly.
-4. `HttpRequestExecutor.ExecuteAsync`:
-   - Calls `IVariableSubstitutionService.BuildScopeAsync` (resolves KV secrets).
-   - Builds URL with substituted query params.
-   - Builds `HttpRequestMessage` with substituted headers and body.
-   - Calls `IAuthHeaderBuilder.ApplyAsync` (applies resolved auth headers).
-   - Sends via named `HttpClient("ApiClient")`.
-   - Parses GraphQL errors when `Method == GraphQl`.
-   - Calls `IPostRequestCaptureExecutor.ExecuteAsync` (JSONPath/header/status extraction).
-5. Result flows back to `ApiClientPage.OnRequestResultAsync` → recorded in history → passed to `ResponseViewerPanel`.
+1. `ApiClientPage` loads local collections/environments and linked roots.
+2. User selects or creates a collection/request.
+3. `RequestBuilderPanel` routes send based on request method: REST, GraphQL HTTP, GraphQL subscription, or WebSocket.
+4. `HttpRequestExecutor` builds a resolved variable scope, applies auth, sends through the named `ApiClient` `HttpClient`, parses GraphQL errors, and runs capture rules.
+5. Result flows back to `ApiClientPage`, updates request history, and renders through `ResponseViewerPanel`.
 
-### WebSocket path
+## Linked Root Save Path
 
-1. `WebSocketPanel.ConnectAsync` — creates `IWebSocketClientService`, calls `ConnectAsync`, starts background `RunReadLoopAsync` (BL-7).
-2. Incoming frames arrive on a bounded `Channel<WebSocketMessage>` (10 000 cap, `DropOldest`).
-3. `ReadAsync` on the channel delivers frames to the UI loop via `InvokeAsync(StateHasChanged)`.
+1. Active request belongs to a linked collection.
+2. `ApiClientPage.SaveActiveCollectionAsync` finds the linked root and expected request content stamp.
+3. `LinkedCollectionFileService.SaveRequestAsync` compares the current content stamp with the expected stamp.
+4. If unchanged, request metadata and sidecars are written atomically.
+5. If changed externally, save returns a conflict. Phase 11 will replace the current passive error with explicit conflict actions.
 
-### GraphQL subscription path
+## Git Action Path
 
-1. `RequestBuilderPanel.IsSubscriptionOperation()` — regex detects `subscription` keyword.
-2. `GraphQlSubscriptionService.RunAsync` — `graphql-ws` handshake over `WebSocketClientService`, streams `next` frames to `OnSubscriptionMessage` callback.
-3. Messages accumulate in `ApiClientPage._subscriptionMessages` (1 000 cap, drop-oldest) and are passed to `ResponseViewerPanel.SubscriptionMessages`.
+1. `LinkedGitService.GetStatusAsync` resolves the repository root and filters porcelain status to the linked API root.
+2. UI shows branch, changed API file count, and changed file details.
+3. Stage/unstage/revert operations validate the file is one of the reported linked API files before invoking Git.
+4. Staged commit rejects unrelated staged files outside the API root.
+5. Push and remote compare use the detected repository remote/branch.
 
 ## State Persistence
 
-| State                  | Location                               | Lifetime        |
-| ---------------------- | -------------------------------------- | --------------- |
-| Collections + requests | `AppData/collections.json`             | Persistent      |
-| Environments           | `AppData/environments.json`            | Persistent      |
-| Active environment     | `AppData/environments.json` (UiState)  | Persistent      |
-| Last selected request  | `AppData/environments.json` (UiState)  | Persistent      |
-| Request history        | `ApiClientPage._requestHistory` (dict) | Session only    |
-| WS message log         | `WebSocketPanel._messages` (list)      | Session only    |
-| GraphQL subscription   | `ApiClientPage._subscriptionMessages`  | Session only    |
-| OAuth2 token cache     | `OAuth2TokenManager._cache` (dict)     | Session only    |
-| Monaco assets          | Browser WebView cache                  | Browser session |
+| State | Location | Lifetime |
+| ----- | -------- | -------- |
+| Local collections and requests | `AppData/collections.json` | Persistent |
+| Local environments and API UI state | `AppData/environments.json` | Persistent |
+| Linked root registrations | `AppData/api-linked-roots.json` | Persistent, machine-local |
+| Linked collections and requests | `.swebkit-api/collections/**` | Persistent, Git-trackable |
+| Linked environments | `.swebkit-api/environments/*.swebenv.json` | Persistent, Git-trackable references only |
+| Secret values | Windows Credential Store or Key Vault | Persistent outside repo files |
+| Request history | `ApiClientPage._requestHistory` | Session only |
+| WebSocket message log | `WebSocketPanel` state | Session/request only |
+| GraphQL subscription messages | `ApiClientPage._subscriptionMessages` | Session/request only |
+| OAuth2 token cache | `OAuth2TokenManager` memory cache | Session only |
+| Generated sample values | request scope/preview only | Not persisted |
+
+## Security and Safety Notes
+
+- Linked root files store secret references only.
+- Export formats never include secret values.
+- Generated variables are non-secret and cannot execute code.
+- Git operations are fixed command builders, not arbitrary command execution.
+- Git status, staging, revert, and commit actions are scoped to linked API root files.
+- Key Vault failure degrades gracefully rather than crashing request execution.
+
+## Validation Focus
+
+- repository atomic write and backup recovery
+- linked-root sparse request read/write and sidecar handling
+- linked environment and generated variable serialization
+- secret-reference-only persistence
+- Git path scoping for status, stage, unstage, revert, and staged commit
+- request execution with auth, variable substitution, generated values, and capture rules
+- UI state for tree selection, linked-root targeting, environments, generated-variable editors, and response rendering

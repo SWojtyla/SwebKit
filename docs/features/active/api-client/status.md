@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Phase 9 complete — linked-root loading, sparse request files, linked environments, conflict-safe save-back, Linked Root Manager, secret configuration, scoped Git actions, and compare helpers are implemented.
+Post-Phase-10 polish roadmap planned — target clarity, in-app Git review, conflict actions, cURL portability, variable inspection, pinned requests, response examples, and deferred collection runner sequencing.
 
 ## Progress Checklist
 
@@ -73,7 +73,7 @@ Phase 9 complete — linked-root loading, sparse request files, linked environme
 
 ### Phase 4 — Authentication ✅
 
-- [x] `Collection.DefaultAuth: AuthConfig?` and `RequestFolder.DefaultAuth: AuthConfig?` — already in domain model
+- [x] `Collection.DefaultAuth: AuthConfig?` and folder `ApiCollectionNode.DefaultAuth: AuthConfig?` — already in domain model
 - [x] `AuthConfig` extended: `BasicUsername`, `OAuth2ClientId`, `OAuth2AuthUrl` added
 - [x] `IAuthInheritanceResolver` contract in `SwebKit.Core/Abstractions/`
 - [x] `AuthInheritanceResolver` — walks request → nearest folder → collection; registered as `Singleton`
@@ -161,7 +161,7 @@ Phase 9 complete — linked-root loading, sparse request files, linked environme
 - [x] Drag-and-drop reordering: **explicitly deferred** (post-Phase-8)
 - [x] Total: 623 tests passing, build clean (pre-existing MSIX signing error only)
 
-### Phase 9 — Git-Linked Collections In Progress
+### Phase 9 — Git-Linked Collections Complete
 
 - [x] Define SwebKit-native folder format for linked API roots (`.swebkit-api/swebkit.json`)
 - [x] Implement compact request files with omitted defaults and optional body/query sidecars
@@ -180,7 +180,7 @@ Phase 9 complete — linked-root loading, sparse request files, linked environme
 
 ## Completed Work
 
-All 8 original phases complete. Phase 9 linked-root implementation now covers format/load/save, linked environments, tree UI, root manager, linked-root selection, conflict detection, Git status/actions, branch dropdown switching, staged file actions, compare helpers, and secret configuration.
+All 8 original phases complete. Phase 9 linked-root implementation now covers format/load/save, linked environments, tree UI, root manager, linked-root selection, conflict detection, Git status/actions, branch dropdown switching, staged file actions, compare helpers, and secret configuration. Phase 10 is tracked as complete below, and the post-Phase-10 polish roadmap is now captured in `polish-roadmap.md`.
 
 ## Blockers
 
@@ -188,7 +188,7 @@ _None._
 
 ## Validation Status
 
-Phase 9 focused linked-root unit tests passing; MAUI app build passing.
+Phase 9 focused linked-root unit tests passing; MAUI app build passing. Documentation refresh completed for active feature modules and architecture routing; docs whitespace validation is the current check for this pass.
 
 ## Planned Follow-Up
 
@@ -201,3 +201,10 @@ Phase 9 focused linked-root unit tests passing; MAUI app build passing.
 - [x] Add generated-variable editors in environment and collection variable screens
 - [x] Extend linked collection/environment file format with `generatedVariables`
 - [x] Add focused tests for constraints, faker values, template composition, scope resolution, and serialization
+
+### Post-Phase-10 Polish Planned
+
+- [ ] Phase 11 — Workflow Trust: target chip, in-app Git diff preview, staged/unstaged review layout, conflict actions
+- [ ] Phase 12 — Request Portability and Variable Clarity: Copy as cURL, Import from cURL, variable inspector
+- [ ] Phase 13 — Workspace Depth and Documentation Value: pinned request tabs, saved response examples
+- [ ] Phase 14 — Collection Runner Later: folder/collection execution after single-request workflows are trustworthy

@@ -155,7 +155,7 @@ DOM without a cap causes visible lag in bUnit tests and in practice.
 ## DEC-9: `FlatTreeNode` model for collection tree virtualisation
 
 **Decision:** The collection tree uses a flattened `List<FlatTreeNode>` fed to `<Virtualize>`,
-rather than recursive Blazor component rendering of `CollectionNode` trees.
+rather than recursive Blazor component rendering of `ApiCollectionNode` trees.
 
 **Rationale:** Recursive Blazor component trees at depth 3–4 with 500+ nodes create significant
 DOM element counts. `<Virtualize>` requires a flat `ICollection<T>`; maintaining a live flattened
@@ -258,9 +258,10 @@ workflows without requiring a complex undo/history system at Phase 1.
 
 ## DEC-16: Auth inheritance by null-propagation up the tree
 
-**Decision:** `HttpRequestEntry.Auth = null` means "inherit". `RequestFolder.DefaultAuth` and
-`Collection.DefaultAuth` are the two ancestor levels. `IAuthInheritanceResolver.Resolve` walks:
-request → direct parent folder → collection. The first non-null value is used.
+**Decision:** `HttpRequestEntry.Auth = null` means "inherit". Folder-level
+`ApiCollectionNode.DefaultAuth` and `ApiCollection.DefaultAuth` are the two ancestor levels.
+`IAuthInheritanceResolver.Resolve` walks request → direct parent folder → collection. The first
+non-null value is used.
 
 **Rationale:** Mirrors the common pattern in Postman and Bruno where a collection-level auth
 (e.g., Bearer token) applies to all requests unless overridden. The null sentinel is clean and
@@ -327,7 +328,8 @@ valid even when some secrets are unresolved on the current machine.
 ## DEC-20: Git integration is staged and scoped to linked API roots
 
 **Decision:** Start with Git awareness (branch, clean/dirty, changed linked-root files), then add
-safe actions: create/switch branch, commit selected SwebKit API files, and push the current branch.
+safe actions: create/switch branch, stage/unstage/revert SwebKit API files, commit staged SwebKit
+API files, and push the current branch.
 Do not implement pull, rebase, stash, arbitrary commands, or PR creation in the first Git action
 slice.
 
@@ -353,3 +355,20 @@ and no code execution attack surface.
 **Implication:** Use SwebKit-owned primitive generators for constraints and add `Bogus` only for
 realistic fake data categories such as names and email addresses. Generated sample values are never
 persisted; only generator definitions are stored.
+
+---
+
+## DEC-22: Post-Phase-10 work prioritizes trust and review before breadth
+
+**Decision:** After dynamic variables, prioritize target clarity, Git diff review, conflict actions,
+cURL portability, and variable inspection before adding pinned request tabs, response examples, or a
+collection runner.
+
+**Rationale:** The API Client now has a broad capability base. The next risk is not missing surface
+area; it is user uncertainty about where edits are saved, what is being committed, which values were
+resolved, and whether secrets can leak through export/review surfaces. Solving those trust points
+makes every later feature safer and easier to understand.
+
+**Implication:** The collection runner remains deliberately later. It should reuse the same
+request execution, auth, variable, capture, response-size, and secret-masking paths instead of
+introducing a parallel execution model.

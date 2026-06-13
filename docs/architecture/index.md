@@ -30,6 +30,7 @@ For any non-trivial implementation, read:
 | Incident Timeline evidence, mappings, snapshot export, proposal generation            | `functionalities/incident-timeline.md`, `design.md` Incident Timeline flows                             | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`                | Verify source coverage, cancellation/version guards, and evidence-first wording.                   |
 | Monitoring alert rules, alert engine, signal sources, Windows toast notifications     | `functionalities/monitoring.md`, `design.md` Alert Engine flow                                          | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/blazor-maui.md`                | Verify rule persistence, cooldown, signal source skipped/firing, and toast notification.           |
 | Settings, configuration health, profile persistence, bundle import/export, appearance | `functionalities/settings-and-configuration.md`, `design.md` Settings Save and Config Propagation Flow  | `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/azure-sdk.md`                  | Verify atomic persistence, backup recovery, credential references, and readiness checks.           |
+| API Client collections, requests, environments, auth, variables, linked repos, Git actions | `functionalities/api-client.md`, `codebase-guide.md` API Client entries                              | `docs/pitfalls/blazor-maui.md`, `docs/pitfalls/dotnet-csharp.md`, `docs/pitfalls/azure-sdk.md` | Run focused API client service/component tests; verify linked-root path scoping and secret masking. |
 | Tests, build plumbing, or validation strategy                                         | `codebase-guide.md`, relevant functionality deep dive                                                   | Relevant `docs/pitfalls/` files                                                 | Prefer focused tests for touched areas before broader builds.                                      |
 
 ## Scale-Out Docs
@@ -46,6 +47,7 @@ Existing functionality deep dives:
 - `functionalities/incident-timeline.md`
 - `functionalities/monitoring.md`
 - `functionalities/settings-and-configuration.md`
+- `functionalities/api-client.md`
 
 Current pitfall docs:
 

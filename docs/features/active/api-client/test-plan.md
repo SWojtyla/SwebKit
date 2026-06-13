@@ -162,3 +162,52 @@
 | 10.5 | Generated variable definitions serialize without storing generated samples | Unit  | `SwebKit.Core.Tests` |
 | 10.6 | Variable preview shows generated sample values and supports refresh        | bUnit | `SwebKit.App.Tests`  |
 | 10.7 | Environment/collection variable editor shows building-block fields by kind | bUnit | `SwebKit.App.Tests`  |
+
+---
+
+## Phase 11 — Workflow Trust and Git Review
+
+| #    | Scenario                                                                                         | Type   | Project              |
+| ---- | ------------------------------------------------------------------------------------------------ | ------ | -------------------- |
+| 11.1 | Toolbar target chip identifies local collection vs selected linked repository                    | bUnit  | `SwebKit.App.Tests`  |
+| 11.2 | Git diff preview loads original and modified API file content for changed linked-root files      | Unit   | `SwebKit.Core.Tests` |
+| 11.3 | Git panel separates staged and unstaged API files                                                | bUnit  | `SwebKit.App.Tests`  |
+| 11.4 | Commit preview includes branch, staged API files, and remote target without unrelated repo files | bUnit  | `SwebKit.App.Tests`  |
+| 11.5 | Conflict prompt exposes Reload from disk, Keep mine, and Save as copy actions                    | bUnit  | `SwebKit.App.Tests`  |
+| 11.6 | Manual: external file edit produces conflict actions rather than a passive save error            | Manual | —                    |
+
+---
+
+## Phase 12 — Request Portability and Variable Clarity
+
+| #    | Scenario                                                                                 | Type  | Project              |
+| ---- | ---------------------------------------------------------------------------------------- | ----- | -------------------- |
+| 12.1 | Copy as cURL serializes method, URL, query, headers, and body for REST requests          | Unit  | `SwebKit.Core.Tests` |
+| 12.2 | Copy as cURL masks secret-backed values by default                                       | Unit  | `SwebKit.Core.Tests` |
+| 12.3 | Import from cURL creates a request with method, URL, headers, query, and body            | Unit  | `SwebKit.Core.Tests` |
+| 12.4 | Variable inspector lists token source: environment, collection, generated, secret, or KV | bUnit | `SwebKit.App.Tests`  |
+| 12.5 | Variable inspector marks unresolved tokens without blocking unrelated request editing    | bUnit | `SwebKit.App.Tests`  |
+
+---
+
+## Phase 13 — Workspace Depth and Response Examples
+
+| #    | Scenario                                                                                 | Type   | Project              |
+| ---- | ---------------------------------------------------------------------------------------- | ------ | -------------------- |
+| 13.1 | Pinned request tabs preserve dirty state independently per request                       | bUnit  | `SwebKit.App.Tests`  |
+| 13.2 | Switching pinned requests preserves response/subscription state without cross-talk       | bUnit  | `SwebKit.App.Tests`  |
+| 13.3 | Saved response example serializes status, headers, body, timestamp, and environment name | Unit   | `SwebKit.Core.Tests` |
+| 13.4 | Saved response examples do not persist secret-backed values                              | Unit   | `SwebKit.Core.Tests` |
+| 13.5 | Manual: pinned tabs restore predictably according to the chosen persistence model        | Manual | —                    |
+
+---
+
+## Phase 14 — Collection Runner Later
+
+| #    | Scenario                                                                              | Type   | Project              |
+| ---- | ------------------------------------------------------------------------------------- | ------ | -------------------- |
+| 14.1 | Runner executes folder requests sequentially using existing request execution path    | Unit   | `SwebKit.Core.Tests` |
+| 14.2 | Runner cancellation stops remaining requests and preserves completed results          | Unit   | `SwebKit.Core.Tests` |
+| 14.3 | Runner result view shows per-request status, elapsed time, size, and capture warnings | bUnit  | `SwebKit.App.Tests`  |
+| 14.4 | Runner does not add pre-request scripts or arbitrary code execution                   | Review | —                    |
+| 14.5 | Manual: one failed request does not corrupt later request state or captured variables | Manual | —                    |
