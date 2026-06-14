@@ -1,0 +1,239 @@
+/*
+   SwebKit CSS layer: pipelines, validation, and legacy shared helpers
+   Generated from app.css during style-system-css-architecture split.
+*/
+
+/* ═══════════════════════════════════════════════════════════
+   Pipelines — shared utilities (global, used across isolated components)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Run status dots */
+.run-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.run-dot--success { background: var(--color-success); }
+.run-dot--failed  { background: var(--color-error); }
+.run-dot--running { background: var(--color-accent); animation: pulse-dot 1.4s ease-in-out infinite; }
+.run-dot--none    { background: var(--color-text-faint); }
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+}
+
+/* Pipeline status badges */
+.pipeline-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.pipeline-status.succeeded   { background: rgba(67,160,71,0.15);  color: var(--color-success); }
+.pipeline-status.failed      { background: rgba(229,57,53,0.15);  color: var(--color-error); }
+.pipeline-status.running     { background: rgba(0,120,212,0.15);  color: var(--color-accent); }
+.pipeline-status.notdeployed { color: var(--color-text-faint); }
+.pipeline-status.waiting     { background: rgba(251,140,0,0.15);  color: var(--color-warning); }
+
+/* Shared form helpers */
+.form-group { display: grid; gap: 3px; }
+.form-label { font-size: 11px; color: var(--color-text-muted); }
+
+.form-input {
+    width: 100%;
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    box-sizing: border-box;
+}
+
+    .form-input:focus { border-color: var(--color-accent); }
+
+/* Shared text utilities */
+.text-mono  { font-family: Consolas, monospace; }
+.text-sm    { font-size: 12px; }
+.text-muted { color: var(--color-text-muted); }
+
+.btn-link-sm { font-size: 12px; color: var(--color-accent); text-decoration: none; }
+    .btn-link-sm:hover { text-decoration: underline; }
+
+/* ── Release status badges (global — used in ReleaseList + ReleaseDetail) ── */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.draft      { background: rgba(128,128,128,0.2); color: var(--color-text-muted); }
+.status-badge.inprogress { background: rgba(0,120,212,0.2);   color: var(--color-accent); }
+.status-badge.completed  { background: rgba(67,160,71,0.2);   color: var(--color-success); }
+
+/* ── Styled select wrapper (global — used in Activity + Approvals) ── */
+.filter-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+    .filter-select-wrap::after {
+        content: '';
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid var(--color-text-muted);
+        pointer-events: none;
+    }
+
+.filter-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 5px 28px 5px 10px;
+    font-size: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    outline: none;
+    min-width: 110px;
+}
+
+    .filter-select:focus {
+        border-color: var(--color-accent);
+    }
+
+/* ── Pipeline section heading (global — used in PipelineDetail + ReleaseDetail) ── */
+.pipeline-section {
+    margin-bottom: 24px;
+}
+
+.pipeline-section-title {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* ── Skeleton loading ── */
+@keyframes skeleton-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.skeleton-row {
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+        90deg,
+        var(--color-surface-2) 25%,
+        var(--color-surface-3) 50%,
+        var(--color-surface-2) 75%
+    );
+    background-size: 800px 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    margin-bottom: 4px;
+}
+
+/* ── Error boundary ── */
+.error-boundary-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--color-text);
+}
+
+.error-boundary-icon {
+    font-size: 48px;
+    color: var(--color-error);
+}
+
+.error-boundary-page h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.error-boundary-message {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    max-width: 480px;
+}
+
+.error-boundary-retry {
+    background: var(--color-accent);
+    color: var(--color-solid-foreground);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 20px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+
+.error-boundary-retry:hover {
+    background: var(--color-accent-hover);
+}
+
+.error-boundary-details {
+    margin-top: 8px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    max-width: 600px;
+    text-align: left;
+}
+
+.error-boundary-details pre {
+    background: var(--color-surface-2);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    font-size: 11px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* ── Focus rings (UI-23) ── */
+:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* ── UI-16: Form validation ── */
+.field-invalid {
+    border-color: var(--color-error) !important;
+    outline: 1px solid var(--color-error);
+}
+
+.field-error-msg {
+    display: block;
+    color: var(--color-error);
+    font-size: 11px;
+    margin-top: 2px;
+}

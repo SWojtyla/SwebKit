@@ -81,7 +81,7 @@
                     class="ws-panel__log-entry ws-panel__log-entry--@(msg.Direction == WebSocketMessageDirection.Sent ? "sent" : "received")">
                     <div class="ws-panel__log-entry-header">
                         <span class="ws-panel__log-dir">@(msg.Direction == WebSocketMessageDirection.Sent ? "↑" :
-                                       "↓")</span>
+                                                                   "↓")</span>
                             <span class="ws-panel__log-time">@msg.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
                             @if (msg.FrameType == WebSocketFrameType.Binary)
                             {
@@ -120,25 +120,25 @@
 
                 @if (Request.SavedMessages.Count > 0)
                 {
-                    <div class="ws-panel__saved-wrap">
-                        <button type="button" class="ws-panel__saved-btn"
-                                @onclick="() => _showSavedDropdown = !_showSavedDropdown">
-                            Saved Messages ▾
-                        </button>
-                        @if (_showSavedDropdown)
-                        {
-                            <div class="ctx-backdrop" @onclick="() => _showSavedDropdown = false"></div>
-                            <div class="ws-panel__saved-dropdown">
-                                @foreach (var saved in Request.SavedMessages)
-                                {
-                                    var s = saved;
-                                    <button type="button" class="ctx-item" @onclick="() => LoadSavedMessage(s)">
-                                        @s.Name
-                                    </button>
-                                }
-                            </div>
-                        }
-                    </div>
+                    <AppDropdown IsOpen="@_showSavedDropdown" OnClose="@(() => _showSavedDropdown = false)"
+                                 CssClass="ws-panel__saved-wrap" MenuCssClass="ws-panel__saved-dropdown"
+                                 Label="Saved WebSocket messages">
+                        <TriggerContent>
+                            <button type="button" class="ws-panel__saved-btn"
+                                    @onclick="() => _showSavedDropdown = !_showSavedDropdown">
+                                Saved Messages ▾
+                            </button>
+                        </TriggerContent>
+                        <ChildContent>
+                            @foreach (var saved in Request.SavedMessages)
+                            {
+                                var s = saved;
+                                <button type="button" class="ctx-item" @onclick="() => LoadSavedMessage(s)">
+                                    @s.Name
+                                </button>
+                            }
+                        </ChildContent>
+                    </AppDropdown>
                 }
 
                 <div class="ws-panel__composer-actions">

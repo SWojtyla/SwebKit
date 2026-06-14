@@ -37,11 +37,12 @@
                 {
                     <div class="release-editor__field">
                         <label class="form-label" for="release-editor-status">Status</label>
-                        <select id="release-editor-status" class="form-input release-editor__input" @bind="SelectedStatus">
+                        <AppSelect Id="release-editor-status" CssClass="form-input release-editor__input"
+                                   Value="@SelectedStatus" ValueChanged='@(value => SelectedStatus = value ?? "Draft")'>
                             <option value="Draft">Draft</option>
                             <option value="InProgress">In Progress</option>
                             <option value="Completed">Completed</option>
-                        </select>
+                        </AppSelect>
                     </div>
                 }
             </div>

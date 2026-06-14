@@ -28,13 +28,13 @@
                             <div class="trigger-row__branch">
                                 @if (_branchesByProject.TryGetValue(row.Entry.ProjectName, out var branches) && branches.Count > 0)
                                 {
-                                    <select class="form-input trigger-row__branch-select" value="@row.Branch"
-                                            @onchange="@(e => row.Branch = e.Value?.ToString() ?? "main")" disabled="@_running">
+                                    <AppSelect CssClass="form-input trigger-row__branch-select" Value="@row.Branch"
+                                               ValueChanged='@(value => row.Branch = value ?? "main")' Disabled="@_running">
                                         @foreach (var b in branches)
                                         {
                                             <option value="@b">@b</option>
                                         }
-                                    </select>
+                                    </AppSelect>
                                 }
                                 else
                                 {

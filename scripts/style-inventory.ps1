@@ -65,13 +65,16 @@ try {
     $razorCssFiles = $cssFiles | Where-Object { $_.Name -like '*.razor.css' }
     $razorFiles = Get-SourceFile -Path 'src\SwebKit.App\Components' -Include '*.razor'
     $appCss = Get-Item 'src\SwebKit.App\wwwroot\app.css'
+    $styleLayerFiles = @(Get-ChildItem -Path 'src\SwebKit.App\wwwroot\styles' -Filter '*.css' -File | Sort-Object Name)
 
     $componentMatches = $razorFiles | Select-String -Pattern '<button', '<select', '<PageToolbar', '<Dropdown', '<AppDropdown', 'app-native-control' -SimpleMatch
     $buttonClasses = @(Get-ClassAttributes -Files $razorFiles -ElementName 'button')
     $selectClasses = @(Get-ClassAttributes -Files $razorFiles -ElementName 'select')
 
     $summary = [pscustomobject]@{
-        AppCssLines             = Get-LineCount $appCss
+        AppCssEntryLines        = Get-LineCount $appCss
+        StyleLayerFileCount     = @($styleLayerFiles).Count
+        StyleLayerLines         = ($styleLayerFiles | ForEach-Object { Get-LineCount $_ } | Measure-Object -Sum).Sum
         CssFileCount            = @($cssFiles).Count
         RazorCssFileCount       = @($razorCssFiles).Count
         IsolatedCssLines        = ($razorCssFiles | ForEach-Object { Get-LineCount $_ } | Measure-Object -Sum).Sum
@@ -86,6 +89,19 @@ try {
     Write-Host 'SwebKit style inventory'
     Write-Host '======================='
     $summary | Format-List
+
+    if ($styleLayerFiles.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'Global CSS layer files'
+        $styleLayerFiles |
+            ForEach-Object {
+                [pscustomobject]@{
+                    File  = $_.Name
+                    Lines = Get-LineCount $_
+                }
+            } |
+            Format-Table -AutoSize
+    }
 
     Write-Host ''
     Write-Host "Top $Top button class attributes"
@@ -129,7 +145,23 @@ try {
     Write-Host 'Legacy token references'
     $legacyPattern = ($legacyTokens | ForEach-Object { [regex]::Escape($_) }) -join '|'
     $legacySourceFiles = $cssFiles | Where-Object { $_.FullName -ne $appCss.FullName }
-    $legacyMatches = @($legacySourceFiles | Select-String -Pattern $legacyPattern)
+    $legacyMatches = @(
+        $legacySourceFiles |
+        Select-String -Pattern $legacyPattern |
+        Where-Object {
+            $relativePath = $_.Path.Substring($repoRoot.Path.Length + 1)
+            $isCompatibilityDeclaration = $false
+
+            foreach ($legacyToken in $legacyTokens) {
+                if ($_.Line -match ('^\s*' + [regex]::Escape($legacyToken) + '\s*:')) {
+                    $isCompatibilityDeclaration = $true
+                    break
+                }
+            }
+
+            -not ($relativePath -eq 'src\SwebKit.App\wwwroot\styles\00-tokens-themes.css' -and $isCompatibilityDeclaration)
+        }
+    )
 
     if ($legacyMatches.Count -eq 0) {
         Write-Host 'None found.'

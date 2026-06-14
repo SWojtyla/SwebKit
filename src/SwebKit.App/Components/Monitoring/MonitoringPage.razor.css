@@ -33,7 +33,7 @@
 }
 
 /* ── Toolbar ── */
-.page-toolbar {
+.monitoring-page ::deep .monitoring-page__toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -43,7 +43,13 @@
     background: var(--neutral-fill-rest);
 }
 
-.page-toolbar__spacer {
+.monitoring-page ::deep .monitoring-page__toolbar .page-toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monitoring-page ::deep .page-toolbar__spacer {
     flex: 1;
 }
 

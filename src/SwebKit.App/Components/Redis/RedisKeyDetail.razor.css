@@ -22,17 +22,26 @@
     overflow-wrap: anywhere;
 }
 
-.copy-btn {
+.copy-btn,
+.redis-key-detail ::deep .copy-btn {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    gap: 0;
     background: transparent;
     border: none;
+    border-radius: 0;
     cursor: pointer;
     color: var(--color-text-muted);
     padding: 2px 4px;
     font-size: 14px;
+    font-weight: 400;
     line-height: 1;
+    box-shadow: none;
 }
 
-.copy-btn:hover {
+.copy-btn:hover,
+.redis-key-detail ::deep .copy-btn:hover {
     color: var(--color-text);
 }
 

@@ -132,9 +132,22 @@ tests/
 
 ## Styling System Navigation
 
-Use `src/SwebKit.App/wwwroot/app.css` for app-wide tokens, themes, native control behavior, shared primitive classes, compatibility aliases, and small utilities. Keep feature-specific layout in the component's `.razor.css` file so Blazor CSS isolation stays predictable.
+Use `src/SwebKit.App/wwwroot/app.css` only as the global stylesheet entry point. It imports ordered layer files under `src/SwebKit.App/wwwroot/styles/`:
 
-Current compatibility aliases in `app.css` keep older feature CSS stable while the style system is migrated: `--color-input-bg`, `--color-surface-raised`, `--color-surface-hover`, `--font-mono`, and `--color-danger`. New CSS should prefer canonical tokens such as `--control-surface`, `--font-family-mono`, `--color-error`, `--color-surface-2`, and `--color-surface-3`.
+| Layer | Ownership |
+| --- | --- |
+| `00-tokens-themes.css` | Design tokens, theme blocks, and transitional token aliases. |
+| `01-base.css` | Document/root host styles such as `html`, `body`, and `#app`. |
+| `02-shell-navigation.css` | Shell chrome, top bar, status bar, navigation, and tabs. |
+| `03-workspaces.css` | Global workspace shells, command surfaces, dialogs, Service Bus globals, and AKS shared globals. |
+| `04-page-surfaces.css` | Page headers, settings surfaces, storage page globals, and page-level shared surfaces. |
+| `05-primitives-utilities.css` | Shared controls, `App*` primitives, context menu, form helpers, text utilities, empty states, and micro-interactions. |
+| `06-observability.css` | Observability global surfaces pending future component-local migration. |
+| `07-pipelines-legacy.css` | Pipelines/Releases shared helpers, skeletons, error boundary, validation helpers, and legacy shared styles. |
+
+Keep feature-specific layout in the component's `.razor.css` file so Blazor CSS isolation stays predictable.
+
+Current compatibility aliases in `00-tokens-themes.css` keep older feature CSS stable while the style system is migrated: `--color-input-bg`, `--color-surface-raised`, `--color-surface-hover`, `--font-mono`, and `--color-danger`. New CSS should prefer canonical tokens such as `--control-surface`, `--font-family-mono`, `--color-error`, `--color-surface-2`, and `--color-surface-3`.
 
 Canonical control semantics:
 

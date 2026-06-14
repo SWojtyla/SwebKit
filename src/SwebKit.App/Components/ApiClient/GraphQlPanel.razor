@@ -34,25 +34,25 @@
         {
             <div class="gql-panel__op-wrap">
                 <span class="gql-panel__op-label">Op:</span>
-                <div class="gql-panel__op-dropdown-wrap">
-                    <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
-                        @(Request.GraphQlSelectedOperation ?? _operationNames[0])
-                        <span class="gql-panel__op-chevron">▾</span>
-                    </button>
-                    @if (_showOpDropdown)
-                    {
-                        <div class="ctx-backdrop" @onclick="() => _showOpDropdown = false"></div>
-                        <div class="gql-panel__op-dropdown">
-                            @foreach (var name in _operationNames)
-                            {
-                                var n = name;
-                                <button type="button"
-                                        class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
-                                        @onclick="() => SelectOperationAsync(n)">@n</button>
-                            }
-                        </div>
-                    }
-                </div>
+                <AppDropdown IsOpen="@_showOpDropdown" OnClose="@(() => _showOpDropdown = false)"
+                             CssClass="gql-panel__op-dropdown-wrap" MenuCssClass="gql-panel__op-dropdown"
+                             Label="GraphQL operation picker">
+                    <TriggerContent>
+                        <button type="button" class="gql-panel__op-btn" @onclick="() => _showOpDropdown = !_showOpDropdown">
+                            @(Request.GraphQlSelectedOperation ?? _operationNames[0])
+                            <span class="gql-panel__op-chevron">▾</span>
+                        </button>
+                    </TriggerContent>
+                    <ChildContent>
+                        @foreach (var name in _operationNames)
+                        {
+                            var n = name;
+                            <button type="button"
+                                    class="ctx-item @(Request.GraphQlSelectedOperation == n ? "ctx-item--active" : "")"
+                                    @onclick="() => SelectOperationAsync(n)">@n</button>
+                        }
+                    </ChildContent>
+                </AppDropdown>
             </div>
         }
 

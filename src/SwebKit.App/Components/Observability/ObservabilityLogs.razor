@@ -280,9 +280,9 @@
                         </FluentButton>
                         @if (_result is not null)
                         {
-                            <button class="obs-copy-btn" @onclick="CopyCsvAsync">📋 Copy CSV</button>
-                            <button class="obs-copy-btn" @onclick="DownloadCsvAsync">⬇ CSV</button>
-                            <button class="obs-copy-btn" @onclick="DownloadJsonAsync">⬇ JSON</button>
+                            <AppButton CssClass="obs-copy-btn" OnClick="CopyCsvAsync">📋 Copy CSV</AppButton>
+                            <AppButton CssClass="obs-copy-btn" OnClick="DownloadCsvAsync">⬇ CSV</AppButton>
+                            <AppButton CssClass="obs-copy-btn" OnClick="DownloadJsonAsync">⬇ JSON</AppButton>
                         }
                     </div>
 

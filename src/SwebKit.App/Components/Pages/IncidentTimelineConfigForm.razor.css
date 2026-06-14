@@ -170,7 +170,8 @@
     gap: 12px;
 }
 
-.incident-timeline-config__button {
+.incident-timeline-config__button,
+.incident-timeline-config ::deep .incident-timeline-config__button {
     min-height: 34px;
     border-radius: 999px;
     border: 1px solid var(--color-border);
@@ -182,16 +183,20 @@
 }
 
 .incident-timeline-config__button:hover,
-.incident-timeline-config__button:focus-visible {
+.incident-timeline-config__button:focus-visible,
+.incident-timeline-config ::deep .incident-timeline-config__button:hover,
+.incident-timeline-config ::deep .incident-timeline-config__button:focus-visible {
     border-color: rgba(0, 120, 212, 0.35);
     outline: none;
 }
 
-.incident-timeline-config__button--secondary {
+.incident-timeline-config__button--secondary,
+.incident-timeline-config ::deep .incident-timeline-config__button--secondary {
     background: var(--color-surface);
 }
 
-.incident-timeline-config__button--danger {
+.incident-timeline-config__button--danger,
+.incident-timeline-config ::deep .incident-timeline-config__button--danger {
     color: var(--color-error);
 }
 
@@ -240,6 +245,7 @@
     }
 
     .incident-timeline-config__intro-actions ::deep fluent-button,
+    .incident-timeline-config__intro-actions ::deep .incident-timeline-config__button,
     .incident-timeline-config__footer ::deep fluent-button {
         width: 100%;
     }

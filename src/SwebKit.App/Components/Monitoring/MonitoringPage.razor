@@ -7,30 +7,31 @@
 <div class="monitoring-page">
     <RoutePageHeader Area="monitoring">
         <Actions>
-            <button
-                class="page-header-action-btn monitoring-toggle-btn @(Monitor.IsMonitoring ? "monitoring-toggle-btn--active" : string.Empty)"
-                @onclick="ToggleMonitoringAsync"
-                title="@(Monitor.IsMonitoring ? "Pause monitoring" : "Start monitoring")">
+            <AppButton CssClass="@MonitoringToggleButtonClass" OnClick="ToggleMonitoringAsync"
+                       Title="@(Monitor.IsMonitoring ? "Pause monitoring" : "Start monitoring")" Size="Small"
+                       Variant="Secondary">
                 <span
                 class="monitoring-toggle-dot @(Monitor.IsMonitoring ? "monitoring-toggle-dot--active" : string.Empty)"></span>
                 @(Monitor.IsMonitoring ? "Monitoring active" : "Monitoring paused")
-            </button>
-            <button class="page-header-action-btn" @onclick="OpenCreateDrawer">
+            </AppButton>
+            <AppButton CssClass="page-header-action-btn" OnClick="OpenCreateDrawer" Size="Small" Variant="Secondary">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 Add rule
-            </button>
+            </AppButton>
         </Actions>
     </RoutePageHeader>
 
-    <div class="page-toolbar">
-        <span class="monitoring-rule-summary">
-            @_rules.Count rule@(_rules.Count == 1 ? "" : "s")
-            @if (_firingCount > 0)
-            {
-                <span class="monitoring-badge monitoring-badge--firing">@_firingCount firing</span>
-            }
-        </span>
-    </div>
+    <PageToolbar CssClass="monitoring-page__toolbar">
+        <LeadingContent>
+            <span class="monitoring-rule-summary">
+                @_rules.Count rule@(_rules.Count == 1 ? "" : "s")
+                @if (_firingCount > 0)
+                {
+                    <span class="monitoring-badge monitoring-badge--firing">@_firingCount firing</span>
+                }
+            </span>
+        </LeadingContent>
+    </PageToolbar>
 
     @if (_isLoading)
     {
@@ -65,6 +66,10 @@
     private List<AlertFiredEvent> _history = [];
     private Dictionary<string, AlertRuleUiState> _uiStates = [];
     private int _firingCount;
+
+    private string MonitoringToggleButtonClass => Monitor.IsMonitoring
+        ? "page-header-action-btn monitoring-toggle-btn monitoring-toggle-btn--active"
+        : "page-header-action-btn monitoring-toggle-btn";
 
     protected override async Task OnInitializedAsync()
     {

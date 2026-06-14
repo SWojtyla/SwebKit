@@ -2,52 +2,57 @@
 
 <div class="pipeline-activity">
     @* ── Filter bar ── *@
-    <div class="activity-toolbar">
-        <div class="filter-btn-group">
-            <button class="filter-btn @(_filterStatus == "" ? "filter-btn--active" : "")"
-                    @onclick='() => _filterStatus = ""'>All</button>
-            <button class="filter-btn @(_filterStatus == "succeeded" ? "filter-btn--active" : "")"
-                    @onclick='() => _filterStatus = "succeeded"'>
-                <span class="run-dot run-dot--success"></span> Passed
-            </button>
-            <button class="filter-btn @(_filterStatus == "failed" ? "filter-btn--active" : "")"
-                    @onclick='() => _filterStatus = "failed"'>
-                <span class="run-dot run-dot--failed"></span> Failed
-            </button>
-            <button class="filter-btn @(_filterStatus == "inProgress" ? "filter-btn--active" : "")"
-                    @onclick='() => _filterStatus = "inProgress"'>
-                <span class="run-dot run-dot--running"></span> Running
-            </button>
-        </div>
+    <PageToolbar CssClass="activity-toolbar" Wrap="true">
+        <LeadingContent>
+            <div class="filter-btn-group">
+                <button class="filter-btn @(_filterStatus == "" ? "filter-btn--active" : "")"
+                        @onclick='() => _filterStatus = ""'>All</button>
+                <button class="filter-btn @(_filterStatus == "succeeded" ? "filter-btn--active" : "")"
+                        @onclick='() => _filterStatus = "succeeded"'>
+                    <span class="run-dot run-dot--success"></span> Passed
+                </button>
+                <button class="filter-btn @(_filterStatus == "failed" ? "filter-btn--active" : "")"
+                        @onclick='() => _filterStatus = "failed"'>
+                    <span class="run-dot run-dot--failed"></span> Failed
+                </button>
+                <button class="filter-btn @(_filterStatus == "inProgress" ? "filter-btn--active" : "")"
+                        @onclick='() => _filterStatus = "inProgress"'>
+                    <span class="run-dot run-dot--running"></span> Running
+                </button>
+            </div>
 
-        <div class="filter-select-wrap">
-            <select class="filter-select" @bind="_filterProject">
-                <option value="">All projects</option>
-                @foreach (var p in _projects)
-                {
-                    <option value="@p.Name">@p.Name</option>
-                }
-            </select>
-        </div>
+            <div class="filter-select-wrap">
+                <AppSelect CssClass="filter-select" Value="@_filterProject"
+                           ValueChanged="value => _filterProject = value ?? string.Empty">
+                    <option value="">All projects</option>
+                    @foreach (var p in _projects)
+                    {
+                        <option value="@p.Name">@p.Name</option>
+                    }
+                </AppSelect>
+            </div>
 
-        <div class="filter-select-wrap">
-            <select class="filter-select" @bind="_filterDate">
-                <option value="today">Today</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="">All time</option>
-            </select>
-        </div>
+            <div class="filter-select-wrap">
+                <AppSelect CssClass="filter-select" Value="@_filterDate"
+                           ValueChanged="value => _filterDate = value ?? string.Empty">
+                    <option value="today">Today</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="">All time</option>
+                </AppSelect>
+            </div>
 
-        <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync" title="Refresh">
-            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="14px" />
-        </FluentButton>
-
-        <label class="auto-refresh-label">
-            <input type="checkbox" @bind="_autoRefresh" />
-            Auto-refresh
-        </label>
-    </div>
+            <FluentButton Appearance="Appearance.Lightweight" @onclick="LoadAsync" title="Refresh">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" Width="14px" />
+            </FluentButton>
+        </LeadingContent>
+        <TrailingContent>
+            <label class="auto-refresh-label">
+                <input type="checkbox" @bind="_autoRefresh" />
+                Auto-refresh
+            </label>
+        </TrailingContent>
+    </PageToolbar>
 
     @* ── Content ── *@
     @if (_isLoading)
@@ -186,11 +191,11 @@
 
         var groups = new[]
         {
-            ("Today",     filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == today).ToList()),
+            ("Today", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == today).ToList()),
             ("Yesterday", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date == yesterday).ToList()),
             ("This week", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date >= thisWeekStart
                                            && r.Run.CreatedDate.LocalDateTime.Date < yesterday).ToList()),
-            ("Older",     filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date < thisWeekStart).ToList())
+            ("Older", filtered.Where(r => r.Run.CreatedDate.LocalDateTime.Date < thisWeekStart).ToList())
         };
 
         return groups.Where(g => g.Item2.Count > 0).Select(g => (g.Item1, g.Item2));

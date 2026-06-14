@@ -28,6 +28,7 @@
 }
 
 .incident-scope-toolbar__select,
+.incident-scope-toolbar__field ::deep .incident-scope-toolbar__select,
 .incident-scope-toolbar__input {
     min-height: 38px;
     border-radius: var(--radius-md);

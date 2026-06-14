@@ -124,9 +124,11 @@
     white-space: nowrap;
 }
 
-.gql-panel__op-dropdown-wrap { position: relative; }
+.gql-panel__op-dropdown-wrap,
+.gql-panel ::deep .gql-panel__op-dropdown-wrap { position: relative; }
 
-.gql-panel__op-btn {
+.gql-panel__op-btn,
+.gql-panel ::deep .gql-panel__op-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -139,14 +141,17 @@
     cursor: pointer;
 }
 
-.gql-panel__op-btn:hover { background: var(--color-surface-hover, #353545); }
+.gql-panel__op-btn:hover,
+.gql-panel ::deep .gql-panel__op-btn:hover { background: var(--color-surface-hover, #353545); }
 
-.gql-panel__op-chevron {
+.gql-panel__op-chevron,
+.gql-panel ::deep .gql-panel__op-chevron {
     font-size: 10px;
     color: var(--color-text-muted, #8a8a9a);
 }
 
-.gql-panel__op-dropdown {
+.gql-panel__op-dropdown,
+.gql-panel ::deep .gql-panel__op-dropdown {
     position: absolute;
     top: calc(100% + 2px);
     right: 0;

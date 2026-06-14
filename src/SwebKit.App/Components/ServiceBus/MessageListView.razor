@@ -49,10 +49,11 @@
                     @onclick='() => SetDensityAsync("comfort")'>Comfort</button>
         </div>
         <div class="message-list-view__menu-anchor">
-            <button type="button" data-testid="column-chooser-toggle" title="Configure visible columns"
-                    @onclick="ToggleColumnChooser" class="message-list-view__toolbar-button">
+            <AppButton data-testid="column-chooser-toggle" Title="Configure visible columns"
+                       OnClick="ToggleColumnChooser" Size="Small" Variant="Secondary"
+                       CssClass="message-list-view__toolbar-button">
                 Columns
-            </button>
+            </AppButton>
             @if (_showColumnChooser)
             {
                 <div data-testid="column-chooser-menu" class="message-list-view__menu message-list-view__menu--chooser">
@@ -77,10 +78,11 @@
                         <input type="text" data-testid="custom-column-input" @bind="_newCustomPropertyColumn"
                                @bind:event="oninput" placeholder="Application property key"
                                class="message-list-view__custom-column-input app-native-control" />
-                        <button type="button" data-testid="add-custom-column" @onclick="AddCustomPropertyColumnAsync"
-                                disabled="@(!CanAddCustomPropertyColumn)" class="message-list-view__toolbar-button">
+                        <AppButton data-testid="add-custom-column" OnClick="AddCustomPropertyColumnAsync"
+                                   Disabled="@(!CanAddCustomPropertyColumn)" Size="Small" Variant="Secondary"
+                                   CssClass="message-list-view__toolbar-button">
                             Add
-                        </button>
+                        </AppButton>
                     </div>
 
                     @if (_customPropertyColumns.Count == 0)
@@ -94,11 +96,12 @@
                             <div data-testid="custom-column-item" data-column-name="@customColumn"
                                  class="message-list-view__custom-column-item">
                                 <span class="message-list-view__custom-column-name">@customColumn</span>
-                                <button type="button" data-testid="remove-custom-column" data-column-name="@customColumn"
-                                        title="Remove custom column" @onclick="() => RemoveCustomPropertyColumnAsync(customColumn)"
-                                        class="message-list-view__toolbar-button message-list-view__toolbar-button--subtle message-list-view__custom-column-remove">
+                                <AppButton data-testid="remove-custom-column" data-column-name="@customColumn"
+                                           Title="Remove custom column" OnClick="() => RemoveCustomPropertyColumnAsync(customColumn)"
+                                           Size="Small" Variant="Subtle"
+                                           CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle message-list-view__custom-column-remove">
                                     ✕
-                                </button>
+                                </AppButton>
                             </div>
                         }
                     }
@@ -119,25 +122,26 @@
                     }
 
                     <div class="message-list-view__menu-footer">
-                        <button type="button" data-testid="reset-column-preferences"
-                                title="Reset columns and density to defaults" @onclick="ResetColumnPreferencesAsync"
-                                class="message-list-view__toolbar-button">
+                        <AppButton data-testid="reset-column-preferences" Title="Reset columns and density to defaults"
+                                   OnClick="ResetColumnPreferencesAsync" Size="Small" Variant="Secondary"
+                                   CssClass="message-list-view__toolbar-button">
                             Reset Defaults
-                        </button>
-                        <button type="button" title="Close column chooser" @onclick="() => _showColumnChooser = false"
-                                class="message-list-view__toolbar-button message-list-view__toolbar-button--subtle">
+                        </AppButton>
+                        <AppButton Title="Close column chooser" OnClick="() => _showColumnChooser = false" Size="Small"
+                                   Variant="Subtle"
+                                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--subtle">
                             Close
-                        </button>
+                        </AppButton>
                     </div>
                 </div>
             }
         </div>
         @if (MultiSelect && Messages.Count > 0)
         {
-            <button type="button" @onclick="ToggleSelectAll" class="message-list-view__toolbar-button"
-                    title="Select / deselect all visible messages">
+            <AppButton OnClick="ToggleSelectAll" Size="Small" Variant="Secondary"
+                       CssClass="message-list-view__toolbar-button" Title="Select / deselect all visible messages">
                 @(_selection.Count == Messages.Count ? "Deselect all" : "Select all")
-            </button>
+            </AppButton>
         }
         <div class="message-list-view__filter-group">
             <input type="text" @bind="TextFilter" @bind:event="oninput" placeholder="Filter messages..."
@@ -183,59 +187,61 @@
         </button>
         @if (_advancedFilterEnabled)
         {
-            <button type="button" data-testid="add-rule" title="Add advanced filter rule" @onclick="AddAdvancedRule"
-                    class="message-list-view__toolbar-button">
+            <AppButton data-testid="add-rule" Title="Add advanced filter rule" OnClick="AddAdvancedRule" Size="Small"
+                       Variant="Secondary" CssClass="message-list-view__toolbar-button">
                 + Rule
-            </button>
+            </AppButton>
         }
         @if (IsDetailPaneOpen && OnCloseDetails.HasDelegate)
         {
-            <button type="button" @onclick="OnCloseDetails" class="message-list-view__toolbar-button"
-                    title="Close message details">
+            <AppButton OnClick="@(() => OnCloseDetails.InvokeAsync())" Size="Small" Variant="Secondary"
+                       CssClass="message-list-view__toolbar-button" Title="Close message details">
                 Close Details
-            </button>
+            </AppButton>
         }
         @if (!IsDlqMode)
         {
-            <button type="button" @onclick="ConfirmDeleteSelectedMessage"
-                    class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                    disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)" title="Delete selected active message">
+            <AppButton OnClick="ConfirmDeleteSelectedMessage" Size="Small" Variant="Danger"
+                       CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                       Disabled="@(IsLoading || IsMutating || !CanDeleteSelectedMessage)" Title="Delete selected active message">
                 Delete Selected
-            </button>
+            </AppButton>
         }
-        <button type="button" @onclick="ConfirmDeleteFilteredMessages"
-                class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
-                title="Delete currently filtered messages in the current mode">
+        <AppButton OnClick="ConfirmDeleteFilteredMessages" Size="Small" Variant="Danger"
+                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                   Disabled="@(IsLoading || IsMutating || !CanDeleteFilteredMessages)"
+                   Title="Delete currently filtered messages in the current mode">
             Delete Filtered
-        </button>
-        <button type="button" @onclick="ConfirmPurgeAllMessages"
-                class="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
-                disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
-                title="Permanently delete all messages in the current mode">
+        </AppButton>
+        <AppButton OnClick="ConfirmPurgeAllMessages" Size="Small" Variant="Danger"
+                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--danger"
+                   Disabled="@(IsLoading || IsMutating || string.IsNullOrWhiteSpace(EntityPath))"
+                   Title="Permanently delete all messages in the current mode">
             Purge All
-        </button>
+        </AppButton>
         @if (ShowCompose && !IsDlqMode && Client is not null)
         {
-            <button type="button" @onclick="@(() => _showComposer = !_showComposer)"
-                    class="message-list-view__toolbar-button message-list-view__toolbar-button--compose @(_showComposer ? "message-list-view__toolbar-button--active" : "")"
-                    title="Compose and send a new message">
+            <AppButton OnClick="@(() => _showComposer = !_showComposer)" Size="Small" Variant="Secondary"
+                       CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--compose {(_showComposer ? "message-list-view__toolbar-button--active" : string.Empty)}")"
+                       Title="Compose and send a new message">
                 ✉ Send
-            </button>
+            </AppButton>
         }
-        <button type="button" @onclick="ExportFilteredJsonAsync" class="message-list-view__toolbar-button"
-                disabled="@(FilteredMessages.Count == 0)" title="Export currently visible messages as JSON">
+        <AppButton OnClick="ExportFilteredJsonAsync" Size="Small" Variant="Secondary"
+                   CssClass="message-list-view__toolbar-button" Disabled="@(FilteredMessages.Count == 0)"
+                   Title="Export currently visible messages as JSON">
             ⬇ Export JSON
-        </button>
-        <button type="button" @onclick="ToggleNsbMode"
-                class="message-list-view__toolbar-button message-list-view__toolbar-button--nsb @(_nsbMode ? "message-list-view__toolbar-button--active" : "")"
-                title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
+        </AppButton>
+        <AppButton OnClick="ToggleNsbMode" Size="Small" Variant="Secondary"
+                   CssClass="@($"message-list-view__toolbar-button message-list-view__toolbar-button--nsb {(_nsbMode ? "message-list-view__toolbar-button--active" : string.Empty)}")"
+                   Title="Toggle NServiceBus view — shows endpoint, message type, conversation ID">
             NSB
-        </button>
-        <button type="button" data-testid="peek-button" @onclick="LoadInitialWindowAsync"
-                class="message-list-view__toolbar-button message-list-view__toolbar-button--primary" disabled="@IsLoading">
+        </AppButton>
+        <AppButton data-testid="peek-button" OnClick="LoadInitialWindowAsync" Size="Small" Variant="Primary"
+                   CssClass="message-list-view__toolbar-button message-list-view__toolbar-button--primary"
+                   Disabled="@IsLoading">
             @(IsLoading ? "Loading…" : "↺ Peek")
-        </button>
+        </AppButton>
     </div>
 
     @if (_advancedFilterEnabled)
@@ -354,7 +360,7 @@
                         <TemplateColumn Title="Correlation ID" Width="180px"
                                         SortBy="@(GridSort<SbMessage>.ByAscending(m => m.CorrelationId))">
                             <span class="cell-truncate" title="@(context.CorrelationId ?? "-")">@(context.CorrelationId ??
-                                                                                                                                                                                                                                                                           "-")</span>
+                                                                                                                                                                                                                                                                                                           "-")</span>
                             </TemplateColumn>
                         }
                         @if (IsBuiltInColumnVisible(ColumnSubject))
@@ -397,14 +403,14 @@
                                             SortBy="@(GridSort<SbMessage>.ByAscending(m => m.SystemProperties.PartitionKey))">
                                 <span class="cell-truncate"
                                       title="@(context.SystemProperties.PartitionKey ?? "-")">@(context.SystemProperties.PartitionKey ??
-                                                                                                                                                                                                                                                                                                                     "-")</span>
+                                                                                                                                                                                                                                                                                                                                                           "-")</span>
                                 </TemplateColumn>
                             }
                             @if (ShowDlqColumns && IsBuiltInColumnVisible(ColumnDeadLetterReason))
                             {
                                 <TemplateColumn Title="DLQ Reason" SortBy="@(GridSort<SbMessage>.ByAscending(m => m.DeadLetterReason))">
                                     <span class="cell-truncate" title="@(context.DeadLetterReason ?? "-")">@(context.DeadLetterReason ??
-                                                                                                                                                                                                                                                                                                                                         "-")</span>
+                                                                                                                                                                                                                                                                                                                                                                                 "-")</span>
                                     </TemplateColumn>
                                 }
                                 @foreach (var customColumn in _customPropertyColumns)
@@ -454,11 +460,11 @@
                                     Large window
                                 </span>
                             }
-                            <button type="button" data-testid="load-more-button" @onclick="LoadMoreAsync"
-                                    class="message-list-view__toolbar-button" disabled="@(!CanLoadMore)"
-                                    title="Load additional messages into the current window">
+                            <AppButton data-testid="load-more-button" OnClick="LoadMoreAsync" Size="Small" Variant="Secondary"
+                                       CssClass="message-list-view__toolbar-button" Disabled="@(!CanLoadMore)"
+                                       Title="Load additional messages into the current window">
                                 @LoadMoreButtonLabel
-                            </button>
+                            </AppButton>
                         </div>
                         <div class="message-list-view__summary-bar message-list-view__summary-bar--secondary">
                             @CountSummary

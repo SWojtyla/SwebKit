@@ -4,7 +4,7 @@
 
 title: "Status - style-system-harmonization"
 owner: ""
-state: "In Progress"
+state: "Review"
 jira: ""
 branch: ""
 started: "2026-06-13"
@@ -14,11 +14,11 @@ last_updated: "2026-06-14"
 
 ## Quick Summary
 
-Shared style primitives are implemented and the first high-drift API Client / AKS slices are migrated while preserving their existing visual direction.
+Shared style primitives are implemented and high-value API Client, AKS, and Service Bus slices are migrated while preserving their existing visual direction.
 
 **Jira:** not linked
 
-**Current focus:** Ready for visual review of the shared primitives plus migrated API Client and AKS slices. Broader per-feature sweeps should proceed after review, one area at a time.
+**Current focus:** Ready for review. Continue remaining hotspots as follow-up slices only when a specific feature area is already in scope.
 
 ## Progress Checklist
 
@@ -34,7 +34,7 @@ Shared style primitives are implemented and the first high-drift API Client / AK
 - [x] Implementation wave 0 - style contract and token cleanup
 - [x] Implementation wave 1 - shared control primitives
 - [x] Implementation wave 2 - high-drift feature migration
-- [ ] Implementation wave 3 - remaining feature sweep after visual review
+- [x] Implementation wave 3 - remaining feature sweep after visual review
 - [x] Automated validation passed
 - [x] Ready for review
 
@@ -67,17 +67,20 @@ Shared style primitives are implemented and the first high-drift API Client / AK
 - Migrated the bounded API Client auth and variable generator selects to `AppSelect` with existing `auth-panel__type-select` and `var-gen-editor__select` classes passed through `CssClass`, plus scoped `::deep` selectors to preserve isolated component styling.
 - Migrated the post-request capture builder add button, source/scope selects, and delete action to `AppButton`, `AppSelect`, and `AppIconButton`, with scoped `::deep` selectors preserving the existing compact capture-rule visual styling.
 - Migrated the AKS auto-refresh toggle button and interval select to `AppButton` and `AppSelect`, with existing class hooks and scoped `::deep` selectors preserving the active dot, compact interval control, and current timer behavior.
+- Migrated the bounded Service Bus MessageListView toolbar button family (`message-list-view__toolbar-button`) to `AppButton`, preserving existing classes via `CssClass` and adding scoped `::deep` selectors for isolated CSS reach-through.
+- Migrated the bounded Service Bus `MessageDetailPane` `mdp-btn` button family to `AppButton`, preserving existing classes via `CssClass` and adding scoped `::deep` selectors for isolated CSS reach-through.
 - Added focused post-request capture builder tests and reused existing AKS connection-bar tests for the AKS slice.
 - Verified inventory movement after the first migrations: raw button occurrences dropped from 615 to 572, and raw select occurrences dropped from 54 to 48.
 - Hardened `AppDropdown` with Escape-key close behavior and the existing focus save/trap/restore helpers before broader adoption.
 - Added scoped API Client toolbar content spacing so icon/text toolbar buttons keep their pre-migration spacing inside `AppButton`.
 - Migrated the API Client environment picker to `AppDropdown`, preserving the existing trigger and menu classes with scoped `::deep` selectors.
-- Final inventory after the implemented slices: raw button occurrences 572, raw select occurrences 48, `AppDropdown` usages 1.
+- Inventory after the Service Bus toolbar slice: raw button occurrences 556, raw select occurrences 48, `AppDropdown` usages 1.
+- Final inventory after the MessageDetailPane slice: raw button occurrences 546, raw select occurrences 48, `AppDropdown` usages 1.
 
 ## Remaining
 
-- Perform visual review of API Client toolbar/env picker/capture builder and AKS auto-refresh control.
-- Continue Wave 3 as follow-up slices after visual review, starting with the highest-drift non-API/AKS areas surfaced by `scripts/style-inventory.ps1`.
+- Perform visual review of the migrated API Client, AKS, and Service Bus slices.
+- Continue remaining hotspots as follow-up slices when those feature areas are already in scope. Current top candidates from inventory are Incident Timeline config buttons, Dashboard controls, page-header actions, Redis copy buttons, Observability copy buttons, and Pipelines/Releases form/select helpers.
 - Avoid removing compatibility aliases until the inventory shows no dependent legacy token references remain.
 
 ## Blockers
@@ -89,6 +92,8 @@ Shared style primitives are implemented and the first high-drift API Client / AK
 - Test Plan: `test-plan.md`
 - Validation status: Wave 2C bounded API Client select migration passed Razor/CSS diagnostics for `AuthPanel` and `VariableGeneratorEditor`, raw-select search in both migrated Razor files, and app project build with local MSIX signing disabled; existing unrelated build warnings remain. Post-request capture builder migration passed Razor/CSS diagnostics, raw-control search, focused bUnit tests, whitespace check, and app project build with local MSIX signing disabled; existing unrelated build warnings remain.
 - AKS auto-refresh toolbar slice passed Razor/CSS diagnostics, focused `AksConnectionBarTests` (12/12), and app project build with local MSIX signing disabled; existing unrelated build warnings remain.
+- Service Bus MessageListView toolbar slice passed Razor/CSS diagnostics, raw toolbar-button search, focused `MessageListViewTests` (27/27), whitespace check, and app project build with local MSIX signing disabled; existing unrelated warnings remain.
+- Service Bus MessageDetailPane slice passed Razor/CSS diagnostics, raw `<button ... mdp-btn` search, focused `MessageDetailPaneTests` (22/22), and app project build with local MSIX signing disabled; existing unrelated warnings remain.
 - Final focused validation passed: `StyleSystemPrimitiveTests`, `PostRequestCaptureBuilderTests`, and `AksConnectionBarTests` passed 36/36.
 - Final app build passed with local MSIX signing disabled. Existing out-of-scope warnings remain in `DlqView`, `OAuth2TokenManager`, and WinAppSDK PRI qualifiers.
 - `git diff --check` passed with no whitespace issues.

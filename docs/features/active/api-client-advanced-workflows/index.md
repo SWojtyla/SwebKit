@@ -60,14 +60,14 @@ The API Client now covers individual request authoring, execution, Git-linked st
 
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-| ---- | ---------- |
+| Risk                                            | Mitigation                                                                                                |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Flow chaining becomes scripting by another name | Keep flow steps declarative: request reference, variable overrides, captures, assertions, failure policy. |
-| Trace correlation differs by API convention | Support configurable header/query/body token names and show generated KQL before running. |
-| JSONPath capture/assertion UX is hard to use | Add helper from latest response/example body, path suggestions, and test-against-response affordance. |
-| Diffing large responses hurts UI performance | Reuse response caps, lazy expansion, and structured section-level diff before full body diff. |
-| Secrets leak through examples/diffs/flow logs | Reuse response example scrubbing and mask secret-backed variables in all workflow surfaces. |
-| Runner/flow cancellation leaves stale UI state | Follow BL-7 cancellation and per-run result ownership; cancel active execution on dispose/navigation. |
+| Trace correlation differs by API convention     | Support configurable header/query/body token names and show generated KQL before running.                 |
+| JSONPath capture/assertion UX is hard to use    | Add helper from latest response/example body, path suggestions, and test-against-response affordance.     |
+| Diffing large responses hurts UI performance    | Reuse response caps, lazy expansion, and structured section-level diff before full body diff.             |
+| Secrets leak through examples/diffs/flow logs   | Reuse response example scrubbing and mask secret-backed variables in all workflow surfaces.               |
+| Runner/flow cancellation leaves stale UI state  | Follow BL-7 cancellation and per-run result ownership; cancel active execution on dispose/navigation.     |
 
 ## Related Documents
 

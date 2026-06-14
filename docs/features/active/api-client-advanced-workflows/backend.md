@@ -21,24 +21,24 @@ Backend work covers new workflow/domain services for trace correlation, response
 
 ## Proposed Domain Shapes
 
-| Model | Purpose |
-| ----- | ------- |
-| `ApiRequestAssertion` | Data-only assertion attached to a request: kind, target, operator, expected value, enabled flag |
-| `ApiAssertionResult` | Result of evaluating one assertion: pass/fail/warning, actual value, message |
-| `ApiResponseDiff` | Sectioned diff: status, headers, timing, body summary, body details |
-| `ApiTraceCorrelationConfig` | Header/query/body token name, generated variable name, App Insights target/query template |
-| `ApiFlowDefinition` | Named sequence of steps, default environment, failure policy |
-| `ApiFlowStep` | Request reference, variable overrides, capture mappings, assertions, continue-on-failure flag |
-| `ApiFlowRunResult` | Per-step results, captured variables, assertion summaries, cancellation state |
+| Model                       | Purpose                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ApiRequestAssertion`       | Data-only assertion attached to a request: kind, target, operator, expected value, enabled flag |
+| `ApiAssertionResult`        | Result of evaluating one assertion: pass/fail/warning, actual value, message                    |
+| `ApiResponseDiff`           | Sectioned diff: status, headers, timing, body summary, body details                             |
+| `ApiTraceCorrelationConfig` | Header/query/body token name, generated variable name, App Insights target/query template       |
+| `ApiFlowDefinition`         | Named sequence of steps, default environment, failure policy                                    |
+| `ApiFlowStep`               | Request reference, variable overrides, capture mappings, assertions, continue-on-failure flag   |
+| `ApiFlowRunResult`          | Per-step results, captured variables, assertion summaries, cancellation state                   |
 
 ## Design Decisions
 
-| # | Decision | Rationale | Alternative considered |
-| - | -------- | --------- | ---------------------- |
-| 1 | Assertions are data-only, not scripts | Keeps API Client safe and portable | JavaScript/Postman-style scripts rejected |
-| 2 | Flow outputs reuse capture/variable semantics | Avoids a second data-passing model | Dedicated flow-only output store rejected initially |
-| 3 | Trace correlation emits editable KQL | Users can understand and adapt the query | Hidden one-click telemetry lookup rejected |
-| 4 | Diff service scrubs/masks before rendering | Prevents examples/results from leaking secrets | Trusting response examples as already scrubbed is too fragile |
+| #   | Decision                                      | Rationale                                      | Alternative considered                                        |
+| --- | --------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| 1   | Assertions are data-only, not scripts         | Keeps API Client safe and portable             | JavaScript/Postman-style scripts rejected                     |
+| 2   | Flow outputs reuse capture/variable semantics | Avoids a second data-passing model             | Dedicated flow-only output store rejected initially           |
+| 3   | Trace correlation emits editable KQL          | Users can understand and adapt the query       | Hidden one-click telemetry lookup rejected                    |
+| 4   | Diff service scrubs/masks before rendering    | Prevents examples/results from leaking secrets | Trusting response examples as already scrubbed is too fragile |
 
 ## Implementation Tasks
 

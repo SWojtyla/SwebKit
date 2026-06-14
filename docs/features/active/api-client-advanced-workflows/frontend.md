@@ -76,12 +76,12 @@ Frontend work adds investigation and orchestration surfaces to the existing API 
 
 ## Design Decisions
 
-| # | Decision | Rationale | Alternative considered |
-| - | -------- | --------- | ---------------------- |
-| 1 | Keep flows in API Client, not a new route initially | Maintains context with collections/environments/results | Separate route deferred unless UI grows too large |
-| 2 | Use builder controls over freeform script editors | Matches no-script safety model | Postman-like script editor rejected |
-| 3 | Keep KQL visible/editable for trace correlation | Operators need transparency | Hidden telemetry query rejected |
-| 4 | Use existing panels and tabs where possible | Avoids another large shell pattern | Brand-new workspace shell deferred |
+| #   | Decision                                            | Rationale                                               | Alternative considered                            |
+| --- | --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------- |
+| 1   | Keep flows in API Client, not a new route initially | Maintains context with collections/environments/results | Separate route deferred unless UI grows too large |
+| 2   | Use builder controls over freeform script editors   | Matches no-script safety model                          | Postman-like script editor rejected               |
+| 3   | Keep KQL visible/editable for trace correlation     | Operators need transparency                             | Hidden telemetry query rejected                   |
+| 4   | Use existing panels and tabs where possible         | Avoids another large shell pattern                      | Brand-new workspace shell deferred                |
 
 ## Implementation Tasks
 

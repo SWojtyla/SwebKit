@@ -23,23 +23,23 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 ### Unit Tests — `SwebKit.Core.Tests`
 
-| Area | Coverage |
-| ---- | -------- |
-| Trace correlation | Correlation config, generated value, KQL query construction, missing App Insights target handling |
-| Diff service | JSON object diff, text diff fallback, header/status/timing diffs, large body cap behavior |
+| Area                | Coverage                                                                                            |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| Trace correlation   | Correlation config, generated value, KQL query construction, missing App Insights target handling   |
+| Diff service        | JSON object diff, text diff fallback, header/status/timing diffs, large body cap behavior           |
 | Assertion evaluator | status code, header, JSONPath, contains, response time, failure messages, invalid JSONPath warnings |
-| Flow runner | ordered execution, capture propagation, variable override precedence, failure policy, cancellation |
-| Persistence | local and linked serialization for assertions/flows, no secret values persisted |
+| Flow runner         | ordered execution, capture propagation, variable override precedence, failure policy, cancellation  |
+| Persistence         | local and linked serialization for assertions/flows, no secret values persisted                     |
 
 ### Component Tests — `SwebKit.App.Tests`
 
-| Area | Coverage |
-| ---- | -------- |
-| Trace UI | correlation action appears only when request/result has enough context; generated query is visible/editable |
-| Diff UI | examples/results selectable; empty and large-diff states render clearly |
-| Assertion UI | adding/removing/editing assertions updates request state and validates required fields |
-| Flow UI | step list, request picker, capture mapping, run results, cancellation state |
-| JSONPath helper | path suggestions/test result states render without destroying editor state |
+| Area            | Coverage                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| Trace UI        | correlation action appears only when request/result has enough context; generated query is visible/editable |
+| Diff UI         | examples/results selectable; empty and large-diff states render clearly                                     |
+| Assertion UI    | adding/removing/editing assertions updates request state and validates required fields                      |
+| Flow UI         | step list, request picker, capture mapping, run results, cancellation state                                 |
+| JSONPath helper | path suggestions/test result states render without destroying editor state                                  |
 
 ## Test Data and Setup
 
@@ -58,12 +58,12 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 ## Regression Risks & Mitigations
 
-| Risk | Mitigation |
-| ---- | ---------- |
-| Existing collection runner breaks | Reuse `ApiClientCollectionRunnerService` and add regression coverage for plain collection runs. |
-| Capture rules and flow outputs diverge | Use one capture/extraction service path for post-request captures and flow variable propagation. |
-| Secrets leak into diffs or flow logs | Centralize response/example scrubbing and assert no secret-looking fields persist. |
-| Blazor state resets in panels | Follow BL-4/BL-5: lift state to parent, guard parameter refreshes, avoid destructive `@if` toggles where state matters. |
+| Risk                                   | Mitigation                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Existing collection runner breaks      | Reuse `ApiClientCollectionRunnerService` and add regression coverage for plain collection runs.                         |
+| Capture rules and flow outputs diverge | Use one capture/extraction service path for post-request captures and flow variable propagation.                        |
+| Secrets leak into diffs or flow logs   | Centralize response/example scrubbing and assert no secret-looking fields persist.                                      |
+| Blazor state resets in panels          | Follow BL-4/BL-5: lift state to parent, guard parameter refreshes, avoid destructive `@if` toggles where state matters. |
 
 ## Acceptance Criteria
 
