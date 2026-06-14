@@ -19,6 +19,10 @@ The backend must build on the completed API Client foundation rather than introd
   - Local workspace flows should live in a dedicated API Client flow store, for example `%APPDATA%/SwebKit/api-flows.json`, because flows can reference requests across collections.
   - Linked-root flows should live under the linked API root, for example `.swebkit-api/flows/<flow>.swebflow.json`, when the flow belongs to that repo.
   - Repo-stored flows should prefer references to requests inside the same linked root. Cross-root or local references are allowed only with explicit unresolved/external-reference warnings because they reduce portability.
+- Environment ownership:
+  - Local environments remain app-local and are used by local flows and local requests by default.
+  - Linked-root environments remain under `.swebkit-api/environments/*.swebenv.json` and are used by flows/requests owned by that linked root by default.
+  - Cross-root or local-environment usage from a linked-root flow should be explicit and warning-backed because it reduces portability.
 
 ## Proposed Domain Shapes
 
@@ -27,6 +31,7 @@ The backend must build on the completed API Client foundation rather than introd
 | `ApiFlowDefinition`       | API Client-level or linked-root flow: name, description, storage scope, ordered steps, default environment, failure policy |
 | `ApiFlowStorageScope`     | Local workspace or linked root storage metadata                                                                            |
 | `ApiRequestReference`     | Stable reference to a request in a local collection or linked root                                                         |
+| `ApiEnvironmentReference` | Stable reference to a local environment or linked-root environment used by a flow or step                                  |
 | `ApiFlowStep`             | Request reference, variable overrides, capture mappings, and optional per-step display metadata                            |
 | `ApiFlowVariableOverride` | Per-flow or per-step variable value that participates in existing substitution scope                                       |
 | `ApiFlowCaptureMapping`   | Data-only capture mapping from a response source to a run-scoped variable                                                  |
@@ -43,6 +48,7 @@ The backend must build on the completed API Client foundation rather than introd
 | 4   | Flow outputs reuse capture/variable semantics | Avoids a second data-passing model                     | Dedicated flow-only output store rejected initially         |
 | 5   | Captured values are run-scoped by default     | Prevents accidental secret persistence                 | Auto-writing every flow capture to an environment rejected  |
 | 6   | User chooses stop or continue policy          | Different flows are validation-oriented or exploratory | One hard-coded default rejected                             |
+| 7   | Environments are scoped by local/repo owner   | Prevents repo-backed requests from using the wrong env | One fully global environment picker rejected                |
 
 ## Implementation Tasks
 
@@ -51,6 +57,7 @@ The backend must build on the completed API Client foundation rather than introd
 #### A1 — Flow contracts and request references
 
 - [ ] Add `ApiFlowDefinition`, `ApiFlowStorageScope`, `ApiRequestReference`, `ApiFlowStep`, variable override, capture mapping, failure policy, and run-result models.
+- [ ] Add `ApiEnvironmentReference` or equivalent ownership metadata for default flow/step environments.
 - [ ] Support request references across local collections and linked roots.
 - [ ] Include enough metadata to show unresolved request references clearly when a linked root or local collection is unavailable.
 - [ ] Do not copy request definitions into flow files.
@@ -67,6 +74,8 @@ The backend must build on the completed API Client foundation rather than introd
 
 - [ ] Load app-local flows and linked-root flows into one flow library.
 - [ ] Clearly mark where each flow is stored: local workspace or linked root.
+- [ ] Filter environment choices by flow storage owner by default: local environments for local flows, linked-root environments for repo flows.
+- [ ] Warn when a flow step uses an environment outside the flow's storage owner.
 - [ ] Warn when a linked-root flow references requests outside its linked root because that flow may not be portable for other users.
 - [ ] Include linked-root Git status for changed flow files through the existing linked Git status/action path if feasible.
 
@@ -76,6 +85,7 @@ The backend must build on the completed API Client foundation rather than introd
 
 - [ ] Implement `ApiClientFlowRunnerService` using the existing `IHttpRequestExecutor` path for each request step.
 - [ ] Resolve each `ApiRequestReference` to the current local or linked request before execution.
+- [ ] Resolve the selected `ApiEnvironmentReference` to a local or linked-root environment before execution.
 - [ ] Build per-step variable scope from collection/environment variables, flow overrides, previous captured values, and step overrides.
 - [ ] Default captured flow values to run-scoped values that feed later steps but are not persisted.
 - [ ] Extract or reuse capture evaluation logic so flow captures and post-request captures do not diverge.

@@ -17,6 +17,7 @@ The near-term plan should focus on the original Wave 4 request-flow capability:
 - Reusable request flows that can run ordered steps, reuse captures, and stop or continue based on explicit user-selected failure policy.
 - A flow library that is more global than a single collection and can support cross-collection request references.
 - Linked-repository flow files when a flow belongs with a linked API root, so those flows can be reviewed, committed, and shared with the API definitions.
+- Environment ownership that matches flow/request ownership: local environments for local workspace flows and linked-root environments for repo-backed flows.
 - JSONPath helper support because it is the shared usability bridge for capture mappings and future assertions.
 - Trace correlation, visual diff, and assertions should only receive extension points that are cheap and natural while building flows; their full UX is deferred.
 
@@ -28,6 +29,7 @@ The near-term plan should focus on the original Wave 4 request-flow capability:
 - Let flows reference requests across collections when the referenced requests are available in the current API Client workspace.
 - Store local workspace flows in app-local API Client state.
 - Store linked-repo flows under the linked root when the flow belongs to that repo, so flow definitions are versioned with the linked API files.
+- Keep environment selection scoped to the flow/request context: local flows use local environments by default, linked-root flows use environments from the owning linked root by default, and cross-root/local environment usage must be explicit.
 - Use stable request references that identify local collection requests and linked-root requests without copying request definitions into the flow.
 - Provide a dedicated flow configuration screen for editing, ordering, and running flows.
 
@@ -91,6 +93,7 @@ The near-term plan should focus on the original Wave 4 request-flow capability:
 | Flow chaining becomes scripting by another name                     | Keep flow steps declarative: request reference, variable overrides, captures, and failure policy.                                          |
 | Cross-collection references become brittle                          | Use stable request references with source kind, linked-root identity when applicable, collection identity, and request identity.           |
 | Linked flow definitions accidentally reference private local assets | Show unresolved/external reference warnings and prefer linked-root-local references for repo-stored flows.                                 |
+| Environment selection leaks across repo boundaries                  | Scope environment picker/overrides by local workspace or linked root, and require explicit choice for external environments.               |
 | JSONPath capture UX is hard to use                                  | Add helper from latest response/example body, path suggestions, and test-against-response affordance.                                      |
 | Captured values accidentally persist secrets                        | Default flow captures to run-scoped values; do not write captures to environments or linked files automatically.                           |
 | Flow cancellation leaves stale UI state                             | Follow BL-7 cancellation and per-run result ownership; cancel active execution on dispose/navigation.                                      |

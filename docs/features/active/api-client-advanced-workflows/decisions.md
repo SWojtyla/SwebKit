@@ -109,3 +109,13 @@
 **Rationale:** Some flows are validation-oriented and should stop early. Others are exploratory or diagnostic and should collect as much output as possible even when one step fails.
 
 **Implication:** Flow results must clearly show completed, failed, skipped, and cancelled steps. Assertion-specific policies are deferred until assertions are reprioritized.
+
+---
+
+## DEC-12: API Client environments are scoped by local or linked-root owner
+
+**Decision:** API Client environments should not feel fully global. Local workspace flows and requests use local environments by default. Linked-root flows and requests use environments stored under that linked root by default. External environments can be selected explicitly, but should show a portability warning.
+
+**Rationale:** Repo-backed API definitions should travel with the environment definitions that make them runnable. A flat global environment picker makes it too easy to run a repo-backed request with the wrong local environment or to create flows that only work on one machine.
+
+**Implication:** Flow and future environment UX should group/filter environments by owner. Linked-root environment files remain under `.swebkit-api/environments/*.swebenv.json`; local environments remain app-local. Flow definitions need stable environment references and unresolved/external-reference warnings.

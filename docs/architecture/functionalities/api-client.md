@@ -65,10 +65,11 @@ ApiClientPage
 
 1. `LinkedGitService.GetStatusAsync` resolves the repository root and filters porcelain status to the linked API root.
 2. UI shows branch, changed API file count, staged/unstaged sections, changed file details, and commit preview for staged files.
-3. Review loads original/current text for a changed API file inside SwebKit.
-4. Stage/unstage/revert operations validate the file is one of the reported linked API files before invoking Git.
-5. Staged commit rejects unrelated staged files outside the API root.
-6. Push and remote compare use the detected repository remote/branch.
+3. Git actions are opened from the API Repos menu for the selected repo, or from the API Repositories management screen's Git action.
+4. Review loads original/current text for a changed API file inside SwebKit.
+5. Stage/unstage/revert operations validate the file is one of the reported linked API files before invoking Git.
+6. Staged commit rejects unrelated staged files outside the API root.
+7. Push and remote compare use the detected repository remote/branch.
 
 ## State Persistence
 

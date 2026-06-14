@@ -59,6 +59,7 @@ Planning is being refined around the maintainer's current priority: build reques
 - [ ] Cross-collection request references
 - [ ] Local workspace flow repository
 - [ ] Linked-root flow file persistence
+- [ ] Scoped environment ownership: local environments for local flows, linked-root environments for repo flows
 - [ ] Flow configuration screen
 - [ ] User-selectable stop/continue failure policy
 
@@ -86,6 +87,7 @@ The maintainer clarified the flow direction on 2026-06-14:
 - Flows should be more global than a single collection. A flow can reference requests across collections when that is useful.
 - Local flows should be available from an API Client flow library, not hidden under one request.
 - Linked-repository flows should be stored in the linked repository when the flow belongs to that repo, so flow definitions can be reviewed and versioned with the API files.
+- Environments should follow the same ownership boundary: local environments for local workspace work, and linked-root environments stored with the linked repo. The picker should not feel like one fully global environment list.
 - The user should choose the failure behavior for each flow: stop on failure or continue.
 - The flow experience should have a real configuration screen rather than a small incidental drawer.
 
@@ -103,6 +105,7 @@ First-pass behavior:
 ## Remaining
 
 - Finalize the flow library storage rules for local workspace flows versus linked-root flows.
+- Finalize environment scoping rules for local workspace flows versus linked-root flows.
 - Implement request flows in small slices, starting with flow contracts, request references, and persistence.
 - Implement the flow configuration screen before broader runner polish.
 - Revisit assertions, trace correlation, and visual diff after the flow workflow is useful and polished.

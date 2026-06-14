@@ -53,6 +53,7 @@
                 </TriggerContent>
                 <ChildContent>
                     <button type="button" class="ctx-item" @onclick="OpenLinkedRootDialogFromMenu">Add API repo</button>
+                    <button type="button" class="ctx-item" disabled="@(CurrentTargetLinkedRoot is null)" @onclick="OpenCurrentTargetGitFromMenu">Git for selected repo</button>
                     <button type="button" class="ctx-item" disabled="@(_linkedRootInfos.Count == 0)" @onclick="OpenLinkedRootManagementFromMenu">Manage API repos</button>
                 </ChildContent>
             </AppDropdown>
@@ -897,6 +898,15 @@ result.Environments)).ToList();
     {
         _showRepoMenu = false;
         _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots;
+    }
+
+    private async Task OpenCurrentTargetGitFromMenu()
+    {
+        _showRepoMenu = false;
+        if (CurrentTargetLinkedRoot is { } linkedRoot)
+        {
+            await OpenGitPanelAsync(linkedRoot.Config.Id);
+        }
     }
 
     private void OpenCurlImportDialogFromMenu()

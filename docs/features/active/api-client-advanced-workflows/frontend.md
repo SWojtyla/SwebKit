@@ -39,7 +39,7 @@ The work should reuse the current `src/SwebKit.App/Components/ApiClient/` folder
   - ordered step list
   - request picker per step
   - request source/collection/root indicator per step
-  - environment and variable overrides
+  - scoped environment picker and variable overrides
   - capture mappings from response to variables
   - failure policy selector
 - Flow runner:
@@ -51,6 +51,8 @@ UX direction:
 
 - Use a real configuration screen inside the API Client, large enough for a step list, request picker, capture mappings, policy settings, and run results.
 - Prefer an in-page full-height panel/workspace over a tiny drawer. A separate app route is still deferred unless the screen becomes too large for the API Client page.
+- Group environment choices by owner. Local flows default to local environments; linked-root flows default to environments stored in that linked root.
+- If a user selects an environment from outside the flow's owner, show a portability warning.
 - Show captured values with secret-looking names masked by default.
 - Let the user choose stop or continue behavior per flow.
 - Start with one selected flow at a time; do not rebuild the removed active collection runner.
@@ -102,6 +104,7 @@ UX direction:
 - [ ] Add flow library screen with local and linked-root flow groups.
 - [ ] Add create/edit/delete/rename affordances with visible storage location.
 - [ ] Add flow editor with ordered step list and cross-collection request picker.
+- [ ] Add scoped environment picker for flow/step execution.
 - [ ] Add failure policy selector with stop and continue options.
 - [ ] Add capture mapping editor and JSONPath helper entry point.
 - [ ] Add unresolved-reference and portability warning states.

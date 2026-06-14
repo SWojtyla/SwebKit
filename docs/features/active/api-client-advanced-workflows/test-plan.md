@@ -15,12 +15,14 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 1. Flow library — Local workspace flows and linked-root flows load into one flow library with clear storage labels.
 2. Linked flow persistence — A flow created for a linked root is stored under that linked repository and can appear in scoped Git status.
 3. Cross-collection flow — A flow can reference requests from more than one collection, with clear source labels.
-4. Flow chaining — Step 1 captures a JSONPath value and Step 2 uses it through existing variables.
-5. Run-scoped captures — Captured values feed later steps without being persisted by default.
-6. JSONPath helper — User can test or select a JSONPath against a saved/latest response body.
-7. Failure policy — User-selected stop/continue policy behaves predictably for request failures.
-8. Cancellation — Cancelling a flow stops remaining steps and preserves completed result state.
-9. Unresolved references — Missing collections, linked roots, or requests render clear warnings and do not crash the flow screen.
+4. Scoped environments — Local flows default to local environments; linked-root flows default to environments stored in that linked root.
+5. External environment warning — A linked-root flow can explicitly use an external/local environment, but the UI warns that the flow is less portable.
+6. Flow chaining — Step 1 captures a JSONPath value and Step 2 uses it through existing variables.
+7. Run-scoped captures — Captured values feed later steps without being persisted by default.
+8. JSONPath helper — User can test or select a JSONPath against a saved/latest response body.
+9. Failure policy — User-selected stop/continue policy behaves predictably for request failures.
+10. Cancellation — Cancelling a flow stops remaining steps and preserves completed result state.
+11. Unresolved references — Missing collections, linked roots, environments, or requests render clear warnings and do not crash the flow screen.
 
 ## Automated Coverage
 
@@ -29,6 +31,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 | Area                | Coverage                                                                                                          |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Flow references     | local request reference, linked-root request reference, cross-collection reference, unresolved reference warnings |
+| Environment scope   | local environment reference, linked-root environment reference, external environment warning, missing environment warning |
 | Flow runner         | ordered execution, capture propagation, variable override precedence, failure policy, cancellation                |
 | Persistence         | local and linked serialization for flows, no secret or captured runtime values persisted                          |
 | Deferred assertions | status code, header, JSONPath, contains, response time, failure messages, invalid JSONPath warnings               |
@@ -40,7 +43,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 | Area                  | Coverage                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Flow library          | local/linked grouping, storage labels, create/edit/delete/rename, unresolved reference warnings             |
-| Flow UI               | step list, cross-collection request picker, capture mapping, run results, cancellation state                |
+| Flow UI               | step list, cross-collection request picker, scoped environment picker, capture mapping, run results, cancellation state |
 | JSONPath helper       | path suggestions/test result states render without destroying editor state                                  |
 | Deferred assertion UI | adding/removing/editing assertions updates request state and validates required fields                      |
 | Deferred trace UI     | correlation action appears only when request/result has enough context; generated query is visible/editable |
@@ -58,6 +61,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 - Flow library: create a local flow and a linked-root flow, then verify the storage location and Git status are clear.
 - Cross-collection flow: create a flow that uses requests from two collections and verify source labels are understandable.
+- Scoped environments: create local and linked-root environments and verify each flow type defaults to the correct owner group.
 - Flow chaining: run login/get-details style flow where captured token/id from Step 1 feeds Step 2.
 - Failure policy: verify stop and continue modes with a failing step.
 - Cancellation: cancel a long flow and verify completed steps remain visible while later steps are skipped.
@@ -73,6 +77,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 | Capture rules and flow outputs diverge        | Use one capture/extraction service path for post-request captures and flow variable propagation.                        |
 | Secrets leak into flow logs or linked files   | Mask secret-looking captured values and assert no secret or captured runtime values persist in flow definitions.        |
 | Cross-collection references break portability | Show source labels and unresolved/external-reference warnings, especially for linked-root flow files.                   |
+| Environments feel fully global                | Group and filter environments by local/linked-root owner, and warn when a flow uses an external environment.            |
 | Deferred work distracts from MVP              | Keep assertion, trace, and diff tests documented but out of the first implementation acceptance gate.                   |
 | Blazor state resets in panels                 | Follow BL-4/BL-5: lift state to parent, guard parameter refreshes, avoid destructive `@if` toggles where state matters. |
 
@@ -80,6 +85,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 - Flows can be stored locally or in a linked root, with clear storage location and no hidden persistence.
 - Flows can reference requests across collections with stable references and clear unresolved-reference warnings.
+- Environments are scoped by owner: local for local flows, linked-root environments for repo flows, with warnings for explicit external use.
 - Flow steps can pass captured values through variables without scripts.
 - Users can choose stop or continue behavior for failed steps.
 - Cancellation is reliable and does not corrupt later request state.
