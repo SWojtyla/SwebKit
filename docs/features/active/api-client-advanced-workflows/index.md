@@ -6,7 +6,7 @@ Extend the completed API Client with higher-level request workflows: trace corre
 
 ## Value
 
-The API Client now covers individual request authoring, execution, Git-linked storage, variables, examples, and collection runs. The next user value is investigative and workflow depth: send a request, correlate it with telemetry, compare behavior across environments, validate expected outcomes, and run dependent request chains without writing scripts.
+The API Client now covers individual request authoring, execution, Git-linked storage, variables, examples, and linked repository workflows. The next user value is investigative and workflow depth: send a request, correlate it with telemetry, compare behavior across environments, validate expected outcomes, and run dependent request chains without writing scripts.
 
 ## Scope
 
@@ -14,13 +14,13 @@ The API Client now covers individual request authoring, execution, Git-linked st
 
 - Add a correlation ID strategy for API requests.
 - Let users inject or generate a correlation value into headers/query/body through existing variables.
-- Provide a jump from a request or runner result into App Insights logs filtered by that correlation value.
+- Provide a jump from a request or future flow result into App Insights logs filtered by that correlation value.
 - Keep the trace query advisory and editable rather than hiding KQL from the user.
 
 ### Wave 2 — Visual Response Diff
 
 - Compare saved response examples against each other.
-- Compare runner results across environments or runs.
+- Compare saved examples and future flow step results across environments or runs.
 - Render structured JSON/text differences with status, headers, timing, and body sections.
 - Preserve existing response-size and secret-scrubbing safeguards.
 
@@ -28,7 +28,7 @@ The API Client now covers individual request authoring, execution, Git-linked st
 
 - Add assertion definitions to requests without scripting.
 - Support status code, header presence/value, JSONPath body checks, response time, and body contains checks.
-- Show pass/fail results in single request execution and collection/flow runner results.
+- Show pass/fail results in single request execution and future flow results.
 - Keep assertions data-only and portable in local and linked collection files.
 
 ### Wave 4 — Request Flows
@@ -46,7 +46,7 @@ The API Client now covers individual request authoring, execution, Git-linked st
 - No full OpenAPI import/export in this feature.
 - No PR creation or remote Git workflow expansion.
 - No automatic cookie jar unless it is planned as a separate feature.
-- No replacement for the existing collection runner; flows build on it where possible.
+- Do not revive the removed active collection runner. Custom request flows should be planned as a dedicated workflow surface.
 
 ## Dependencies
 
@@ -67,7 +67,7 @@ The API Client now covers individual request authoring, execution, Git-linked st
 | JSONPath capture/assertion UX is hard to use    | Add helper from latest response/example body, path suggestions, and test-against-response affordance.     |
 | Diffing large responses hurts UI performance    | Reuse response caps, lazy expansion, and structured section-level diff before full body diff.             |
 | Secrets leak through examples/diffs/flow logs   | Reuse response example scrubbing and mask secret-backed variables in all workflow surfaces.               |
-| Runner/flow cancellation leaves stale UI state  | Follow BL-7 cancellation and per-run result ownership; cancel active execution on dispose/navigation.     |
+| Flow cancellation leaves stale UI state         | Follow BL-7 cancellation and per-run result ownership; cancel active execution on dispose/navigation.     |
 
 ## Related Documents
 

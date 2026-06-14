@@ -9,7 +9,7 @@ Backend work covers new workflow/domain services for trace correlation, response
 - Project: `src/SwebKit.Core/`
   - `Domain/ApiClientModels.cs` or new focused models file for assertions, flow definitions, diff results, and trace correlation config.
   - `Services/ApiClientWorkflowService.cs` for request helper reuse where appropriate.
-  - `Services/ApiClientCollectionRunnerService.cs` for runner reuse.
+  - Existing request execution services for single-request reuse.
   - New services likely needed: `ApiClientAssertionEvaluator`, `ApiClientResponseDiffService`, `ApiClientFlowRunnerService`, `ApiClientTraceCorrelationService`.
 - Project: `src/SwebKit.Observability/`
   - App Insights/KQL query handoff support if existing provider abstractions need extension.
@@ -63,7 +63,7 @@ Backend work covers new workflow/domain services for trace correlation, response
 - [ ] Add assertion model and operators.
 - [ ] Implement evaluator for status code, header, body contains, JSONPath, response time.
 - [ ] Return pass/fail/warning results with user-readable messages.
-- [ ] Attach assertion results to single request and collection runner results.
+- [ ] Attach assertion results to single request and future flow results.
 - [ ] Serialize assertions in local and linked formats without secrets.
 
 ### Wave 4 — Request Flows

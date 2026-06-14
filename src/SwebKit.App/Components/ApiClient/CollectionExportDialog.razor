@@ -162,10 +162,24 @@
     [Parameter] public bool Visible { get; set; }
     [Parameter] public ApiCollection? Collection { get; set; }
     [Parameter] public IReadOnlyList<ApiEnvironment> Environments { get; set; } = [];
+    [Parameter] public string InitialTab { get; set; } = "export";
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnImported { get; set; }
 
     private string _activeTab = "export";
+    private bool _wasVisible;
+
+    protected override void OnParametersSet()
+    {
+        if (Visible && !_wasVisible)
+        {
+            _activeTab = string.Equals(InitialTab, "import", StringComparison.OrdinalIgnoreCase)
+                ? "import"
+                : "export";
+        }
+
+        _wasVisible = Visible;
+    }
 
     // ── Export state ──────────────────────────────────────────────────────────
 

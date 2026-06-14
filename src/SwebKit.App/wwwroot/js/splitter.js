@@ -4,6 +4,15 @@
 //   leftPane: false → pane is to the RIGHT of the splitter (drag left  = grow, default)
 window.SwebKitSplitter = {
   init: function (splitterEl, paneEl, options) {
+    if (!splitterEl || !paneEl) {
+      return {
+        dispose: function () {},
+        getWidth: function () {
+          return 0;
+        },
+      };
+    }
+
     const minW = options?.minWidth ?? 200;
     const maxW = options?.maxWidth ?? 1600;
     const leftPane = options?.leftPane ?? false;

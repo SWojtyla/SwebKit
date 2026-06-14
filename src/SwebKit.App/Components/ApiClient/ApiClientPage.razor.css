@@ -300,6 +300,37 @@
     color: var(--color-text-muted);
 }
 
+.api-client-toolbar-menu,
+.api-client-page ::deep .api-client-toolbar-menu {
+    position: relative;
+}
+
+.api-client-toolbar-menu__chevron,
+.api-client-page ::deep .api-client-toolbar-menu__chevron {
+    margin-left: 2px;
+    color: var(--color-text-muted);
+    font-size: 10px;
+}
+
+.api-client-toolbar-menu__dropdown,
+.api-client-page ::deep .api-client-toolbar-menu__dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: var(--z-overlay);
+    min-width: 180px;
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
+}
+
+.api-client-page ::deep .api-client-toolbar-menu__dropdown .ctx-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 /* ── Env picker (custom dropdown, replaces native select) ── */
 
 .api-client-env-picker,
@@ -325,100 +356,6 @@
 
 .api-client-env-picker__chevron,
 .api-client-page ::deep .api-client-env-picker__chevron {
-    margin-left: auto;
-    font-size: 10px;
-    color: var(--color-text-muted);
-}
-
-.api-client-env-picker__dropdown,
-.api-client-page ::deep .api-client-env-picker__dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    z-index: var(--z-overlay);
-    min-width: 160px;
-    background: var(--color-panel-card, var(--color-surface));
-    border: 1px solid var(--color-card-border-strong, var(--color-border));
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    padding: 4px 0;
-}
-
-/* ── Body split ─────────────────────────────────────────── */
-
-.api-client-body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    overflow: hidden;
-}
-
-/* ── Tree panel (left) ──────────────────────────────────── */
-
-.api-client-tree-panel {
-    width: 260px;
-    min-width: 160px;
-    max-width: 400px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--color-border);
-    background: var(--color-surface);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.api-client-tree-panel__loading,
-.api-client-tree-panel__empty {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.api-client-linked-roots,
-.api-client-git-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    overflow: auto;
-}
-
-.api-client-linked-roots__empty {
-    color: var(--color-text-muted);
-    font-size: 13px;
-    padding: 12px;
-}
-
-.api-client-linked-root-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-}
-
-.api-client-linked-root-card__main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.api-client-linked-root-card__name {
-    color: var(--color-text);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.api-client-linked-root-card__path {
-    color: var(--color-text-muted);
-    font-family: var(--font-family-mono);
-    font-size: 11px;
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -602,55 +539,7 @@
     overflow: hidden;
 }
 
-.api-client-pinned-tabs {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 8px;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface-raised);
-    overflow-x: auto;
-}
-
-.api-client-pinned-tab,
-.api-client-pinned-tab__close {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
-    font-size: 11px;
-    cursor: pointer;
-}
-
-.api-client-pinned-tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 180px;
-    padding: 4px 8px;
-}
-
-.api-client-pinned-tab span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.api-client-pinned-tab--active {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
-}
-
-.api-client-pinned-tab__close {
-    width: 22px;
-    height: 22px;
-}
-
-.api-client-inspector,
-.api-client-runner {
+.api-client-inspector {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -658,8 +547,7 @@
     overflow: auto;
 }
 
-.api-client-inspector__row,
-.api-client-runner__row {
+.api-client-inspector__row {
     display: grid;
     grid-template-columns: minmax(120px, 1fr) 140px minmax(180px, 2fr);
     gap: 10px;
@@ -671,29 +559,21 @@
     font-size: 12px;
 }
 
-.api-client-runner__row {
-    grid-template-columns: 56px minmax(180px, 1fr) minmax(160px, 1fr) 80px;
-}
-
 .api-client-inspector__row--unresolved {
     border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
 }
 
-.api-client-inspector__key,
-.api-client-runner__method {
+.api-client-inspector__key {
     font-family: var(--font-family-mono);
     color: var(--color-text);
     font-weight: 600;
 }
 
-.api-client-inspector__source,
-.api-client-runner__status,
-.api-client-runner__elapsed {
+.api-client-inspector__source {
     color: var(--color-text-muted);
 }
 
-.api-client-inspector__value,
-.api-client-runner__name {
+.api-client-inspector__value {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

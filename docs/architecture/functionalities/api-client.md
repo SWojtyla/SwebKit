@@ -16,11 +16,9 @@
 - **GraphQL** — query and variables editors, operation parsing, schema introspection cache, GraphQL error rendering, and `graphql-ws` subscriptions.
 - **WebSocket** — URL/headers/subprotocol, connection state, bounded virtualized message log, text/binary composer, and saved message templates.
 - **Export/import** — SwebKit-native JSON, Postman v2.1 subset import/export, Bruno export, standalone environment import, and full configuration bundle integration.
-- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands and import cURL commands into the active collection.
+- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands and import cURL commands into the active request target collection.
 - **Variable inspector** — list request tokens with source metadata and masked/resolved values.
-- **Pinned requests** — session-local pinned request tabs with isolated dirty, response, and subscription message state.
 - **Response examples** — save scrubbed response examples on requests; linked files persist examples only after explicit save.
-- **Collection runner** — sequential folder/collection execution through the existing request execution path, with cancellation and per-request results.
 - **Keyboard shortcuts** — API Client command registrations for new request, new collection, environment manager, send, and cancellation.
 
 ## Current Deferrals
@@ -37,7 +35,7 @@ ApiClientPage
   │     ├── Local Collections
   │     └── Linked Repositories
   ├── RequestBuilderPanel
-  │     ├── Params / Headers / Body / Auth / Capture
+  │     ├── Body / Params / Headers / Auth / Capture
   │     ├── GraphQlPanel
   │     └── WebSocketPanel
   └── ResponseViewerPanel
@@ -83,7 +81,6 @@ ApiClientPage
 | Linked environments                 | `.swebkit-api/environments/*.swebenv.json` | Persistent, Git-trackable references only |
 | Secret values                       | Windows Credential Store or Key Vault      | Persistent outside repo files             |
 | Request history                     | `ApiClientPage._requestHistory`            | Session only                              |
-| Pinned requests                     | `ApiClientPage._pinnedRequestIds`          | Session only                              |
 | Response examples                   | `HttpRequestEntry.ResponseExamples`        | Persistent with collection/request        |
 | WebSocket message log               | `WebSocketPanel` state                     | Session/request only                      |
 | GraphQL subscription messages       | `ApiClientPage._subscriptionMessages`      | Session/request only                      |

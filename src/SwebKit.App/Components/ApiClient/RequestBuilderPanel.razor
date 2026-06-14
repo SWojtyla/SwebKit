@@ -264,9 +264,9 @@
     [Inject] private IGraphQlSubscriptionService SubscriptionService { get; set; } = default!;
     [Inject] private UserSettingsRepository UserSettings { get; set; } = default!;
 
-    private static readonly string[] _tabs = ["Params", "Headers", "Body", "Auth", "Capture"];
+    private static readonly string[] _tabs = ["Body", "Params", "Headers", "Auth", "Capture"];
     private static readonly string[] _graphQlTabs = ["GraphQL", "Headers", "Auth", "Capture"];
-    private string _activeTab = "Params";
+    private string _activeTab = "Body";
 
     private string[] ActiveTabs => Request.Method == ApiRequestMethod.GraphQl ? _graphQlTabs : _tabs;
 
@@ -347,7 +347,7 @@
         if (method == ApiRequestMethod.GraphQl && !_graphQlTabs.Contains(_activeTab))
             _activeTab = "GraphQL";
         else if (method != ApiRequestMethod.GraphQl && !_tabs.Contains(_activeTab))
-            _activeTab = "Params";
+            _activeTab = "Body";
 
         await MarkDirtyAsync();
     }

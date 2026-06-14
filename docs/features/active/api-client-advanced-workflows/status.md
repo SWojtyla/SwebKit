@@ -28,7 +28,7 @@ Planning complete for advanced API Client workflows: trace correlation, visual r
 - [ ] Correlation config model
 - [ ] Header/query/body injection strategy
 - [ ] App Insights query handoff
-- [ ] UI action from request/runner result to traces
+- [ ] UI action from request/flow result to traces
 - [ ] Focused tests and manual trace check
 
 ### Wave 2 — Visual Response Diff
@@ -44,7 +44,7 @@ Planning complete for advanced API Client workflows: trace correlation, visual r
 - [ ] Assertion domain model
 - [ ] Assertion evaluator service
 - [ ] Assertion builder UI
-- [ ] Request and runner result integration
+- [ ] Request and flow result integration
 - [ ] Focused tests for status/header/body/timing assertions
 
 ### Wave 4 — Request Flows
@@ -60,6 +60,7 @@ Planning complete for advanced API Client workflows: trace correlation, visual r
 
 - Follow-up scope separated from completed API Client foundation.
 - Existing API Client feature prepared for archive as historical foundation.
+- Feedback cleanup completed for the current API Client surface: consolidated API repo controls, import/export controls, and variables controls into menus; removed active collection runner and request pinning; made Body the default REST request tab; fixed linked-repo request creation targeting; hardened splitter initialization during collection switches; cleaned response history styling.
 
 ## Remaining
 
@@ -73,7 +74,7 @@ _None._
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: Advanced-workflow implementation not started. API Client feedback cleanup passed focused diagnostics, style inventory, and app build with local signing disabled on 2026-06-14.
 
 ## Notes
 

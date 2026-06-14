@@ -36,16 +36,16 @@
 
 **Decision:** Visual response diffs compare scrubbed examples/results. Secret-looking headers and JSON properties must be masked before diff payloads are rendered or persisted.
 
-**Rationale:** Saved examples and runner results are useful documentation artifacts, but diffs often encourage sharing. Secret safety should not depend on the user remembering to scrub values manually.
+**Rationale:** Saved examples and future flow results are useful documentation artifacts, but diffs often encourage sharing. Secret safety should not depend on the user remembering to scrub values manually.
 
 **Implication:** Diff services should either accept already-scrubbed examples or call the same scrubbing helper used by response examples.
 
 ---
 
-## DEC-5: Flow runner builds on collection runner semantics
+## DEC-5: Flow runner owns workflow semantics
 
-**Decision:** Flow execution should reuse the existing request execution path and collection runner result patterns wherever possible.
+**Decision:** Flow execution should reuse the existing single-request execution path, but should not rebuild the removed active collection runner as a toolbar feature.
 
-**Rationale:** The completed collection runner already handles sequential execution, cancellation, per-request results, and skipped WebSocket requests. Flows add step dependencies and variable propagation, not a new HTTP engine.
+**Rationale:** The API Client should stay focused on individual request work until a dedicated custom-flow surface exists. Flows add step dependencies, variable propagation, and explicit failure policy; they should not inherit old collection-run assumptions.
 
-**Implication:** Any divergence from collection runner behavior must be explicit in the flow failure policy.
+**Implication:** Flow behavior and cancellation must be specified directly in the flow failure policy.

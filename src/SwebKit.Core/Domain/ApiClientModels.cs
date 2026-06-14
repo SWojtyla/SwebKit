@@ -123,16 +123,6 @@ public sealed class CurlImportResult
     public static CurlImportResult Failure(string errorMessage) => new() { ErrorMessage = errorMessage };
 }
 
-public sealed class CollectionRunItemResult
-{
-    public string RequestId { get; init; } = string.Empty;
-    public string RequestName { get; init; } = string.Empty;
-    public ApiRequestMethod Method { get; init; }
-    public HttpRequestResult? Result { get; init; }
-    public string? ErrorMessage { get; init; }
-    public TimeSpan Elapsed => Result?.Elapsed ?? TimeSpan.Zero;
-}
-
 public enum ApiRequestMethod
 {
     Get,

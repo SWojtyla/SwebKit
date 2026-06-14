@@ -14,7 +14,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 1. Trace correlation — Generated correlation ID is injected into a request and available for App Insights query handoff.
 2. Visual diff — Two saved response examples can be compared without exposing secret-looking values.
 3. Assertions — A request with no-code assertions reports pass/fail details after execution.
-4. Runner assertions — Collection or flow run displays assertion results per request/step.
+4. Flow assertions — Flow run displays assertion results per step.
 5. Flow chaining — Step 1 captures a JSONPath value and Step 2 uses it through existing variables.
 6. JSONPath helper — User can test or select a JSONPath against a saved/latest response body.
 7. Cancellation — Cancelling a flow stops remaining steps and preserves completed result state.
@@ -52,7 +52,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 - Trace correlation: send a request with correlation header and verify the generated App Insights query opens with the correlation value.
 - Visual diff: compare dev vs prod examples and verify changed status/header/body sections are readable.
-- Assertions: create one passing and one failing assertion and verify runner output is understandable.
+- Assertions: create one passing and one failing assertion and verify request/flow output is understandable.
 - Flow chaining: run login/get-details style flow where captured token/id from Step 1 feeds Step 2.
 - Cancellation: cancel a long flow and verify completed steps remain visible while later steps are skipped.
 
@@ -60,7 +60,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 | Risk                                   | Mitigation                                                                                                              |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Existing collection runner breaks      | Reuse `ApiClientCollectionRunnerService` and add regression coverage for plain collection runs.                         |
+| Existing request execution breaks      | Reuse the existing request execution path and add regression coverage for single request execution.                     |
 | Capture rules and flow outputs diverge | Use one capture/extraction service path for post-request captures and flow variable propagation.                        |
 | Secrets leak into diffs or flow logs   | Centralize response/example scrubbing and assert no secret-looking fields persist.                                      |
 | Blazor state resets in panels          | Follow BL-4/BL-5: lift state to parent, guard parameter refreshes, avoid destructive `@if` toggles where state matters. |
@@ -69,7 +69,7 @@ Validate that advanced API Client workflows are safe, deterministic, script-free
 
 - Trace query handoff works with a configured App Insights resource and degrades clearly when not configured.
 - Response diffs are readable for JSON and text and do not show secret values.
-- Assertions are data-only and run for single requests, collections, and flows.
+- Assertions are data-only and run for single requests and future flows.
 - Flow steps can pass captured values through variables without scripts.
 - Cancellation is reliable and does not corrupt later request state.
 - All new persistence writes keep secret values out of local/linkable files.

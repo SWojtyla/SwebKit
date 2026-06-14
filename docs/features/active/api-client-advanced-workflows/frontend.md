@@ -33,7 +33,7 @@ Frontend work adds investigation and orchestration surfaces to the existing API 
 
 - Diff entry points:
   - compare two saved response examples on a request
-  - compare two runner results
+  - compare two saved examples or flow step results
   - compare selected environment runs when metadata is present
 - Viewer sections:
   - status and timing
@@ -49,7 +49,7 @@ Frontend work adds investigation and orchestration surfaces to the existing API 
   - operator selector: equals, not equals, contains, exists, less than, greater than
   - target/value inputs
   - enabled toggle
-- Results appear in request response and runner/flow result rows with pass/fail/warning badges.
+- Results appear in request response and future flow result rows with pass/fail/warning badges.
 - Invalid assertions should be shown as warnings, not app-breaking errors.
 
 ### Request Flows
@@ -86,7 +86,7 @@ Frontend work adds investigation and orchestration surfaces to the existing API 
 ## Implementation Tasks
 
 - [ ] Add assertion builder component and request integration.
-- [ ] Add assertion result rendering in response/runner/flow surfaces.
+- [ ] Add assertion result rendering in response/flow surfaces.
 - [ ] Add response diff panel and example/result selection UI.
 - [ ] Add trace correlation panel and Observability handoff action.
 - [ ] Add flow manager/editor/runner screens.

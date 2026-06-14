@@ -152,7 +152,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
         builder.Services.AddSingleton<IVariablePreviewService, VariablePreviewService>();
         builder.Services.AddSingleton<ApiClientWorkflowService>();
-        builder.Services.AddSingleton<ApiClientCollectionRunnerService>();
         builder.Services.AddSingleton<IRequestBodyFormatter, RequestBodyFormatter>();
         builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
         builder.Services.AddSingleton<IKeyVaultSecretResolver>(sp =>

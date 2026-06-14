@@ -130,8 +130,8 @@
     [Parameter] public EventCallback<HttpRequestEntry> OnRequestSelected { get; set; }
     [Parameter] public EventCallback<string> OnCollectionSelected { get; set; }
     [Parameter] public EventCallback<string> OnLinkedRootSelected { get; set; }
-    [Parameter] public EventCallback<ApiCollectionNode> OnAddFolder { get; set; }
-    [Parameter] public EventCallback<ApiCollectionNode> OnAddRequest { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddFolder { get; set; }
+    [Parameter] public EventCallback<(string CollectionId, ApiCollectionNode ParentNode)> OnAddRequest { get; set; }
     [Parameter] public EventCallback<(ApiCollectionNode Node, string NewName)> OnRenameNode { get; set; }
     [Parameter] public EventCallback<ApiCollectionNode> OnDeleteNode { get; set; }
     [Parameter] public EventCallback<(string CollectionId, string NewName)> OnRenameCollection { get; set; }
@@ -396,14 +396,14 @@
     {
         var node = _ctxNode;
         _ctxNode = null;
-        if (node is not null) await OnAddFolder.InvokeAsync(node.Node);
+        if (node is not null) await OnAddFolder.InvokeAsync((node.CollectionId, node.Node));
     }
 
     private async Task AddRequestCtxAsync()
     {
         var node = _ctxNode;
         _ctxNode = null;
-        if (node is not null) await OnAddRequest.InvokeAsync(node.Node);
+        if (node is not null) await OnAddRequest.InvokeAsync((node.CollectionId, node.Node));
     }
 
     private async Task DeleteNodeCtxAsync()

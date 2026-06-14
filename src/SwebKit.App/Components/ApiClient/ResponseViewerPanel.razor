@@ -185,13 +185,15 @@
                 {
                     <div class="resp-viewer__body-toolbar">
                         <span class="resp-viewer__content-type">@(Result.ContentType ?? "unknown")</span>
-                        <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)"
-                                title="Save response example">
-                            Save example
-                        </button>
-                        <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
-                            @(_copied ? "✓ Copied" : "Copy")
-                        </button>
+                        <div class="resp-viewer__body-actions">
+                            <button type="button" class="resp-viewer__copy-btn" @onclick="() => OnSaveExample.InvokeAsync(Result)"
+                                    title="Save response example">
+                                Save example
+                            </button>
+                            <button type="button" class="resp-viewer__copy-btn" @onclick="CopyBodyAsync" title="Copy response body">
+                                @(_copied ? "Copied" : "Copy")
+                            </button>
+                        </div>
                     </div>
                     <pre class="resp-viewer__body-pre">@GetDisplayBody()</pre>
                     @if (IsBodyDisplayTruncated)
