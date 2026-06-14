@@ -2,63 +2,106 @@
 
 ## Scope
 
-Backend work covers new workflow/domain services for trace correlation, response diffs, assertions, and request flows. It must build on the completed API Client foundation rather than introducing a parallel request execution or scripting model.
+Backend work now prioritizes request flows. Trace correlation, response diffs, and assertions remain planned later, but the first implementation should not build their full services or UI until the flow experience is polished.
+
+The backend must build on the completed API Client foundation rather than introducing a parallel request execution or scripting model.
 
 ## Architecture Touchpoints
 
 - Project: `src/SwebKit.Core/`
-  - `Domain/ApiClientModels.cs` or new focused models file for assertions, flow definitions, diff results, and trace correlation config.
+  - `Domain/ApiClientModels.cs` or a new focused models file for flow definitions, request references, and flow run results.
   - `Services/ApiClientWorkflowService.cs` for request helper reuse where appropriate.
   - Existing request execution services for single-request reuse.
-  - New services likely needed: `ApiClientAssertionEvaluator`, `ApiClientResponseDiffService`, `ApiClientFlowRunnerService`, `ApiClientTraceCorrelationService`.
-- Project: `src/SwebKit.Observability/`
-  - App Insights/KQL query handoff support if existing provider abstractions need extension.
+  - New services likely needed: `ApiClientFlowRunnerService`, `ApiClientFlowRepository`, and a small capture-evaluation helper if current capture execution is too coupled to persistence.
 - Project: `src/SwebKit.App/`
   - DI registration in `MauiProgram.cs`.
 - Persistence:
-  - Local `collections.json` and linked `.swebreq.json` request files should carry assertion definitions and saved flow references where appropriate.
-  - Flows may need collection-level storage rather than per-request storage.
+  - Local workspace flows should live in a dedicated API Client flow store, for example `%APPDATA%/SwebKit/api-flows.json`, because flows can reference requests across collections.
+  - Linked-root flows should live under the linked API root, for example `.swebkit-api/flows/<flow>.swebflow.json`, when the flow belongs to that repo.
+  - Repo-stored flows should prefer references to requests inside the same linked root. Cross-root or local references are allowed only with explicit unresolved/external-reference warnings because they reduce portability.
 
 ## Proposed Domain Shapes
 
-| Model                       | Purpose                                                                                         |
-| --------------------------- | ----------------------------------------------------------------------------------------------- |
-| `ApiRequestAssertion`       | Data-only assertion attached to a request: kind, target, operator, expected value, enabled flag |
-| `ApiAssertionResult`        | Result of evaluating one assertion: pass/fail/warning, actual value, message                    |
-| `ApiResponseDiff`           | Sectioned diff: status, headers, timing, body summary, body details                             |
-| `ApiTraceCorrelationConfig` | Header/query/body token name, generated variable name, App Insights target/query template       |
-| `ApiFlowDefinition`         | Named sequence of steps, default environment, failure policy                                    |
-| `ApiFlowStep`               | Request reference, variable overrides, capture mappings, assertions, continue-on-failure flag   |
-| `ApiFlowRunResult`          | Per-step results, captured variables, assertion summaries, cancellation state                   |
+| Model                     | Purpose                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ApiFlowDefinition`       | API Client-level or linked-root flow: name, description, storage scope, ordered steps, default environment, failure policy |
+| `ApiFlowStorageScope`     | Local workspace or linked root storage metadata                                                                            |
+| `ApiRequestReference`     | Stable reference to a request in a local collection or linked root                                                         |
+| `ApiFlowStep`             | Request reference, variable overrides, capture mappings, and optional per-step display metadata                            |
+| `ApiFlowVariableOverride` | Per-flow or per-step variable value that participates in existing substitution scope                                       |
+| `ApiFlowCaptureMapping`   | Data-only capture mapping from a response source to a run-scoped variable                                                  |
+| `ApiFlowFailurePolicy`    | User-selected stop or continue behavior for failed requests                                                                |
+| `ApiFlowRunResult`        | Per-step results, captured variables, failed/skipped/cancelled state, and warnings                                         |
 
 ## Design Decisions
 
-| #   | Decision                                      | Rationale                                      | Alternative considered                                        |
-| --- | --------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
-| 1   | Assertions are data-only, not scripts         | Keeps API Client safe and portable             | JavaScript/Postman-style scripts rejected                     |
-| 2   | Flow outputs reuse capture/variable semantics | Avoids a second data-passing model             | Dedicated flow-only output store rejected initially           |
-| 3   | Trace correlation emits editable KQL          | Users can understand and adapt the query       | Hidden one-click telemetry lookup rejected                    |
-| 4   | Diff service scrubs/masks before rendering    | Prevents examples/results from leaking secrets | Trusting response examples as already scrubbed is too fragile |
+| #   | Decision                                      | Rationale                                              | Alternative considered                                      |
+| --- | --------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| 1   | Flows are first priority                      | They provide immediate workflow value                  | Starting with assertions rejected as lower priority for now |
+| 2   | Flows are API Client-level artifacts          | They may reference requests across collections         | Collection-only flows rejected as too restrictive           |
+| 3   | Linked-root flows are stored in the repo      | Repo-owned flows should be reviewable/versioned        | Storing all flows only in app-local state rejected          |
+| 4   | Flow outputs reuse capture/variable semantics | Avoids a second data-passing model                     | Dedicated flow-only output store rejected initially         |
+| 5   | Captured values are run-scoped by default     | Prevents accidental secret persistence                 | Auto-writing every flow capture to an environment rejected  |
+| 6   | User chooses stop or continue policy          | Different flows are validation-oriented or exploratory | One hard-coded default rejected                             |
 
 ## Implementation Tasks
 
-### Wave 1 — Trace Correlation
+### Near-Term Wave A — Request Flow Library
 
-- [ ] Add correlation config model.
-- [ ] Add helper to generate/inject correlation values into headers/query/body using existing variables.
-- [ ] Build App Insights KQL query from correlation value, time window, and selected resource.
-- [ ] Integrate with Observability route/query handoff.
-- [ ] Add tests for query construction and missing-resource behavior.
+#### A1 — Flow contracts and request references
 
-### Wave 2 — Visual Response Diff
+- [ ] Add `ApiFlowDefinition`, `ApiFlowStorageScope`, `ApiRequestReference`, `ApiFlowStep`, variable override, capture mapping, failure policy, and run-result models.
+- [ ] Support request references across local collections and linked roots.
+- [ ] Include enough metadata to show unresolved request references clearly when a linked root or local collection is unavailable.
+- [ ] Do not copy request definitions into flow files.
 
-- [ ] Add response/example/result diff service.
-- [ ] Support JSON structural diff and text fallback.
-- [ ] Include status, header, body, content type, elapsed time, and environment/run metadata.
-- [ ] Scrub secret-looking fields before returning diff payloads.
-- [ ] Add tests for JSON/text/header/status diffs and secret scrubbing.
+#### A2 — Flow persistence
 
-### Wave 3 — No-Code Assertions
+- [ ] Add a local workspace flow repository, likely backed by `%APPDATA%/SwebKit/api-flows.json`.
+- [ ] Add linked-root flow read/write support under `.swebkit-api/flows/`.
+- [ ] Add collision-safe create/rename behavior for flow files.
+- [ ] Add serialization tests for local flows, linked flows, cross-collection references, and unresolved references.
+- [ ] Add tests proving linked flow files do not persist secret values or captured runtime values.
+
+#### A3 — Flow discovery and ownership
+
+- [ ] Load app-local flows and linked-root flows into one flow library.
+- [ ] Clearly mark where each flow is stored: local workspace or linked root.
+- [ ] Warn when a linked-root flow references requests outside its linked root because that flow may not be portable for other users.
+- [ ] Include linked-root Git status for changed flow files through the existing linked Git status/action path if feasible.
+
+### Near-Term Wave B — Flow Runner and Capture Handoff
+
+#### B1 — Flow runner service
+
+- [ ] Implement `ApiClientFlowRunnerService` using the existing `IHttpRequestExecutor` path for each request step.
+- [ ] Resolve each `ApiRequestReference` to the current local or linked request before execution.
+- [ ] Build per-step variable scope from collection/environment variables, flow overrides, previous captured values, and step overrides.
+- [ ] Default captured flow values to run-scoped values that feed later steps but are not persisted.
+- [ ] Extract or reuse capture evaluation logic so flow captures and post-request captures do not diverge.
+- [ ] Support cancellation tokens and progress callbacks per step.
+
+#### B2 — Failure policy
+
+- [ ] Support user-selected failure policy: stop on failed step or continue after failed step.
+- [ ] Treat transport failures, invalid request references, and cancellation as distinct result states.
+- [ ] Defer assertion-specific failure policy until assertions are reprioritized.
+- [ ] Preserve completed step results when later steps are cancelled or skipped.
+
+#### B3 — Capture handoff
+
+- [ ] Let a step define capture mappings from status, header, body text, or JSONPath result into a run-scoped variable name.
+- [ ] Mask secret-looking captured variable names and values in run results.
+- [ ] Make capture warnings visible when a mapping fails or returns no value.
+- [ ] Do not persist captured values unless a future explicit save action is designed.
+
+#### B4 — Backend validation
+
+- [ ] Unit-test ordered execution, request reference resolution, capture propagation, variable override precedence, failure policy, and cancellation.
+- [ ] Add regression tests proving single-request execution still works when no assertions are configured.
+- [ ] Add persistence tests for local and linked flow definitions, including cross-collection references.
+
+### Deferred Later — No-Code Assertions
 
 - [ ] Add assertion model and operators.
 - [ ] Implement evaluator for status code, header, body contains, JSONPath, response time.
@@ -66,19 +109,28 @@ Backend work covers new workflow/domain services for trace correlation, response
 - [ ] Attach assertion results to single request and future flow results.
 - [ ] Serialize assertions in local and linked formats without secrets.
 
-### Wave 4 — Request Flows
+### Deferred Later — Trace Correlation
 
-- [ ] Add flow definition and step models.
-- [ ] Implement flow runner using existing request execution path.
-- [ ] Reuse post-request capture extraction for step output propagation.
-- [ ] Support flow failure policy: stop on failure, continue, or continue only on assertion failure.
-- [ ] Add cancellation and per-step progress callbacks.
-- [ ] Persist flows locally and in linked roots if linked collection owns them.
+- [ ] Add correlation config model.
+- [ ] Add helper to generate/inject correlation values into headers/query/body using existing variables.
+- [ ] Build App Insights KQL query from correlation value, time window, and selected resource.
+- [ ] Integrate with Observability route/query handoff.
+- [ ] Add tests for query construction and missing-resource behavior.
+
+### Deferred Later — Visual Response Diff
+
+- [ ] Add response/example/result diff service.
+- [ ] Support JSON structural diff and text fallback.
+- [ ] Include status, header, body, content type, elapsed time, and environment/run metadata.
+- [ ] Scrub secret-looking fields before returning diff payloads.
+- [ ] Add tests for JSON/text/header/status diffs and secret scrubbing.
 
 ## Validation Notes
 
-- Unit tests should cover every assertion operator and failure message.
 - Flow runner tests must prove captures from earlier steps feed later steps through variables.
-- Trace correlation tests should not require live App Insights; live validation is manual.
-- Diff service tests must include secret-looking fields and large bodies.
+- Flow persistence tests must cover app-local and linked-root storage.
+- Request-reference tests must cover cross-collection and missing-reference behavior.
+- Assertion tests should cover every assertion operator and failure message when deferred work resumes.
+- Trace correlation tests should not require live App Insights when deferred work resumes; live validation is manual.
+- Diff service tests must include secret-looking fields and large bodies when deferred work resumes.
 - Linked serialization tests must prove no secret values are persisted.

@@ -16,8 +16,9 @@ Add a Postman/Insomnia/Bruno-alike API client to SwebKit so users can author, ex
 - SwebKit/Postman/Bruno export/import plus full configuration bundle integration.
 - Git-linked `.swebkit-api/` repository roots with sparse request files, sidecars, linked environments, conflict detection, and scoped Git actions.
 - Workflow trust polish: target chip, in-app Git diff preview, staged/unstaged Git review layout, commit preview, and linked-save conflict actions.
-- Request portability and inspection: Copy as cURL, Import from cURL, active-request variable inspector.
-- Workspace depth: pinned request tabs, scrubbed saved response examples, and sequential collection runner.
+- Request portability and inspection: Copy as cURL, Import from cURL, active-request variable inspector, and scrubbed saved response examples.
+- Feedback cleanup: consolidated linked repository, import/export, and variable controls into menus; defaulted REST requests to the Body tab; fixed linked-root request targeting; hardened splitter initialization during collection switches; cleaned response history styling.
+- Request pinning and the active collection runner were retired after UX review; future custom flows belong to the dedicated advanced-workflows feature.
 - Architecture and feature docs updated to describe the implemented API Client foundation.
 
 ## Key Decisions
@@ -34,7 +35,8 @@ Add a Postman/Insomnia/Bruno-alike API client to SwebKit so users can author, ex
 ## Validation Performed
 
 - Focused API Client Core tests passed during the final implementation pass: 26 passed, 0 failed.
-- MAUI app build passed after implementation.
+- Linked-root/API Client focused diagnostics passed after feedback cleanup.
+- MAUI app build passed after implementation and feedback cleanup.
 - `git diff --check` passed after the final implementation/review pass.
 - Known unrelated build warnings remained outside this feature scope: `DlqView.ShowConfirm` and OAuth2 `WebAuthenticator` platform support.
 - Aikido scan could not be run because the Aikido MCP tool was unavailable in the session.
@@ -53,4 +55,4 @@ Add a Postman/Insomnia/Bruno-alike API client to SwebKit so users can author, ex
 
 ## Archive Note
 
-This feature had no Jira ticket. It was archived by explicit user confirmation after implementation and documentation were complete. Archive location: `docs/features/archive/api-client/`.
+This feature had no Jira ticket. It was archived by explicit user confirmation after implementation and documentation were complete, then refreshed after feedback cleanup removed request pinning and active collection running. Archive location: `docs/features/archive/api-client/`.
