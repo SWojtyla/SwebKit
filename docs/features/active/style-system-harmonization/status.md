@@ -4,21 +4,21 @@
 
 title: "Status - style-system-harmonization"
 owner: ""
-state: "Planned"
+state: "In Progress"
 jira: ""
 branch: ""
 started: "2026-06-13"
-last_updated: "2026-06-13"
+last_updated: "2026-06-14"
 
 ---
 
 ## Quick Summary
 
-Planning and codebase styling review are complete; next step is scope review before implementation starts.
+Shared style primitives are implemented and the first high-drift API Client / AKS slices are migrated while preserving their existing visual direction.
 
 **Jira:** not linked
 
-**Current focus:** Confirm the staged style-system cleanup scope and choose the first migration slice.
+**Current focus:** Ready for visual review of the shared primitives plus migrated API Client and AKS slices. Broader per-feature sweeps should proceed after review, one area at a time.
 
 ## Progress Checklist
 
@@ -29,14 +29,14 @@ Planning and codebase styling review are complete; next step is scope review bef
 - [x] Honest current-state review captured
 - [x] Frontend/style-system plan drafted
 - [x] Test plan drafted
-- [ ] Scope confirmed by maintainer
-- [ ] Design reviewed
-- [ ] Implementation wave 0 - style contract and token cleanup
-- [ ] Implementation wave 1 - shared control primitives
-- [ ] Implementation wave 2 - high-drift feature migration
-- [ ] Implementation wave 3 - remaining feature sweep and docs alignment
-- [ ] Automated and manual validation passed
-- [ ] Ready for review
+- [x] Scope confirmed by maintainer
+- [x] Design reviewed
+- [x] Implementation wave 0 - style contract and token cleanup
+- [x] Implementation wave 1 - shared control primitives
+- [x] Implementation wave 2 - high-drift feature migration
+- [ ] Implementation wave 3 - remaining feature sweep after visual review
+- [x] Automated validation passed
+- [x] Ready for review
 
 ## Completed
 
@@ -55,26 +55,47 @@ Planning and codebase styling review are complete; next step is scope review bef
   - `app-native-control` occurrences in Razor markup: 85 total matches, with 20 direct class attributes in the source metric pass
 - Identified fragmented control families and undefined/legacy token names.
 - Assigned current global styling score: 6/10.
+- Added compatibility aliases in `src/SwebKit.App/wwwroot/app.css` for old token names used by existing component CSS.
+- Added `scripts/style-inventory.ps1` to make future style drift measurable.
+- Added styling-system navigation and ownership rules to `docs/architecture/codebase-guide.md`.
+- Documented the initial canonical control semantics and accepted the `--color-danger` to `--color-error` compatibility mapping.
+- Added shared primitives: `AppButton`, `AppIconButton`, `FormField`, `AppSelect`, `AppDropdown`, `StatusBadge`, and `SegmentedControl`.
+- Extended `PageToolbar` with density, wrapping, and custom-class conventions while preserving its existing default behavior.
+- Added focused shared primitive bUnit coverage in `tests/SwebKit.App.Tests/StyleSystemPrimitiveTests.cs`.
+- Migrated the API Client initial toolbar action buttons to `AppButton` with existing `api-client-toolbar-btn` classes passed through `CssClass`.
+- Migrated remaining API Client raw buttons using `api-client-toolbar-btn`, `api-client-toolbar-btn--danger`, `api-client-secret-warning__btn`, `api-client-dialog__btn`, and `api-client-dialog__btn--primary` to `AppButton` while preserving existing visual classes through `CssClass`.
+- Migrated the bounded API Client auth and variable generator selects to `AppSelect` with existing `auth-panel__type-select` and `var-gen-editor__select` classes passed through `CssClass`, plus scoped `::deep` selectors to preserve isolated component styling.
+- Migrated the post-request capture builder add button, source/scope selects, and delete action to `AppButton`, `AppSelect`, and `AppIconButton`, with scoped `::deep` selectors preserving the existing compact capture-rule visual styling.
+- Migrated the AKS auto-refresh toggle button and interval select to `AppButton` and `AppSelect`, with existing class hooks and scoped `::deep` selectors preserving the active dot, compact interval control, and current timer behavior.
+- Added focused post-request capture builder tests and reused existing AKS connection-bar tests for the AKS slice.
+- Verified inventory movement after the first migrations: raw button occurrences dropped from 615 to 572, and raw select occurrences dropped from 54 to 48.
+- Hardened `AppDropdown` with Escape-key close behavior and the existing focus save/trap/restore helpers before broader adoption.
+- Added scoped API Client toolbar content spacing so icon/text toolbar buttons keep their pre-migration spacing inside `AppButton`.
+- Migrated the API Client environment picker to `AppDropdown`, preserving the existing trigger and menu classes with scoped `::deep` selectors.
+- Final inventory after the implemented slices: raw button occurrences 572, raw select occurrences 48, `AppDropdown` usages 1.
 
 ## Remaining
 
-- Confirm whether the intended scope is a broad app-wide style-system cleanup rather than a smaller API Client or button/dropdown-only cleanup.
-- Decide the canonical button/select/dropdown approach.
-- Decide whether `app.css` should remain a single physical file or become an import entry point for layered files.
-- Create or update architecture documentation for styling conventions if implementation proceeds.
-- Implement migrations in small, reviewable slices.
+- Perform visual review of API Client toolbar/env picker/capture builder and AKS auto-refresh control.
+- Continue Wave 3 as follow-up slices after visual review, starting with the highest-drift non-API/AKS areas surfaced by `scripts/style-inventory.ps1`.
+- Avoid removing compatibility aliases until the inventory shows no dependent legacy token references remain.
 
 ## Blockers
 
-- Maintainer scope confirmation is still needed before code changes. The inferred scope is broad, app-wide styling harmonization with no visual rebrand.
+- None.
 
 ## Validation
 
 - Test Plan: `test-plan.md`
-- Validation status: Not started
+- Validation status: Wave 2C bounded API Client select migration passed Razor/CSS diagnostics for `AuthPanel` and `VariableGeneratorEditor`, raw-select search in both migrated Razor files, and app project build with local MSIX signing disabled; existing unrelated build warnings remain. Post-request capture builder migration passed Razor/CSS diagnostics, raw-control search, focused bUnit tests, whitespace check, and app project build with local MSIX signing disabled; existing unrelated build warnings remain.
+- AKS auto-refresh toolbar slice passed Razor/CSS diagnostics, focused `AksConnectionBarTests` (12/12), and app project build with local MSIX signing disabled; existing unrelated build warnings remain.
+- Final focused validation passed: `StyleSystemPrimitiveTests`, `PostRequestCaptureBuilderTests`, and `AksConnectionBarTests` passed 36/36.
+- Final app build passed with local MSIX signing disabled. Existing out-of-scope warnings remain in `DlqView`, `OAuth2TokenManager`, and WinAppSDK PRI qualifiers.
+- `git diff --check` passed with no whitespace issues.
 
 ## Notes
 
 - The first implementation should avoid sweeping all pages at once. Start with tokens and primitives, then migrate one high-drift feature area such as API Client.
 - Keep compatibility aliases during migration for old classes and tokens to avoid breaking multiple routes in one change.
 - Refactor the styling model underneath AKS and API Client without redesigning their current look.
+- When migrating a feature-local class onto a shared child component, preserve scoped visual styling with `::deep` selectors or move only truly shared styling into the global primitive layer. Passing a feature class through `CssClass` alone is not enough under Blazor CSS isolation.

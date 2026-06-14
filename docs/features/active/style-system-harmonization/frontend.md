@@ -25,16 +25,16 @@ Give SwebKit a coherent UI styling system so new pages and feature components ca
 
 ### Styling footprint
 
-| Metric | Current value | Interpretation |
-| --- | ---: | --- |
-| `app.css` lines | 5,255 | Too large for safe global ownership; it mixes multiple concerns. |
-| Source CSS files | 126 | CSS is spread widely, which is expected with isolation, but needs conventions. |
-| Component-scoped CSS files | 125 | Component isolation is heavily used. Keep it for local layout. |
-| Component-scoped CSS lines | 22,099 | Feature-level styles are large enough that shared primitives should reduce repeated control styling. |
-| Raw `<button>` occurrences | 615 | Repeated command styling is a major drift source. |
-| Raw `<select>` occurrences | 54 | Dropdown/select styling has multiple competing patterns. |
-| `PageToolbar` usages | 2 | Shared toolbar primitive exists but is not broadly adopted. |
-| `Dropdown` usages | 0 | Shared dropdown primitive exists but is not currently used. |
+| Metric                     | Current value | Interpretation                                                                                       |
+| -------------------------- | ------------: | ---------------------------------------------------------------------------------------------------- |
+| `app.css` lines            |         5,255 | Too large for safe global ownership; it mixes multiple concerns.                                     |
+| Source CSS files           |           126 | CSS is spread widely, which is expected with isolation, but needs conventions.                       |
+| Component-scoped CSS files |           125 | Component isolation is heavily used. Keep it for local layout.                                       |
+| Component-scoped CSS lines |        22,099 | Feature-level styles are large enough that shared primitives should reduce repeated control styling. |
+| Raw `<button>` occurrences |           615 | Repeated command styling is a major drift source.                                                    |
+| Raw `<select>` occurrences |            54 | Dropdown/select styling has multiple competing patterns.                                             |
+| `PageToolbar` usages       |             2 | Shared toolbar primitive exists but is not broadly adopted.                                          |
+| `Dropdown` usages          |             0 | Shared dropdown primitive exists but is not currently used.                                          |
 
 ### Control drift
 
@@ -130,29 +130,33 @@ Do not create a giant all-purpose component. Each primitive should solve one rep
 
 ### Wave 0 - Contract and safety net
 
-- Document canonical control variants and token names.
-- Add missing token aliases for known legacy references.
-- Decide whether `--color-danger` maps to `--color-error` or remains a separate semantic token.
-- Add a small style inventory script or test helper that reports new raw control class families.
-- Update architecture/codebase guidance with style ownership rules.
+- Document canonical control variants and token names. Initial contract lives in `docs/architecture/codebase-guide.md` under Styling System Navigation.
+- Add missing token aliases for known legacy references. Initial aliases live in `app.css` for `--color-input-bg`, `--color-surface-raised`, `--color-surface-hover`, `--font-mono`, and `--color-danger`.
+- Decide whether `--color-danger` maps to `--color-error` or remains a separate semantic token. Decision: `--color-danger` aliases to `--color-error`; `--color-prod` remains for production-safety cues.
+- Add a small style inventory script or test helper that reports new raw control class families. Initial script: `scripts/style-inventory.ps1`.
+- Update architecture/codebase guidance with style ownership rules. Initial guidance: `docs/architecture/codebase-guide.md`.
 
 ### Wave 1 - Foundation primitives
 
-- Extract or reorganize `app.css` into named layers while preserving load order.
-- Implement `AppButton`, `AppIconButton`, `AppSelect` or `FormField`, `AppDropdown`, `SegmentedControl`, and `StatusBadge` only if agreed.
-- Add component tests for variants, disabled/loading states, and accessibility attributes.
+- Keep `app.css` as the stable physical entry point for now; add primitive sections in place while preserving load order.
+- Implemented `AppButton`, `AppIconButton`, `FormField`, `AppSelect`, `AppDropdown`, `SegmentedControl`, and `StatusBadge`.
+- Added component tests for variants, disabled/loading states, accessibility attributes, select change handling, dropdown close behavior, badge variants, segmented control behavior, and toolbar density/wrap classes.
 
 ### Wave 2 - High-drift migration
 
-- Migrate API Client toolbar, dialog, warning/conflict actions, tabs, and select/input classes to shared primitives or canonical classes while preserving its current visual direction.
-- Migrate one AKS toolbar/grid action slice, not the whole AKS area at once, and keep the current AKS diagnostics feel intact.
+- Migrated API Client toolbar, dialog/warning/conflict buttons, auth/variable-generator selects, and post-request capture builder controls to shared primitives while preserving its current visual direction.
+- Migrated one AKS toolbar slice: the auto-refresh toggle and interval select now use shared primitives while keeping the current AKS diagnostics feel intact.
 - Preserve legacy classes as aliases where needed during transition.
+
+Implementation note: feature-local visual classes rendered inside shared child components require scoped `::deep` selectors in the owning component stylesheet. This is intentional for transitional migrations because it preserves the current feature look without moving API Client or AKS visual rules into global CSS.
 
 ### Wave 3 - Cross-feature sweep
 
 - Move Service Bus, Incident Timeline, Monitoring, Dashboard, Pipelines/Releases, Storage, Redis, Notifications, and Observability to the same control primitives.
 - Remove duplicated `.form-input`, `.filter-select`, local copy-button, and toolbar-button definitions once no longer used.
 - Remove compatibility aliases only after tests and route smoke checks pass.
+
+Wave 3 should proceed only as small follow-up slices after reviewing the migrated AKS/API Client surfaces. The current implementation establishes the primitives and migration pattern; it intentionally avoids sweeping every feature-local button in one large change.
 
 ## Accessibility and UX Requirements
 

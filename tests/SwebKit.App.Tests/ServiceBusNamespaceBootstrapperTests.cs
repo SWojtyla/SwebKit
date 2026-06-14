@@ -8,7 +8,7 @@ namespace SwebKit.App.Tests;
 public sealed class ServiceBusNamespaceBootstrapperTests
 {
     [Fact]
-    public void BuildInitialStates_RestoresSnapshots_AndAppendsDemoNamespaces()
+    public void BuildInitialStates_RealMode_RestoresSnapshots()
     {
         var configuredNamespaces = new List<ServiceBusNamespace>
         {
@@ -36,16 +36,39 @@ public sealed class ServiceBusNamespaceBootstrapperTests
 
         var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore(), new NullServiceBusClientFactory());
 
-        var states = bootstrapper.BuildInitialStates(configuredNamespaces, snapshots, useDemoData: true);
+        var states = bootstrapper.BuildInitialStates(configuredNamespaces, snapshots, useDemoData: false);
 
-        Assert.Equal(4, states.Count);
+        Assert.Equal(2, states.Count);
         Assert.True(states[0].ShouldConnect);
         Assert.Null(states[0].ConnectionError);
         Assert.False(states[0].IsDemo);
         Assert.False(states[1].ShouldConnect);
         Assert.Equal("Access denied", states[1].ConnectionError);
-        Assert.Equal(2, states.Count(state => state.IsDemo));
-        Assert.All(states.Where(state => state.IsDemo), state => Assert.NotNull(state.Client));
+        Assert.DoesNotContain(states, state => state.IsDemo);
+    }
+
+    [Fact]
+    public void BuildInitialStates_DemoMode_UsesOnlyDemoNamespaces()
+    {
+        var configuredNamespaces = new List<ServiceBusNamespace>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Alias = "orders-live",
+                FullyQualifiedNamespace = "orders-live.servicebus.windows.net",
+                CredentialKey = "orders-live"
+            }
+        };
+
+        var bootstrapper = new ServiceBusNamespaceBootstrapper(new FakeCredentialStore(), new NullServiceBusClientFactory());
+
+        var states = bootstrapper.BuildInitialStates(configuredNamespaces, new Dictionary<Guid, ServiceBusNamespaceBootstrapSnapshot>(), useDemoData: true);
+
+        Assert.Equal(2, states.Count);
+        Assert.All(states, state => Assert.True(state.IsDemo));
+        Assert.All(states, state => Assert.NotNull(state.Client));
+        Assert.DoesNotContain(states, state => state.Namespace.Alias == "orders-live");
     }
 
     [Fact]

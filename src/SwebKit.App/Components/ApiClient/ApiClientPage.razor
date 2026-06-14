@@ -20,40 +20,40 @@
     @* ── Toolbar ── *@
     <div class="api-client-toolbar">
         <div class="api-client-toolbar__left">
-            <button type="button" class="api-client-toolbar-btn" title="New collection (Ctrl+Shift+N)"
-                    @onclick="OpenNewCollectionDialog">
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                    Title="New collection (Ctrl+Shift+N)" OnClick="OpenNewCollectionDialog">
                 <FluentIcon Value="@(new Icons.Regular.Size16.AddSquare())" Width="14px" />
                 <span>New Collection</span>
-            </button>
-            <button type="button" class="api-client-toolbar-btn" title="New request (Ctrl+N)"
-                    disabled="@(_activeCollection is null)" @onclick="AddRequestAsync">
+            </AppButton>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                    Title="New request (Ctrl+N)" Disabled="@(_activeCollection is null)" OnClick="AddRequestAsync">
                 <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Width="14px" />
                 <span>New Request</span>
-            </button>
+            </AppButton>
             @if (_isDirty && !_autoSave)
             {
-                <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--save"
-                        title="Save request (Ctrl+S)" @onclick="SaveRequestAsync">
+                <AppButton Variant="Primary" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--save"
+                        Title="Save request (Ctrl+S)" OnClick="SaveRequestAsync">
                     <FluentIcon Value="@(new Icons.Regular.Size16.Save())" Width="14px" />
                     <span>Save</span>
-                </button>
+                </AppButton>
             }
-            <button type="button" class="api-client-toolbar-btn" title="Add a Git-backed SwebKit API collection folder"
-                    @onclick="OpenLinkedRootDialog">
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                    Title="Add a Git-backed SwebKit API collection folder" OnClick="OpenLinkedRootDialog">
                 <span>Add API Repo</span>
-            </button>
-            <button type="button" class="api-client-toolbar-btn" title="Import a request from cURL"
-                    disabled="@(_activeCollection is null)" @onclick="OpenCurlImportDialog">
+            </AppButton>
+            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                    Title="Import a request from cURL" Disabled="@(_activeCollection is null)" OnClick="OpenCurlImportDialog">
                 <span>Import cURL</span>
-            </button>
+            </AppButton>
             @if (_linkedRootInfos.Count > 0)
             {
-                <button type="button"
-                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetLinkedRoots ? "api-client-toolbar-btn--active" : "")"
-                        title="Manage Git-backed API repositories"
-                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots)">
+                <AppButton Variant="Secondary" Size="Small"
+                        CssClass="@(_worksheetMode == WorksheetLinkedRoots ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                        Title="Manage Git-backed API repositories"
+                        OnClick="@(() => _worksheetMode = _worksheetMode == WorksheetLinkedRoots ? null : WorksheetLinkedRoots)">
                     <span>API Repos</span>
-                </button>
+                </AppButton>
             }
         </div>
 
@@ -72,9 +72,9 @@
             {
                 <div class="api-client-conflict-banner">
                     <span>@_linkedSaveConflict.Message</span>
-                    <button type="button" class="api-client-secret-warning__btn" @onclick="ReloadLinkedConflictAsync">Reload from disk</button>
-                    <button type="button" class="api-client-secret-warning__btn" @onclick="KeepMineLinkedConflictAsync">Keep mine</button>
-                    <button type="button" class="api-client-secret-warning__btn" @onclick="SaveLinkedConflictAsCopyAsync">Save as copy</button>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="ReloadLinkedConflictAsync">Reload from disk</AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="KeepMineLinkedConflictAsync">Keep mine</AppButton>
+                    <AppButton Variant="Primary" Size="Small" CssClass="api-client-secret-warning__btn" OnClick="SaveLinkedConflictAsCopyAsync">Save as copy</AppButton>
                 </div>
             }
             @if (_linkedSaveError is not null)
@@ -94,55 +94,56 @@
         <div class="api-client-toolbar__right">
             @if (_activeCollection is not null)
             {
-                <button type="button"
-                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetRunner ? "api-client-toolbar-btn--active" : "")"
-                        title="Run active collection"
-                        @onclick="RunActiveCollectionAsync">Run</button>
-                <button type="button"
-                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetVars ? "api-client-toolbar-btn--active" : "")"
-                        title="Edit collection variables"
-                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars)">⚙
-                    Vars</button>
-                    <button type="button" class="api-client-toolbar-btn" title="Export / Import"
-                            @onclick="() => _showExportDialog = true">⬆⬇ Export / Import</button>
+                <AppButton Variant="Secondary" Size="Small"
+                        CssClass="@(_worksheetMode == WorksheetRunner ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                        Title="Run active collection" OnClick="RunActiveCollectionAsync">Run</AppButton>
+                <AppButton Variant="Secondary" Size="Small"
+                        CssClass="@(_worksheetMode == WorksheetVars ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                        Title="Edit collection variables"
+                        OnClick="@(() => _worksheetMode = _worksheetMode == WorksheetVars ? null : WorksheetVars)">⚙
+                    Vars</AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Export / Import"
+                            OnClick="@(() => _showExportDialog = true)">⬆⬇ Export / Import</AppButton>
                 }
                     @if (_selectedRequest is not null)
                     {
-                    <button type="button" class="api-client-toolbar-btn" title="Pin request"
-                        @onclick="TogglePinnedRequestAsync">@(IsSelectedRequestPinned ? "Unpin" : "Pin")</button>
-                    <button type="button" class="api-client-toolbar-btn" title="Copy request as cURL"
-                        @onclick="CopyCurlAsync">Copy cURL</button>
-                    <button type="button"
-                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetVariables ? "api-client-toolbar-btn--active" : "")"
-                        title="Inspect variables used by this request"
-                        @onclick="OpenVariableInspectorAsync">Variables</button>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Pin request"
+                        OnClick="TogglePinnedRequestAsync">@(IsSelectedRequestPinned ? "Unpin" : "Pin")</AppButton>
+                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Title="Copy request as cURL"
+                        OnClick="CopyCurlAsync">Copy cURL</AppButton>
+                    <AppButton Variant="Secondary" Size="Small"
+                        CssClass="@(_worksheetMode == WorksheetVariables ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                        Title="Inspect variables used by this request"
+                        OnClick="OpenVariableInspectorAsync">Variables</AppButton>
                     }
-                <button type="button"
-                        class="api-client-toolbar-btn @(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn--active" : "")"
-                        title="Manage environments"
-                        @onclick="@(() => _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs)">🌍
-                    Envs</button>
+                <AppButton Variant="Secondary" Size="Small"
+                        CssClass="@(_worksheetMode == WorksheetEnvs ? "api-client-toolbar-btn api-client-toolbar-btn--active" : "api-client-toolbar-btn")"
+                        Title="Manage environments"
+                        OnClick="@(() => _worksheetMode = _worksheetMode == WorksheetEnvs ? null : WorksheetEnvs)">🌍
+                    Envs</AppButton>
                     <span class="api-client-toolbar__env-label">Env:</span>
-                    <div class="api-client-env-picker">
-                        <button type="button" class="api-client-env-picker__btn"
-                                @onclick="() => _showEnvPicker = !_showEnvPicker">
-                            <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
-                            <span class="api-client-env-picker__chevron">▾</span>
-                        </button>
-                        @if (_showEnvPicker)
-                        {
-                            <div class="ctx-backdrop" @onclick="() => _showEnvPicker = false"></div>
-                            <div class="api-client-env-picker__dropdown">
-                                <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
-                                        @onclick="() => SelectEnvAsync(null)">— None —</button>
-                                @foreach (var env in _environments)
-                                {
-                                    <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
-                                            @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
-                                }
-                            </div>
-                        }
-                    </div>
+                    <AppDropdown IsOpen="@_showEnvPicker"
+                                 OnClose="@(() => _showEnvPicker = false)"
+                                 CssClass="api-client-env-picker"
+                                 MenuCssClass="api-client-env-picker__dropdown"
+                                 Label="Environment picker">
+                        <TriggerContent>
+                            <button type="button" class="api-client-env-picker__btn"
+                                    @onclick="() => _showEnvPicker = !_showEnvPicker">
+                                <span>@(ActiveEnvironment?.Name ?? "— None —")</span>
+                                <span class="api-client-env-picker__chevron">▾</span>
+                            </button>
+                        </TriggerContent>
+                        <ChildContent>
+                            <button type="button" class="ctx-item @(_activeEnvironmentId is null ? "ctx-item--active" : "")"
+                                    @onclick="() => SelectEnvAsync(null)">— None —</button>
+                            @foreach (var env in _environments)
+                            {
+                                <button type="button" class="ctx-item @(env.Id == _activeEnvironmentId ? "ctx-item--active" : "")"
+                                        @onclick="() => SelectEnvAsync(env.Id)">@env.Name</button>
+                            }
+                        </ChildContent>
+                    </AppDropdown>
                 </div>
             </div>
 
@@ -273,8 +274,8 @@
                                 <span class="api-client-management-screen__title">Collection Runner — @(_activeCollection?.Name ?? "No collection")</span>
                                 @if (_runnerRunning)
                                 {
-                                    <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--danger"
-                                            @onclick="CancelRunnerAsync">Cancel</button>
+                                    <AppButton Variant="Danger" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                            OnClick="CancelRunnerAsync">Cancel</AppButton>
                                 }
                             </div>
                             <div class="api-client-runner">
@@ -327,12 +328,12 @@
                                                 </div>
                                             </div>
                                             <div class="api-client-linked-root-card__actions">
-                                                <button type="button" class="api-client-toolbar-btn"
-                                                        @onclick="LoadLinkedRootsAsync">Refresh</button>
-                                                <button type="button" class="api-client-toolbar-btn"
-                                                        @onclick="() => OpenGitPanelAsync(root.Config.Id)">Git</button>
-                                                <button type="button" class="api-client-toolbar-btn"
-                                                        @onclick="() => RemoveLinkedRootAsync(root.Config.Id)">Remove</button>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                    OnClick="LoadLinkedRootsAsync">Refresh</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                    OnClick="@(() => OpenGitPanelAsync(root.Config.Id))">Git</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn"
+                                                    OnClick="@(() => RemoveLinkedRootAsync(root.Config.Id))">Remove</AppButton>
                                             </div>
                                         </div>
                                     }
@@ -386,8 +387,8 @@
                                         <div class="api-client-git-panel__row">
                                             <input class="api-client-dialog__input" placeholder="branch name" value="@_gitBranchName"
                                                    @oninput="e => _gitBranchName = e.Value?.ToString() ?? string.Empty" />
-                                            <button type="button" class="api-client-toolbar-btn" @onclick="CreateGitBranchAsync">Create
-                                                branch</button>
+                                            <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="CreateGitBranchAsync">Create
+                                                branch</AppButton>
                                                 </div>
                                                 <div class="api-client-git-panel__row">
                                                     <select class="api-client-dialog__input api-client-git-panel__branch-select" value="@_gitBranchToSwitch"
@@ -397,21 +398,21 @@
                                                             <option value="@branch.Name">@(branch.IsCurrent ? $"{branch.Name} (current)" : branch.Name)</option>
                                                         }
                                                     </select>
-                                                    <button type="button" class="api-client-toolbar-btn" disabled="@string.IsNullOrWhiteSpace(_gitBranchToSwitch)"
-                                                            @onclick="SwitchGitBranchAsync">Switch branch</button>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(string.IsNullOrWhiteSpace(_gitBranchToSwitch))"
+                                                            OnClick="SwitchGitBranchAsync">Switch branch</AppButton>
                                                 </div>
                                                 <div class="api-client-git-panel__row">
-                                                        <button type="button" class="api-client-toolbar-btn" disabled="@(unstagedGitFiles.Count == 0)"
-                                                            @onclick="StageAllGitFilesAsync">Stage all</button>
-                                                        <button type="button" class="api-client-toolbar-btn" disabled="@(stagedGitFiles.Count == 0)"
-                                                            @onclick="UnstageAllGitFilesAsync">Unstage all</button>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(unstagedGitFiles.Count == 0)"
+                                                            OnClick="StageAllGitFilesAsync">Stage all</AppButton>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(stagedGitFiles.Count == 0)"
+                                                            OnClick="UnstageAllGitFilesAsync">Unstage all</AppButton>
                                                     <input class="api-client-dialog__input" placeholder="commit message" value="@_gitCommitMessage"
                                                            @oninput="e => _gitCommitMessage = e.Value?.ToString() ?? string.Empty" />
-                                                        <button type="button" class="api-client-toolbar-btn" disabled="@(stagedGitFiles.Count == 0 || string.IsNullOrWhiteSpace(_gitCommitMessage))"
-                                                            @onclick="CommitGitChangesAsync">Commit staged</button>
-                                                        <button type="button" class="api-client-toolbar-btn" @onclick="PushGitBranchAsync">Push</button>
-                                                        <button type="button" class="api-client-toolbar-btn" @onclick="OpenRemoteCompareAsync">Open remote
-                                                            compare</button>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" Disabled="@(stagedGitFiles.Count == 0 || string.IsNullOrWhiteSpace(_gitCommitMessage))"
+                                                            OnClick="CommitGitChangesAsync">Commit staged</AppButton>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="PushGitBranchAsync">Push</AppButton>
+                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="OpenRemoteCompareAsync">Open remote
+                                                            compare</AppButton>
                                                         </div>
                                                         <div class="api-client-git-panel__files">
                                                             @if (ActiveGitRoot.GitStatus.ChangedFileDetails.Count == 0)
@@ -432,10 +433,10 @@
                                                                         <span class="api-client-git-panel__file-path">@file.Path</span>
                                                                     </div>
                                                                     <div class="api-client-git-panel__file-actions">
-                                                                        <button type="button" class="api-client-toolbar-btn" @onclick="() => LoadGitDiffAsync(file.Path)">Review</button>
-                                                                        <button type="button" class="api-client-toolbar-btn" @onclick="() => UnstageGitFileAsync(file.Path)">Unstage</button>
-                                                                        <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--danger"
-                                                                                @onclick="() => QueueRevertGitFile(file.Path)">Revert</button>
+                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
+                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => UnstageGitFileAsync(file.Path))">Unstage</AppButton>
+                                                                        <AppButton Variant="Danger" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                                                            OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
                                                                     </div>
                                                                 </div>
                                                             }
@@ -453,10 +454,10 @@
                                                                         <span class="api-client-git-panel__file-path">@file.Path</span>
                                                                     </div>
                                                                     <div class="api-client-git-panel__file-actions">
-                                                                        <button type="button" class="api-client-toolbar-btn" @onclick="() => LoadGitDiffAsync(file.Path)">Review</button>
-                                                                        <button type="button" class="api-client-toolbar-btn" @onclick="() => StageGitFileAsync(file.Path)">Stage</button>
-                                                                        <button type="button" class="api-client-toolbar-btn api-client-toolbar-btn--danger"
-                                                                                @onclick="() => QueueRevertGitFile(file.Path)">Revert</button>
+                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => LoadGitDiffAsync(file.Path))">Review</AppButton>
+                                                                        <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => StageGitFileAsync(file.Path))">Stage</AppButton>
+                                                                        <AppButton Variant="Danger" Size="Small" CssClass="api-client-toolbar-btn api-client-toolbar-btn--danger"
+                                                                            OnClick="@(() => QueueRevertGitFile(file.Path))">Revert</AppButton>
                                                                     </div>
                                                                 </div>
                                                             }
@@ -470,7 +471,7 @@
                                                             {
                                                                 <div class="api-client-git-panel__diff-header">
                                                                     <span>Diff preview — @_gitDiff.Path</span>
-                                                                    <button type="button" class="api-client-toolbar-btn" @onclick="() => _gitDiff = null">Close</button>
+                                                                    <AppButton Variant="Secondary" Size="Small" CssClass="api-client-toolbar-btn" OnClick="@(() => _gitDiff = null)">Close</AppButton>
                                                                 </div>
                                                                 @if (!_gitDiff.IsSuccess)
                                                                 {
@@ -516,8 +517,8 @@
                                                         {
                                                             <div class="api-client-secret-warning">
                                                                 Missing secret reference(s): @string.Join(", ", MissingSecretNames).
-                                                                <button type="button" class="api-client-secret-warning__btn"
-                                                                        @onclick="OpenConfigureSecretDialog">Configure</button>
+                                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-secret-warning__btn"
+                                                                    OnClick="OpenConfigureSecretDialog">Configure</AppButton>
                                                             </div>
                                                         }
                                                         <RequestBuilderPanel Request="@_selectedRequest" Collection="@(_activeCollection!)"
@@ -550,11 +551,11 @@
                                                @oninput="e => _newCollectionName = e.Value?.ToString() ?? string.Empty"
                                                @onkeydown="OnNewCollectionKeyDownAsync" @ref="_newCollectionInput" />
                                         <div class="api-client-dialog__actions">
-                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    disabled="@string.IsNullOrWhiteSpace(_newCollectionName)"
-                                                    @onclick="ConfirmNewCollectionAsync">Create</button>
-                                            <button type="button" class="api-client-dialog__btn"
-                                                    @onclick="() => _showNewCollectionDialog = false">Cancel</button>
+                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    Disabled="@(string.IsNullOrWhiteSpace(_newCollectionName))"
+                                                    OnClick="ConfirmNewCollectionAsync">Create</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                                                    OnClick="@(() => _showNewCollectionDialog = false)">Cancel</AppButton>
                                         </div>
                                     </div>
                                 }
@@ -578,10 +579,10 @@
                                             <div class="api-client-dialog__error">@_linkedRootError</div>
                                         }
                                         <div class="api-client-dialog__actions">
-                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    disabled="@string.IsNullOrWhiteSpace(_newLinkedRootPath)" @onclick="ConfirmLinkedRootAsync">Add repo</button>
-                                            <button type="button" class="api-client-dialog__btn"
-                                                    @onclick="() => _showLinkedRootDialog = false">Cancel</button>
+                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    Disabled="@(string.IsNullOrWhiteSpace(_newLinkedRootPath))" OnClick="ConfirmLinkedRootAsync">Add repo</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                                                    OnClick="@(() => _showLinkedRootDialog = false)">Cancel</AppButton>
                                         </div>
                                     </div>
                                 }
@@ -600,11 +601,11 @@
                                             <div class="api-client-dialog__error">@_secretConfigError</div>
                                         }
                                         <div class="api-client-dialog__actions">
-                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
-                                                    @onclick="SaveConfiguredSecretAsync">Save Secret</button>
-                                            <button type="button" class="api-client-dialog__btn"
-                                                    @onclick="() => _showConfigureSecretDialog = false">Cancel</button>
+                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    Disabled="@(string.IsNullOrWhiteSpace(_secretNameToConfigure) || string.IsNullOrEmpty(_secretValueToConfigure))"
+                                                    OnClick="SaveConfiguredSecretAsync">Save Secret</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                                                    OnClick="@(() => _showConfigureSecretDialog = false)">Cancel</AppButton>
                                         </div>
                                     </div>
                                 }
@@ -622,11 +623,11 @@
                                             <div class="api-client-dialog__error">@_curlImportError</div>
                                         }
                                         <div class="api-client-dialog__actions">
-                                            <button type="button" class="api-client-dialog__btn api-client-dialog__btn--primary"
-                                                    disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _activeCollection is null)"
-                                                    @onclick="ImportCurlAsync">Import</button>
-                                            <button type="button" class="api-client-dialog__btn"
-                                                    @onclick="() => _showCurlImportDialog = false">Cancel</button>
+                                                <AppButton Variant="Primary" Size="Small" CssClass="api-client-dialog__btn api-client-dialog__btn--primary"
+                                                    Disabled="@(string.IsNullOrWhiteSpace(_curlImportText) || _activeCollection is null)"
+                                                    OnClick="ImportCurlAsync">Import</AppButton>
+                                                <AppButton Variant="Secondary" Size="Small" CssClass="api-client-dialog__btn"
+                                                    OnClick="@(() => _showCurlImportDialog = false)">Cancel</AppButton>
                                         </div>
                                     </div>
                                 }

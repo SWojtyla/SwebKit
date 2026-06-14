@@ -45,6 +45,14 @@
     --overlay-backdrop-strong: rgba(15, 31, 52, 0.36);
     --color-solid-foreground: #fff;
 
+    /* transitional aliases for pre-style-system component CSS */
+    --color-input-bg: var(--control-surface);
+    --color-surface-raised: var(--color-surface-2);
+    --color-surface-hover: var(--color-surface-3);
+    --color-danger: var(--color-error);
+    --color-on-accent: var(--color-solid-foreground);
+    --font-mono: var(--font-family-mono);
+
     /* spacing scale */
     --spacing-xs:  4px;
     --spacing-sm:  8px;
@@ -2979,6 +2987,15 @@ fluent-button[appearance="stealth"][disabled]::part(control) {
     margin-left: auto;
 }
 
+.page-shell-header > .page-header-shell--context-hidden {
+    justify-content: flex-end;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
 .page-header-shell__copy {
     display: flex;
     flex-direction: column;
@@ -3769,6 +3786,422 @@ fluent-button[appearance="stealth"][disabled]::part(control) {
 
 .app-native-select {
     color-scheme: var(--control-color-scheme);
+}
+
+.app-form-field {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.app-form-field__label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.app-form-field__required {
+    color: var(--color-error);
+}
+
+.app-form-field__control {
+    min-width: 0;
+}
+
+.app-form-field__hint,
+.app-form-field__error {
+    font-size: var(--font-size-xs);
+    line-height: 1.35;
+}
+
+.app-form-field__hint {
+    color: var(--color-text-faint);
+}
+
+.app-form-field__error {
+    color: var(--color-error);
+}
+
+.app-select {
+    width: 100%;
+    min-height: 34px;
+    padding: 5px 30px 5px 9px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    line-height: 1.3;
+}
+
+.app-select--invalid,
+.app-select[aria-invalid="true"] {
+    border-color: color-mix(in srgb, var(--color-error) 68%, var(--control-border));
+}
+
+.app-select--invalid:focus,
+.app-select--invalid:focus-visible,
+.app-select[aria-invalid="true"]:focus,
+.app-select[aria-invalid="true"]:focus-visible {
+    border-color: var(--color-error);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 22%, transparent), var(--control-shadow);
+}
+
+.page-toolbar.page-toolbar.page-toolbar--density-compact {
+    gap: 8px;
+    padding: 4px 8px;
+}
+
+.page-toolbar.page-toolbar.page-toolbar--density-comfortable {
+    gap: 12px;
+    padding: 8px 12px;
+}
+
+.page-toolbar.page-toolbar.page-toolbar--wrap {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+
+.page-toolbar.page-toolbar.page-toolbar--wrap .page-toolbar-leading,
+.page-toolbar.page-toolbar.page-toolbar--wrap .page-toolbar-trailing {
+    flex-wrap: wrap;
+}
+
+.page-toolbar.page-toolbar.page-toolbar--wrap .page-toolbar-center {
+    flex: 1 1 220px;
+}
+
+.app-segmented-control {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--control-surface) 84%, transparent);
+}
+
+.app-segmented-control--disabled {
+    opacity: 0.62;
+}
+
+.app-segmented-control__item {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius-sm) - 2px);
+    font-family: var(--font-family-ui);
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: 0;
+    color: var(--color-text-muted);
+    background: transparent;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.app-segmented-control__item--small {
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: var(--font-size-xs);
+}
+
+.app-segmented-control__item--medium {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: var(--font-size-sm);
+}
+
+.app-segmented-control__item:hover:not(:disabled) {
+    color: var(--color-text);
+    background: var(--color-surface-hover);
+}
+
+.app-segmented-control__item:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--control-focus-ring);
+}
+
+.app-segmented-control__item--active {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+    border-color: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.app-segmented-control__item:disabled,
+.app-segmented-control__item--disabled {
+    cursor: not-allowed;
+}
+
+.app-button,
+.app-icon-button {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    font-weight: 650;
+    line-height: 1;
+    color: var(--color-text);
+    background: transparent;
+    cursor: pointer;
+    user-select: none;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.app-button:focus-visible,
+.app-icon-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--control-focus-ring);
+}
+
+.app-button:disabled,
+.app-icon-button:disabled,
+.app-button--disabled,
+.app-icon-button--disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.app-button--small {
+    min-height: 28px;
+    padding: 0 10px;
+    gap: 6px;
+}
+
+.app-button--medium {
+    min-height: 34px;
+    padding: 0 12px;
+    gap: 8px;
+}
+
+.app-icon-button--small {
+    width: 28px;
+    height: 28px;
+}
+
+.app-icon-button--medium {
+    width: 34px;
+    height: 34px;
+}
+
+.app-button--primary,
+.app-icon-button--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-solid-foreground);
+}
+
+.app-button--primary:hover:not(:disabled),
+.app-icon-button--primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 86%, var(--color-solid-foreground));
+    border-color: color-mix(in srgb, var(--color-accent) 86%, var(--color-solid-foreground));
+}
+
+.app-button--secondary {
+    background: var(--control-surface);
+    border-color: var(--control-border);
+    color: var(--control-text);
+}
+
+.app-button--secondary:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--control-border-strong);
+}
+
+.app-button--ghost,
+.app-icon-button--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--color-text-muted);
+}
+
+.app-button--ghost:hover:not(:disabled),
+.app-icon-button--ghost:hover:not(:disabled) {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+}
+
+.app-button--subtle,
+.app-icon-button--subtle {
+    background: color-mix(in srgb, var(--control-surface) 78%, transparent);
+    border-color: var(--control-border);
+    color: var(--control-text);
+}
+
+.app-button--subtle:hover:not(:disabled),
+.app-icon-button--subtle:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--control-border-strong);
+}
+
+.app-button--danger,
+.app-icon-button--danger {
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-error) 46%, transparent);
+    color: var(--color-error);
+}
+
+.app-button--danger:hover:not(:disabled),
+.app-icon-button--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-error) 18%, transparent);
+    border-color: color-mix(in srgb, var(--color-error) 62%, transparent);
+}
+
+.app-button__icon,
+.app-button__content,
+.app-icon-button__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-button__spinner,
+.app-icon-button__spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 999px;
+    animation: app-control-spin 0.72s linear infinite;
+}
+
+@keyframes app-control-spin {
+    to { transform: rotate(360deg); }
+}
+
+.app-dropdown {
+    position: relative;
+    display: inline-flex;
+    min-width: 0;
+}
+
+.app-dropdown__trigger {
+    display: inline-flex;
+    min-width: 0;
+}
+
+.app-dropdown__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-dropdown) - 1);
+    background: transparent;
+}
+
+.app-dropdown__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    z-index: var(--z-dropdown);
+    min-width: 180px;
+    max-width: min(360px, calc(100vw - 24px));
+    padding: 4px;
+    color-scheme: var(--control-color-scheme);
+    color: var(--color-text);
+    background: var(--color-panel-card, var(--color-surface));
+    border: 1px solid var(--color-card-border-strong, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(14px);
+}
+
+.app-dropdown__menu--start {
+    left: 0;
+}
+
+.app-dropdown__menu--end {
+    right: 0;
+}
+
+.app-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    max-width: 100%;
+    border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+    border-radius: var(--shell-pill-radius);
+    font-family: var(--font-family-ui);
+    font-weight: var(--shell-pill-weight);
+    letter-spacing: 0;
+    line-height: 1;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.app-status-badge--small {
+    min-height: 20px;
+    padding: 1px 7px;
+    font-size: var(--font-size-xs);
+}
+
+.app-status-badge--medium {
+    min-height: 24px;
+    padding: 2px 9px;
+    font-size: 11px;
+}
+
+.app-status-badge--neutral {
+    background: color-mix(in srgb, var(--color-surface-2) 90%, transparent);
+    color: var(--color-text-muted);
+}
+
+.app-status-badge--accent {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.app-status-badge--success {
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+}
+
+.app-status-badge--warning {
+    background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+    color: var(--color-warning);
+    border-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
+}
+
+.app-status-badge--danger {
+    background: color-mix(in srgb, var(--color-error) 14%, transparent);
+    color: var(--color-error);
+    border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
+}
+
+.app-status-badge--production {
+    background: color-mix(in srgb, var(--color-prod) 14%, transparent);
+    color: var(--color-prod);
+    border-color: color-mix(in srgb, var(--color-prod) 28%, transparent);
+}
+
+.app-status-badge__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: 0 0 auto;
+}
+
+.app-status-badge__content {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Prevent app theme text/bg colours from bleeding into the OS-native select popup.

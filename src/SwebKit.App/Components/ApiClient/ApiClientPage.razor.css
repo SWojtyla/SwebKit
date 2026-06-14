@@ -100,7 +100,8 @@
     justify-content: flex-end;
 }
 
-.api-client-dialog__btn {
+.api-client-dialog__btn,
+.api-client-page ::deep .api-client-dialog__btn {
     padding: 5px 14px;
     border-radius: var(--radius-sm);
     font-size: 12px;
@@ -110,13 +111,15 @@
     color: var(--color-text);
 }
 
-.api-client-dialog__btn--primary {
+.api-client-dialog__btn--primary,
+.api-client-page ::deep .api-client-dialog__btn--primary {
     background: var(--color-accent);
     color: var(--color-solid-foreground, #fff);
     border-color: transparent;
 }
 
-.api-client-dialog__btn--primary:disabled {
+.api-client-dialog__btn--primary:disabled,
+.api-client-page ::deep .api-client-dialog__btn--primary:disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
@@ -155,7 +158,8 @@
     margin-left: auto;
 }
 
-.api-client-toolbar-btn {
+.api-client-toolbar-btn,
+.api-client-page ::deep .api-client-toolbar-btn {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -169,39 +173,50 @@
     transition: background 0.1s, border-color 0.1s;
 }
 
-.api-client-toolbar-btn:hover:not([disabled]) {
+.api-client-toolbar-btn:hover:not([disabled]),
+.api-client-page ::deep .api-client-toolbar-btn:hover:not([disabled]) {
     background: var(--color-surface-hover);
     border-color: var(--color-accent);
 }
 
-.api-client-toolbar-btn:disabled {
+.api-client-toolbar-btn:disabled,
+.api-client-page ::deep .api-client-toolbar-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
 
-.api-client-toolbar-btn--active {
+.api-client-page ::deep .api-client-toolbar-btn .app-button__content {
+    gap: 5px;
+}
+
+.api-client-toolbar-btn--active,
+.api-client-page ::deep .api-client-toolbar-btn--active {
     background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
     border-color: var(--color-accent);
     color: var(--color-accent);
 }
 
-.api-client-toolbar-btn--save {
+.api-client-toolbar-btn--save,
+.api-client-page ::deep .api-client-toolbar-btn--save {
     background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
     border-color: var(--color-accent);
     color: var(--color-accent);
     font-weight: 600;
 }
 
-.api-client-toolbar-btn--save:hover {
+.api-client-toolbar-btn--save:hover,
+.api-client-page ::deep .api-client-toolbar-btn--save:hover {
     background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
 }
 
-.api-client-toolbar-btn--danger {
+.api-client-toolbar-btn--danger,
+.api-client-page ::deep .api-client-toolbar-btn--danger {
     border-color: color-mix(in srgb, var(--color-danger, #dc2626) 48%, var(--color-border));
     color: var(--color-danger, #dc2626);
 }
 
-.api-client-toolbar-btn--danger:hover:not([disabled]) {
+.api-client-toolbar-btn--danger:hover:not([disabled]),
+.api-client-page ::deep .api-client-toolbar-btn--danger:hover:not([disabled]) {
     background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, var(--color-surface));
     border-color: var(--color-danger, #dc2626);
 }
@@ -287,11 +302,13 @@
 
 /* ── Env picker (custom dropdown, replaces native select) ── */
 
-.api-client-env-picker {
+.api-client-env-picker,
+.api-client-page ::deep .api-client-env-picker {
     position: relative;
 }
 
-.api-client-env-picker__btn {
+.api-client-env-picker__btn,
+.api-client-page ::deep .api-client-env-picker__btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -306,13 +323,15 @@
     text-align: left;
 }
 
-.api-client-env-picker__chevron {
+.api-client-env-picker__chevron,
+.api-client-page ::deep .api-client-env-picker__chevron {
     margin-left: auto;
     font-size: 10px;
     color: var(--color-text-muted);
 }
 
-.api-client-env-picker__dropdown {
+.api-client-env-picker__dropdown,
+.api-client-page ::deep .api-client-env-picker__dropdown {
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
@@ -469,7 +488,8 @@
     color: var(--color-warning);
 }
 
-.api-client-secret-warning__btn {
+.api-client-secret-warning__btn,
+.api-client-page ::deep .api-client-secret-warning__btn {
     margin-left: 8px;
     border: 1px solid currentColor;
     border-radius: var(--radius-sm);

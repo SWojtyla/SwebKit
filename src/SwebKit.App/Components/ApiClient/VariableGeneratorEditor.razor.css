@@ -6,7 +6,7 @@
     width: 100%;
 }
 
-.var-gen-editor__select,
+.var-gen-editor ::deep .var-gen-editor__select,
 .var-gen-editor__number,
 .var-gen-editor__text {
     min-width: 0;
@@ -18,8 +18,11 @@
     padding: 4px 6px;
 }
 
-.var-gen-editor__select {
+.var-gen-editor ::deep .var-gen-editor__select {
     flex: 0 0 120px;
+    min-height: 0;
+    width: auto;
+    box-shadow: none;
 }
 
 .var-gen-editor__number {

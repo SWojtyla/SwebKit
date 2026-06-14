@@ -20,7 +20,7 @@
     white-space: nowrap;
 }
 
-.auth-panel__type-select {
+.auth-panel ::deep .auth-panel__type-select {
     padding: 4px 8px;
     background: var(--color-input-bg);
     border: 1px solid var(--color-border);
@@ -28,12 +28,17 @@
     color: var(--color-text);
     font-size: 13px;
     min-width: 180px;
+    min-height: 0;
+    width: auto;
+    box-shadow: none;
     cursor: pointer;
 }
 
-    .auth-panel__type-select:focus {
+    .auth-panel ::deep .auth-panel__type-select:focus,
+    .auth-panel ::deep .auth-panel__type-select:focus-visible {
         outline: none;
         border-color: var(--color-accent);
+        box-shadow: none;
     }
 
 /* ── Inherited badge ── */

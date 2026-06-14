@@ -3,7 +3,7 @@
 <div class="capture-builder">
     <div class="capture-builder__header">
         <span class="capture-builder__title">Capture Rules</span>
-        <button type="button" class="capture-builder__add-btn" @onclick="AddRule">+ Add Capture</button>
+        <AppButton CssClass="capture-builder__add-btn" Size="Small" Variant="Secondary" OnClick="AddRule">+ Add Capture</AppButton>
     </div>
 
     @if (_rules.Count == 0)
@@ -19,12 +19,12 @@
             <input type="checkbox" class="capture-builder__rule-enabled" checked="@rule.IsEnabled"
                    @onchange="e => { rule.IsEnabled = (bool)(e.Value ?? true); NotifyChanged(); }" />
 
-            <select class="capture-builder__source-type" value="@rule.Source.ToString()"
-                    @onchange="e => { rule.Source = Enum.Parse<CaptureSource>(e.Value?.ToString() ?? nameof(CaptureSource.BodyJsonPath)); NotifyChanged(); }">
+            <AppSelect CssClass="capture-builder__source-type" Value="@rule.Source.ToString()"
+                       ValueChanged="value => OnSourceChanged(rule, value)">
                 <option value="@nameof(CaptureSource.BodyJsonPath)">Body (JSONPath)</option>
                 <option value="@nameof(CaptureSource.ResponseHeader)">Header</option>
                 <option value="@nameof(CaptureSource.StatusCode)">Status Code</option>
-            </select>
+            </AppSelect>
 
             @if (rule.Source == CaptureSource.BodyJsonPath)
             {
@@ -46,16 +46,18 @@
             <input type="text" class="capture-builder__target" placeholder="variable name" value="@rule.TargetVariable"
                    @oninput="e => { rule.TargetVariable = e.Value?.ToString() ?? string.Empty; NotifyChanged(); }" />
 
-            <select class="capture-builder__scope" value="@rule.TargetScope" @onchange="@(e => OnScopeChanged(rule, e))">
+            <AppSelect CssClass="capture-builder__scope" Value="@rule.TargetScope" ValueChanged="value => OnScopeSelected(rule, value)">
                 <option value="collection">Collection</option>
                 @foreach (var env in AvailableEnvironments)
                 {
                     <option value="@env.Id">@env.Name</option>
                 }
-            </select>
+            </AppSelect>
 
-            <button type="button" class="capture-builder__rule-delete" title="Remove rule"
-                    @onclick="() => RemoveRule(rule)">×</button>
+            <AppIconButton Label="Remove capture rule" Variant="Ghost" Size="Small" CssClass="capture-builder__rule-delete"
+                           OnClick="@(() => RemoveRule(rule))">
+                <Icon>×</Icon>
+            </AppIconButton>
         </div>
     }
 
@@ -105,6 +107,15 @@
     }
 
     private void NotifyChanged() => OnChanged.InvokeAsync();
+
+    private void OnSourceChanged(CaptureRule rule, string? value)
+    {
+        rule.Source = Enum.Parse<CaptureSource>(value ?? nameof(CaptureSource.BodyJsonPath));
+        NotifyChanged();
+    }
+
+    private void OnScopeSelected(CaptureRule rule, string? value) =>
+        OnScopeChanged(rule, new ChangeEventArgs { Value = value });
 
     private void OnScopeChanged(CaptureRule rule, ChangeEventArgs e)
     {

@@ -1,7 +1,7 @@
 @inject IVariableGeneratorService GeneratorService
 
 <div class="var-gen-editor">
-    <select class="var-gen-editor__select" value="@Definition.Kind" @onchange="OnKindChanged" aria-label="Generator kind">
+    <AppSelect CssClass="var-gen-editor__select" Value="@Definition.Kind.ToString()" ValueChanged="OnKindSelectChanged" aria-label="Generator kind">
         <option value="@VariableGeneratorKind.Integer">Integer range</option>
         <option value="@VariableGeneratorKind.Decimal">Decimal range</option>
         <option value="@VariableGeneratorKind.Boolean">Boolean</option>
@@ -10,7 +10,7 @@
         <option value="@VariableGeneratorKind.List">List pick</option>
         <option value="@VariableGeneratorKind.Faker">Fake data</option>
         <option value="@VariableGeneratorKind.Template">Template</option>
-    </select>
+    </AppSelect>
 
     @if (Definition.Kind == VariableGeneratorKind.Integer)
     {
@@ -36,14 +36,14 @@
     }
     else if (Definition.Kind == VariableGeneratorKind.Faker)
     {
-        <select class="var-gen-editor__select" value="@Definition.FakerCategory" @onchange="e => Definition.FakerCategory = e.Value?.ToString()">
+        <AppSelect CssClass="var-gen-editor__select" Value="@Definition.FakerCategory" ValueChanged="OnFakerCategoryChanged">
             <option value="person.firstName">First name</option>
             <option value="person.lastName">Last name</option>
             <option value="person.fullName">Full name</option>
             <option value="internet.email">Email</option>
             <option value="phone.number">Phone</option>
             <option value="company.name">Company</option>
-        </select>
+        </AppSelect>
     }
     else if (Definition.Kind == VariableGeneratorKind.List)
     {
@@ -78,6 +78,9 @@
         set => Definition.Values = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 
+    private void OnKindSelectChanged(string? value) =>
+        OnKindChanged(new ChangeEventArgs { Value = value });
+
     private void OnKindChanged(ChangeEventArgs args)
     {
         if (Enum.TryParse<VariableGeneratorKind>(args.Value?.ToString(), out var kind))
@@ -87,6 +90,8 @@
             _preview = null;
         }
     }
+
+    private void OnFakerCategoryChanged(string? value) => Definition.FakerCategory = value;
 
     private void ApplyDefaults(VariableGeneratorKind kind)
     {

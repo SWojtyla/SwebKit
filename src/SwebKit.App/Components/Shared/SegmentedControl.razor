@@ -1,0 +1,83 @@
+<div @attributes="AdditionalAttributes"
+     class="@ControlClass"
+     role="group"
+     aria-label="@AriaLabel">
+    @foreach (var item in Items)
+    {
+        var isActive = IsActive(item);
+        <button type="button"
+                class="@GetItemClass(isActive)"
+                aria-pressed="@FormatBoolean(isActive)"
+                disabled="@Disabled"
+                @onclick="() => HandleItemClickAsync(item)">
+            @item
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<string> Items { get; set; } = Array.Empty<string>();
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string Size { get; set; } = "Medium";
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? ItemCssClass { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string? AriaLabel => string.IsNullOrWhiteSpace(Label) ? null : Label;
+
+    private string ControlClass
+    {
+        get
+        {
+            var size = NormalizeSize(Size);
+            var stateClasses = string.Join(' ', new[]
+            {
+                Disabled ? "app-segmented-control--disabled" : null,
+                CssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return string.IsNullOrWhiteSpace(stateClasses)
+                ? $"app-segmented-control app-segmented-control--{size}"
+                : $"app-segmented-control app-segmented-control--{size} {stateClasses}";
+        }
+    }
+
+    private string GetItemClass(bool isActive)
+    {
+        var size = NormalizeSize(Size);
+        var stateClasses = string.Join(' ', new[]
+        {
+            isActive ? "app-segmented-control__item--active" : null,
+            Disabled ? "app-segmented-control__item--disabled" : null,
+            ItemCssClass
+        }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+        return string.IsNullOrWhiteSpace(stateClasses)
+            ? $"app-segmented-control__item app-segmented-control__item--{size}"
+            : $"app-segmented-control__item app-segmented-control__item--{size} {stateClasses}";
+    }
+
+    private bool IsActive(string item) => string.Equals(item, Value, StringComparison.Ordinal);
+
+    private async Task HandleItemClickAsync(string item)
+    {
+        if (Disabled || IsActive(item))
+        {
+            return;
+        }
+
+        await ValueChanged.InvokeAsync(item);
+    }
+
+    private static string NormalizeSize(string? size)
+        => size?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            _ => "medium"
+        };
+
+    private static string FormatBoolean(bool value) => value ? "true" : "false";
+}

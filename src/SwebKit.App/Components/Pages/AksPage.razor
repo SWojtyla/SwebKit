@@ -1058,6 +1058,7 @@ OnCtxRestartDeployment();
             Jobs = [];
             CronJobs = [];
             PodMetricsList = [];
+            IsLoading = false;
             await InvokeAsync(StateHasChanged);
             return;
         }

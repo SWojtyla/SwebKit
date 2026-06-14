@@ -114,3 +114,57 @@ The first implementation should preserve the existing SwebKit operations-tool id
 
 - Redesign all pages at once - rejected because it would be too broad and risky.
 - Only shrink `app.css` without visual consistency work - rejected because the user's main pain includes inconsistent dropdowns and buttons.
+
+---
+
+## Decision 005 - Add compatibility aliases for legacy style tokens
+
+**Status:** Accepted
+
+**Date:** 2026-06-14
+
+### Context
+
+Existing component CSS references older token names such as `--color-input-bg`, `--color-surface-raised`, `--color-surface-hover`, `--font-mono`, and `--color-danger`. Removing or rewriting all of those references in one pass would create unnecessary visual risk, especially in AKS and API Client.
+
+### Decision
+
+Add compatibility aliases in `app.css` and migrate call sites gradually. Map `--color-danger` to `--color-error` for normal destructive controls. Keep `--color-prod` for production-safety cues and irreversible production operations.
+
+### Consequences
+
+- Existing AKS and API Client styling stays visually stable during migration.
+- Future CSS has a documented canonical direction.
+- The inventory script can track remaining legacy token usage without treating the alias block itself as drift.
+
+### Alternatives considered
+
+- Rewrite all legacy token references immediately - rejected because it creates a large visual-regression surface.
+- Keep old tokens undocumented forever - rejected because it would preserve the current drift.
+
+---
+
+## Decision 006 - Preserve feature visuals with scoped `::deep` bridges during migration
+
+**Status:** Accepted
+
+**Date:** 2026-06-14
+
+### Context
+
+Blazor CSS isolation scopes selectors to elements rendered by the component that owns the `.razor.css` file. When API Client and AKS markup moved from raw `<button>` / `<select>` elements to shared child components, the original feature selectors no longer reached the rendered HTML by default.
+
+### Decision
+
+During transitional migrations, keep feature-specific visual rules in the feature stylesheet and add scoped `::deep` selectors for feature classes passed through shared primitives. Move styles to `app.css` only when the style is a true reusable primitive rather than a feature visual identity.
+
+### Consequences
+
+- Existing AKS and API Client visual direction remains stable while markup becomes more consistent.
+- The migration pattern stays compatible with Blazor CSS isolation.
+- Future cleanup can remove `::deep` bridges once feature-specific classes are replaced by canonical global primitive classes.
+
+### Alternatives considered
+
+- Move all migrated feature button/select styles into `app.css` - rejected because it would turn global CSS back into a feature bucket.
+- Drop feature classes after replacing markup with shared primitives - rejected because it would visually redesign surfaces the maintainer explicitly wants to preserve.

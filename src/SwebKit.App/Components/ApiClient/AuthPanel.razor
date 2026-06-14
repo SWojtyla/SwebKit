@@ -6,14 +6,14 @@
     @* ── Type selector ── *@
     <div class="auth-panel__selector-row">
         <label class="auth-panel__type-label">Auth type</label>
-        <select class="auth-panel__type-select" value="@_selectedType" @onchange="OnTypeChanged">
+        <AppSelect CssClass="auth-panel__type-select" Value="@_selectedType.ToString()" ValueChanged="OnTypeSelectChanged">
             <option value="@AuthType.Inherited">Inherit from parent</option>
             <option value="@AuthType.None">No auth</option>
             <option value="@AuthType.BearerToken">Bearer token</option>
             <option value="@AuthType.Basic">Basic</option>
             <option value="@AuthType.ApiKey">API key</option>
             <option value="@AuthType.OAuth2">OAuth 2.0</option>
-        </select>
+        </AppSelect>
     </div>
 
     @* ── Inherited badge ── *@
@@ -88,9 +88,12 @@
             : (Request.Auth ??= new AuthConfig { Type = _selectedType });
     }
 
-    private async Task OnTypeChanged(ChangeEventArgs e)
+    private Task OnTypeSelectChanged(string? value) =>
+        OnTypeChanged(new ChangeEventArgs { Value = value });
+
+    private async Task OnTypeChanged(ChangeEventArgs args)
     {
-        if (!Enum.TryParse<AuthType>(e.Value?.ToString(), out var newType))
+        if (!Enum.TryParse<AuthType>(args.Value?.ToString(), out var newType))
             return;
 
         _selectedType = newType;

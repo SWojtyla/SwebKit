@@ -1,0 +1,174 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="@DropdownClass">
+    @if (TriggerContent is not null)
+    {
+        <div class="app-dropdown__trigger">
+            @TriggerContent
+        </div>
+    }
+
+    @if (IsOpen)
+    {
+        <div class="app-dropdown__backdrop" @onclick="HandleBackdropClickAsync"></div>
+        <div class="@MenuClass" role="menu" aria-label="@MenuLabel" style="@MenuStyle" tabindex="-1"
+             @ref="_menuRef" @onkeydown="HandleMenuKeyDownAsync">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? TriggerContent { get; set; }
+    [Parameter] public string Alignment { get; set; } = "end";
+    [Parameter] public string? Width { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? MenuCssClass { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+
+    private ElementReference _menuRef;
+    private bool _trapApplied;
+    private bool _wasOpen;
+    private IJSObjectReference? _savedFocusRef;
+
+    private string? MenuLabel => string.IsNullOrWhiteSpace(Label) ? null : Label;
+
+    private string? MenuStyle => string.IsNullOrWhiteSpace(Width) ? null : $"width: {Width};";
+
+    private string DropdownClass
+    {
+        get
+        {
+            var classes = string.Join(' ', new[]
+            {
+                "app-dropdown",
+                CssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return classes;
+        }
+    }
+
+    private string MenuClass
+    {
+        get
+        {
+            var alignment = NormalizeAlignment(Alignment);
+            var classes = string.Join(' ', new[]
+            {
+                "app-dropdown__menu",
+                $"app-dropdown__menu--{alignment}",
+                MenuCssClass
+            }.Where(static cssClass => !string.IsNullOrWhiteSpace(cssClass)));
+
+            return classes;
+        }
+    }
+
+    private async Task HandleBackdropClickAsync()
+    {
+        if (!CloseOnBackdrop)
+        {
+            return;
+        }
+
+        await CloseAsync();
+    }
+
+    private async Task HandleMenuKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (string.Equals(args.Key, "Escape", StringComparison.Ordinal))
+        {
+            await CloseAsync();
+        }
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsOpen || _trapApplied)
+        {
+            return;
+        }
+
+        _trapApplied = true;
+        try
+        {
+            _savedFocusRef = await JS.InvokeAsync<IJSObjectReference>("SwebKit.saveFocus");
+            await JS.InvokeVoidAsync("SwebKit.trapFocus", _menuRef);
+        }
+        catch
+        {
+            // Focus helpers are best-effort so dropdown rendering remains resilient in tests and WebView startup.
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            _wasOpen = true;
+            return;
+        }
+
+        if (_wasOpen)
+        {
+            _wasOpen = false;
+            await RestoreFocusAsync();
+        }
+
+        _trapApplied = false;
+    }
+
+    private async Task RestoreFocusAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKit.releaseTrap", _menuRef);
+        }
+        catch
+        {
+        }
+
+        if (_savedFocusRef is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("SwebKit.restoreFocus", _savedFocusRef);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            await _savedFocusRef.DisposeAsync();
+        }
+        catch
+        {
+        }
+
+        _savedFocusRef = null;
+    }
+
+    private static string NormalizeAlignment(string? alignment)
+        => alignment?.Trim().ToLowerInvariant() switch
+        {
+            "start" => "start",
+            _ => "end"
+        };
+
+    public async ValueTask DisposeAsync()
+    {
+        await RestoreFocusAsync();
+    }
+}
