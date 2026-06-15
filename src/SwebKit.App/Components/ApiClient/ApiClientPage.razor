@@ -614,6 +614,7 @@
                                 @* ── Export / Import dialog ── *@
                                                         <CollectionExportDialog Visible="@_showExportDialog" Collection="@_activeCollection" Environments="@_environments"
                                                         InitialTab="@_exportDialogInitialTab"
+                                                        TargetLinkedRootApiPath="@(CurrentTargetLinkedRoot?.ApiRootPath)"
                                                         OnClose="@(() => _showExportDialog = false)" OnImported="@OnCollectionImportedAsync" />
 
 @code {
@@ -2019,6 +2020,12 @@ StringComparison.OrdinalIgnoreCase));
             try { await _newLinkedRootInput.FocusAsync(); }
             catch { }
         }
+
+        // On the very first render the element refs may not be bound yet
+        // (the async init hasn't completed, so the workspace panels may not have rendered).
+        // Wait for the post-init render before touching the DOM via JS.
+        if (firstRender)
+            return;
 
         // Init the splitter whenever the panels become visible for a new request.
         // _lastSplitterRequestId tracks which request the current JS handle was set up for.

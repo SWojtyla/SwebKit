@@ -25,18 +25,23 @@
 
             <table class="table">
                 <thead>
-                <tr><th>DB</th><th>Keys</th><th>Expires</th><th>Avg TTL</th></tr>
+                    <tr>
+                        <th>DB</th>
+                        <th>Keys</th>
+                        <th>Expires</th>
+                        <th>Avg TTL</th>
+                    </tr>
                 </thead>
                 <tbody>
-                @foreach (var db in Info.Databases)
-                {
-                    <tr>
-                        <td>@db.Index</td>
-                        <td>@db.Keys</td>
-                        <td>@db.Expires</td>
-                        <td>@db.AvgTtl</td>
-                    </tr>
-                }
+                    @foreach (var db in Info.Databases)
+                    {
+                        <tr>
+                            <td>@db.Index</td>
+                            <td>@db.Keys</td>
+                            <td>@db.Expires</td>
+                            <td>@db.AvgTtl</td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         }

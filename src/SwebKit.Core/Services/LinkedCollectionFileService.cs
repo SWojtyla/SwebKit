@@ -128,6 +128,84 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         return StableId(collectionDirectory);
     }
 
+    /// <summary>
+    /// Writes a fully-populated <see cref="ApiCollection"/> (including all nested folders and
+    /// requests) into a linked-root's collections folder. Used when importing an external
+    /// collection (Bruno, Postman, SwebKit JSON) directly into a linked repo.
+    /// </summary>
+    public async Task WriteCollectionToLinkedRootAsync(string apiRootPath, ApiCollection collection, CancellationToken cancellationToken = default)
+    {
+        var collectionsPath = Path.Combine(apiRootPath, "collections");
+        Directory.CreateDirectory(collectionsPath);
+
+        var collectionDirectory = GetUniqueCollectionDirectory(collectionsPath, Slugify(collection.Name));
+        Directory.CreateDirectory(collectionDirectory);
+
+        var manifest = new SwebKitCollectionManifest
+        {
+            Name = collection.Name.Trim(),
+            Variables = collection.Variables,
+            DefaultAuth = collection.DefaultAuth,
+        };
+        await WriteJsonAtomicAsync(Path.Combine(collectionDirectory, "collection.json"), manifest, cancellationToken);
+        await WriteNodesToDirectoryAsync(collectionDirectory, collection.Nodes, cancellationToken);
+    }
+
+    private static async Task WriteNodesToDirectoryAsync(string directory, IEnumerable<ApiCollectionNode> nodes, CancellationToken cancellationToken)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var folderDir = Path.Combine(directory, Slugify(node.Name));
+                Directory.CreateDirectory(folderDir);
+                await WriteNodesToDirectoryAsync(folderDir, node.Children, cancellationToken);
+            }
+            else if (node.Type == ApiCollectionNodeType.Request && node.Request is not null)
+            {
+                var requestPath = Path.Combine(directory, $"{Slugify(node.Request.Name)}{RequestFileExtension}");
+                var requestFile = SwebKitRequestFile.FromRequest(node.Request, requestPath);
+                await WriteJsonAtomicAsync(requestPath, requestFile, cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(requestFile.Body?.JsonFile) && !string.IsNullOrWhiteSpace(node.Request.Body.RawContent))
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.Body.JsonFile), node.Request.Body.RawContent, cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(requestFile.QueryFile) && !string.IsNullOrWhiteSpace(node.Request.GraphQlQuery))
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.QueryFile), node.Request.GraphQlQuery, cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(requestFile.VariablesFile) && !string.IsNullOrWhiteSpace(node.Request.GraphQlVariables))
+                    await WriteTextAtomicAsync(Path.Combine(directory, requestFile.VariablesFile), node.Request.GraphQlVariables, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes an environment into a linked-root's environments folder. Used when importing
+    /// an external collection directly into a linked repo.
+    /// </summary>
+    public async Task WriteEnvironmentToLinkedRootAsync(string apiRootPath, ApiEnvironment environment, CancellationToken cancellationToken = default)
+    {
+        var environmentsPath = Path.Combine(apiRootPath, "environments");
+        Directory.CreateDirectory(environmentsPath);
+        var environmentFilePath = GetUniqueEnvironmentFilePath(environmentsPath, Slugify(environment.Name));
+        var file = SwebKitEnvironmentFile.FromEnvironment(environment);
+        await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken);
+    }
+
+    private static string GetUniqueEnvironmentFilePath(string environmentsPath, string slug)
+    {
+        var candidate = Path.Combine(environmentsPath, $"{slug}.swebenv.json");
+        if (!File.Exists(candidate))
+            return candidate;
+
+        for (var index = 2; ; index++)
+        {
+            candidate = Path.Combine(environmentsPath, $"{slug}-{index}.swebenv.json");
+            if (!File.Exists(candidate))
+                return candidate;
+        }
+    }
+
     public async Task<LinkedRequestSaveResult> SaveRequestAsync(
         string apiRootPath,
         ApiCollection collection,

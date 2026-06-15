@@ -88,6 +88,12 @@
                 Select the root Bruno collection folder (the one containing <code>bruno.json</code>).
                 Requests, sub-folders, and environments are all imported at once.
             </div>
+            @if (TargetLinkedRootApiPath is not null)
+            {
+                <div class="col-export-dialog__note col-export-dialog__note--target">
+                    → Will import into linked repo: <strong>@TargetLinkedRootApiPath</strong>
+                </div>
+            }
 
             @* ── SwebKit / Postman file ── *@
             <div class="col-export-dialog__section-title col-export-dialog__section-title--gap">
@@ -172,6 +178,11 @@
     [Parameter] public string InitialTab { get; set; } = "export";
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnImported { get; set; }
+    /// <summary>
+    /// When set, imported collections are written directly into this linked repo root
+    /// (as .swebreq.json files on disk) instead of local SwebKit storage.
+    /// </summary>
+    [Parameter] public string? TargetLinkedRootApiPath { get; set; }
 
     private string _activeTab = "export";
     private bool _wasVisible;
@@ -305,11 +316,15 @@
 
             if (_importBrunoFolderPath is not null)
             {
-                collResult = await ImportService.ImportBrunoFolderAsync(_importBrunoFolderPath);
+                collResult = TargetLinkedRootApiPath is not null
+                    ? await ImportService.ImportBrunoFolderToLinkedRootAsync(_importBrunoFolderPath, TargetLinkedRootApiPath)
+                    : await ImportService.ImportBrunoFolderAsync(_importBrunoFolderPath);
             }
             else if (_importPayload is not null)
             {
-                collResult = await ImportService.ImportCollectionAsync(_importPayload);
+                collResult = TargetLinkedRootApiPath is not null
+                    ? await ImportService.ImportCollectionToLinkedRootAsync(_importPayload, TargetLinkedRootApiPath)
+                    : await ImportService.ImportCollectionAsync(_importPayload);
             }
 
             if (collResult is not null && (collResult.Collections.Count > 0 || collResult.Warnings.Count > 0))

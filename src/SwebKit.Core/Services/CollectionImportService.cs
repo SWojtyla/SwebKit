@@ -15,7 +15,8 @@ public sealed class CollectionImportService(
     SwebKitCollectionImporter swebKitImporter,
     PostmanCollectionImporter postmanImporter,
     SwebKitEnvironmentImporter environmentImporter,
-    BrunoFolderImporter brunoFolderImporter)
+    BrunoFolderImporter brunoFolderImporter,
+    LinkedCollectionFileService linkedFileService)
 {
     private readonly IReadOnlyList<ICollectionImporter> _importers = [swebKitImporter, postmanImporter];
 
@@ -80,6 +81,55 @@ public sealed class CollectionImportService(
             existingEnvNames.Add(env.Name);
             await environmentRepo.AddImportedEnvironmentAsync(env);
         }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Imports a Bruno collection from a folder on disk directly into a linked repo root,
+    /// writing .swebreq.json files to the repo rather than local SwebKit storage.
+    /// </summary>
+    public async Task<CollectionImportResult> ImportBrunoFolderToLinkedRootAsync(
+        string folderPath,
+        string apiRootPath,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await brunoFolderImporter.ImportFromFolderAsync(folderPath, cancellationToken);
+        if (result.Collections.Count == 0)
+            return result;
+
+        foreach (var collection in result.Collections)
+            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken);
+
+        foreach (var env in result.Environments)
+            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Detects the format from the file payload and imports the collections and environments
+    /// directly into a linked repo root, writing .swebreq.json files to the repo rather than
+    /// local SwebKit storage.
+    /// </summary>
+    public async Task<CollectionImportResult> ImportCollectionToLinkedRootAsync(
+        byte[] payload,
+        string apiRootPath,
+        CancellationToken cancellationToken = default)
+    {
+        var importer = DetectImporter(payload);
+        if (importer is null)
+            return new CollectionImportResult { Warnings = ["Unrecognised file format. Supported: SwebKit JSON, Postman v2.1"] };
+
+        var result = await importer.ImportAsync(payload, cancellationToken);
+        if (result.Collections.Count == 0)
+            return result;
+
+        foreach (var collection in result.Collections)
+            await linkedFileService.WriteCollectionToLinkedRootAsync(apiRootPath, collection, cancellationToken);
+
+        foreach (var env in result.Environments)
+            await linkedFileService.WriteEnvironmentToLinkedRootAsync(apiRootPath, env, cancellationToken);
 
         return result;
     }
