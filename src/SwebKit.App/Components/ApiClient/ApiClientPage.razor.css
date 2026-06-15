@@ -378,6 +378,7 @@
     gap: 8px;
     color: var(--color-text-muted);
     font-size: 11px;
+    padding: 6px 0;
 }
 
 .api-client-linked-root-card__actions,
@@ -386,10 +387,38 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    padding: 4px 0;
+}
+
+.api-client-git-panel__scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.api-client-git-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.api-client-git-panel__section-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
 }
 
 .api-client-git-panel__branch-select {
     max-width: 320px;
+    flex: 1;
+    min-width: 0;
 }
 
 .api-client-git-panel__commit-preview {
@@ -553,16 +582,29 @@
 }
 
 .api-client-tree-panel {
-    flex: 0 0 320px;
-    width: 320px;
-    min-width: 260px;
-    max-width: 420px;
+    flex: 0 0 280px;
+    width: 280px;
+    min-width: 180px;
+    max-width: 600px;
     min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--color-border);
     background: var(--color-surface);
+}
+
+.api-client-tree-splitter {
+    flex: 0 0 5px;
+    width: 5px;
+    background: var(--color-border);
+    cursor: col-resize;
+    transition: background 0.15s;
+    align-self: stretch;
+}
+
+.api-client-tree-splitter:hover,
+.api-client-tree-splitter.active {
+    background: var(--color-accent);
 }
 
 .api-client-tree-panel__loading,

@@ -173,7 +173,7 @@
             <div class="api-client-body">
 
                 @* Left: collection tree *@
-                <div class="api-client-tree-panel">
+                <div class="api-client-tree-panel" @ref="_treePanelEl">
                     @if (_loadingCollections)
                     {
                         <div class="api-client-tree-panel__loading">
@@ -206,6 +206,8 @@
                                         OnDeleteCollection="OnDeleteCollectionAsync" OnLinkCollectionToRepo="OnLinkCollectionToRepoAsync" />
                     }
                 </div>
+
+                <div class="api-client-tree-splitter" @ref="_treeSplitterEl"></div>
 
                 @* Right: request builder + response viewer OR management screens *@
                 <div class="api-client-workspace">
@@ -314,6 +316,7 @@
                                     <span class="api-client-management-screen__title">Git — @ActiveGitRoot.DisplayName</span>
                                 </div>
                                 <div class="api-client-git-panel">
+                                    <div class="api-client-git-panel__scroll">
                                     @{
                                         var stagedGitFiles = GetStagedGitFiles();
                                         var unstagedGitFiles = GetUnstagedGitFiles();
@@ -457,8 +460,9 @@
                                                                 }
                                                             }
                                                         </div>
-                                                    </div>
-                                                </div>
+                                                    </div>  @* end api-client-git-panel__scroll *@
+                                                </div>  @* end api-client-git-panel *@
+                                            </div>  @* end api-client-management-screen *@
                                             }
             else if (_selectedRequest is null)
                                             {
@@ -713,6 +717,12 @@
     private ElementReference _builderPanelEl;
     private IJSObjectReference? _splitterHandle;
     private string? _lastSplitterRequestId;
+
+    // Tree panel splitter
+    private ElementReference _treeSplitterEl;
+    private ElementReference _treePanelEl;
+    private IJSObjectReference? _treeSplitterHandle;
+    private bool _treeSplitterInited;
 
     // Auto-save debounce
     private System.Timers.Timer? _autoSaveTimer;
@@ -2027,6 +2037,17 @@ StringComparison.OrdinalIgnoreCase));
         if (firstRender)
             return;
 
+        // Init the tree panel splitter once the DOM is ready.
+        if (!_treeSplitterInited)
+        {
+            _treeSplitterInited = true;
+            _treeSplitterHandle = await JS.InvokeAsync<IJSObjectReference>(
+                "SwebKitSplitter.init",
+                _treeSplitterEl,
+                _treePanelEl,
+                new { leftPane = true, minWidth = 200, maxWidth = 520 });
+        }
+
         // Init the splitter whenever the panels become visible for a new request.
         // _lastSplitterRequestId tracks which request the current JS handle was set up for.
         var shouldShowSplitter = _selectedRequest is not null && _worksheetMode is null;
@@ -2053,6 +2074,15 @@ StringComparison.OrdinalIgnoreCase));
         try { await _splitterHandle.InvokeVoidAsync("dispose"); } catch { /* ignore teardown errors */ }
         try { await _splitterHandle.DisposeAsync(); } catch { }
         _splitterHandle = null;
+    }
+
+    private async Task DisposeTreeSplitterAsync()
+    {
+        if (_treeSplitterHandle is null) return;
+        try { await _treeSplitterHandle.InvokeVoidAsync("dispose"); } catch { }
+        try { await _treeSplitterHandle.DisposeAsync(); } catch { }
+        _treeSplitterHandle = null;
+        _treeSplitterInited = false;
     }
 
     // ── Keyboard shortcut event handler ─────────────────────────────────────────
@@ -2138,6 +2168,7 @@ StringComparison.OrdinalIgnoreCase));
         _autoSaveTimer?.Stop();
         _autoSaveTimer?.Dispose();
         await DisposeSplitterAsync();
+        await DisposeTreeSplitterAsync();
     }
 
     private LinkedCollectionRootLoadResult? FindLinkedRootForCollection(string collectionId) =>
